@@ -89,6 +89,8 @@ pub fn create(root: &Path, spec: &Spec, seed: bool) -> Result<Info> {
     let mut seeded = None;
     if seed && main_target.is_dir() {
         seeded = Some(crate::seed::seed(root, &main_target, &path, &target)?);
+    } else {
+        std::fs::create_dir_all(&target)?;
     }
     Ok(Info {
         path,
@@ -199,7 +201,11 @@ mod tests {
         let spec = Spec::parse("T-007", false).unwrap();
         let info = create(root, &spec, false).unwrap();
         assert!(info.seeded.is_none());
-        assert!(!info.target.exists());
+        assert_eq!(
+            std::fs::read_dir(&info.target).unwrap().count(),
+            0,
+            "empty target"
+        );
         assert_eq!(
             git(&info.path, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap(),
             "task/T-007"

@@ -11,7 +11,7 @@ CHARTER §4; the process around them is in `methodology/METHODOLOGY.md`.
 | rustfmt | 1.9.0-stable | toolchain component |
 | clippy | 0.1.97 | toolchain component |
 | git | ≥ 2.38 (developed with 2.43.0) | system; `worktree`, `rebase`, `merge --ff-only` |
-| cp | GNU coreutils (`cp -a --reflink=auto`) | system; seeds worktree target dirs |
+| tar/cp | not used | target seeding is done by xtask itself (plain file copies, mtimes kept) |
 
 No cargo plugins are required or installed: `cargo-nextest`, `cargo-deny` and `cargo-fuzz`
 were absent on the bootstrap machine and nothing was installed. The gate uses `cargo test`
@@ -146,34 +146,125 @@ cargo xtask worktree list                 # task worktrees, ahead/behind main
 cargo xtask worktree rm T-012 [--tests] [--force]   # deletes the branch only if merged
 ```
 
-`new` prints the `cd` and `export CARGO_TARGET_DIR=<worktree>/target` to use. The target dir
-is seeded with a copy of main's `target/` (`--no-seed` to skip): crates.io dependencies are
-reused, workspace crates rebuild because the fresh checkout is newer. Each seeded copy costs the
-full size of `target/` (1.6–1.9 GB here; this filesystem has no reflinks) — remove finished
-worktrees. Never point two checkouts at one target directory: cargo's mtime-based freshness
-can then reuse artifacts built from the other tree (observed during bootstrap).
+`new` prints the `cd` and `export CARGO_TARGET_DIR=<worktree>/target` to use. Never point two
+checkouts at one target directory: cargo's mtime-based freshness can then reuse artifacts built
+from the other tree (bootstrap-verification §7 defect 4).
+
+**Seeding.** Unless `--no-seed` (which creates an empty `target/`), the new target directory is
+seeded from main's `target/` with **copies** (never hard links, symlinks or a shared directory)
+of the build artifacts of packages that are *not* workspace members:
+
+- members are the package and target names `cargo metadata --no-deps` reports for main's
+  checkout and the new one (`-` and `_` treated alike);
+- in each profile directory (`target/debug`, `target/<triple>/debug`, …) only entries of
+  `.fingerprint/`, `build/` and `deps/` named `<unit>-<16 hex hash>…` are considered, and an
+  entry is copied only if `<unit>` is not a member; uplifted files (`target/debug/kiln-cli`, …),
+  `incremental/`, `examples/` and anything unrecognised are never copied;
+- mtimes are kept. A non-member whose sources live in the checkout (a path dependency outside
+  the workspace) gets main's mtimes on its source files in the new checkout only where the
+  content is byte-identical, so cargo judges it fresh exactly when it would in main's checkout;
+  otherwise it is rebuilt.
+
+So crates.io dependencies are reused, every workspace crate is rebuilt from the worktree's own
+source, and a build in the worktree never writes into main's `target/` (or the reverse). A seed
+costs roughly main's dependency artifacts (`du -sh .worktrees/T-NNN/target`), not the whole
+`target/` — no workspace-crate files and no `incremental/` data. `worktree new` prints the
+number of files and MB copied. Remove finished worktrees.
 
 ## Merge queue: `cargo xtask queue T-NNN`
 
-Run from the primary checkout, with `main` checked out and clean. It: takes
-`.git/kiln-queue.lock` (a lock whose process is gone is reclaimed); refuses if the working tree
-has changes outside `metrics/`; rebases `task/T-NNN` onto `main` in `.worktrees/T-NNN` (conflict:
-`git rebase --abort`, record `conflict`, exit 1); runs `cargo xtask ci` there with
-`CARGO_TARGET_DIR=.worktrees/T-NNN/target`; fast-forwards `main` only if green; appends to
-`metrics/queue.jsonl`:
+Run from the primary checkout, with `main` checked out and clean. In order:
+
+1. takes `.git/kiln-queue.lock` (a lock whose process is gone is reclaimed); refuses (error,
+   exit 2, no record) if `main` is not checked out, the working tree has changes outside
+   `metrics/`, `.worktrees/T-NNN` is missing, dirty or not on `task/T-NNN`, or the branch has no
+   commits beyond `main`;
+2. runs the **preconditions** below; the first that fails is a refusal: exit 1, one stderr line
+   `queue: refused: <check>: <reason>`, nothing changed and no record written;
+3. builds main's xtask from `base_sha` (= `main`) in a private build tree
+   `.git/kiln-queue/main-xtask/` (`src/` is a fresh export of `base_sha` through a private git
+   index — not a worktree, never a task's tree — and `target/` is used for nothing else; a binary
+   already built from the same sha is reused). If that build fails the queue stops with an
+   error and writes no record (main itself is broken: an incident);
+4. rebases `task/T-NNN` onto `main` in `.worktrees/T-NNN` (generated-file conflicts: below;
+   any other conflict: `git rebase --abort`, record `conflict`, `failed_step: "rebase"`);
+5. runs **main's gate**: main's xtask binary `ci --report <file>` with the rebased worktree as
+   working directory and `CARGO_TARGET_DIR=.worktrees/T-NNN/target`. If the task changes a gate
+   path (anything under `xtask/` or `.cargo/`, `clippy.toml`, `rust-toolchain.toml`), the task's
+   own rebased gate (`cargo run -p xtask -- ci --report …`) runs afterwards too; both must pass,
+   there is no override (D-3);
+6. fast-forwards `main` only if green (never pushes) and appends to `metrics/queue.jsonl`:
 
 ```json
 {"task":"T-001","attempt":1,"started_at":"…Z","ended_at":"…Z","base_sha":"…","head_sha":"…",
- "result":"merged|gate_failed|conflict|ff_failed","failed_step":null,"gate_seconds":10.0}
+ "result":"merged|gate_failed|conflict|ff_failed","failed_step":null,"gate_seconds":10.0,
+ "gate_xtask":"main|main+task","gate_xtask_sha":"<base_sha>","regenerated":[]}
 ```
 
-It never pushes. Refusals (lock held, dirty main, missing worktree, nothing to merge) write no
-record. The gate that runs is the task branch's own (rebased) xtask: a task that edits `xtask/`
-changes its own gate, which is why `xtask/` is high tier. The queue does not check tier, join
-or review evidence; the director does before queueing (METHODOLOGY §4).
+Under `"main+task"` a `gate_failed` record's `failed_step` is prefixed `main:` or `task:`.
+The queue works on any repository with an `xtask` package whose `ci --report <file>` writes
+JSON `{"passed": bool, "failed_step": string|null, …}`.
+
+### Preconditions (in this order; all read before any rebase)
+
+| check | passes when |
+|---|---|
+| `task-file` | exactly one `tasks/T-NNN-*.md` in **main's** tree; its front matter parses with `id: T-NNN`, `tier` low/medium/high and a `touches` list |
+| `front-matter` | the task branch did not change that file's front matter: its copy at the task head has front matter identical to main's, or identical to the copy at the merge base (main's `state` moves after the branch is made); deleting the file is refused. Builders append to the log body only |
+| `state` | main's `state` is `queued`, or `reviewed` (medium/high), or `self_verified` (low) |
+| `config` | main's `xtask/generated.toml` and `xtask/ledger.toml` exist and are valid (below) |
+| `touches` | every path of `git diff --name-only --no-renames <merge-base> <task head>` is allowed (below) |
+| `join` | medium/high: the primary checkout's `metrics/tasks.jsonl` has a `kind:"join"`, `result:"joined"` record of the task whose `joined_sha` is the task head or an ancestor of it. Read only from this record — the rebase flattens the join merge (D-6) |
+| `review` | medium/high: on the task head, `reviews/T-NNN-r<N>.md` with the highest N has `verdict: approve`, a `reviewed_sha` that is the head or an ancestor of it, and every commit after `reviewed_sha` changes only `reviews/T-NNN-*` and the task file |
+| `approval` | high: main's `docs/decisions.md` has a table row whose Decision cell begins with `Approve T-NNN` (D-2) |
+| `main-history` | every commit on main's first-parent history after the newest `head_sha` of a `merged` record in `metrics/queue.jsonl` changes only ledger paths, respecting their mode; trivially true before the first merge |
+
+**Allowed paths** (`touches` check): `p` is allowed if `p == t` or `p` starts with `t/` for an
+entry `t` of main's `touches` (a trailing `/` on `t` is ignored; `crates/a` allows
+`crates/a/src/x.rs`, not `crates/ab/x.rs`); or `p` is the task file; or `p` is a generated path;
+or, for medium/high only, `p` is an `acceptance_tNNN*.rs` file directly in a `crates/*/tests/`,
+`apps/*/tests/` or `xtask/tests/` directory, `scorecard/items/<id>.toml` for an `<id>` in the
+task's `scorecard_items`, or starts with `reviews/T-NNN-`. Deletions count as changes.
+
+### Policy files (read from main's tree, never from the task branch)
+
+- `xtask/generated.toml` — `[[generated]]` entries `path` + `command` (argv; `{xtask}` = main's
+  built xtask), in order: `Cargo.lock` ← `cargo update --workspace`, `docs/commands.json` ←
+  `{xtask} schema --write`, `docs/scorecard.md` ← `{xtask} scorecard` (D-1).
+- `xtask/ledger.toml` — `[[ledger]]` entries `path` + `mode` (`any` or `add-only`): the paths
+  the director may commit to on `main` directly (D-4): `tasks/`, `metrics/`,
+  `docs/decisions.md`, `docs/adr/`, `STATE.md`, `handoffs/`, `retrospectives/`, `evaluations/`,
+  `methodology/` (`any`; "only at a retrospective" stays a director check) and
+  `scorecard/items/` (`add-only`: new files only). Code, `xtask/`, `.github/` and `Cargo.*`
+  reach `main` only through the queue.
+
+Both are parsed strictly: unknown keys, an empty list, an empty command, a malformed or
+duplicate path, a path in both files, or a ledger entry under `xtask/`, `.github/` or `Cargo.*`
+are errors (refusal `config`). Changing either file is an `xtask/` change, so it goes through
+the queue like code and takes effect from the next run after it is merged.
+
+### Generated-file conflicts
+
+Tasks still regenerate generated files locally so their own gate passes. When the rebase stops
+on a conflict and **every** conflicted path is a generated path, the queue takes main's side for
+those paths (`git checkout HEAD -- <path>`, or `git rm` if main's side deleted it), continues the
+rebase and repeats for later commits. After the rebase it runs every entry's command in file
+order in the worktree (`CARGO_TARGET_DIR=.worktrees/T-NNN/target`); for `Cargo.lock` it first
+restores main's (`base_sha`) lock file and afterwards fails if a registry or git package of
+main's lock changed version (path packages are not compared). If any generated file changed it
+commits them as one commit (`queue: regenerate generated files`, `Task: T-NNN`,
+`Role: director`); the gate then runs on the result. `regenerated` lists the generated paths
+that were conflicted or changed. A failing command, a version change in the lock, or a command
+that changes a non-generated path gives `conflict` with `failed_step: "regenerate:<path>"`; the
+task branch is reset to its pre-queue head and `main` is unchanged. Regeneration runs only after
+such a conflict; a rebase without conflicts keeps the task's generated files as committed (its
+gate checks them).
 
 `metrics/` is exempt from the clean check because the queue appends there; the director commits
-metrics records.
+metrics records (a ledger path).
+
+This queue was introduced by T-005. T-005 itself was the last task queued by the old queue,
+which ran the task branch's own gate and checked none of the above.
 
 ## Join: `cargo xtask join T-NNN` and `--revert-check`
 
@@ -191,13 +282,16 @@ Acceptance tests live in `crates/*/tests/acceptance_tNNN*.rs` or `apps/*/tests/�
 
 `cargo xtask join --revert-check T-NNN [--revert <sha>]…` reverts the implementation commits
 (default: non-merge commits on `task/T-NNN` not on `main` or `task/T-NNN-tests`) in a temporary
-worktree with a private seeded target, keeps the tests, and records a `revert_check` record with
+worktree `.worktrees/T-NNN-revert-check` with a private target seeded from the task worktree's
+target exactly like `worktree new` (copies of non-member artifacts only; the task's target is
+only read, so a later build there is never served the reverted tree), keeps the tests, and records a `revert_check` record with
 `result_kind`. Exit 0 only for `fails`. When the tests call a new API, revert only the logic
 commits (`--revert <sha>`) so the API stub remains and the tests compile — split such work into
 a stub commit and a logic commit.
 
 Note: the queue's rebase flattens the join merge, so after queueing `task/T-NNN-tests` no longer
-looks merged (`worktree list` shows it ahead); remove it with `worktree rm --tests --force`.
+looks merged (`worktree list` shows it ahead); remove it with `worktree rm --tests --force`. For
+the same reason the queue's `join` check reads the `join` record, not history.
 
 ## Metrics: `cargo xtask metrics`
 

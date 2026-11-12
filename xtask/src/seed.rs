@@ -264,6 +264,11 @@ pub fn seed(
     dst_root: &Path,
     dst_target: &Path,
 ) -> Result<Stats> {
+    if profile_dirs(src_target)?.is_empty() {
+        // Nothing was ever built there: nothing to classify or copy.
+        std::fs::create_dir_all(dst_target)?;
+        return Ok(Stats::default());
+    }
     let mut members = member_names(src_root)?;
     members.extend(member_names(dst_root)?);
     seed_with(src_root, src_target, dst_root, dst_target, &members)
@@ -305,6 +310,16 @@ mod tests {
         assert_eq!(unit_name("xtask", true), None);
         assert_eq!(unit_name("serde-123", false), None);
         assert_eq!(unit_name(&format!("-{H}"), false), None);
+    }
+
+    #[test]
+    fn members_of_this_workspace() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let m = member_names(root).unwrap();
+        for n in ["xtask", "kiln_text", "kiln_cli", "kiln_commands"] {
+            assert!(m.contains(n), "{n}: {m:?}");
+        }
+        assert!(!m.contains("serde"));
     }
 
     #[test]
