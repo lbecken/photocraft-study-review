@@ -88,14 +88,16 @@ Decisions:
   status is never edited by hand.
 - `cargo xtask metrics …` — appends per-task records to `metrics/tasks.jsonl`.
 - Task files: `tasks/T-NNN-slug.md` with front matter `id, title, tier (low|medium|high),
-  state, owner_role, scorecard_items, depends_on, touches (paths), budget_tokens`.
+  state, owner_role, scorecard_items, depends_on, touches (paths), budget_tokens, iteration,
+  found_by, origin_task` (the last two only on defect/follow-up tasks).
   States: `draft → specified → ready → in_progress → self_verified → tests_joined → reviewed
   → queued → merged → evaluated` (or `blocked`, `abandoned`).
 - Risk tiers: **low** (docs, tests, internal refactor in one module), **medium** (feature in
   one crate), **high** (contracts in §3, command schema, persistence/save path, CI and gate,
   dependencies, anything in two or more layers).
-- Roles: director (orchestrator; owner-delegate), planner, implementer, test author,
-  reviewer, integrator, evaluator, retrospective analyst.
+- Roles: director (orchestrator; owner-delegate; also acts as integrator by running the
+  queue), planner, implementer, test author, reviewer, evaluator, retrospective analyst.
+  At most 3 builder agents run at once (4-core machine; recalibrate at retrospectives).
 
 ## 5. Iterations
 
