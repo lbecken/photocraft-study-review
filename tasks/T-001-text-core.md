@@ -2,7 +2,7 @@
 id: T-001
 title: "Buffer with exact position conversions, line access and operation-based undo/redo"
 tier: high              # scorecard items undo.undo / undo.redo are high; L0 public API is the base contract
-state: self_verified
+state: tests_joined
 owner_role: director
 scorecard_items: [text.insert, text.delete, text.positions, text.lines, undo.undo, undo.redo, undo.grouping, undo.roundtrip]
 depends_on: []
