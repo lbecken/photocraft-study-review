@@ -264,6 +264,36 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   procedure noted. · gate attempts: 0 · next: director review.
 <!-- end planner log -->
 ### implementer
+- 2026-11-12 · R-007 · ready · did: restated ACs: RelPath validates exactly the listed cases
+  (AC-1); MemoryFs is the reference model for DiskFs incl. NotFound for missing file/parent
+  (a file used as a parent counts as missing) and NotAFile for directories (AC-2, AC-11);
+  open+save without edits is byte-identical for UTF-8, UTF-8+BOM, UTF-16LE/BE (AC-3..5);
+  decode is strict with the exact offsets of AC-6 (earliest error wins, so an unpaired
+  surrogate before a trailing odd byte is reported first); encode∘decode identity except
+  Utf8+leading U+FEFF ⇒ Utf8Bom (AC-7); dirty = buffer text ≠ last opened/saved text (AC-8,
+  D-1); failed save leaves file and dirty flag (AC-9); disk save = temp + rename (AC-10);
+  error Display names only the RelPath (AC-11/12). Built modules path, vfs, memory, disk,
+  encoding, document in crates/kiln-workspace/src (+ dep on kiln-text, Cargo.lock), 27 unit
+  tests incl. a fixed-seed MemoryFs-vs-DiskFs differential test, inode/permission/symlink
+  checks, stale-temp recovery and the AC-9 directory-replacement case through Document.
+  Choices: temp file `.<name>.kiln-tmp` in the destination's directory, derived only from the
+  name, opened with truncate, so a crash leftover is overwritten by the next save (cost: a
+  user file of exactly that name would be clobbered); symlink chains are resolved (max 40
+  hops) and the final target replaced; existing permissions copied to the temp file (owner
+  and xattrs not preserved); temp file fsynced before rename (else a crash could leave an
+  empty file under the real name), parent directory fsynced best-effort after rename (failure
+  not reported because the replace already happened). DiskFs::new errors use the placeholder
+  RelPath `(root)` (NotFound for a missing root, Io{NotADirectory} for a non-directory). ·
+  gate attempts: 3 (1: red no-skip, a `#[cfg(unix)]` test, rewritten to run on every
+  platform via cfg'd helper fns; 2: red clippy, compile error I did not build before running
+  the gate; last: green) · not run: kiln-cli / control-protocol check (no doc commands exist
+  until T-003; behaviour exercised only through the public API in unit tests); non-Unix
+  builds (Windows symlink creation in the test needs privileges); very long file names (a
+  255-byte name makes the temp name exceed NAME_MAX, so save fails with Io) · missing
+  context: spec gives no RelPath for DiskFs::new errors (chose `(root)`); NotFound vs Io for a
+  write whose parent is a file not stated (chose NotFound, matching MemoryFs); how the AC-2
+  test creates directories in MemoryFs vs DiskFs not stated (MemoryFs::insert of a file below
+  vs create_dir on disk assumed) · next: join with T-002 acceptance tests, review.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

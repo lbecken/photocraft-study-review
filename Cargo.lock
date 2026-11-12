@@ -320,6 +320,9 @@ version = "0.0.0"
 [[package]]
 name = "kiln-workspace"
 version = "0.0.0"
+dependencies = [
+ "kiln-text",
+]
 
 [[package]]
 name = "libc"

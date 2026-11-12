@@ -7,4 +7,25 @@
 //! May depend on: L0–L1. Headless and deterministic: no wall clock, randomness or
 //! thread-timing dependence in behaviour.
 //!
-//! Status: intentionally empty until its first scorecard task.
+//! Implemented so far:
+//! - [`RelPath`]: validated root-relative paths.
+//! - [`Vfs`] with [`MemoryFs`] (deterministic reference model) and [`DiskFs`] (atomic
+//!   replace via a deterministic temporary file and rename).
+//! - [`decode`] / [`encode`]: UTF-8 (with or without BOM) and UTF-16 LE/BE with BOM; invalid
+//!   input is reported with a byte offset, never repaired.
+//! - [`Document`]: a `kiln_text::Buffer` opened from a VFS, content-based dirty tracking and
+//!   byte-exact save (line endings are kept verbatim).
+
+mod disk;
+mod document;
+mod encoding;
+mod memory;
+mod path;
+mod vfs;
+
+pub use disk::DiskFs;
+pub use document::{Document, OpenError};
+pub use encoding::{DecodeError, Encoding, decode, encode};
+pub use memory::MemoryFs;
+pub use path::{PathError, RelPath};
+pub use vfs::{Vfs, VfsError};
