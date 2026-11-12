@@ -252,6 +252,42 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   attempts: 0 · next: director review.
 <!-- end planner log -->
 ### implementer
+- 2026-11-12 · R-020 · specified · BLOCKED: gate step `test` fails on
+  `apps/kiln-cli/src/main.rs` unit test `tests::schema_lists_every_command`, which asserts the
+  registry's names are exactly `["buffer.insert", "buffer.text"]`. Registering the eleven
+  `doc.*` commands (Goal, AC-9) necessarily breaks it, AC-10 requires the existing kiln-cli
+  tests to pass, and `apps/` is outside `touches` and named out of scope ("if a needed change
+  lies there: stop, report"). The spec is self-contradictory on this point; I did not edit or
+  weaken the test. · ACs restated: AC-1 open→insert→save slice exact values; AC-2 doc edits
+  equal a direct `Buffer` model, rejected edits change nothing; AC-3 documents independent, ids
+  never reused, closed id rejected; AC-4 dirty = text ≠ last saved text; AC-5 dominant line
+  ending + mixed flag, byte-exact round trip; AC-6 rejected vs invalid_params, re-open returns
+  existing id unchanged, dirty close needs discard; AC-7 T-001 typing groups across commands,
+  save breaks the group; AC-8 log = successful commands with MUTATING, replay round-trip +
+  idempotence; AC-9 describe/commands.json with `mutating`, examples with `files`/`setup`,
+  audit; AC-10 buffer.* unchanged. · did: two commits — (1) public API with stub bodies
+  (`Context` over `Box<dyn Vfs>`, `with_files`/`with_vfs`/`vfs`/`log`, `LogEntry`,
+  `ReplayError`, `Registry::replay` stub, `Command::MUTATING`, `Example.files/setup`,
+  `kiln-workspace` workspace dependency + edge); (2) logic — `src/doc.rs` with the eleven
+  commands, log append on success in `execute`, `replay`, audit running `files`+`setup`,
+  `"mutating"` in `describe()`, regenerated `docs/commands.json`. `line_ending`/`encoding` are
+  schema enums. Unit tests in `src/doc.rs` and `src/registry.rs` cover AC-1…AC-9 (800-op
+  differential vs Buffer, 20 random log/replay rounds incl. failures, failed-save integrity
+  via `MemoryFs::set_fail_writes`). Checked from outside with `kiln-cli exec doc.open`/
+  `doc.list`/`buffer.insert`. · gate attempts: 1 (last: red `test`, only
+  `schema_lists_every_command`; fmt, clippy, layers, ui-commands, schema, scorecard green;
+  fuzz/budgets/later steps not run). `cargo test --workspace -- --skip
+  schema_lists_every_command`: 196 passed, 0 failed (not a gate run). · not run: acceptance
+  tests (not joined yet), gate steps after `test`. · missing context: `touches` lacks
+  `apps/kiln-cli/src/main.rs` although adding commands breaks its exact-name test; Example
+  `files`/`setup` JSON shape unspecified (I used serde's default tuple-as-array:
+  `[["doc.open", {...}]]`); whether `replay` must roll back on error (I leave earlier entries
+  applied, documented). · next: director either adds `apps/kiln-cli/src/main.rs` to
+  `touches` (update the expected list to the 13 names, or derive it from the registry) or
+  rules otherwise; then re-run `cargo xtask ci`.
+  QUESTION: AC-10 ("existing kiln-cli tests pass") contradicts registering doc.* while
+  `apps/kiln-cli/src/main.rs:164` asserts exactly `["buffer.insert", "buffer.text"]`. May
+  the implementer update that assertion, and under which task's `touches`?
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
