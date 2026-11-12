@@ -176,22 +176,17 @@ number of files and MB copied. Remove finished worktrees.
 Cargo names a workspace crate's artifacts by its path relative to the workspace root, so two
 checkouts sharing a target directory get the same artifact names, and mtime-based freshness can
 serve one checkout's `xtask` in the other (T-005 join triage, D-019). Every `xtask` invocation
-therefore first checks where the binary was built from (its compile-time `CARGO_MANIFEST_DIR`)
-and refuses — exit 2, one line `xtask: stale xtask binary: built from <A> but … <B>; …` — when:
-
-- it was launched by cargo for another workspace (`cargo xtask …` / `cargo run -p xtask`, and
-  processes spawned by `cargo test -p xtask`: cargo's runtime `CARGO_MANIFEST_DIR` with
-  `CARGO_PKG_NAME=xtask` must be the build's own xtask package), or
-- the binary sits in `<checkout>/target/…` of a cargo workspace other than the one it was built
-  from.
-
-A test that runs `CARGO_BIN_EXE_xtask` inside a toy repository passes both: the inherited
-`CARGO_MANIFEST_DIR` (if any) is the build's own, and the binary lives in its own checkout's
-target. The queue's run of main's xtask (built in `.git/kiln-queue/main-xtask/`, not any
-checkout's target) against a task worktree is the one sanctioned exception: the queue sets
-`KILN_XTASK_RUN_IN=<canonical worktree path>` for that child (gate and `{xtask}` regeneration
-commands), and the exception holds only when the variable names exactly the workspace the
-command runs in; anywhere else it is ignored. Fix a refusal by rebuilding in the right checkout
+therefore first resolves the git working tree it was built from (the workspace above its
+compile-time `CARGO_MANIFEST_DIR`) and the one it is run in (the cargo workspace above the
+working directory), and refuses — exit 2, one line `xtask: stale xtask binary: built from <A>
+but run in <B> …` — when they are **different working trees of the same repository** (same
+common git directory), e.g. main's build served by `cargo xtask` in `.worktrees/T-NNN`. In its
+own checkout it runs; in an unrelated repository (the toy repositories tests create) it runs; if
+either side is not a git working tree it runs. The queue's run of main's xtask against a task
+worktree is the one sanctioned exception: the queue sets `KILN_XTASK_RUN_IN=<canonical worktree
+path>` for that child (gate and `{xtask}` regeneration commands), and the exception holds only
+when the variable names exactly the workspace the command runs in; anywhere else it is ignored.
+(Main's build tree `.git/kiln-queue/main-xtask/src` is not a working tree anyway.) Fix a refusal by rebuilding in the right checkout
 (`touch xtask/src/main.rs` or `cargo clean -p xtask`); never export one checkout's
 `CARGO_TARGET_DIR` while working in another.
 

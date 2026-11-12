@@ -383,6 +383,25 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   guards pass) · not run: a green full gate (blocked by the acceptance test I may not edit) ·
   missing context: whether (e) "guard tests" should also be run/recorded by join — I only
   widened the search path · next: re-join with the test author's fix, then gate.
+- 2026-11-12T23:52Z · R-018 (cont.) · in_progress · director ruling on (f) received mid-run;
+  my first design differed (it compared cargo's runtime `CARGO_MANIFEST_DIR` and the exe's
+  owning `target/`, which would also refuse a worktree's binary run in an unrelated toy repo),
+  so I replaced it: `provenance.rs` now resolves the git working tree at the build's workspace
+  and at the run workspace (nearest `[workspace]` above cwd) and refuses (exit 2, one line,
+  both paths) only when they differ and share a common git dir. Cases: own checkout → runs;
+  unrelated repo (toy repos) → runs; not a working tree on either side → runs; queue main
+  gate → explicit `KILN_XTASK_RUN_IN=<canonical worktree>` set by the queue, honoured only for
+  exactly that workspace (main's export in `.git/kiln-queue/` is not a working tree anyway);
+  a leaked value excuses nothing else. Unit tests: 3 in `provenance::tests` with real git
+  worktrees. Scratch proof (scratchpad/t005/prov2): primary `p` + `git worktree add`
+  `.worktrees/T-901`, xtask built in `p` into the worktree's target: `cargo xtask help` and
+  the direct binary in the worktree → exit 2 naming both; same binary in an unrelated repo →
+  runs; with the exception for the worktree → runs; after `touch xtask/src/main.rs` → runs.
+  Clone `q` as main: `cargo xtask queue T-900` ran main's guarded xtask through the real gate
+  in the task worktree, no refusal, stopping only at the known test. · gate attempts: 2 (last:
+  red `test`, only `allows_acceptance_scorecard_and_review_paths_for_medium_only` — triage
+  RC-2 test defect; every other step passes) · not run: green gate (blocked on the test
+  author's fix) · missing context: none beyond the ruling · next: re-join with the fixed test.
 <!-- end implementer log -->
 ### test author
 - 2026-11-12 23:30 · R-010 · in_progress · did: 16 acceptance tests in
