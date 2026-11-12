@@ -402,6 +402,20 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   red `test`, only `allows_acceptance_scorecard_and_review_paths_for_medium_only` — triage
   RC-2 test defect; every other step passes) · not run: green gate (blocked on the test
   author's fix) · missing context: none beyond the ruling · next: re-join with the fixed test.
+- 2026-11-12T23:58Z · R-023 · in_progress (round 3, D-021) · did: `join` now runs the
+  regression guards (`guard_tNNN*.rs`, found in the same places as acceptance tests,
+  including `xtask/tests`) itself, on base (tests worktree) and on the joined branch; the
+  record gains `guard_total` (joined-branch guards, a non-compiling target counts as one),
+  `guard_fail_base`, `guard_fail_join`; any guard failure gives `result:"guard_failed"`
+  (exit 1), the merge is kept like `acceptance_failed`, and the gate is not run. Decided:
+  precedence `refused_base_passes` > `acceptance_failed` > `guard_failed` > gate; a guard target
+  that does not compile counts as a failure. Unit test
+  `join::tests::guards_must_pass_on_base_and_joined_branch` (pass everywhere → joined and gate
+  run once; broken on join → guard_failed, gate not run; failing on base → guard_failed).
+  docs/development.md Join section updated. · gate attempts: 1 (last: green, 172 tests in 27
+  suites; `acceptance_t005` 16/16, `acceptance_t005_r2` 4/4, guards pass) · not run: a real
+  `cargo xtask join` on a scratch repo with a breaking guard beyond the r2 acceptance test,
+  which does exactly that and passes · missing context: none · next: review.
 <!-- end implementer log -->
 ### test author
 - 2026-11-12 23:30 · R-010 · in_progress · did: 16 acceptance tests in

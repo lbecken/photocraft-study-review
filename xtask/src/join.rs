@@ -14,6 +14,9 @@
 //! 2. `impl_tests_green`: the implementer branch's own `cargo test --workspace` before the merge;
 //! 3. merge `task/T-NNN-tests` into `task/T-NNN` (`--no-ff`); on conflict abort and refuse;
 //! 4. run the acceptance tests on the joined branch (`acc_fail_first_join` failures), then the gate;
+//!    regression guards (`guard_tNNN*.rs`, same places) are run by join itself on base and on the
+//!    joined branch (`guard_total`, `guard_fail_base`, `guard_fail_join`); any failure in either
+//!    place gives `guard_failed` (D-021) and the gate is not run;
 //! 5. append a `join` record to `metrics/tasks.jsonl`. Exit 0 only if the base evidence holds,
 //!    every acceptance test passes on the joined branch, and the gate is green. Acceptance
 //!    failures keep the merge: the task goes back to the implementer with the tests.
@@ -165,8 +168,25 @@ pub struct JoinRecord {
     pub tests_sha: String,
     /// Head of `task/T-NNN` after the join (pre-join head if undone).
     pub joined_sha: String,
-    /// `joined`, `acceptance_failed`, `gate_failed`, `refused_base_passes`, `conflict`, `no_acceptance_tests`.
+    /// `joined`, `acceptance_failed`, `guard_failed`, `gate_failed`, `refused_base_passes`,
+    /// `conflict`, `no_acceptance_tests`.
     pub result: String,
+    /// Regression guards (`guard_tNNN*`, D-010) on the joined branch (a target that does not
+    /// compile counts as one).
+    pub guard_total: u64,
+    /// Guards not passing on base (failed, or their target did not compile).
+    pub guard_fail_base: u64,
+    /// Guards not passing on the joined branch.
+    pub guard_fail_join: u64,
+}
+
+/// Guards that did not pass in a run: failed tests plus targets that did not compile.
+fn guard_failures(run: &AccRun) -> u64 {
+    run.results
+        .values()
+        .filter(|o| **o != Outcome::Passed)
+        .count() as u64
+        + run.not_compiled.len() as u64
 }
 
 /// Run the join.
@@ -202,6 +222,7 @@ pub fn join(
         }
     }
     let prefix = format!("acceptance_{}", spec.task.to_lowercase().replace('-', ""));
+    let guard_prefix = format!("guard_{}", spec.task.to_lowercase().replace('-', ""));
     let target = wt.join("target");
     let tests_target = twt.join("target");
     let mut rec = JoinRecord {
@@ -218,10 +239,16 @@ pub fn join(
         tests_sha: rev(&twt, "HEAD")?,
         joined_sha: rev(&wt, "HEAD")?,
         result: String::new(),
+        guard_total: 0,
+        guard_fail_base: 0,
+        guard_fail_join: 0,
     };
     let metrics = root.join("metrics/tasks.jsonl");
 
     let base = oracle.acceptance(&twt, &tests_target, &prefix)?;
+    // Guards must pass on base and on the joined branch (D-021); join runs them itself.
+    let guards_base = oracle.acceptance(&twt, &tests_target, &guard_prefix)?;
+    rec.guard_fail_base = guard_failures(&guards_base);
     if base.results.is_empty() && base.not_compiled.is_empty() {
         rec.result = "no_acceptance_tests".into();
         append_jsonl(&metrics, &rec)?;
@@ -257,6 +284,9 @@ pub fn join(
     }
 
     let joined = oracle.acceptance(&wt, &target, &prefix)?;
+    let guards_join = oracle.acceptance(&wt, &target, &guard_prefix)?;
+    rec.guard_total = (guards_join.results.len() + guards_join.not_compiled.len()) as u64;
+    rec.guard_fail_join = guard_failures(&guards_join);
     rec.acc_total = joined.results.len() as u64;
     rec.acc_fail_first_join = joined
         .results
@@ -292,6 +322,12 @@ pub fn join(
         rec.acc_fail_first_join += joined.not_compiled.len() as u64;
     } else if rec.acc_fail_first_join > 0 {
         rec.result = "acceptance_failed".into();
+    } else if rec.guard_fail_base > 0 || rec.guard_fail_join > 0 {
+        eprintln!(
+            "join: regression guards fail ({} on base, {} on the joined branch); the join is kept but not accepted",
+            rec.guard_fail_base, rec.guard_fail_join
+        );
+        rec.result = "guard_failed".into();
     } else {
         let g = gate.run(&wt, crate::queue::GateXtask::Own)?;
         rec.gate_green = Some(g.passed);
@@ -466,7 +502,7 @@ pub fn revert_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::testrepo;
+    use crate::git::testrepo::{self, g};
     use crate::queue::GateOutcome;
     use crate::util::read_jsonl;
     use crate::worktree;
@@ -484,6 +520,18 @@ mod tests {
     impl TestOracle for FileOracle {
         fn acceptance(&self, dir: &Path, _: &Path, prefix: &str) -> Result<AccRun> {
             let mut run = AccRun::default();
+            if prefix.starts_with("guard_") {
+                // Guards pass while `keep.txt` exists.
+                for t in acceptance_targets(dir, prefix)? {
+                    let o = if dir.join("keep.txt").is_file() {
+                        Outcome::Passed
+                    } else {
+                        Outcome::Failed
+                    };
+                    run.results.insert((t, "g_1".into()), o);
+                }
+                return Ok(run);
+            }
             for t in acceptance_targets(dir, prefix)? {
                 match std::fs::read_to_string(dir.join("crates/k/src/lib.rs")) {
                     Err(_) => {
@@ -665,6 +713,92 @@ mod tests {
         );
         let e = revert_check(root, "T-009", &[], &FixedClock, &FileOracle).unwrap_err();
         assert!(e.to_string().contains("no commits beyond main"), "{e}");
+    }
+
+    /// Counts gate runs, so a test can see the gate was not relied on.
+    struct CountingGate(std::cell::Cell<u32>);
+    impl GateRunner for CountingGate {
+        fn run(&self, _: &Path, _: crate::queue::GateXtask<'_>) -> Result<GateOutcome> {
+            self.0.set(self.0.get() + 1);
+            Ok(GateOutcome {
+                passed: true,
+                failed_step: None,
+            })
+        }
+    }
+
+    fn guard_setup(tag: &str, keep_on_base: bool) -> crate::util::testutil::TempDir {
+        let repo = setup(tag, Some("// stub\n"));
+        let root = repo.path();
+        let twt = root.join(".worktrees/T-004-tests");
+        let mut files = vec![("xtask/tests/guard_t004.rs", "#[test] fn g_1() {}")];
+        if keep_on_base {
+            files.push(("keep.txt", "k"));
+        }
+        testrepo::commit(&twt, "guard", &files);
+        repo
+    }
+
+    #[test]
+    fn guards_must_pass_on_base_and_joined_branch() {
+        // Passing everywhere: joined, guard counted.
+        let repo = guard_setup("guard-ok", true);
+        let root = repo.path();
+        testrepo::commit(
+            &root.join(".worktrees/T-004"),
+            "impl",
+            &[("crates/k/src/lib.rs", "impl = done\n")],
+        );
+        let gate = CountingGate(Default::default());
+        let r = join(root, "T-004", None, &FixedClock, &FileOracle, &gate).unwrap();
+        assert_eq!(
+            (
+                r.result.as_str(),
+                r.guard_total,
+                r.guard_fail_base,
+                r.guard_fail_join
+            ),
+            ("joined", 1, 0, 0)
+        );
+        assert_eq!(gate.0.get(), 1);
+        let recs = read_jsonl(&root.join("metrics/tasks.jsonl")).unwrap();
+        assert_eq!(recs[0]["guard_total"], 1);
+        assert_eq!(recs[0]["guard_fail_join"], 0);
+
+        // The implementation breaks the guard: not joined, and the gate is not what notices.
+        let repo = guard_setup("guard-broken", true);
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-004");
+        testrepo::commit(&wt, "impl", &[("crates/k/src/lib.rs", "impl = done\n")]);
+        g(&wt, &["merge", "-q", "task/T-004-tests"]);
+        g(&wt, &["rm", "-q", "keep.txt"]);
+        g(&wt, &["commit", "-q", "-m", "drop keep"]);
+        let gate = CountingGate(Default::default());
+        let r = join(root, "T-004", None, &FixedClock, &FileOracle, &gate).unwrap();
+        assert_eq!(
+            (
+                r.result.as_str(),
+                r.guard_fail_base,
+                r.guard_fail_join,
+                r.gate_green
+            ),
+            ("guard_failed", 0, 1, None)
+        );
+        assert_eq!(gate.0.get(), 0, "gate not run");
+
+        // A guard that already fails on base.
+        let repo = guard_setup("guard-base", false);
+        let root = repo.path();
+        testrepo::commit(
+            &root.join(".worktrees/T-004"),
+            "impl",
+            &[("crates/k/src/lib.rs", "impl = done\n"), ("keep.txt", "k")],
+        );
+        let r = join(root, "T-004", None, &FixedClock, &FileOracle, &Gate(true)).unwrap();
+        assert_eq!(
+            (r.result.as_str(), r.guard_fail_base, r.guard_fail_join),
+            ("guard_failed", 1, 0)
+        );
     }
 
     #[test]

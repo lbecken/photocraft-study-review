@@ -290,7 +290,10 @@ which ran the task branch's own gate and checked none of the above.
 Acceptance tests live in `crates/*/tests/acceptance_tNNN*.rs`, `apps/*/tests/…` or
 `xtask/tests/…` (directly in that `tests/` directory) on `task/T-NNN-tests`. Regression guards
 (`guard_tNNN*.rs`, D-010) live in the same places; they are meant to pass on base, so join does
-not count them as acceptance evidence — the gate runs them. `join`:
+not count them as acceptance evidence, but it runs them itself on base and on the joined
+branch: every guard must pass in both places, otherwise the record's `result` is
+`guard_failed` (exit 1, the merge is kept, the gate is not run). The record carries
+`guard_total`, `guard_fail_base` and `guard_fail_join` (D-021). `join`:
 
 1. builds and runs them in `.worktrees/T-NNN-tests` (base + tests) → `base_fail_kind`:
    `fails` (all compile and fail), `does_not_compile` (weak evidence), `mixed`, or `passes`
