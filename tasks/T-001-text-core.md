@@ -309,6 +309,32 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   director review.
 <!-- end planner log -->
 ### implementer
+- 2026-11-12T23:00Z · R-004 · ready · ACs restated: edits/sizes/removed text/errors equal a
+  `String` model (AC-1, AC-11); six conversions exact and mutually inverse, exact error variants
+  for out-of-range, mid-UTF-8, mid-surrogate, mid-CRLF, line/col out of range (AC-2, AC-3); lines
+  split CRLF-first on `\r\n|\n|\r` (AC-4); style and dominant kind with Lf>Crlf>Cr ties (AC-5);
+  op-based undo/redo with the five-part typing rule, no-ops/rejects invisible to history,
+  edits clear redo (AC-6..AC-10); `Eq` on text only, independent clones (AC-12); CLI unchanged
+  (AC-13). · did: `ropey =1.6.1` (default-features off, `cr_lines`+`simd`, so ropey breaks
+  exactly on LF/CRLF/CR) as storage; per-kind break counts kept incrementally from a
+  one-char-margin window per edit; history = stacks of inverse `Op`s, a typing group is one
+  `Op` whose inserted text grows; new modules `history.rs`, `line_ending.rs`, `position.rs`.
+  Unit tests keep the 8 bootstrap names and add multi-chunk differential edits (3 seeds ×
+  1 500 ops on ~6–12k-char texts, CRLF made/split at edit edges), all-index conversion checks,
+  undo/redo against a step-boundary model (3 seeds × 400 edits), exact grouping/no-op/clone
+  cases; the differential test caught one bug (window-count underflow), fixed. Checked from
+  outside: `kiln-cli exec buffer.insert '{"offset":3,"text":"!"}' --text abc` → `{"len_chars":4}`.
+  Performance (not gated): a scratch release binary outside the repo on a 10 MiB, 291 273-line
+  buffer measured 1 000 inserts 1.9 ms, 1 000 deletes 1.3 ms, 2 000 undos 1.7 ms vs 5.3 ms for a
+  single full `text()` copy, so an edit does not copy the text. · gate attempts: 1 (last: green;
+  fuzz/budgets EMPTY) · not run: the acceptance tests (not visible to me); full workspace test
+  rebuild only via the gate · missing context: (1) error precedence when a range is both
+  inverted and out of range, and start-vs-end when both are out of range, is not specified; I
+  kept main's order (InvertedRange, then start, then end); (2) whether a rejected edit or a
+  `redo()`/`undo()` that returns `false` ends a typing group is not stated; I chose "no" (they
+  change nothing), consistent with "history unchanged on Err"; (3) feature unification: if any
+  future crate enables ropey's default `unicode_lines`, line semantics silently change — a unit
+  test (`unicode_separators_do_not_break_lines`) guards it. · next: join with T-001-tests, review.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
