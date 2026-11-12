@@ -352,6 +352,37 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   (registry/git), not path packages; (5) failure to build main's xtask has no specified
   result — it is an error (exit 2) with no record. · next: director join with the acceptance
   tests, reviewer.
+- 2026-11-12T23:47Z · R-018 · in_progress (round 2, D-019 d–f; join triage read) · did: (d)
+  `guard_tNNN*.rs` allowed exactly like `acceptance_tNNN*.rs` (`precheck.rs`); (e)
+  `join::acceptance_targets` searches `crates/*/tests/`, `apps/*/tests/` and `xtask/tests/`
+  (files directly in those dirs); join still counts only `acceptance_*` as evidence (guards
+  pass on base by D-010 and run in the gate); (f) new `provenance.rs`, checked first in
+  `main()`: compile-time `CARGO_MANIFEST_DIR` is compared with (1) the runtime
+  `CARGO_MANIFEST_DIR` when `CARGO_PKG_NAME=xtask` (cargo run / cargo test set it), and (2) the
+  checkout whose `target/` holds `current_exe()`; a mismatch exits 2 with one line naming
+  both checkouts. The three cases: **queue main gate** — the queue sets
+  `KILN_XTASK_RUN_IN=<canonical worktree>` on main's xtask (gate and `{xtask}` regeneration);
+  it excuses only a run whose workspace (nearest `[workspace]` above cwd) is exactly that
+  path, so a leaked/exported value excuses nothing elsewhere, and main's binary lives in
+  `.git/kiln-queue/…`, not a checkout target; **tests in toy repos** — the inherited
+  `CARGO_MANIFEST_DIR` (if not scrubbed) is the build's own and the exe sits in its own
+  checkout's target, so both checks pass whatever the cwd; **accidental bypass** — only an
+  exact-path match of a dedicated variable skips the checks. Unit tests: `provenance::tests`
+  (4), `join::tests::acceptance_targets_include_xtask_tests`, `precheck::tests::allowed_paths`
+  extended. Scratch proof (clones `p`, `w` under scratchpad/t005/prov): build in `p` with
+  `CARGO_TARGET_DIR=w/target` (cargo does not rebuild: the RC-1 situation), then in `w`:
+  `cargo xtask help` → exit 2 "built from …/p but cargo is running it for the workspace …/w";
+  direct `w/target/debug/xtask help` → exit 2 "…sits in the target directory of …/w"; after
+  `touch xtask/src/main.rs` it runs. Clone `q` (this branch as main): `cargo xtask queue
+  T-900` ran main's guarded xtask through the full real gate in the task worktree with no
+  guard refusal (its acceptance_t005 children ran; record `gate_xtask:"main"`); it stopped at
+  `test` only on the known defective case. · gate attempts: 1 (last: red `test`: only
+  `allows_acceptance_scorecard_and_review_paths_for_medium_only`, the triage's RC-2 test
+  defect, not yet fixed on `task/T-005-tests`; fmt/clippy/layers/ui-commands/schema/scorecard
+  passed; no-skip PASS and fuzz/budgets EMPTY run individually; 82 unit, 15/16 acceptance,
+  guards pass) · not run: a green full gate (blocked by the acceptance test I may not edit) ·
+  missing context: whether (e) "guard tests" should also be run/recorded by join — I only
+  widened the search path · next: re-join with the test author's fix, then gate.
 <!-- end implementer log -->
 ### test author
 - 2026-11-12 23:30 · R-010 · in_progress · did: 16 acceptance tests in
