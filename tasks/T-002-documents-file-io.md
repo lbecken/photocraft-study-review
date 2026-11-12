@@ -411,4 +411,22 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   QUESTION: SG-5/6/7 (test author's) — proposed rulings: `path` is the requested RelPath;
   `PathError.path` is the input verbatim and `reason` is free text; a save onto a directory
   returns `NotAFile`.
+- 2026-11-12 · R-014 · round 2 · did: reviewed delta `4a45196..65ff172` against D-014 →
+  `reviews/T-002-r2.md`, verdict request-changes (test-only). Round-1 defects D-1, D-2 and D-3
+  (existing targets) are resolved, as are TG-1 and N-3; TG-2 is waived. TG-3 waiver stands: a
+  failing rename can be provoked as non-root via a sticky directory and another uid's 0666 file
+  (cleanup verified), but the setup needs chown, so it cannot be an acceptance test. Mutation
+  spot-check: 12 bugs; the acceptance tests killed 6 (9 counting unit tests). Survivors:
+  fsync; rename cleanup; temp created 0666 (survives every test); chmod after rename; fill-failure
+  cleanup; writability check that truncates. New findings: TG-4 (owner-only temp mode on the
+  save path not asserted; the named unit test checks the helper only), TG-5 (no acceptance save
+  that fails after the check on a writable target, e.g. a 0555 directory as non-root),
+  SG-8 (new-file temp follows the umask; reword D-014 (2)), nits N-4…N-7 (the check opens the
+  target O_WRONLY; the exhaustion message gives no cleanup hint; the sticky-directory
+  limitation is undocumented; the branch is not rebased on main and the D-014 text is missing
+  in the branch's task file). · gate attempts: 1 (last: green) · not run: crash injection,
+  ENOSPC/EFBIG path · missing context: none · next: test-only fixes for TG-4/TG-5 or a director
+  waiver; rebase.
+  QUESTION: SG-8 — reword D-014 (2) as "never more readable than the resulting file
+  (owner-only for an existing target, `0666 & ~umask` for a new one)"?
 <!-- end reviewer log -->
