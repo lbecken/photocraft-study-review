@@ -1294,7 +1294,12 @@ mod tests {
             err.to_string(),
             "replay failed at log entry 1: no open document 9"
         );
+        // No rollback: the entry before the failure stays applied, the one after never ran.
         assert_eq!(ctx.log(), &log[..1]);
+        assert_eq!(
+            ok(&r, &mut ctx, "doc.list", json!({})),
+            json!({"docs": [{"doc": 1, "path": "a", "dirty": false}]})
+        );
     }
 
     #[test]

@@ -288,6 +288,15 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   QUESTION: AC-10 ("existing kiln-cli tests pass") contradicts registering doc.* while
   `apps/kiln-cli/src/main.rs:164` asserts exactly `["buffer.insert", "buffer.text"]`. May
   the implementer update that assertion, and under which task's `touches`?
+- 2026-11-12 · R-021 · blocked → unblocked by D-020 · did: per D-020 (1) changed only
+  `apps/kiln-cli/src/main.rs` test `schema_lists_every_command` to assert the CLI listing
+  equals `standard_registry().names()` and contains `buffer.insert`/`buffer.text`; (2) kept
+  the arrays-of-pairs `files`/`setup` shape; (3) `Registry::replay` doc comment now states
+  no rollback (earlier entries stay applied, error names the failing index), and
+  `replay_stops_at_first_failure` also pins that the pre-failure `doc.open` stays applied and
+  the later entry never ran. · gate attempts: 2 total (last: green; fuzz and budgets EMPTY,
+  nothing registered) · not run: acceptance tests (not joined yet) · missing context: none
+  new · next: join with test author's branch, review.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

@@ -442,8 +442,9 @@ impl Registry {
         Ok(result)
     }
 
-    /// Execute every entry of `log` in order on `ctx` and return their results; stop at the
-    /// first error (entries before it stay applied).
+    /// Execute every entry of `log` in order on `ctx` and return their results. Stops at the
+    /// first failing entry and returns a [`ReplayError`] naming its index; there is no
+    /// rollback: the entries before it stay applied to `ctx` (and in its log).
     pub fn replay(&self, ctx: &mut Context, log: &[LogEntry]) -> Result<Vec<Value>, ReplayError> {
         log.iter()
             .enumerate()

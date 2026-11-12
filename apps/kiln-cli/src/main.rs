@@ -161,7 +161,8 @@ mod tests {
             .iter()
             .map(|c| c["name"].as_str().unwrap())
             .collect();
-        assert_eq!(names, ["buffer.insert", "buffer.text"]);
+        assert_eq!(names, standard_registry().unwrap().names());
+        assert!(names.contains(&"buffer.insert") && names.contains(&"buffer.text"));
     }
 
     #[test]
