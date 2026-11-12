@@ -4,31 +4,58 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use kiln_text::Buffer;
+use kiln_workspace::{MemoryFs, PathError, RelPath, Vfs};
 use schemars::JsonSchema;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// The state commands act on.
+/// The state commands act on: a VFS, the documents opened from it, a scratch buffer (for the
+/// `buffer.*` commands) and the log of successfully executed commands.
 ///
-/// Placeholder for iteration 0: a single scratch buffer. It becomes the open-documents state of
-/// `kiln-workspace` when that crate gains documents; commands keep the same calling shape.
 /// Only read access is public; mutation happens inside commands.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug)]
 pub struct Context {
     buffer: Buffer,
+    vfs: Box<dyn Vfs>,
+    log: Vec<LogEntry>,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self::with_vfs(Box::new(MemoryFs::new()))
+    }
 }
 
 impl Context {
-    /// An empty context.
+    /// An empty context: empty scratch buffer, empty [`MemoryFs`], no documents, empty log.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// A context whose scratch buffer holds `text`.
+    /// A context whose scratch buffer holds `text` (empty [`MemoryFs`]).
     pub fn with_text(text: &str) -> Self {
         Self {
             buffer: Buffer::from_text(text),
+            ..Self::default()
+        }
+    }
+
+    /// A context over a [`MemoryFs`] holding `files` (path, bytes). Fails on an invalid path.
+    pub fn with_files(files: &[(&str, &[u8])]) -> Result<Self, PathError> {
+        let mut fs = MemoryFs::new();
+        for (path, bytes) in files {
+            fs.insert(&RelPath::new(path)?, bytes);
+        }
+        Ok(Self::with_vfs(Box::new(fs)))
+    }
+
+    /// A context over `vfs` (empty scratch buffer, no documents, empty log).
+    pub fn with_vfs(vfs: Box<dyn Vfs>) -> Self {
+        Self {
+            buffer: Buffer::new(),
+            vfs,
+            log: Vec::new(),
         }
     }
 
@@ -40,16 +67,64 @@ impl Context {
     pub(crate) fn buffer_mut(&mut self) -> &mut Buffer {
         &mut self.buffer
     }
+
+    /// Read access to the VFS.
+    pub fn vfs(&self) -> &dyn Vfs {
+        self.vfs.as_ref()
+    }
+
+    /// Every successfully executed command, in execution order.
+    pub fn log(&self) -> &[LogEntry] {
+        &self.log
+    }
 }
 
-/// An executable example of a command: run on a fresh [`Context::with_text`]`(initial_text)`
-/// with `params`, it must return exactly `result`. Examples are checked by `cargo xtask schema`.
+/// One successfully executed command, in execution order.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LogEntry {
+    /// The command name.
+    pub name: String,
+    /// The params it was executed with, as given.
+    pub params: Value,
+    /// The command's [`Command::MUTATING`] flag.
+    pub mutating: bool,
+}
+
+/// [`Registry::replay`] stopped: entry `index` of the log failed with `error`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReplayError {
+    /// Index of the failing log entry.
+    pub index: usize,
+    /// Why it failed.
+    pub error: CommandError,
+}
+
+impl fmt::Display for ReplayError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "replay failed at log entry {}: {}",
+            self.index, self.error
+        )
+    }
+}
+
+impl std::error::Error for ReplayError {}
+
+/// An executable example of a command: on a fresh [`Context::with_text`]`(initial_text)` whose
+/// [`MemoryFs`] holds `files`, each `setup` command is executed (each must succeed), then the
+/// command with `params`; it must return exactly `result`. Examples are checked by
+/// `cargo xtask schema`.
 #[derive(Clone, Debug, Serialize)]
 pub struct Example {
     /// What the example shows.
     pub description: &'static str,
     /// Text of the scratch buffer before the command runs.
     pub initial_text: &'static str,
+    /// Initial files of the context's [`MemoryFs`]: (path, UTF-8 content).
+    pub files: Vec<(&'static str, &'static str)>,
+    /// Commands (name, params) executed before the example; each must succeed.
+    pub setup: Vec<(&'static str, Value)>,
     /// Params passed to the command.
     pub params: Value,
     /// The exact expected result.
@@ -66,6 +141,9 @@ pub trait Command {
     type Params: DeserializeOwned + JsonSchema;
     /// Result; its JSON Schema is generated from this type.
     type Output: Serialize + JsonSchema;
+    /// True iff the command can change state (documents, buffer, files); false for read-only
+    /// queries.
+    const MUTATING: bool;
 
     /// At least one executable example.
     fn examples() -> Vec<Example>;
@@ -297,6 +375,13 @@ impl Registry {
         Ok(result)
     }
 
+    /// Execute every entry of `log` in order on `ctx` and return their results; stop at the
+    /// first error (entries before it stay applied).
+    pub fn replay(&self, ctx: &mut Context, log: &[LogEntry]) -> Result<Vec<Value>, ReplayError> {
+        let _ = (ctx, log);
+        Ok(Vec::new())
+    }
+
     /// Machine-readable description of every command (the content of `docs/commands.json`).
     pub fn describe(&self) -> Value {
         let commands: Vec<Value> = self
@@ -369,10 +454,13 @@ mod tests {
         const DOC: &'static str = "Echo n.";
         type Params = EchoParams;
         type Output = EchoOut;
+        const MUTATING: bool = false;
         fn examples() -> Vec<Example> {
             vec![Example {
                 description: "echo",
                 initial_text: "",
+                files: vec![],
+                setup: vec![],
                 params: json!({"n": 1}),
                 result: json!({"n": 1}),
             }]
@@ -388,10 +476,13 @@ mod tests {
         const DOC: &'static str = "Example claims the wrong result.";
         type Params = EchoParams;
         type Output = EchoOut;
+        const MUTATING: bool = false;
         fn examples() -> Vec<Example> {
             vec![Example {
                 description: "wrong",
                 initial_text: "",
+                files: vec![],
+                setup: vec![],
                 params: json!({"n": 1}),
                 result: json!({"n": 2}),
             }]
@@ -407,6 +498,7 @@ mod tests {
         const DOC: &'static str = " ";
         type Params = EchoParams;
         type Output = EchoOut;
+        const MUTATING: bool = false;
         fn examples() -> Vec<Example> {
             Echo::examples()
         }

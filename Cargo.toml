@@ -24,6 +24,7 @@ publish = false
 # Dependencies are high-tier changes (CHARTER §4): add them here, through review.
 [workspace.dependencies]
 kiln-text = { path = "crates/kiln-text" }
+kiln-workspace = { path = "crates/kiln-workspace" }
 kiln-commands = { path = "crates/kiln-commands" }
 kiln-ui = { path = "crates/kiln-ui" }
 # T-001 (D-1): rope storage for kiln-text. `cr_lines` without `unicode_lines` makes ropey break

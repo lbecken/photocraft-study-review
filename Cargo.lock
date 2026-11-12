@@ -285,6 +285,7 @@ version = "0.0.0"
 dependencies = [
  "jsonschema",
  "kiln-text",
+ "kiln-workspace",
  "schemars",
  "serde",
  "serde_json",

@@ -14,7 +14,9 @@
 mod buffer;
 mod registry;
 
-pub use registry::{Command, CommandError, Context, Example, Registry, RegistryError};
+pub use registry::{
+    Command, CommandError, Context, Example, LogEntry, Registry, RegistryError, ReplayError,
+};
 
 /// The registry with every built-in command group registered.
 pub fn standard_registry() -> Result<Registry, RegistryError> {

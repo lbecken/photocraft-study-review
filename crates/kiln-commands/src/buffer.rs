@@ -38,18 +38,23 @@ impl Command for Insert {
     const DOC: &'static str = "Insert text at a char offset of the scratch buffer.";
     type Params = InsertParams;
     type Output = InsertResult;
+    const MUTATING: bool = true;
 
     fn examples() -> Vec<Example> {
         vec![
             Example {
                 description: "append to an empty buffer",
                 initial_text: "",
+                files: vec![],
+                setup: vec![],
                 params: json!({"offset": 0, "text": "fn main() {}"}),
                 result: json!({"len_chars": 12}),
             },
             Example {
                 description: "offsets count chars, not bytes",
                 initial_text: "héllo",
+                files: vec![],
+                setup: vec![],
                 params: json!({"offset": 2, "text": "X"}),
                 result: json!({"len_chars": 6}),
             },
@@ -88,11 +93,14 @@ impl Command for Text {
     const DOC: &'static str = "Return the whole text of the scratch buffer.";
     type Params = TextParams;
     type Output = TextResult;
+    const MUTATING: bool = false;
 
     fn examples() -> Vec<Example> {
         vec![Example {
             description: "read the buffer",
             initial_text: "let x = 1;",
+            files: vec![],
+            setup: vec![],
             params: json!({}),
             result: json!({"text": "let x = 1;", "len_chars": 10}),
         }]
