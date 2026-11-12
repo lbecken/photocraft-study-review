@@ -233,7 +233,7 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   resolved by the director regenerating the lock file until T-005 lands.
 - Director rulings after review r1 (2026-11-12, decision D-014) — these are part of the spec:
   1. A save never reads, writes, replaces or deletes any file other than its target and a temp file it created itself. The temp file is created exclusively (if anything already exists at the candidate name, including a symlink, try the next name) and its name is short and independent of the target's name length.
-  2. The temp file is always created owner-only; an existing target keeps its mode across a save; a newly created file gets the platform default mode under the umask. (Reworded after review r2.)
+  2. New content is never more readable than the file it replaces or becomes: when the target exists, the temp file is created owner-only and receives the target's mode before the rename; when the target is new, the temp file is created with the platform default mode under the umask, which is the mode the new file keeps. (Final wording after review r2; an intermediate wording was not implementable without reading the umask.)
   3. Saving to a target the user cannot write returns `PermissionDenied` and leaves the file untouched.
   4. Replacing the file splits hard links and may change the owner: documented limitation.
   5. Supported platforms: Unix (Linux, macOS). Windows is out of scope.
