@@ -2,7 +2,7 @@
 id: T-002
 title: "Open and save documents through a virtual file system, preserving encoding and line endings, atomically"
 tier: high              # persistence/save path; Cargo.lock (new dependency edge)
-state: in_progress
+state: queued
 owner_role: director
 scorecard_items: [ws.vfs, io.utf8, io.bom, io.encoding, io.save-atomic]
 depends_on: []
