@@ -1,33 +1,48 @@
-//! On-disk VFS with atomic replace.
+//! On-disk VFS with atomic replace (supported platforms: Unix only, decision D-014).
 //!
 //! `write_atomic` writes the new content to a temporary file next to the destination and
 //! renames it over the destination, so readers see either the old or the new content.
 //!
-//! - Temporary name: `.<file name>.kiln-tmp` in the destination's directory. It is derived
-//!   only from the destination name (no clock, no randomness), is always longer than the
-//!   destination name so it never equals it, and is opened with truncation, so a leftover from
-//!   a crashed save is simply overwritten by the next save of the same file. Consequence: a
-//!   user file that happens to have exactly that name is overwritten and removed by a save.
+//! - A save never reads, writes, replaces or deletes any file other than its target and a
+//!   temporary file it created itself (D-014 (1)). The temporary file is created exclusively
+//!   (`O_CREAT|O_EXCL`, which also refuses an existing symlink) under the first free name of
+//!   the fixed sequence `.kiln-tmp-0`, `.kiln-tmp-1`, … `.kiln-tmp-99` in the
+//!   destination's directory. The names are short and independent of the target's name length,
+//!   and derived without clock or randomness. A leftover from a crashed save is never touched;
+//!   it only makes the next save use the next name. Only when every candidate exists does the
+//!   save fail (`AlreadyExists`).
+//! - Permissions (D-014 (2)): for an existing target the temporary file is created owner-only
+//!   (`0600`) and receives the target's permission bits before the rename, so the new content
+//!   is never more widely readable than the old. A new file is created with the default mode
+//!   `0666` reduced by the umask, as a plain create would.
+//! - A target the caller cannot open for writing is refused with `PermissionDenied` and left
+//!   untouched (D-014 (3)); the check opens it for writing without truncating or writing.
 //! - Symlinks: the destination path is resolved through any chain of symlinks first, so the
 //!   link's target file is replaced and the link itself stays in place.
-//! - Permissions of an existing destination are copied to the temporary file before the
-//!   rename. Ownership and other metadata are not preserved.
+//! - Documented limitations (D-014 (4)): because the content is swapped in as a new inode, a
+//!   hard link to the target keeps the old content (the link is split), the file's owner and
+//!   group become those of the saving process, and extended attributes and ACLs are not
+//!   carried over.
 //! - Durability: the temporary file is `fsync`ed before the rename (otherwise a crash after the
-//!   rename could leave an empty or partial file under the destination name, defeating the
-//!   point), and on Unix the directory is `fsync`ed after it on a best-effort basis (the
-//!   replace has already happened, so a failure there is not reported as a failed save).
+//!   rename could leave an empty or partial file under the destination name), and the
+//!   directory is `fsync`ed after it on a best-effort basis (the replace has already happened,
+//!   so a failure there is not reported as a failed save).
+//! - On any failure after the temporary file was created, that file is removed.
 //! - Error messages are built from the `RelPath` and the OS error description only; the host
 //!   root never appears in them.
 
 use std::fs;
 use std::io::{self, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::path::RelPath;
 use crate::vfs::{Vfs, VfsError};
 
-/// Suffix of the deterministic temporary file used by `write_atomic`.
-const TEMP_SUFFIX: &str = ".kiln-tmp";
+/// Prefix of the deterministic temporary file names used by `write_atomic`.
+const TEMP_PREFIX: &str = ".kiln-tmp-";
+/// How many temporary names `write_atomic` tries before giving up.
+const TEMP_ATTEMPTS: usize = 100;
 /// Upper bound on symlink hops when resolving a destination (as Linux `MAXSYMLINKS`).
 const MAX_SYMLINK_HOPS: usize = 40;
 
@@ -114,13 +129,34 @@ fn resolve_symlinks(rel: &RelPath, mut path: PathBuf) -> Result<PathBuf, VfsErro
     })
 }
 
-/// Write `bytes` to `temp` (created or truncated), with `permissions` if given, and sync it.
-fn write_temp(temp: &Path, bytes: &[u8], permissions: Option<fs::Permissions>) -> io::Result<()> {
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(temp)?;
+/// Create a new temporary file in `dir` exclusively, under the first free candidate name.
+/// Nothing that already exists (file, directory or symlink) is opened or changed.
+fn create_temp(dir: &Path, mode: u32) -> io::Result<(PathBuf, fs::File)> {
+    for n in 0..TEMP_ATTEMPTS {
+        let temp = dir.join(format!("{TEMP_PREFIX}{n}"));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(mode)
+            .open(&temp)
+        {
+            Ok(file) => return Ok((temp, file)),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        format!("all {TEMP_ATTEMPTS} temporary file names are taken"),
+    ))
+}
+
+/// Fill the freshly created temporary `file`, give it `permissions` if given, and sync it.
+fn fill_temp(
+    mut file: fs::File,
+    bytes: &[u8],
+    permissions: Option<fs::Permissions>,
+) -> io::Result<()> {
     file.write_all(bytes)?;
     if let Some(permissions) = permissions {
         file.set_permissions(permissions)?;
@@ -128,7 +164,6 @@ fn write_temp(temp: &Path, bytes: &[u8], permissions: Option<fs::Permissions>) -
     file.sync_all()
 }
 
-#[cfg(unix)]
 fn sync_dir(dir: &Path) {
     // Best effort: the rename has happened; a failure here does not undo it.
     if let Ok(d) = fs::File::open(dir) {
@@ -136,8 +171,64 @@ fn sync_dir(dir: &Path) {
     }
 }
 
-#[cfg(not(unix))]
-fn sync_dir(_dir: &Path) {}
+impl DiskFs {
+    /// `write_atomic` with the final rename injectable, so tests can make it fail.
+    fn write_atomic_with(
+        &mut self,
+        path: &RelPath,
+        bytes: &[u8],
+        rename: impl FnOnce(&Path, &Path) -> io::Result<()>,
+    ) -> Result<(), VfsError> {
+        let dest = resolve_symlinks(path, self.resolve(path))?;
+        let Some(dir) = dest.parent() else {
+            return Err(VfsError::Io {
+                path: path.clone(),
+                kind: io::ErrorKind::InvalidInput,
+                message: "the destination has no parent directory".to_owned(),
+            });
+        };
+        match fs::metadata(dir) {
+            Ok(meta) if meta.is_dir() => {}
+            Ok(_) => return Err(VfsError::NotFound { path: path.clone() }),
+            Err(e) => return Err(lookup_error(path, &e)),
+        }
+        let permissions = match fs::metadata(&dest) {
+            Ok(meta) if meta.is_dir() => return Err(VfsError::NotAFile { path: path.clone() }),
+            Ok(meta) => {
+                if meta.is_file() {
+                    // Respect write protection: rename alone would only need the directory to
+                    // be writable. Opening for write neither truncates nor writes.
+                    fs::OpenOptions::new()
+                        .write(true)
+                        .open(&dest)
+                        .map_err(|e| io_error(path, &e))?;
+                }
+                Some(meta.permissions())
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+            Err(e) => return Err(io_error(path, &e)),
+        };
+        // Owner-only until the target's bits are applied; a new file gets the default mode.
+        let mode = if permissions.is_some() { 0o600 } else { 0o666 };
+        let (temp, file) = create_temp(dir, mode).map_err(|e| io_error(path, &e))?;
+
+        if let Err(e) = fill_temp(file, bytes, permissions) {
+            let _ = fs::remove_file(&temp);
+            return Err(io_error(path, &e));
+        }
+        if let Err(e) = rename(&temp, &dest) {
+            let _ = fs::remove_file(&temp);
+            return Err(match e.kind() {
+                io::ErrorKind::IsADirectory | io::ErrorKind::DirectoryNotEmpty => {
+                    VfsError::NotAFile { path: path.clone() }
+                }
+                _ => io_error(path, &e),
+            });
+        }
+        sync_dir(dir);
+        Ok(())
+    }
+}
 
 impl Vfs for DiskFs {
     fn read(&self, path: &RelPath) -> Result<Vec<u8>, VfsError> {
@@ -150,46 +241,7 @@ impl Vfs for DiskFs {
     }
 
     fn write_atomic(&mut self, path: &RelPath, bytes: &[u8]) -> Result<(), VfsError> {
-        let dest = resolve_symlinks(path, self.resolve(path))?;
-        let (Some(dir), Some(name)) = (dest.parent(), dest.file_name()) else {
-            return Err(VfsError::Io {
-                path: path.clone(),
-                kind: io::ErrorKind::InvalidInput,
-                message: "the destination has no file name".to_owned(),
-            });
-        };
-        match fs::metadata(dir) {
-            Ok(meta) if meta.is_dir() => {}
-            Ok(_) => return Err(VfsError::NotFound { path: path.clone() }),
-            Err(e) => return Err(lookup_error(path, &e)),
-        }
-        let permissions = match fs::metadata(&dest) {
-            Ok(meta) if meta.is_dir() => return Err(VfsError::NotAFile { path: path.clone() }),
-            Ok(meta) => Some(meta.permissions()),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-            Err(e) => return Err(io_error(path, &e)),
-        };
-
-        let mut temp_name = std::ffi::OsString::from(".");
-        temp_name.push(name);
-        temp_name.push(TEMP_SUFFIX);
-        let temp = dir.join(temp_name);
-
-        if let Err(e) = write_temp(&temp, bytes, permissions) {
-            let _ = fs::remove_file(&temp);
-            return Err(io_error(path, &e));
-        }
-        if let Err(e) = fs::rename(&temp, &dest) {
-            let _ = fs::remove_file(&temp);
-            return Err(match e.kind() {
-                io::ErrorKind::IsADirectory | io::ErrorKind::DirectoryNotEmpty => {
-                    VfsError::NotAFile { path: path.clone() }
-                }
-                _ => io_error(path, &e),
-            });
-        }
-        sync_dir(dir);
-        Ok(())
+        self.write_atomic_with(path, bytes, |from, to| fs::rename(from, to))
     }
 
     fn is_file(&self, path: &RelPath) -> bool {
@@ -284,81 +336,216 @@ mod tests {
         assert_eq!(listing(&dir.join("d")), ["n.rs"]);
     }
 
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(path).unwrap().permissions().mode() & 0o7777
+    }
+
+    fn set_mode(path: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+    }
+
     #[test]
-    fn stale_temp_file_does_not_block_save() {
+    fn leftover_at_temp_name_is_never_touched() {
         let dir = fresh_dir("stale");
         let mut fs_ = DiskFs::new(&dir).unwrap();
-        fs::write(dir.join(".a.kiln-tmp"), b"leftover from a crash").unwrap();
+        fs::write(dir.join("a"), b"old").unwrap();
+        // Longer than the new content, and read-only: neither may matter or be changed.
+        fs::write(dir.join(".kiln-tmp-0"), b"leftover from a crash, long").unwrap();
+        set_mode(&dir.join(".kiln-tmp-0"), 0o444);
         fs_.write_atomic(&p("a"), b"new").unwrap();
-        assert_eq!(fs::read(dir.join("a")).unwrap(), b"new");
-        assert_eq!(listing(&dir), ["a"]);
+        fs_.write_atomic(&p("a"), b"newer").unwrap();
+        assert_eq!(fs::read(dir.join("a")).unwrap(), b"newer");
+        assert_eq!(
+            fs::read(dir.join(".kiln-tmp-0")).unwrap(),
+            b"leftover from a crash, long"
+        );
+        assert_eq!(mode(&dir.join(".kiln-tmp-0")), 0o444);
+        assert_eq!(listing(&dir), [".kiln-tmp-0", "a"]);
     }
 
-    /// Platform helpers so the test below runs everywhere (no cfg on the test itself).
-    #[cfg(unix)]
-    mod platform {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        use std::path::Path;
-
-        /// Give `path` non-default permission bits and return them.
-        pub fn set_distinct_permissions(path: &Path) -> std::fs::Permissions {
-            let perms = std::fs::Permissions::from_mode(0o640);
-            std::fs::set_permissions(path, perms.clone()).unwrap();
-            std::fs::metadata(path).unwrap().permissions()
+    #[test]
+    fn symlink_at_temp_name_is_not_followed() {
+        use std::os::unix::fs::symlink;
+        let dir = fresh_dir("tmp-symlink");
+        let outside = fresh_dir("tmp-symlink-outside");
+        fs::write(outside.join("precious"), b"precious").unwrap();
+        fs::write(dir.join("f"), b"old").unwrap();
+        symlink(outside.join("precious"), dir.join(".kiln-tmp-0")).unwrap();
+        // A dangling symlink must not be followed either (O_EXCL refuses it).
+        symlink(outside.join("nonexistent"), dir.join(".kiln-tmp-1")).unwrap();
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        fs_.write_atomic(&p("f"), b"EDIT").unwrap();
+        assert_eq!(fs::read(outside.join("precious")).unwrap(), b"precious");
+        assert!(!outside.join("nonexistent").exists());
+        assert_eq!(listing(&outside), ["precious"]);
+        let f = fs::symlink_metadata(dir.join("f")).unwrap();
+        assert!(f.file_type().is_file());
+        assert_eq!(fs::read(dir.join("f")).unwrap(), b"EDIT");
+        for link in [".kiln-tmp-0", ".kiln-tmp-1"] {
+            assert!(
+                fs::symlink_metadata(dir.join(link))
+                    .unwrap()
+                    .file_type()
+                    .is_symlink()
+            );
         }
+        assert_eq!(listing(&dir), [".kiln-tmp-0", ".kiln-tmp-1", "f"]);
+    }
 
-        pub fn file_id(path: &Path) -> Option<u64> {
-            Some(std::fs::metadata(path).unwrap().ino())
+    #[test]
+    fn all_temp_names_taken_fails_without_changes_then_recovers() {
+        let dir = fresh_dir("exhausted");
+        fs::write(dir.join("f"), b"old").unwrap();
+        for n in 0..TEMP_ATTEMPTS {
+            fs::write(dir.join(format!("{TEMP_PREFIX}{n}")), b"user").unwrap();
         }
+        let before = listing(&dir);
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let err = fs_.write_atomic(&p("f"), b"new").unwrap_err();
+        assert!(matches!(
+            err,
+            VfsError::Io {
+                kind: io::ErrorKind::AlreadyExists,
+                ..
+            }
+        ));
+        assert_eq!(listing(&dir), before);
+        assert_eq!(fs::read(dir.join("f")).unwrap(), b"old");
+        for n in 0..TEMP_ATTEMPTS {
+            assert_eq!(
+                fs::read(dir.join(format!("{TEMP_PREFIX}{n}"))).unwrap(),
+                b"user"
+            );
+        }
+        fs::remove_file(dir.join(format!("{TEMP_PREFIX}57"))).unwrap();
+        fs_.write_atomic(&p("f"), b"new").unwrap();
+        assert_eq!(fs::read(dir.join("f")).unwrap(), b"new");
+        assert_eq!(listing(&dir).len(), before.len() - 1);
+    }
 
-        pub fn symlink(target: &str, link: &Path) -> std::io::Result<()> {
-            std::os::unix::fs::symlink(target, link)
+    #[test]
+    fn longest_file_names_can_be_saved() {
+        let dir = fresh_dir("long");
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        for len in [245, 246, 250, 255] {
+            let name = "n".repeat(len);
+            fs_.write_atomic(&p(&name), b"one").unwrap();
+            fs_.write_atomic(&p(&name), b"two").unwrap();
+            assert_eq!(fs_.read(&p(&name)).unwrap(), b"two");
+        }
+        assert_eq!(listing(&dir).len(), 4);
+    }
+
+    #[test]
+    fn temp_file_is_created_owner_only_and_gets_target_mode_before_rename() {
+        let dir = fresh_dir("perm");
+        // The temporary file itself is owner-only from its creation.
+        let (temp, _file) = create_temp(&dir, 0o600).unwrap();
+        assert_eq!(mode(&temp), 0o600);
+        fs::remove_file(&temp).unwrap();
+
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        for target_mode in [0o600, 0o640, 0o644, 0o755] {
+            fs::write(dir.join("f"), b"old").unwrap();
+            set_mode(&dir.join("f"), target_mode);
+            let mut seen = None;
+            fs_.write_atomic_with(&p("f"), b"secret", |from, to| {
+                // Just before the rename: content complete, mode already the target's.
+                seen = Some((mode(from), fs::read(from).unwrap()));
+                fs::rename(from, to)
+            })
+            .unwrap();
+            assert_eq!(seen, Some((target_mode, b"secret".to_vec())));
+            assert_eq!(mode(&dir.join("f")), target_mode);
+            assert_eq!(listing(&dir), ["f"]);
         }
     }
 
-    #[cfg(not(unix))]
-    mod platform {
-        use std::path::Path;
+    #[test]
+    fn failed_rename_removes_own_temp_and_keeps_target() {
+        let dir = fresh_dir("rename-fail");
+        fs::write(dir.join("f"), b"old").unwrap();
+        fs::write(dir.join(".kiln-tmp-0"), b"not mine").unwrap();
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let mut used = None;
+        let err = fs_
+            .write_atomic_with(&p("f"), b"new", |from, _to| {
+                used = Some(from.to_path_buf());
+                Err(io::Error::other("injected rename failure"))
+            })
+            .unwrap_err();
+        assert_eq!(
+            err,
+            VfsError::Io {
+                path: p("f"),
+                kind: io::ErrorKind::Other,
+                message: "injected rename failure".to_owned()
+            }
+        );
+        assert_eq!(used, Some(dir.join(".kiln-tmp-1")));
+        assert_eq!(listing(&dir), [".kiln-tmp-0", "f"]);
+        assert_eq!(fs::read(dir.join("f")).unwrap(), b"old");
+        assert_eq!(fs::read(dir.join(".kiln-tmp-0")).unwrap(), b"not mine");
+    }
 
-        pub fn set_distinct_permissions(path: &Path) -> std::fs::Permissions {
-            std::fs::metadata(path).unwrap().permissions()
+    #[test]
+    fn read_only_target_is_refused_unless_root() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = fresh_dir("readonly");
+        fs::write(dir.join("f"), b"old").unwrap();
+        // The owner of a file we just created is our effective uid.
+        let euid = fs::metadata(dir.join("f")).unwrap().uid();
+        set_mode(&dir.join("f"), 0o444);
+        let ino = fs::metadata(dir.join("f")).unwrap().ino();
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let result = fs_.write_atomic(&p("f"), b"new");
+        if euid == 0 {
+            // Root may write any file, so no file is write-protected against it.
+            assert_eq!(result, Ok(()));
+            assert_eq!(fs::read(dir.join("f")).unwrap(), b"new");
+        } else {
+            assert!(matches!(
+                result,
+                Err(VfsError::Io {
+                    kind: io::ErrorKind::PermissionDenied,
+                    ..
+                })
+            ));
+            assert_eq!(fs::read(dir.join("f")).unwrap(), b"old");
+            assert_eq!(fs::metadata(dir.join("f")).unwrap().ino(), ino);
         }
+        assert_eq!(mode(&dir.join("f")), 0o444);
+        assert_eq!(listing(&dir), ["f"]);
+    }
 
-        pub fn file_id(_path: &Path) -> Option<u64> {
-            None
-        }
-
-        #[cfg(windows)]
-        pub fn symlink(target: &str, link: &Path) -> std::io::Result<()> {
-            std::os::windows::fs::symlink_file(target, link)
-        }
-
-        #[cfg(not(windows))]
-        pub fn symlink(_target: &str, _link: &Path) -> std::io::Result<()> {
-            Err(std::io::ErrorKind::Unsupported.into())
-        }
+    #[test]
+    fn new_file_gets_default_mode() {
+        let dir = fresh_dir("newmode");
+        fs::write(dir.join("reference"), b"").unwrap();
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        fs_.write_atomic(&p("new"), b"x").unwrap();
+        assert_eq!(mode(&dir.join("new")), mode(&dir.join("reference")));
     }
 
     #[test]
     fn replace_swaps_inode_keeps_permissions_and_follows_symlinks() {
-        use platform::symlink;
+        use std::os::unix::fs::{MetadataExt, symlink};
         let dir = fresh_dir("replace");
         let mut fs_ = DiskFs::new(&dir).unwrap();
         fs::write(dir.join("f"), b"old").unwrap();
-        let perms = platform::set_distinct_permissions(&dir.join("f"));
-        let id = platform::file_id(&dir.join("f"));
+        set_mode(&dir.join("f"), 0o640);
+        let ino = fs::metadata(dir.join("f")).unwrap().ino();
         fs_.write_atomic(&p("f"), b"new").unwrap();
-        // Inode numbers are a Unix notion (AC-10 says "(Unix)").
-        if cfg!(unix) {
-            assert_ne!(platform::file_id(&dir.join("f")), id);
-        }
-        assert_eq!(fs::metadata(dir.join("f")).unwrap().permissions(), perms);
+        assert_ne!(fs::metadata(dir.join("f")).unwrap().ino(), ino);
+        assert_eq!(mode(&dir.join("f")), 0o640);
         assert_eq!(fs::read(dir.join("f")).unwrap(), b"new");
 
         fs::create_dir(dir.join("t")).unwrap();
         fs::write(dir.join("t/target"), b"old").unwrap();
-        symlink("t/target", &dir.join("link")).unwrap();
-        symlink("link", &dir.join("link2")).unwrap();
+        symlink("t/target", dir.join("link")).unwrap();
+        symlink("link", dir.join("link2")).unwrap();
         fs_.write_atomic(&p("link2"), b"via link").unwrap();
         assert!(
             fs::symlink_metadata(dir.join("link"))
@@ -376,7 +563,7 @@ mod tests {
         assert_eq!(listing(&dir), ["f", "link", "link2", "t"]);
         assert_eq!(listing(&dir.join("t")), ["target"]);
 
-        symlink("loop", &dir.join("loop")).unwrap();
+        symlink("loop", dir.join("loop")).unwrap();
         assert!(matches!(
             fs_.write_atomic(&p("loop"), b"x"),
             Err(VfsError::Io { .. })
@@ -445,6 +632,6 @@ mod tests {
         for path in mem.paths() {
             assert_eq!(disk.read(&path).unwrap(), mem.get(&path).unwrap());
         }
-        assert!(listing(&dir).iter().all(|n| !n.ends_with(TEMP_SUFFIX)));
+        assert!(listing(&dir).iter().all(|n| !n.starts_with(TEMP_PREFIX)));
     }
 }

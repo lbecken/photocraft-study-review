@@ -294,6 +294,32 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   write whose parent is a file not stated (chose NotFound, matching MemoryFs); how the AC-2
   test creates directories in MemoryFs vs DiskFs not stated (MemoryFs::insert of a file below
   vs create_dir on disk assumed) · next: join with T-002 acceptance tests, review.
+- 2026-11-12 · R-012 · request-changes (review r1) · did: fixed D-1..D-3 per D-014 in
+  `disk.rs`. Temp file is now created exclusively (`create_new` = O_CREAT|O_EXCL, refuses
+  existing files and symlinks, dangling or not) under the first free name of `.kiln-tmp-0` …
+  `.kiln-tmp-99` in the target's directory: short, independent of the target name length, no
+  clock/randomness; leftovers are never touched, only skipped; all 100 taken ⇒ `Io{AlreadyExists}`
+  with nothing changed (D-014 (1), D-1, D-2). For an existing target the temp is created 0600
+  and gets the target's bits via fchmod before fsync and rename; a new file is created 0666 &
+  ~umask like a plain create (D-014 (2), D-3). An existing regular target that cannot be opened
+  for writing (open O_WRONLY, no truncate) ⇒ `Io{PermissionDenied}`, untouched (D-014 (3); root
+  can write anything, so root is never refused). Own temp removed on any failure after
+  creation, including a failed rename (rename made injectable via a private
+  `write_atomic_with` seam). Hard-link split, owner/group change, lost xattrs/ACLs documented
+  in the module docs (D-014 (4)); Unix-only APIs used directly, the cross-platform test
+  helpers removed (D-014 (5)). Error shapes unchanged (D-014 (6)). New unit tests: leftover
+  (longer, read-only) untouched; symlink and dangling symlink at temp names not followed and
+  outside file unchanged; name exhaustion fails cleanly then recovers; 245/246/250/255-byte
+  names save; temp mode is the target's (0600/0640/0644/0755) with full content just before
+  rename; injected rename failure leaves no own temp and keeps the target and a foreign
+  `.kiln-tmp-0`; read-only target refused (as non-root) / written (as root); new-file default
+  mode. · gate attempts: 1 (last: green) · not run: fsync remains unobservable (TG-2 not
+  addressed); real crash injection; the PermissionDenied branch is not reached by `cargo xtask
+  ci` here because the sandbox runs as root — I ran the lib test binary as `nobody` via
+  `setpriv --reuid=65534 --regid=65534 --clear-groups` and all 13 disk tests passed, including
+  that branch · missing context: none (D-014 answered it); note that a new file's mode follows
+  the umask, not 0600, which D-014 (2) does not state explicitly · next: join with the
+  test author's D-014 tests, review round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-12 · R-008 · in_progress · did: wrote 15 acceptance tests in
