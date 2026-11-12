@@ -12,6 +12,7 @@ touches:
   - Cargo.toml
   - Cargo.lock
   - docs/commands.json
+  - apps/kiln-cli/src/main.rs   # D-020: only the test `schema_lists_every_command`
 budget_tokens: 700000
 iteration: 0
 found_by: planner
@@ -219,6 +220,10 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
 - `Cargo.lock`, `docs/commands.json` are generated files under T-005's policy; until T-005 lands
   the director regenerates them on a rebase conflict.
 - Director (2026-11-12): confirmed — only successful commands are logged; a failed command changes no state and is not replayed.
+- Director rulings after the implementer's blocked report (2026-11-12, decision D-020) — part of the spec:
+  1. `touches` gains `apps/kiln-cli/src/main.rs`, for one change only: the test `schema_lists_every_command` must stop hard-coding the full command list; it asserts that the CLI's listing equals the registry's own list and contains `buffer.insert` and `buffer.text`.
+  2. In examples, `files` and `setup` are arrays of pairs as implemented (`[["doc.open", {...}]]`).
+  3. `replay` does not roll back: when an entry fails, the entries before it stay applied and the error names the failing index.
 
 ## Questions
 None open.
