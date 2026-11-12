@@ -358,6 +358,35 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   QUESTION: AC-9 DiskFs (path became a directory) says only "returns an error"; tests do not
   assert the variant. Proposed: "returns `VfsError::NotAFile`", consistent with `write_atomic` on
   MemoryFs.
+- 2026-11-12 · R-013 · in_progress (round 2, rulings D-014) · did: added 10 tests in
+  `crates/kiln-workspace/tests/acceptance_t002_r2.rs`; first file and scorecard items unchanged
+  (no item names these tests). Every check is a whole-tree snapshot (entries, bytes, mode,
+  inode, symlink targets, no symlink followed) before and after; decoys are planted under 35
+  plausible temp names (incl. `.<name>.kiln-tmp`); no naming scheme assumed. Ruling → tests
+  (base: all `compile`, 2 errors from unresolved imports):
+  (1) `save_leaves_regular_files_at_temp_names_untouched`,
+  `save_never_writes_through_symlinks_at_temp_names` (links → victims outside the dir),
+  `save_ignores_self_pointing_and_dangling_symlinks_at_temp_names` (links → the document; dangling
+  links whose targets must not appear), `save_through_symlink_with_decoys_changes_only_the_link_target`,
+  `documents_named_like_temp_files_do_not_clobber_each_other`; (2)
+  `saved_file_is_never_more_readable_than_the_target` (modes 600, 640, 604, 644, 660, 700, 755);
+  (3) `save_to_unwritable_target_is_permission_denied_and_untouched` (modes 444, 400, 555; it
+  probes whether permission bits stop writes; unprivileged ⇒ `Io{PermissionDenied, path}`,
+  tree unchanged, still dirty; privileged ⇒ the same refusal or a complete save with the mode
+  kept, never a partial state); (4) `file_with_255_byte_name_opens_edits_and_saves` (ASCII and
+  2-byte chars); (5) `not_found_names_the_requested_path`, `save_onto_directory_is_not_a_file`.
+  Validation against the throwaway stub outside the repo: the naive stub from R-008 fails 6/10
+  (the decoy and long-name tests); a stub fixed to use `create_new` 0600 temps with short names
+  passes 10/10 (and still 15/15 on round 1), both as root and, run as `nobody`, in the
+  unprivileged branch. · gate attempts: 1 (last: red clippy, only the acceptance targets,
+  compile case; fmt and no-skip pass) · not run: gate steps after clippy · missing context: none ·
+  next: join.
+  Not testable: the mode of the transient temp file (ruling 2, "no file created during the save
+  is group- or world-readable"). It cannot be seen without a file watcher or a race; only the
+  final state is checked. A failing *rename* cannot be provoked deterministically through the
+  public interface (a directory target is caught as `NotAFile` before any temp exists; root
+  ignores permission bits). Failed saves are checked for no extra entries only in the
+  `NotAFile` and `PermissionDenied` cases. Decoys cover only the guessed names.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-12 · R-011 · self_verified · did: review round 1 of joined `ccd3d52` →
