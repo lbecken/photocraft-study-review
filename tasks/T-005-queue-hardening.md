@@ -2,7 +2,7 @@
 id: T-005
 title: "Merge queue gates with main's xtask, refuses tasks without their lifecycle evidence, resolves generated-file conflicts, tolerates only ledger commits on main, and seeds worktrees without copying the whole target"
 tier: high              # xtask/ (CI and gate)
-state: in_progress
+state: self_verified
 owner_role: director
 scorecard_items: []
 depends_on: []
