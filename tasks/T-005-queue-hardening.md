@@ -354,6 +354,65 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   tests, reviewer.
 <!-- end implementer log -->
 ### test author
+- 2026-11-12 23:30 · R-010 · in_progress · did: 16 acceptance tests in
+  `xtask/tests/acceptance_t005.rs` and 3 regression guards in `xtask/tests/guard_t005.rs` (D-010),
+  from the spec only. All drive `CARGO_BIN_EXE_xtask` in toy repos under `CARGO_TARGET_TMPDIR`
+  (toy cargo workspace, toy `xtask` whose `ci --report` fails iff `RED` exists, `scorecard` =
+  sorted summary of `items/` (fails on `items/poison.toml`), `schema --write` = constant; offline,
+  child env stripped of `CARGO_*`/`GIT_*`). Every refusal assertion checks exit 1, exactly one
+  `queue: refused: <check>: ` line, the named path/commit, and the AC-9 snapshot (main, task
+  head, both `git status --porcelain`, `metrics/queue.jsonl` bytes). A check that passes is
+  observed as a refusal at the next check in the spec's order (e.g. medium → `join`) or a merge.
+  Criterion → tests → result on base (all fail by assertion; none by compile):
+  AC-1 `self_weakened_gate_fails_under_mains_gate` (merged, no `gate_xtask`);
+  AC-2 `gate_runs_mains_xtask_and_records_it` (merged instead of refusal `touches`);
+  AC-3 `refuses_unaccepted_states` (17 refused states across tiers incl. low `reviewed`, medium/high
+  `self_verified`; 5 accepted; merged instead of refusal);
+  AC-4 `refuses_front_matter_changes_on_task_branch` (tier/touches/state/id/scorecard_items);
+  AC-5 `refuses_paths_outside_touches`, `allows_acceptance_scorecard_and_review_paths_for_medium_only`
+  (naive predicate `allowed()` cross-checked per case);
+  AC-6 `refuses_missing_or_failed_join`; AC-7 `refuses_missing_rejected_or_stale_review`;
+  AC-8 `refuses_high_without_approval_row`; AC-9 `refusals_change_nothing` (one refusal per check,
+  plus `task-file`: absent, two files, id mismatch, bad tier, no touches, only on branch) and the
+  snapshot inside every refusal assertion; AC-12 `seed_reuses_non_member_artifacts_only` (member
+  `.fingerprint`/`deps`/`incremental` seeded); AC-14 `generated_only_conflict_is_regenerated_and_merged`
+  (no `regenerated` field); AC-15 `mixed_or_failed_regeneration_conflict_is_rejected` (poisoned
+  regeneration is `conflict`/`rebase`, not `regenerate:docs/scorecard.md`); AC-16
+  `generated_paths_are_exempt_from_touches_by_mains_list`; AC-17 `main_history_tolerates_only_ledger_commits`
+  (7 non-ledger commit kinds, each also followed by a ledger commit); AC-18
+  `invalid_policy_files_are_refused` (missing / not TOML / unknown root key / empty, each file).
+  Guards (pass on base, kept because base's full independent `cp -a` copy already has the
+  property and the new selective seed must keep it; a hard-link, symlink or shared-dir seed fails
+  them): AC-10 `seeded_worktree_builds_its_own_source`, AC-11 `worktree_build_does_not_touch_main_target`
+  (manifests both ways; no symlink and no inode shared with main's target), AC-13
+  `revert_check_leaves_task_target_untouched`.
+  Edge cases: `crates/ab` vs `crates/a`, `docs/notes.md.bak` vs exact entry, trailing `/`, deletion,
+  rename (no rename detection), acceptance file in `tests/sub/` or outside `tests/`, `t008` file on
+  T-007, `xtask/tests/` acceptance file, review rounds r2 vs r10 (numeric), non-round review file,
+  join record for another task / other kind / nonexistent sha, approval text not at cell start or in
+  another column, ledger add-only deletion, mixed ledger+code commit, two-commit regeneration replay.
+  Feasibility of AC-12 checked by hand (copy of target minus member files and `incremental/`:
+  `outsidedep` fresh, member rebuilt). · gate attempts: 1 (last: red test — exactly the 16
+  acceptance tests; guards and all else green) · not run: anything against the new queue (not
+  implemented on this branch) · missing context: none outside the repository.
+  QUESTION: the TOML layout of `xtask/generated.toml` / `xtask/ledger.toml` is not specified.
+  Tests copy the files this package ships (`CARGO_MANIFEST_DIR`) into each toy repo (a stand-in is
+  used only while they do not exist, i.e. on base), and AC-16/AC-18 edit them textually
+  (replace `docs/commands.json`; prepend `unknown_key_for_test = true`). Proposed: name the schema
+  in the spec (e.g. `[[file]] path, command` / `[[path]] path, mode`).
+  QUESTION: `front-matter` says "identical to main's", but the director changes `state` on main
+  after the branch is cut, so a literal reading refuses every real task. Proposed: "the task branch
+  does not change the front matter relative to the merge base". Fixtures sidestep it (worktrees cut
+  after main's task file is final).
+  QUESTION: the allowed-path rule has no entry for `guard_tNNN*.rs` (D-010), so guard files are
+  refused at `touches`; and `cargo xtask join` finds acceptance targets only under `crates/` and
+  `apps/`, so this task's `xtask/tests/acceptance_t005.rs` (the spec's location) would be
+  `no_acceptance_tests`. Proposed: add `guard_tNNN*.rs` to the rule and `xtask/tests/` to join's search.
+  Also unspecified (chosen readings): position of `config` among the checks (AC-18 keeps all other
+  checks passing, no merged record); "naming the commit" = contains a ≥7-char sha prefix; under
+  `gate_xtask:"main"` `failed_step` is main's step unprefixed (`red`); AC-10's dependency "outside
+  the workspace" is outside the repository at an absolute path (inside the repo its package id
+  differs per checkout, so it could never be fresh); refusal exit 1 (base exits 2 on errors).
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
