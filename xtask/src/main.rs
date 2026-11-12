@@ -12,10 +12,13 @@ mod join;
 mod layers;
 mod metrics;
 mod noskip;
+mod policy;
+mod precheck;
 mod queue;
 mod registries;
 mod schema;
 mod scorecard;
+mod seed;
 mod testbins;
 mod timefmt;
 mod uicmds;
@@ -163,10 +166,13 @@ fn real_main() -> Result<bool> {
                     println!(
                         "target:   {} ({})",
                         info.target.display(),
-                        if info.seeded {
-                            "seeded from main's target/"
-                        } else {
-                            "empty"
+                        match &info.seeded {
+                            Some(s) => format!(
+                                "seeded with {} files ({} MB) of non-member artifacts from main's target/",
+                                s.files,
+                                s.bytes / 1_000_000
+                            ),
+                            None => "empty".into(),
                         }
                     );
                     println!(
@@ -200,9 +206,19 @@ fn real_main() -> Result<bool> {
             let [task] = args.as_slice() else {
                 bail!("usage: queue T-NNN")
             };
-            let r = queue::run(&primary()?, task, &timefmt::SystemClock, &queue::CargoGate)?;
+            let r = match queue::run(&primary()?, task, &timefmt::SystemClock, &queue::CargoGate) {
+                Ok(r) => r,
+                Err(e) => match e.downcast_ref::<queue::Refusal>() {
+                    // Exit 1, one line: `queue: refused: <check>: <reason>`.
+                    Some(refusal) => {
+                        eprintln!("{refusal}");
+                        return Ok(false);
+                    }
+                    None => return Err(e),
+                },
+            };
             println!(
-                "queue {} attempt {}: {}{} (base {}, head {}, gate {:.1}s)",
+                "queue {} attempt {}: {}{} (base {}, head {}, gate {:.1}s, gate xtask {} @ {}{})",
                 r.task,
                 r.attempt,
                 r.result,
@@ -212,7 +228,14 @@ fn real_main() -> Result<bool> {
                     .unwrap_or_default(),
                 &r.base_sha[..12.min(r.base_sha.len())],
                 &r.head_sha[..12.min(r.head_sha.len())],
-                r.gate_seconds
+                r.gate_seconds,
+                r.gate_xtask,
+                &r.gate_xtask_sha[..12.min(r.gate_xtask_sha.len())],
+                if r.regenerated.is_empty() {
+                    String::new()
+                } else {
+                    format!(", regenerated {}", r.regenerated.join(" "))
+                }
             );
             if r.result == "merged" {
                 println!("main fast-forwarded to {} (not pushed)", r.head_sha);

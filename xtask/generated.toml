@@ -1,0 +1,21 @@
+# Generated-file policy (T-005, D-1). Read by `cargo xtask queue` from main's tree only.
+#
+# Each entry names a repository path that a command regenerates. When a queue rebase conflicts
+# only on these paths, the queue takes main's side, finishes the rebase, runs every command below
+# in file order in the rebased worktree and commits what changed. These paths are exempt from the
+# `touches` check. `{xtask}` stands for the xtask binary built from main's commit.
+#
+# Cargo.lock: the queue first restores main's lock file, then re-resolves workspace members only,
+# and fails (`regenerate:Cargo.lock`) if a registry or git package of main's lock changed version.
+
+[[generated]]
+path = "Cargo.lock"
+command = ["cargo", "update", "--workspace"]
+
+[[generated]]
+path = "docs/commands.json"
+command = ["{xtask}", "schema", "--write"]
+
+[[generated]]
+path = "docs/scorecard.md"
+command = ["{xtask}", "scorecard"]

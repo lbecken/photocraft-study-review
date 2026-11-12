@@ -3,16 +3,16 @@
 //! `new T-NNN` creates `.worktrees/T-NNN` on `task/T-NNN` from `main`; `new T-NNN --tests` (or
 //! `new T-NNN-tests`) creates `.worktrees/T-NNN-tests` on `task/T-NNN-tests` for the test author.
 //! The worktree's target directory is `<worktree>/target` (cargo's default for that workspace;
-//! the printed `CARGO_TARGET_DIR` overrides any global setting). It is seeded by copying `main`'s
-//! `target/` when present, so the first build reuses compiled dependencies.
-
-use std::path::{Path, PathBuf};
-use std::process::Command;
+//! the printed `CARGO_TARGET_DIR` overrides any global setting). Unless `--no-seed`, it is seeded
+//! from main's `target/` with copies of the artifacts of non-member packages only
+//! (`crate::seed`), so the first build reuses compiled dependencies and rebuilds every workspace
+//! crate from the worktree's own source.
 
 use anyhow::{Result, bail};
+use std::path::{Path, PathBuf};
 
 use crate::git::{branch_exists, git, git_try};
-use crate::util::{capture, task_id};
+use crate::util::task_id;
 
 /// Which worktree of a task.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -64,8 +64,8 @@ pub struct Info {
     pub branch: String,
     /// Target directory.
     pub target: PathBuf,
-    /// Whether `target/` was seeded from main's.
-    pub seeded: bool,
+    /// What was copied from main's `target/` (`None`: not seeded).
+    pub seeded: Option<crate::seed::Stats>,
 }
 
 /// Create the worktree for `spec` from `main`.
@@ -86,18 +86,9 @@ pub fn create(root: &Path, spec: &Spec, seed: bool) -> Result<Info> {
     )?;
     let target = path.join("target");
     let main_target = root.join("target");
-    let mut seeded = false;
+    let mut seeded = None;
     if seed && main_target.is_dir() {
-        let out = capture(
-            Command::new("cp")
-                .args(["-a", "--reflink=auto"])
-                .arg(&main_target)
-                .arg(&target),
-        )?;
-        if !out.ok {
-            bail!("seeding {} failed: {}", target.display(), out.stderr.trim());
-        }
-        seeded = true;
+        seeded = Some(crate::seed::seed(root, &main_target, &path, &target)?);
     }
     Ok(Info {
         path,
@@ -205,11 +196,10 @@ mod tests {
     fn create_seed_list_remove() {
         let repo = testrepo::init("wt", &[("a.txt", "a")]);
         let root = repo.path();
-        testrepo::write(root, "target/debug/marker", "built");
         let spec = Spec::parse("T-007", false).unwrap();
-        let info = create(root, &spec, true).unwrap();
-        assert!(info.seeded);
-        assert!(info.target.join("debug/marker").is_file());
+        let info = create(root, &spec, false).unwrap();
+        assert!(info.seeded.is_none());
+        assert!(!info.target.exists());
         assert_eq!(
             git(&info.path, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap(),
             "task/T-007"

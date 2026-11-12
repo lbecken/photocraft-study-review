@@ -1,0 +1,47 @@
+# Ledger paths (T-005, D-4): the only paths the director may commit to on `main` directly.
+# Everything else (code, xtask/, .github/, Cargo.*) reaches main only through `cargo xtask queue`.
+# The queue's `main-history` check reads this file from main's tree.
+#
+# mode "any": add, modify or delete; mode "add-only": new files only.
+# `methodology/` may change only at a retrospective (METHODOLOGY §14): that part stays a
+# director check; the queue only checks the path.
+
+[[ledger]]
+path = "tasks/"
+mode = "any"
+
+[[ledger]]
+path = "metrics/"
+mode = "any"
+
+[[ledger]]
+path = "docs/decisions.md"
+mode = "any"
+
+[[ledger]]
+path = "docs/adr/"
+mode = "any"
+
+[[ledger]]
+path = "STATE.md"
+mode = "any"
+
+[[ledger]]
+path = "handoffs/"
+mode = "any"
+
+[[ledger]]
+path = "retrospectives/"
+mode = "any"
+
+[[ledger]]
+path = "evaluations/"
+mode = "any"
+
+[[ledger]]
+path = "methodology/"
+mode = "any"
+
+[[ledger]]
+path = "scorecard/items/"
+mode = "add-only"

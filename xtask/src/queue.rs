@@ -1,14 +1,23 @@
-//! `cargo xtask queue T-NNN`: the serial merge queue (CHARTER §4, METHODOLOGY §8).
+//! `cargo xtask queue T-NNN`: the serial merge queue (CHARTER §4, METHODOLOGY §8, T-005).
 //!
 //! 1. take the lock `<git-common-dir>/kiln-queue.lock` (one queue at a time; a lock whose
 //!    process is gone is reclaimed);
 //! 2. refuse unless the primary checkout is on `main` with a clean working tree (paths under
-//!    `metrics/` excepted: the queue itself appends there);
-//! 3. rebase `task/T-NNN` onto `main` in `.worktrees/T-NNN`; on conflict abort and reject;
-//! 4. run the full gate in that worktree, on the rebased commit;
-//! 5. only if green, fast-forward `main` to it (never push);
-//! 6. append one record to `metrics/queue.jsonl`.
+//!    `metrics/` excepted: the queue itself appends there), the task worktree is clean and on its
+//!    branch, and the branch is ahead of main;
+//! 3. the preconditions of `crate::precheck` (task file, front matter, state, config, touches,
+//!    join, review, approval, main history), all read from main or the metrics records; a
+//!    failure is a [`Refusal`] and writes nothing;
+//! 4. build main's xtask from `base_sha` in a private build tree (`<git-common-dir>/kiln-queue/`);
+//! 5. rebase `task/T-NNN` onto `main` in `.worktrees/T-NNN`; a conflict only on generated paths
+//!    (`xtask/generated.toml`) takes main's side and continues, and afterwards every generated
+//!    file is regenerated and committed; any other conflict aborts and rejects;
+//! 6. run main's gate in the worktree (and, if the task changes a gate path, the task's own gate
+//!    too; both must pass);
+//! 7. only if green, fast-forward `main` to it (never push);
+//! 8. append one record to `metrics/queue.jsonl`.
 
+use std::collections::BTreeSet;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -16,11 +25,13 @@ use anyhow::{Context as _, Result, bail};
 use serde::Serialize;
 
 use crate::git::{dirty_paths, git, git_try, rev};
+use crate::policy::Policy;
+pub use crate::precheck::Refusal;
 use crate::timefmt::{Clock, format_utc};
-use crate::util::{append_jsonl, read_jsonl};
+use crate::util::{append_jsonl, capture, read_jsonl, tail};
 use crate::worktree::Spec;
 
-/// One line of `metrics/queue.jsonl` (field names: METHODOLOGY §13; `gate_seconds` extra).
+/// One line of `metrics/queue.jsonl` (field names: METHODOLOGY §13; the rest are extras).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct QueueRecord {
     /// `T-NNN`.
@@ -37,10 +48,17 @@ pub struct QueueRecord {
     pub head_sha: String,
     /// `merged`, `gate_failed`, `conflict` or `ff_failed`.
     pub result: String,
-    /// First failing gate step, `rebase` on conflict, null when merged.
+    /// First failing gate step (`main:`/`task:` prefixed under `main+task`), `rebase` or
+    /// `regenerate:<path>` on conflict, null when merged.
     pub failed_step: Option<String>,
-    /// Wall seconds spent in the gate.
+    /// Wall seconds spent in the gate(s).
     pub gate_seconds: f64,
+    /// `main`, or `main+task` when the task changes a gate path.
+    pub gate_xtask: String,
+    /// The commit main's xtask was built from (= `base_sha`).
+    pub gate_xtask_sha: String,
+    /// Generated paths that were conflicted or changed by regeneration (file order).
+    pub regenerated: Vec<String>,
 }
 
 /// What a gate run reports to the queue.
@@ -52,30 +70,55 @@ pub struct GateOutcome {
     pub failed_step: Option<String>,
 }
 
-/// Runs the gate in a worktree (real: `cargo xtask ci`; tests: a fake).
-pub trait GateRunner {
-    /// Run the full gate in `worktree`.
-    fn run(&self, worktree: &Path) -> Result<GateOutcome>;
+/// Which xtask runs the gate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GateXtask<'a> {
+    /// The checkout's own xtask (`cargo run -p xtask -- ci`).
+    Own,
+    /// A prebuilt binary (main's xtask), run with the checkout as working directory.
+    Binary(&'a Path),
 }
 
-/// The real gate: `cargo xtask ci --report …` in the worktree, with its own target directory.
+/// Runs the gate in a worktree (real: xtask `ci`; tests: a fake).
+pub trait GateRunner {
+    /// Run the full gate in `worktree` with `xtask`.
+    fn run(&self, worktree: &Path, xtask: GateXtask<'_>) -> Result<GateOutcome>;
+    /// Build main's xtask from commit `sha` of the repository at `root`; return the binary.
+    fn build_main_xtask(&self, root: &Path, sha: &str) -> Result<PathBuf> {
+        build_main_xtask(root, sha)
+    }
+}
+
+/// The real gate: xtask `ci --report …` in the worktree, with the worktree's target directory.
 pub struct CargoGate;
 
 impl GateRunner for CargoGate {
-    fn run(&self, worktree: &Path) -> Result<GateOutcome> {
+    fn run(&self, worktree: &Path, xtask: GateXtask<'_>) -> Result<GateOutcome> {
         let target = worktree.join("target");
         std::fs::create_dir_all(&target)?;
         let report = target.join("kiln-gate-report.json");
         let _ = std::fs::remove_file(&report);
-        let status = std::process::Command::new("cargo")
-            .args(["xtask", "ci", "--report"])
+        let mut cmd = match xtask {
+            GateXtask::Own => {
+                let mut c = std::process::Command::new("cargo");
+                c.args(["run", "--quiet"]);
+                if worktree.join("Cargo.lock").is_file() {
+                    c.arg("--locked");
+                }
+                c.args(["--package", "xtask", "--"]);
+                c
+            }
+            GateXtask::Binary(bin) => std::process::Command::new(bin),
+        };
+        let status = cmd
+            .args(["ci", "--report"])
             .arg(&report)
             .current_dir(worktree)
             .env("CARGO_TARGET_DIR", &target)
             // The worktree's rust-toolchain.toml decides the toolchain, not the caller's.
             .env_remove("RUSTUP_TOOLCHAIN")
             .status()
-            .context("start cargo xtask ci")?;
+            .context("start the gate")?;
         let parsed: Option<serde_json::Value> = std::fs::read_to_string(&report)
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok());
@@ -96,6 +139,83 @@ impl GateRunner for CargoGate {
             },
         })
     }
+}
+
+fn common_dir(root: &Path) -> Result<PathBuf> {
+    let common = git(root, &["rev-parse", "--git-common-dir"])?;
+    Ok(if Path::new(&common).is_absolute() {
+        PathBuf::from(common)
+    } else {
+        root.join(common)
+    })
+}
+
+/// Build the xtask of commit `sha` in the private build tree
+/// `<git-common-dir>/kiln-queue/main-xtask/` (`src/`: a fresh export of `sha`, never a worktree;
+/// `target/`: used for nothing else). A binary already built from `sha` is reused.
+pub fn build_main_xtask(root: &Path, sha: &str) -> Result<PathBuf> {
+    let base = common_dir(root)?.join("kiln-queue").join("main-xtask");
+    let (src, target) = (base.join("src"), base.join("target"));
+    let bin = target
+        .join("debug")
+        .join(format!("xtask{}", std::env::consts::EXE_SUFFIX));
+    let stamp = base.join("built-from");
+    if bin.is_file() && std::fs::read_to_string(&stamp).ok().as_deref() == Some(sha) {
+        return Ok(bin);
+    }
+    let _ = std::fs::remove_file(&stamp);
+    if src.exists() {
+        std::fs::remove_dir_all(&src)?;
+    }
+    std::fs::create_dir_all(&src)?;
+    // Export with a private index: the repository's own index and worktrees are untouched.
+    let index = base.join("export.index");
+    let export = |args: &[&str]| -> Result<()> {
+        let out = capture(
+            crate::git::cmd(root)
+                .args(args)
+                .env("GIT_INDEX_FILE", &index),
+        )?;
+        if !out.ok {
+            bail!("git {} failed: {}", args.join(" "), out.stderr.trim());
+        }
+        Ok(())
+    };
+    export(&["read-tree", sha])?;
+    let prefix = format!("{}/", src.display());
+    export(&[
+        "checkout-index",
+        "--all",
+        "--force",
+        &format!("--prefix={prefix}"),
+    ])?;
+    let _ = std::fs::remove_file(&index);
+    let mut c = std::process::Command::new("cargo");
+    c.args(["build", "--quiet", "--package", "xtask"]);
+    if src.join("Cargo.lock").is_file() {
+        c.arg("--locked");
+    }
+    let out = capture(
+        c.current_dir(&src)
+            .env("CARGO_TARGET_DIR", &target)
+            .env_remove("RUSTUP_TOOLCHAIN"),
+    )?;
+    if !out.ok || !bin.is_file() {
+        bail!(
+            "building main's xtask at {sha} failed:\n{}",
+            tail(&out.stderr, 30)
+        );
+    }
+    std::fs::write(&stamp, sha)?;
+    Ok(bin)
+}
+
+/// Whether a changed path makes the task's own gate run too (gate-path exception).
+pub fn is_gate_path(p: &str) -> bool {
+    crate::policy::path_under(p, "xtask")
+        || crate::policy::path_under(p, ".cargo")
+        || p == "clippy.toml"
+        || p == "rust-toolchain.toml"
 }
 
 /// Exclusive queue lock, released on drop.
@@ -149,9 +269,207 @@ fn now_secs(clock: &dyn Clock) -> i64 {
     clock.now_millis().div_euclid(1000)
 }
 
+/// `git` with a non-interactive editor (rebase --continue must not open one).
+fn git_rebase(dir: &Path, args: &[&str]) -> Result<(bool, String)> {
+    let out = capture(crate::git::cmd(dir).args(args).env("GIT_EDITOR", "true"))?;
+    Ok((out.ok, format!("{}{}", out.stdout, out.stderr)))
+}
+
+/// How the rebase ended.
+#[derive(Debug)]
+enum Rebased {
+    /// Rebased; these generated paths conflicted and were resolved to main's side.
+    Done(BTreeSet<String>),
+    /// A conflict on a non-generated path (aborted).
+    Conflict(String),
+}
+
+fn unmerged(wt: &Path) -> Result<Vec<String>> {
+    Ok(git(wt, &["diff", "--name-only", "--diff-filter=U"])?
+        .lines()
+        .map(str::to_owned)
+        .collect())
+}
+
+/// Rebase onto main; resolve conflicts that lie only in generated paths by taking main's side.
+fn rebase(wt: &Path, policy: &Policy) -> Result<Rebased> {
+    let mut conflicted = BTreeSet::new();
+    let (mut ok, mut out) = git_rebase(wt, &["rebase", "--quiet", "main"])?;
+    while !ok {
+        let paths = unmerged(wt)?;
+        let only_generated = !paths.is_empty() && paths.iter().all(|p| policy.is_generated(p));
+        if !only_generated {
+            let _ = git_try(wt, &["rebase", "--abort"]);
+            return Ok(Rebased::Conflict(out));
+        }
+        for p in &paths {
+            // During a rebase HEAD is main plus the commits applied so far: main's side.
+            if git_try(wt, &["cat-file", "-e", &format!("HEAD:{p}")])?.0 {
+                git(wt, &["checkout", "HEAD", "--", p])?;
+            } else {
+                git(wt, &["rm", "--quiet", "--force", "--", p])?;
+            }
+            conflicted.insert(p.clone());
+        }
+        (ok, out) = git_rebase(wt, &["rebase", "--continue"])?;
+        if !ok && unmerged(wt)?.is_empty() {
+            // Not a further conflict (e.g. a commit left empty): give up rather than guess.
+            let _ = git_try(wt, &["rebase", "--abort"]);
+            return Ok(Rebased::Conflict(out));
+        }
+    }
+    Ok(Rebased::Done(conflicted))
+}
+
+/// `(name, source) → versions` of the packages with a source in a `Cargo.lock`.
+fn lock_versions(
+    text: &str,
+) -> Result<std::collections::BTreeMap<(String, String), BTreeSet<String>>> {
+    let v: toml::Value = toml::from_str(text).context("parse Cargo.lock")?;
+    let mut out: std::collections::BTreeMap<(String, String), BTreeSet<String>> =
+        Default::default();
+    for p in v
+        .get("package")
+        .and_then(|p| p.as_array())
+        .into_iter()
+        .flatten()
+    {
+        let (Some(name), Some(version)) = (
+            p.get("name").and_then(|x| x.as_str()),
+            p.get("version").and_then(|x| x.as_str()),
+        ) else {
+            continue;
+        };
+        // Path packages (workspace members, path dependencies) have no source: their version
+        // is set by the source tree, not by resolution.
+        let Some(source) = p.get("source").and_then(|x| x.as_str()) else {
+            continue;
+        };
+        out.entry((name.to_owned(), source.to_owned()))
+            .or_default()
+            .insert(version.to_owned());
+    }
+    Ok(out)
+}
+
+/// The registry/git packages of `main_lock` whose version the regenerated `new_lock` changed
+/// (a version of main's lock disappears while a version main did not have appears).
+pub fn lock_version_changes(main_lock: &str, new_lock: &str) -> Result<Vec<String>> {
+    let (old, new) = (lock_versions(main_lock)?, lock_versions(new_lock)?);
+    let mut changes = Vec::new();
+    for (key, was) in &old {
+        let Some(now) = new.get(key) else { continue };
+        let lost: Vec<&String> = was.difference(now).collect();
+        let gained: Vec<&String> = now.difference(was).collect();
+        if !lost.is_empty() && !gained.is_empty() {
+            changes.push(format!(
+                "{} {} -> {}",
+                key.0,
+                lost.iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join("/"),
+                gained
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join("/")
+            ));
+        }
+    }
+    Ok(changes)
+}
+
+fn is_lock(path: &str) -> bool {
+    path == "Cargo.lock" || path.ends_with("/Cargo.lock")
+}
+
+/// Run every generated entry's command in `wt`; commit what changed. On failure returns the
+/// failing path. Returns the generated paths that changed.
+fn regenerate(
+    wt: &Path,
+    task: &str,
+    base_sha: &str,
+    policy: &Policy,
+    xtask: &Path,
+) -> Result<std::result::Result<BTreeSet<String>, String>> {
+    let gen_paths: BTreeSet<&str> = policy.generated.iter().map(|g| g.path.as_str()).collect();
+    for g in &policy.generated {
+        let main_lock = if is_lock(&g.path) {
+            crate::precheck::show(wt, base_sha, &g.path)?
+        } else {
+            None
+        };
+        if let Some(text) = &main_lock {
+            std::fs::write(wt.join(&g.path), text)?;
+        }
+        let argv: Vec<String> = g
+            .command
+            .iter()
+            .map(|a| a.replace("{xtask}", &xtask.to_string_lossy()))
+            .collect();
+        let out = capture(
+            std::process::Command::new(&argv[0])
+                .args(&argv[1..])
+                .current_dir(wt)
+                .env("CARGO_TARGET_DIR", wt.join("target"))
+                .env_remove("RUSTUP_TOOLCHAIN"),
+        );
+        let failed = match out {
+            Err(e) => Some(format!("{e:#}")),
+            Ok(o) if !o.ok => Some(tail(&format!("{}{}", o.stdout, o.stderr), 20)),
+            Ok(_) => None,
+        };
+        if let Some(why) = failed {
+            eprintln!(
+                "queue: regenerating {} failed ({}):\n{why}",
+                g.path,
+                argv.join(" ")
+            );
+            return Ok(Err(g.path.clone()));
+        }
+        if let Some(text) = &main_lock {
+            let new = std::fs::read_to_string(wt.join(&g.path)).unwrap_or_default();
+            let changes = lock_version_changes(text, &new)?;
+            if !changes.is_empty() {
+                eprintln!(
+                    "queue: regenerating {} changed versions of main's packages: {}",
+                    g.path,
+                    changes.join(", ")
+                );
+                return Ok(Err(g.path.clone()));
+            }
+        }
+        let stray: Vec<String> = dirty_paths(wt, None)?
+            .into_iter()
+            .filter(|l| !gen_paths.contains(&l[3..]))
+            .collect();
+        if !stray.is_empty() {
+            eprintln!(
+                "queue: regenerating {} changed non-generated paths:\n{}",
+                g.path,
+                stray.join("\n")
+            );
+            return Ok(Err(g.path.clone()));
+        }
+    }
+    let changed: BTreeSet<String> = dirty_paths(wt, None)?
+        .into_iter()
+        .map(|l| l[3..].to_owned())
+        .collect();
+    if !changed.is_empty() {
+        let mut args = vec!["add", "--all", "--"];
+        args.extend(changed.iter().map(String::as_str));
+        git(wt, &args)?;
+        let msg = format!("queue: regenerate generated files\n\nTask: {task}\nRole: director");
+        git(wt, &["commit", "--quiet", "--no-verify", "-m", &msg])?;
+    }
+    Ok(Ok(changed))
+}
+
 /// Run the queue for `task` in the repository whose primary checkout is `root`.
 /// Returns the record (also appended to `metrics/queue.jsonl`). Refusals return `Err` and write
-/// nothing.
+/// nothing; a failed precondition is a [`Refusal`] in the error chain.
 pub fn run(
     root: &Path,
     task: &str,
@@ -162,13 +480,7 @@ pub fn run(
     if spec.tests {
         bail!("queue the task branch, not its tests branch (join it first)");
     }
-    let common = git(root, &["rev-parse", "--git-common-dir"])?;
-    let common = if Path::new(&common).is_absolute() {
-        PathBuf::from(common)
-    } else {
-        root.join(common)
-    };
-    let _lock = Lock::acquire(&common.join("kiln-queue.lock"), &spec.task)?;
+    let _lock = Lock::acquire(&common_dir(root)?.join("kiln-queue.lock"), &spec.task)?;
 
     let head = git(root, &["symbolic-ref", "--quiet", "HEAD"]).unwrap_or_default();
     if head != "refs/heads/main" {
@@ -220,6 +532,10 @@ pub fn run(
             spec.branch()
         );
     }
+    let task_head = rev(&wt, "HEAD")?;
+    let checked = crate::precheck::check(root, &spec.task, &spec.branch(), &task_head)?;
+    let both = checked.changed.iter().any(|p| is_gate_path(p));
+    let main_xtask = gate.build_main_xtask(root, &base_sha)?;
 
     let metrics = root.join("metrics/queue.jsonl");
     let attempt = 1 + read_jsonl(&metrics)?
@@ -233,30 +549,71 @@ pub fn run(
         started_at: format_utc(started),
         ended_at: String::new(),
         base_sha: base_sha.clone(),
-        head_sha: rev(&wt, "HEAD")?,
+        head_sha: task_head.clone(),
         result: String::new(),
         failed_step: None,
         gate_seconds: 0.0,
+        gate_xtask: if both { "main+task" } else { "main" }.into(),
+        gate_xtask_sha: base_sha.clone(),
+        regenerated: Vec::new(),
     };
 
-    let (rebased, _, err) = git_try(&wt, &["rebase", "--quiet", "main"])?;
-    if !rebased {
-        let _ = git_try(&wt, &["rebase", "--abort"]);
-        eprintln!(
-            "queue: rebase of {} onto main conflicts; aborted:\n{}",
-            spec.branch(),
-            err.trim()
-        );
-        record.result = "conflict".into();
-        record.failed_step = Some("rebase".into());
-    } else {
+    let restore = |wt: &Path| {
+        let _ = git_try(wt, &["reset", "--quiet", "--hard", &task_head]);
+        let _ = git_try(wt, &["clean", "--quiet", "-d", "--force"]);
+    };
+    let mut ready = false;
+    match rebase(&wt, &checked.policy)? {
+        Rebased::Conflict(out) => {
+            eprintln!(
+                "queue: rebase of {} onto main conflicts; aborted:\n{}",
+                spec.branch(),
+                out.trim()
+            );
+            record.result = "conflict".into();
+            record.failed_step = Some("rebase".into());
+        }
+        Rebased::Done(conflicted) if conflicted.is_empty() => ready = true,
+        Rebased::Done(conflicted) => {
+            match regenerate(&wt, &spec.task, &base_sha, &checked.policy, &main_xtask) {
+                Ok(Ok(changed)) => {
+                    record.regenerated = checked
+                        .policy
+                        .generated
+                        .iter()
+                        .map(|g| g.path.clone())
+                        .filter(|p| conflicted.contains(p) || changed.contains(p))
+                        .collect();
+                    ready = true;
+                }
+                Ok(Err(path)) => {
+                    restore(&wt);
+                    record.result = "conflict".into();
+                    record.failed_step = Some(format!("regenerate:{path}"));
+                    record.regenerated = conflicted.into_iter().collect();
+                }
+                Err(e) => {
+                    restore(&wt);
+                    return Err(e.context("regenerating generated files"));
+                }
+            }
+        }
+    }
+    if ready {
         record.head_sha = rev(&wt, "HEAD")?;
         let g0 = clock.now_millis();
-        let outcome = gate.run(&wt)?;
+        let mut outcome = gate.run(&wt, GateXtask::Binary(&main_xtask))?;
+        let mut prefix = "main:";
+        if outcome.passed && both {
+            outcome = gate.run(&wt, GateXtask::Own)?;
+            prefix = "task:";
+        }
         record.gate_seconds = ((clock.now_millis() - g0) as f64 / 100.0).round() / 10.0;
         if !outcome.passed {
             record.result = "gate_failed".into();
-            record.failed_step = outcome.failed_step;
+            record.failed_step = outcome
+                .failed_step
+                .map(|s| if both { format!("{prefix}{s}") } else { s });
         } else if rev(root, "main")? != base_sha {
             record.result = "ff_failed".into();
             record.failed_step = Some("main-moved".into());
@@ -281,7 +638,7 @@ mod tests {
     use super::*;
     use crate::git::testrepo::{self, g};
     use crate::worktree;
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
 
     /// A clock that advances 1.5 s per reading, from a fixed instant.
     struct FakeClock(Cell<i64>);
@@ -296,39 +653,87 @@ mod tests {
         FakeClock(Cell::new(1_793_000_000_000))
     }
 
-    struct FakeGate(bool);
+    /// Main's gate passes iff `main`; the task's own gate iff `own`. Records each call.
+    struct FakeGate {
+        main: bool,
+        own: bool,
+        calls: RefCell<Vec<String>>,
+    }
+    fn gate(main: bool, own: bool) -> FakeGate {
+        FakeGate {
+            main,
+            own,
+            calls: RefCell::new(Vec::new()),
+        }
+    }
     impl GateRunner for FakeGate {
-        fn run(&self, wt: &Path) -> Result<GateOutcome> {
+        fn run(&self, wt: &Path, xtask: GateXtask<'_>) -> Result<GateOutcome> {
             // The gate must see the rebased tree: the base file from main is present.
             assert!(wt.join("base.txt").is_file());
-            Ok(if self.0 {
-                GateOutcome {
-                    passed: true,
-                    failed_step: None,
+            let (who, pass) = match xtask {
+                GateXtask::Binary(b) => {
+                    assert_eq!(b, Path::new("/fake/main-xtask"));
+                    ("main", self.main)
                 }
-            } else {
-                GateOutcome {
-                    passed: false,
-                    failed_step: Some("test".into()),
-                }
+                GateXtask::Own => ("own", self.own),
+            };
+            self.calls.borrow_mut().push(who.into());
+            Ok(GateOutcome {
+                passed: pass,
+                failed_step: (!pass).then(|| "test".into()),
             })
+        }
+        fn build_main_xtask(&self, root: &Path, sha: &str) -> Result<PathBuf> {
+            assert_eq!(rev(root, "main")?, sha);
+            self.calls.borrow_mut().push("build".into());
+            Ok(PathBuf::from("/fake/main-xtask"))
         }
     }
 
-    fn setup(tag: &str) -> crate::util::testutil::TempDir {
+    const GEN: &str = "[[generated]]\npath = \"gen.txt\"\ncommand = [\"sh\", \"-c\", \"ls items | sort > gen.txt\"]\n";
+    const LED: &str = "[[ledger]]\npath = \"tasks/\"\nmode = \"any\"\n\n[[ledger]]\npath = \"metrics/\"\nmode = \"any\"\n\n[[ledger]]\npath = \"STATE.md\"\nmode = \"any\"\n\n[[ledger]]\npath = \"docs/decisions.md\"\nmode = \"any\"\n\n[[ledger]]\npath = \"scorecard/items/\"\nmode = \"add-only\"\n";
+
+    fn task_md(tier: &str, state: &str, touches: &[&str]) -> String {
+        format!(
+            "---\nid: T-001\ntier: {tier}\nstate: {state}\nscorecard_items: []\ntouches: [{}]\n---\n# T-001\n\n## Log\n",
+            touches.join(", ")
+        )
+    }
+
+    fn setup_with(tag: &str, task: &str) -> crate::util::testutil::TempDir {
         let repo = testrepo::init(
             tag,
             &[
                 ("base.txt", "base\n"),
                 (".gitignore", ".worktrees/\ntarget/\n"),
+                ("tasks/T-001-thing.md", task),
+                ("xtask/generated.toml", GEN),
+                ("xtask/ledger.toml", LED),
+                ("items/a", ""),
+                ("gen.txt", "a\n"),
             ],
         );
         worktree::create(repo.path(), &Spec::parse("T-001", false).unwrap(), false).unwrap();
         repo
     }
 
+    fn setup(tag: &str) -> crate::util::testutil::TempDir {
+        setup_with(
+            tag,
+            &task_md(
+                "low",
+                "self_verified",
+                &["feature.txt", "items", "base.txt"],
+            ),
+        )
+    }
+
     fn read_records(root: &Path) -> Vec<serde_json::Value> {
         read_jsonl(&root.join("metrics/queue.jsonl")).unwrap()
+    }
+
+    fn refusal(r: Result<QueueRecord>) -> Refusal {
+        r.unwrap_err().downcast::<Refusal>().unwrap()
     }
 
     #[test]
@@ -337,12 +742,20 @@ mod tests {
         let root = repo.path();
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "feature", &[("feature.txt", "f")]);
-        // main moves meanwhile: the queue must rebase.
-        testrepo::commit(root, "other", &[("other.txt", "o")]);
-        let r = run(root, "T-001", &clock(), &FakeGate(true)).unwrap();
+        // main moves meanwhile (a ledger commit): the queue must rebase.
+        testrepo::commit(root, "other", &[("STATE.md", "o")]);
+        let base = rev(root, "main").unwrap();
+        let fake = gate(true, true);
+        let r = run(root, "T-001", &clock(), &fake).unwrap();
         assert_eq!(r.result, "merged");
+        assert_eq!(*fake.calls.borrow(), ["build", "main"]);
+        assert_eq!(
+            (r.gate_xtask.as_str(), r.gate_xtask_sha.as_str()),
+            ("main", base.as_str())
+        );
+        assert!(r.regenerated.is_empty());
         assert_eq!(rev(root, "main").unwrap(), r.head_sha);
-        assert!(root.join("feature.txt").is_file() && root.join("other.txt").is_file());
+        assert!(root.join("feature.txt").is_file() && root.join("STATE.md").is_file());
         assert_eq!(r.started_at, "2026-10-26T07:33:20Z");
         assert_eq!(r.ended_at, "2026-10-26T07:33:24Z");
         assert_eq!(r.gate_seconds, 1.5);
@@ -362,13 +775,17 @@ mod tests {
                 "ended_at",
                 "failed_step",
                 "gate_seconds",
+                "gate_xtask",
+                "gate_xtask_sha",
                 "head_sha",
+                "regenerated",
                 "result",
                 "started_at",
                 "task"
             ]
         );
         assert!(recs[0]["failed_step"].is_null());
+        assert_eq!(recs[0]["regenerated"], serde_json::json!([]));
     }
 
     #[test]
@@ -378,14 +795,62 @@ mod tests {
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "broken", &[("feature.txt", "f")]);
         let before = rev(root, "main").unwrap();
-        let r1 = run(root, "T-001", &clock(), &FakeGate(false)).unwrap();
+        let r1 = run(root, "T-001", &clock(), &gate(false, true)).unwrap();
         assert_eq!(
             (r1.result.as_str(), r1.failed_step.as_deref(), r1.attempt),
             ("gate_failed", Some("test"), 1)
         );
         assert_eq!(rev(root, "main").unwrap(), before);
-        let r2 = run(root, "T-001", &clock(), &FakeGate(true)).unwrap();
+        let r2 = run(root, "T-001", &clock(), &gate(true, false)).unwrap();
         assert_eq!((r2.result.as_str(), r2.attempt), ("merged", 2));
+    }
+
+    #[test]
+    fn gate_path_changes_run_both_gates() {
+        let repo = setup_with(
+            "q-both",
+            &task_md("low", "self_verified", &["feature.txt", "xtask"]),
+        );
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "weaken", &[("xtask/src/main.rs", "fn main() {}")]);
+        let before = rev(root, "main").unwrap();
+        let fake = gate(false, true);
+        let r = run(root, "T-001", &clock(), &fake).unwrap();
+        assert_eq!(
+            (
+                r.result.as_str(),
+                r.failed_step.as_deref(),
+                r.gate_xtask.as_str()
+            ),
+            ("gate_failed", Some("main:test"), "main+task")
+        );
+        assert_eq!(
+            *fake.calls.borrow(),
+            ["build", "main"],
+            "own gate not reached"
+        );
+        let fake = gate(true, false);
+        let r = run(root, "T-001", &clock(), &fake).unwrap();
+        assert_eq!(r.failed_step.as_deref(), Some("task:test"));
+        assert_eq!(*fake.calls.borrow(), ["build", "main", "own"]);
+        assert_eq!(rev(root, "main").unwrap(), before);
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(
+            (r.result.as_str(), r.gate_xtask.as_str()),
+            ("merged", "main+task")
+        );
+        for p in [
+            "xtask",
+            ".cargo/config.toml",
+            "clippy.toml",
+            "rust-toolchain.toml",
+        ] {
+            assert!(is_gate_path(p), "{p}");
+        }
+        for p in ["xtaskx/a", "docs/clippy.toml", "src/xtask/a.rs"] {
+            assert!(!is_gate_path(p), "{p}");
+        }
     }
 
     #[test]
@@ -394,10 +859,14 @@ mod tests {
         let root = repo.path();
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "task edit", &[("base.txt", "task\n")]);
-        testrepo::commit(root, "main edit", &[("base.txt", "main\n")]);
+        testrepo::commit(
+            root,
+            "main edit",
+            &[("STATE.md", "x"), ("base.txt", "main\n")],
+        );
         let before = rev(root, "main").unwrap();
         let task_head = rev(&wt, "HEAD").unwrap();
-        let r = run(root, "T-001", &clock(), &FakeGate(true)).unwrap();
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(
             (r.result.as_str(), r.failed_step.as_deref()),
             ("conflict", Some("rebase"))
@@ -412,11 +881,364 @@ mod tests {
     }
 
     #[test]
-    fn refusals_write_nothing() {
+    fn generated_only_conflicts_are_regenerated() {
+        let repo = setup("q-gen");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "item b", &[("items/b", ""), ("gen.txt", "a\nb\n")]);
+        testrepo::commit(&wt, "more", &[("feature.txt", "f")]);
+        // Another task merged meanwhile with its own item and regenerated file.
+        testrepo::commit(root, "item c", &[("items/c", ""), ("gen.txt", "a\nc\n")]);
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(r.result, "merged", "{r:?}");
+        assert_eq!(r.regenerated, ["gen.txt"]);
+        assert_eq!(
+            std::fs::read_to_string(root.join("gen.txt")).unwrap(),
+            "a\nb\nc\n"
+        );
+        let msg = g(root, &["log", "-1", "--format=%B"]);
+        assert_eq!(
+            msg,
+            "queue: regenerate generated files\n\nTask: T-001\nRole: director"
+        );
+        assert!(root.join("feature.txt").is_file());
+        assert!(dirty_paths(&wt, None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn mixed_or_failing_regeneration_is_a_conflict() {
+        let repo = setup("q-gen-mixed");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "b", &[("gen.txt", "a\nb\n"), ("base.txt", "task\n")]);
+        testrepo::commit(root, "c", &[("gen.txt", "a\nc\n"), ("base.txt", "main\n")]);
+        let (main0, head0) = (rev(root, "main").unwrap(), rev(&wt, "HEAD").unwrap());
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(
+            (r.result.as_str(), r.failed_step.as_deref()),
+            ("conflict", Some("rebase"))
+        );
+        assert_eq!(rev(root, "main").unwrap(), main0);
+        assert_eq!(rev(&wt, "HEAD").unwrap(), head0);
+
+        let repo = setup("q-gen-fail");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "b", &[("gen.txt", "a\nb\n"), ("items/b", "")]);
+        // main's generator is broken now (a ledger-free change, so it lands via a fake merge
+        // record; here: before any merge, so main-history passes trivially).
+        let broken = GEN.replace("ls items | sort > gen.txt", "exit 3");
+        testrepo::commit(
+            root,
+            "c",
+            &[("gen.txt", "a\nc\n"), ("xtask/generated.toml", &broken)],
+        );
+        let (main0, head0) = (rev(root, "main").unwrap(), rev(&wt, "HEAD").unwrap());
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(
+            (r.result.as_str(), r.failed_step.as_deref()),
+            ("conflict", Some("regenerate:gen.txt"))
+        );
+        assert_eq!(rev(root, "main").unwrap(), main0);
+        assert_eq!(rev(&wt, "HEAD").unwrap(), head0, "task branch restored");
+        assert!(dirty_paths(&wt, None).unwrap().is_empty());
+    }
+
+    /// Snapshot of everything a refusal must leave alone.
+    fn snapshot(root: &Path) -> Vec<String> {
+        let wt = root.join(".worktrees/T-001");
+        vec![
+            rev(root, "main").unwrap(),
+            rev(&wt, "HEAD").unwrap(),
+            dirty_paths(root, None).unwrap().join("|"),
+            dirty_paths(&wt, None).unwrap().join("|"),
+            std::fs::read_to_string(root.join("metrics/queue.jsonl")).unwrap_or_default(),
+        ]
+    }
+
+    fn assert_refused(root: &Path, check: &str, needle: &str) {
+        let before = snapshot(root);
+        let fake = gate(true, true);
+        let r = refusal(run(root, "T-001", &clock(), &fake));
+        assert_eq!(r.check, check, "{r}");
+        assert!(
+            r.to_string()
+                .starts_with(&format!("queue: refused: {check}: "))
+        );
+        assert!(r.reason.contains(needle), "{r}");
+        assert!(fake.calls.borrow().is_empty(), "nothing built or gated");
+        assert_eq!(snapshot(root), before);
+    }
+
+    #[test]
+    fn state_front_matter_touches_and_config_refusals() {
+        for state in [
+            "draft",
+            "ready",
+            "in_progress",
+            "reviewed",
+            "tests_joined",
+            "merged",
+            "blocked",
+        ] {
+            let repo = setup_with("q-state", &task_md("low", state, &["feature.txt"]));
+            testrepo::commit(
+                &repo.path().join(".worktrees/T-001"),
+                "f",
+                &[("feature.txt", "f")],
+            );
+            assert_refused(repo.path(), "state", state);
+        }
+        let repo = setup("q-fm");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        let tf = "tasks/T-001-thing.md";
+        let original = std::fs::read_to_string(wt.join(tf)).unwrap();
+        testrepo::commit(
+            &wt,
+            "touches",
+            &[(tf, &original.replace("feature.txt,", "feature.txt, src,"))],
+        );
+        assert_refused(root, "front-matter", "`touches`");
+        g(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+        testrepo::commit(
+            &wt,
+            "log",
+            &[
+                (tf, &format!("{original}- implementer: did x\n")),
+                ("feature.txt", "f"),
+            ],
+        );
+        // The director moved main's state after the branch was made: still fine.
+        testrepo::commit(
+            root,
+            "state",
+            &[(tf, &original.replace("self_verified", "queued"))],
+        );
+        testrepo::commit(&wt, "outside", &[("src/x.rs", "x"), ("items_b", "")]);
+        assert_refused(root, "touches", ": items_b, src/x.rs");
+        g(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+        g(&wt, &["rm", "-q", "items/a"]);
+        g(&wt, &["commit", "-q", "-m", "delete"]);
+        // items/a is inside touches; deleting gen.txt (generated) is exempt.
+        g(&wt, &["rm", "-q", "gen.txt"]);
+        g(&wt, &["commit", "-q", "-m", "delete gen"]);
+        testrepo::commit(
+            root,
+            "bad policy",
+            &[(
+                "xtask/ledger.toml",
+                "[[ledger]]\npath = \"xtask/\"\nmode = \"any\"\n",
+            )],
+        );
+        assert_refused(root, "config", "xtask/");
+        g(root, &["rm", "-q", "xtask/ledger.toml"]);
+        g(root, &["commit", "-q", "-m", "no ledger"]);
+        assert_refused(root, "config", "missing");
+        testrepo::commit(root, "ledger back", &[("xtask/ledger.toml", LED)]);
+        assert_eq!(
+            run(root, "T-001", &clock(), &gate(true, true))
+                .unwrap()
+                .result,
+            "merged"
+        );
+    }
+
+    #[test]
+    fn task_file_refusals() {
+        let repo = setup_with(
+            "q-tf",
+            &task_md("urgent", "self_verified", &["feature.txt"]),
+        );
+        let root = repo.path();
+        testrepo::commit(&root.join(".worktrees/T-001"), "f", &[("feature.txt", "f")]);
+        assert_refused(root, "task-file", "urgent");
+        testrepo::commit(root, "two", &[("tasks/T-001-other.md", "x")]);
+        assert_refused(root, "task-file", "2 files");
+        g(
+            root,
+            &["rm", "-q", "tasks/T-001-other.md", "tasks/T-001-thing.md"],
+        );
+        g(root, &["commit", "-q", "-m", "none"]);
+        assert_refused(root, "task-file", "no tasks/T-001-*.md");
+        let no_touches = "---\nid: T-001\ntier: low\nstate: self_verified\n---\n";
+        testrepo::commit(root, "nt", &[("tasks/T-001-thing.md", no_touches)]);
+        assert_refused(root, "task-file", "touches");
+        let wrong_id = task_md("low", "self_verified", &["x"]).replace("id: T-001", "id: T-002");
+        testrepo::commit(root, "id", &[("tasks/T-001-thing.md", &wrong_id)]);
+        assert_refused(root, "task-file", "id: T-001");
+    }
+
+    #[test]
+    fn medium_and_high_evidence() {
+        let repo = setup_with("q-ev", &task_md("high", "reviewed", &["feature.txt"]));
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        let joined = testrepo::commit(&wt, "impl", &[("feature.txt", "f")]);
+        assert_refused(root, "join", "no `joined`");
+        let join = |sha: &str, result: &str| {
+            crate::util::append_jsonl(
+                &root.join("metrics/tasks.jsonl"),
+                &serde_json::json!({"kind": "join", "task": "T-001", "result": result, "joined_sha": sha}),
+            )
+            .unwrap();
+        };
+        join(&joined, "acceptance_failed");
+        assert_refused(root, "join", "no `joined`");
+        join(&base_sha_of(root), "joined"); // an ancestor of the head, but main's: fine too
+        let review = |round: u32, verdict: &str, sha: &str| {
+            format!(
+                "---\ntask: T-001\nround: {round}\nreviewed_sha: {sha}\nverdict: {verdict}\n---\n"
+            )
+        };
+        assert_refused(root, "review", "no reviews/T-001-r<N>.md");
+        testrepo::commit(
+            &wt,
+            "r1",
+            &[("reviews/T-001-r1.md", &review(1, "approve", &joined))],
+        );
+        testrepo::commit(
+            &wt,
+            "r2",
+            &[(
+                "reviews/T-001-r2.md",
+                &review(2, "request-changes", &joined),
+            )],
+        );
+        assert_refused(root, "review", "request-changes");
+        testrepo::commit(
+            &wt,
+            "r10",
+            &[("reviews/T-001-r10.md", &review(10, "approve", "0123abcd"))],
+        );
+        assert_refused(root, "review", "not a commit");
+        let side = g(
+            root,
+            &["commit-tree", "-m", "side", &format!("{joined}^{{tree}}")],
+        );
+        testrepo::commit(
+            &wt,
+            "r10",
+            &[("reviews/T-001-r10.md", &review(10, "approve", &side))],
+        );
+        assert_refused(root, "review", "not an ancestor");
+        testrepo::commit(
+            &wt,
+            "r10",
+            &[("reviews/T-001-r10.md", &review(10, "approve", &joined))],
+        );
+        let tf = "tasks/T-001-thing.md";
+        let log = format!(
+            "{}- reviewer: ok\n",
+            std::fs::read_to_string(wt.join(tf)).unwrap()
+        );
+        testrepo::commit(&wt, "log", &[(tf, &log)]);
+        assert_refused(root, "approval", "Approve T-001");
+        testrepo::commit(
+            root,
+            "approve",
+            &[(
+                "docs/decisions.md",
+                "| # | Date | Decision | Why |\n|---|---|---|---|\n| D-1 | 2026-01-01 | Approve T-001 (queue). | ok |\n",
+            )],
+        );
+        let late = testrepo::commit(&wt, "late fix", &[("feature.txt", "g")]);
+        assert_refused(root, "review", &late[..12]);
+        g(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(r.result, "merged");
+    }
+
+    fn base_sha_of(root: &Path) -> String {
+        rev(root, "main").unwrap()
+    }
+
+    #[test]
+    fn main_history_tolerates_only_ledger_commits() {
+        let repo = setup_with("q-hist", &task_md("low", "queued", &["feature.txt", "f2"]));
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "f", &[("feature.txt", "f")]);
+        // Before any merge record, history is not checked.
+        testrepo::commit(root, "code on main", &[("code.rs", "x")]);
+        assert_eq!(
+            run(root, "T-001", &clock(), &gate(true, true))
+                .unwrap()
+                .result,
+            "merged"
+        );
+        testrepo::commit(&wt, "f2", &[("f2", "x")]);
+        testrepo::commit(
+            root,
+            "ledger",
+            &[
+                (
+                    "tasks/T-001-thing.md",
+                    &task_md("low", "queued", &["feature.txt", "f2"])
+                        .replace("## Log\n", "## Log\n- x\n"),
+                ),
+                ("metrics/tasks.jsonl", ""),
+                ("STATE.md", "s"),
+                ("scorecard/items/x.toml", "id = 1"),
+            ],
+        );
+        let mark = rev(root, "main").unwrap();
+        testrepo::commit(root, "edit item", &[("scorecard/items/x.toml", "id = 2")]);
+        let bad = rev(root, "main").unwrap();
+        assert_refused(root, "main-history", &bad);
+        g(root, &["reset", "-q", "--hard", &mark]);
+        for (p, c) in [
+            ("src/a.rs", "x"),
+            ("xtask/src/main.rs", "x"),
+            ("Cargo.lock", "x"),
+        ] {
+            let c = testrepo::commit(root, "direct", &[(p, c)]);
+            assert_refused(root, "main-history", &c);
+            g(root, &["reset", "-q", "--hard", &mark]);
+        }
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(r.result, "merged");
+    }
+
+    #[test]
+    fn lock_version_changes_detects_bumps_only() {
+        let lock = |pkgs: &[(&str, &str, Option<&str>)]| {
+            let mut s = String::from("version = 4\n");
+            for (n, v, src) in pkgs {
+                s.push_str(&format!(
+                    "\n[[package]]\nname = \"{n}\"\nversion = \"{v}\"\n"
+                ));
+                if let Some(src) = src {
+                    s.push_str(&format!("source = \"{src}\"\n"));
+                }
+            }
+            s
+        };
+        let reg = Some("registry+https://github.com/rust-lang/crates.io-index");
+        let main = lock(&[("serde", "1.0.1", reg), ("app", "0.1.0", None)]);
+        let same = lock(&[
+            ("serde", "1.0.1", reg),
+            ("app", "0.2.0", None),
+            ("new", "1.0.0", reg),
+        ]);
+        assert!(lock_version_changes(&main, &same).unwrap().is_empty());
+        let extra = lock(&[("serde", "1.0.1", reg), ("serde", "1.0.9", reg)]);
+        assert!(lock_version_changes(&main, &extra).unwrap().is_empty());
+        let removed = lock(&[("app", "0.1.0", None)]);
+        assert!(lock_version_changes(&main, &removed).unwrap().is_empty());
+        let bumped = lock(&[("serde", "1.0.2", reg)]);
+        assert_eq!(
+            lock_version_changes(&main, &bumped).unwrap(),
+            ["serde 1.0.1 -> 1.0.2"]
+        );
+    }
+
+    #[test]
+    fn basic_refusals_write_nothing() {
         let repo = setup("q-refuse");
         let root = repo.path();
         // Nothing to merge.
-        assert!(run(root, "T-001", &clock(), &FakeGate(true)).is_err());
+        assert!(run(root, "T-001", &clock(), &gate(true, true)).is_err());
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "feature", &[("feature.txt", "f")]);
         // Dirty main (metrics/ is exempt, tracked or not).
@@ -428,18 +1250,18 @@ mod tests {
             Vec::<String>::new()
         );
         testrepo::write(root, "scratch.txt", "x");
-        let e = run(root, "T-001", &clock(), &FakeGate(true)).unwrap_err();
+        let e = run(root, "T-001", &clock(), &gate(true, true)).unwrap_err();
         assert!(e.to_string().contains("dirty"), "{e}");
         std::fs::remove_file(root.join("scratch.txt")).unwrap();
         // Lock held by a live process (this one).
         let common = root.join(".git/kiln-queue.lock");
         std::fs::write(&common, format!("{} T-999\n", std::process::id())).unwrap();
-        let e = run(root, "T-001", &clock(), &FakeGate(true)).unwrap_err();
+        let e = run(root, "T-001", &clock(), &gate(true, true)).unwrap_err();
         assert!(e.to_string().contains("another queue run"), "{e}");
         // Stale lock (no such process) is reclaimed.
         std::fs::write(&common, "999999999 T-999\n").unwrap();
         assert_eq!(
-            run(root, "T-001", &clock(), &FakeGate(true))
+            run(root, "T-001", &clock(), &gate(true, true))
                 .unwrap()
                 .result,
             "merged"
@@ -447,7 +1269,7 @@ mod tests {
         assert!(!common.exists(), "lock released");
         // Not on main.
         g(root, &["checkout", "-q", "-b", "elsewhere"]);
-        assert!(run(root, "T-001", &clock(), &FakeGate(true)).is_err());
+        assert!(run(root, "T-001", &clock(), &gate(true, true)).is_err());
         assert_eq!(read_records(root).len(), 1);
     }
 }

@@ -277,7 +277,7 @@ pub fn join(
     } else if rec.acc_fail_first_join > 0 {
         rec.result = "acceptance_failed".into();
     } else {
-        let g = gate.run(&wt)?;
+        let g = gate.run(&wt, crate::queue::GateXtask::Own)?;
         rec.gate_green = Some(g.passed);
         rec.result = if g.passed {
             "joined".into()
@@ -409,19 +409,13 @@ pub fn revert_check(
         }
         let prefix = format!("acceptance_{}", spec.task.to_lowercase().replace('-', ""));
         // Never share a target directory between two source trees: cargo's mtime-based
-        // freshness can then reuse artifacts built from the other tree. Seed a private copy.
+        // freshness can then reuse artifacts built from the other tree (bootstrap §7 defect 4).
         let target = tmp.join("target");
+        // The private target gets copies of non-member artifacts only (`crate::seed`); the task
+        // worktree's target is only read.
         let task_target = spec.path(root).join("target");
         if task_target.is_dir() {
-            let out = capture(
-                std::process::Command::new("cp")
-                    .args(["-a", "--reflink=auto"])
-                    .arg(&task_target)
-                    .arg(&target),
-            )?;
-            if !out.ok {
-                bail!("seeding {} failed: {}", target.display(), out.stderr.trim());
-            }
+            crate::seed::seed(&spec.path(root), &task_target, &tmp, &target)?;
         }
         let run = oracle.acceptance(&tmp, &target, &prefix)?;
         let fail = run
@@ -499,7 +493,7 @@ mod tests {
 
     struct Gate(bool);
     impl GateRunner for Gate {
-        fn run(&self, _: &Path) -> Result<GateOutcome> {
+        fn run(&self, _: &Path, _: crate::queue::GateXtask<'_>) -> Result<GateOutcome> {
             Ok(GateOutcome {
                 passed: self.0,
                 failed_step: None,
