@@ -2,7 +2,7 @@
 id: T-005
 title: "Merge queue gates with main's xtask, refuses tasks without their lifecycle evidence, resolves generated-file conflicts, tolerates only ledger commits on main, and seeds worktrees without copying the whole target"
 tier: high              # xtask/ (CI and gate)
-state: self_verified
+state: in_progress
 owner_role: director
 scorecard_items: []
 depends_on: []
@@ -260,6 +260,13 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   metrics record.
 - D-6 (from D-5 (e)): the `join` check reads only `metrics/tasks.jsonl`, never history.
 - Director (2026-11-12): `Cargo.lock` regeneration = take `main`'s lock file, then `cargo update --workspace`; the queue must verify that no package already present in `main`'s lock changed version, and fail otherwise.
+- Director rulings after join triage (2026-11-12, decision D-019) — part of the spec:
+  a. `front-matter` passes when the branch's copy of the task front matter equals main's or is unchanged since the merge base.
+  b. The shipped layout of `xtask/generated.toml` and `xtask/ledger.toml` is the specified schema.
+  c. The `config` check runs just before `touches`.
+  d. `guard_tNNN*.rs` test files are allowed paths, like `acceptance_tNNN*.rs`.
+  e. `cargo xtask join` also finds acceptance and guard tests under `xtask/tests`.
+  f. `xtask` refuses to run (exit 2, one line naming both paths) when the checkout it was built from differs from the workspace it is run in, except where the queue deliberately runs main's `xtask` against a task worktree.
 
 ## Questions
 None open.

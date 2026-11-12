@@ -50,3 +50,6 @@
 {"kind":"run","task":"T-002","iteration":0,"run":"R-017","role":"reviewer","tier":"high","started_at":"2026-11-12T23:40:30Z","ended_at":"2026-11-12T23:41:50Z","wall_s":80,"tokens":9155,"tool_calls":8,"gate_attempts":1,"outcome":"completed","missing_context":"none","note":"round 3 (delta): approve; new unit tests also kill the round-2 skipped-cleanup survivor; token figure is the delta over R-014"}
 {"kind":"run","task":"T-005","iteration":0,"run":"R-015","role":"reviewer","tier":"high","started_at":"2026-11-12T23:35:00Z","ended_at":"2026-11-12T23:42:00Z","wall_s":420,"tokens":140270,"tool_calls":34,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"join triage: 15 of 16 first-join failures were a stale xtask binary (main's xtask built into the worktree target by a director command that leaked CARGO_TARGET_DIR); 1 test defect; 0 implementation defects"}
 {"kind":"transition","task":"T-002","iteration":0,"at":"2026-11-12T23:38:43Z","from":"queued","to":"merged"}
+{"kind":"transition","task":"T-005","iteration":0,"at":"2026-11-12T23:39:34Z","from":"self_verified","to":"in_progress"}
+{"kind":"transition","task":"T-003","iteration":0,"at":"2026-11-12T23:39:34Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-003","iteration":0,"at":"2026-11-12T23:39:34Z","from":"ready","to":"in_progress"}
