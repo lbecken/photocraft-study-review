@@ -29,3 +29,4 @@
 {"kind":"run","task":"T-001","iteration":0,"run":"R-009","role":"reviewer","tier":"high","started_at":"2026-11-12T23:10:30Z","ended_at":"2026-11-12T23:15:20Z","wall_s":290,"tokens":127282,"tool_calls":24,"gate_attempts":1,"outcome":"completed","missing_context":"none","note":"round 1: approve; 0 defects, 0 test gaps, 3 spec gaps, 1 nit; mutation kill 14/14 (4 bugs caught by a single test each)"}
 {"kind":"transition","task":"T-001","iteration":0,"at":"2026-11-12T23:14:40Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-001","iteration":0,"at":"2026-11-12T23:14:40Z","from":"reviewed","to":"queued"}
+{"kind":"transition","task":"T-001","iteration":0,"at":"2026-11-12T23:14:58Z","from":"queued","to":"merged"}
