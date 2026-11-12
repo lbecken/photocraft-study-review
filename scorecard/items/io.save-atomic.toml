@@ -2,4 +2,4 @@ id = "io.save-atomic"
 title = "Save writes through a temporary file and rename; a failed save leaves the original file intact"
 crate = "kiln-workspace"
 tier = "high"
-tests = []
+tests = ["kiln_workspace::acceptance_t002::failed_save_leaves_file_intact_and_document_dirty", "kiln_workspace::acceptance_t002::disk_save_replaces_via_rename_without_leftovers", "kiln_workspace::acceptance_t002::save_through_symlink_updates_target"]

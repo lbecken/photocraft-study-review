@@ -2,4 +2,4 @@ id = "io.encoding"
 title = "UTF-16 LE/BE files with BOM open correctly; undecodable bytes are reported, never silently replaced"
 crate = "kiln-workspace"
 tier = "medium"
-tests = []
+tests = ["kiln_workspace::acceptance_t002::utf16_le_and_be_with_bom_open_and_save", "kiln_workspace::acceptance_t002::invalid_bytes_are_reported_with_offset_never_replaced", "kiln_workspace::acceptance_t002::encode_decode_round_trip"]

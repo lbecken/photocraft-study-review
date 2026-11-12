@@ -2,4 +2,4 @@ id = "io.bom"
 title = "A UTF-8 byte-order mark is detected on open and preserved on save"
 crate = "kiln-workspace"
 tier = "medium"
-tests = []
+tests = ["kiln_workspace::acceptance_t002::utf8_bom_detected_stripped_and_restored_on_save", "kiln_workspace::acceptance_t002::bom_only_file_round_trips"]

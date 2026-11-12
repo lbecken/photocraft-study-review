@@ -2,4 +2,4 @@ id = "io.utf8"
 title = "Open and save UTF-8 files byte-for-byte unchanged when not edited (round-trip)"
 crate = "kiln-workspace"
 tier = "high"
-tests = []
+tests = ["kiln_workspace::acceptance_t002::unedited_utf8_files_round_trip_byte_for_byte", "kiln_workspace::acceptance_t002::line_endings_round_trip_verbatim"]
