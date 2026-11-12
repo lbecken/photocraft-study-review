@@ -1,0 +1,5 @@
+id = "text.lines"
+title = "Line access: line count, line text and line start offsets agree with a naive split for LF, CRLF and CR"
+crate = "kiln-text"
+tier = "medium"
+tests = []

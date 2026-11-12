@@ -1,0 +1,5 @@
+id = "control.errors"
+title = "Malformed or invalid requests get structured error responses; the host never exits on bad input"
+crate = "kiln-control"
+tier = "medium"
+tests = []

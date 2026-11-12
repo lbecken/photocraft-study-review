@@ -1,0 +1,5 @@
+id = "ws.vfs"
+title = "Virtual file system with an in-memory implementation for deterministic tests and a disk implementation"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

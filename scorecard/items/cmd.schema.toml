@@ -1,0 +1,9 @@
+id = "cmd.schema"
+title = "Every command publishes params and result JSON Schemas and an executable example (docs/commands.json)"
+crate = "kiln-commands"
+tier = "high"
+tests = [
+    "kiln_commands::registry::tests::describe_lists_schemas_and_examples",
+    "kiln_commands::registry::tests::audit_catches_wrong_example_and_empty_registry",
+    "kiln_commands::buffer::tests::standard_registry_passes_its_own_audit",
+]

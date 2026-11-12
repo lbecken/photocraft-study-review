@@ -1,0 +1,5 @@
+id = "search.whole-word"
+title = "Whole-word option restricts matches to identifier boundaries"
+crate = "kiln-search"
+tier = "low"
+tests = []

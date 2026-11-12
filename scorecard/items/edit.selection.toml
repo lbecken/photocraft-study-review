@@ -1,0 +1,5 @@
+id = "edit.selection"
+title = "Cursor and selection move by char, word and line and survive edits elsewhere in the buffer"
+crate = "kiln-text"
+tier = "medium"
+tests = []

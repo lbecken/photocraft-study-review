@@ -1,0 +1,5 @@
+id = "ws.open-project"
+title = "Open a directory as a project and list its files as a tree, honouring .gitignore and skipping target/"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

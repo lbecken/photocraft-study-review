@@ -1,0 +1,5 @@
+id = "search.literal"
+title = "Literal search in a buffer, case-sensitive and case-insensitive, agrees with a naive scan"
+crate = "kiln-search"
+tier = "medium"
+tests = []

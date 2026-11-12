@@ -1,0 +1,5 @@
+id = "io.encoding"
+title = "UTF-16 LE/BE files with BOM open correctly; undecodable bytes are reported, never silently replaced"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

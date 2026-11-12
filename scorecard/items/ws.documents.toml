@@ -1,0 +1,5 @@
+id = "ws.documents"
+title = "Several documents open at once, each with its own buffer, undo history and modified flag"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

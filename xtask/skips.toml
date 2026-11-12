@@ -1,0 +1,11 @@
+# Allowlist for `cargo xtask no-skip`. An ignored, skipped or cfg-disabled test fails the gate
+# unless it is listed here with a reason and an expiry date that has not passed. "Today" is the
+# commit date of HEAD, so the gate result is a function of the commit. Unused entries fail too.
+#
+# [[skip]]
+# file = "crates/kiln-x/src/foo.rs"   # path relative to the repository root
+# item = "tests::slow_case"           # module path within the file, then the fn or mod name
+# kind = "ignore"                     # optional: ignore | cfg-attr-ignore | skip-call |
+#                                     #   early-return | cfg-disabled | doc-ignore
+# reason = "why, and which task removes it"
+# expires = "2026-12-31"

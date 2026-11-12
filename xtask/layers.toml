@@ -1,0 +1,71 @@
+# The layer table (CHARTER §3) — the single source of truth for `cargo xtask layers`.
+# Changing it is a high-tier change (contract in §3; ADR required).
+#
+# Rules enforced:
+#   * every workspace crate is listed here, and every entry is a workspace crate;
+#   * a layered crate depends (normal, build or dev) only on crates in strictly lower layers;
+#     same-layer and upward dependencies fail;
+#   * the testkit is only ever a dev-dependency of layered crates and apps, and itself depends
+#     only on layers <= testkit_max_layer;
+#   * apps depend on layered crates (and the testkit as a dev-dependency), never on other apps
+#     or on the tool;
+#   * the tool (xtask) depends on no workspace crate, so a broken product crate cannot stop the
+#     gate from building and reporting;
+#   * no crate named in headless_forbidden appears in the normal/build dependency closure of
+#     layers 0-4, the testkit, or an app marked headless.
+
+testkit_max_layer = 4
+
+headless_forbidden = [
+    "kiln-ui",
+    "egui", "eframe", "epaint", "emath", "ecolor", "egui-winit", "egui_glow", "egui-wgpu",
+    "egui_extras", "egui_kittest",
+    "winit", "wgpu", "wgpu-core", "wgpu-hal", "wgpu-types", "glow", "glutin", "glutin-winit",
+    "raw-window-handle", "softbuffer", "ash", "metal", "khronos-egl", "gpu-alloc",
+    "wayland-client", "wayland-sys", "x11-dl", "x11rb", "smithay-client-toolkit", "accesskit_winit",
+]
+
+[[crate]]
+name = "kiln-text"
+layer = 0
+
+[[crate]]
+name = "kiln-syntax"
+layer = 1
+
+[[crate]]
+name = "kiln-search"
+layer = 1
+
+[[crate]]
+name = "kiln-workspace"
+layer = 2
+
+[[crate]]
+name = "kiln-commands"
+layer = 3
+
+[[crate]]
+name = "kiln-control"
+layer = 4
+
+[[crate]]
+name = "kiln-ui"
+layer = 5
+
+[[crate]]
+name = "kiln-testkit"
+role = "testkit"
+
+[[crate]]
+name = "kiln-cli"
+role = "app"
+headless = true
+
+[[crate]]
+name = "kiln"
+role = "app"
+
+[[crate]]
+name = "xtask"
+role = "tool"

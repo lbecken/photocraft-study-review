@@ -1,0 +1,5 @@
+id = "fmt.idempotent"
+title = "Formatting an already formatted document changes nothing"
+crate = "kiln-workspace"
+tier = "low"
+tests = []

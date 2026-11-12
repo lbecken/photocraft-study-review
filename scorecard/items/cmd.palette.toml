@@ -1,0 +1,5 @@
+id = "cmd.palette"
+title = "Command palette query returns commands ranked by fuzzy match on name and doc"
+crate = "kiln-commands"
+tier = "medium"
+tests = []

@@ -1,0 +1,5 @@
+id = "diag.tool-fake"
+title = "External tools run behind a trait with a recorded-output fake, so diagnostics and formatting tests are deterministic"
+crate = "kiln-workspace"
+tier = "high"
+tests = []

@@ -1,0 +1,5 @@
+id = "control.session"
+title = "A headless session can open a file, edit it and save it through the control protocol"
+crate = "kiln-control"
+tier = "high"
+tests = []

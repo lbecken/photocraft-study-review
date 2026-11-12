@@ -1,0 +1,11 @@
+id = "cmd.registry"
+title = "Every state change goes through a named command whose JSON params are validated against its schema"
+crate = "kiln-commands"
+tier = "high"
+tests = [
+    "kiln_commands::registry::tests::rejects_params_that_violate_schema",
+    "kiln_commands::registry::tests::rejects_duplicate_names",
+    "kiln_commands::registry::tests::unknown_command_is_an_error",
+    "kiln_commands::buffer::tests::insert_rejects_missing_text_param",
+    "kiln_commands::buffer::tests::insert_then_text_round_trip",
+]

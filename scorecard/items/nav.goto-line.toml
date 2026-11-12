@@ -1,0 +1,5 @@
+id = "nav.goto-line"
+title = "Go to line:column, clamped to the document"
+crate = "kiln-commands"
+tier = "low"
+tests = []

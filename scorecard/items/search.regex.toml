@@ -1,0 +1,5 @@
+id = "search.regex"
+title = "Regex search in a buffer with match ranges in char offsets; invalid patterns are reported"
+crate = "kiln-search"
+tier = "medium"
+tests = []

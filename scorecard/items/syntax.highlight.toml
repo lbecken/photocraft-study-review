@@ -1,0 +1,5 @@
+id = "syntax.highlight"
+title = "Highlight spans for Rust (keywords, strings, comments, types, functions) cover the text without overlap"
+crate = "kiln-syntax"
+tier = "medium"
+tests = []

@@ -1,0 +1,5 @@
+id = "text.positions"
+title = "Convert positions between byte, char, UTF-16 code unit and line/column, exactly inverse on valid positions"
+crate = "kiln-text"
+tier = "medium"
+tests = []

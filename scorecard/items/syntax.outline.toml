@@ -1,0 +1,5 @@
+id = "syntax.outline"
+title = "Outline lists fn, struct, enum, trait, impl and mod items with names and ranges"
+crate = "kiln-syntax"
+tier = "medium"
+tests = []

@@ -1,0 +1,5 @@
+id = "fmt.rustfmt"
+title = "Format the current document with rustfmt; the result replaces the buffer as one undo step"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

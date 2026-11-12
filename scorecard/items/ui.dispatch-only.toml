@@ -1,0 +1,5 @@
+id = "ui.dispatch-only"
+title = "The UI changes state only by dispatching registry commands (gate step ui-commands)"
+crate = "kiln-ui"
+tier = "high"
+tests = []

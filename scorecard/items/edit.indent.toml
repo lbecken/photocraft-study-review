@@ -1,0 +1,5 @@
+id = "edit.indent"
+title = "Newline keeps the current indentation; indent and outdent shift the selected lines by one level"
+crate = "kiln-commands"
+tier = "medium"
+tests = []

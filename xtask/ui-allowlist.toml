@@ -1,0 +1,24 @@
+# Paths of lower-layer crates that `kiln-ui` source may name (`cargo xtask ui-commands`).
+#
+# kiln-ui may only dispatch commands and read state (CHARTER §3). Every path in kiln-ui that
+# starts with a workspace crate (kiln_text::…, kiln_commands::…) must match an entry here:
+# equal to it, or extending it by whole `::` segments. Anything else fails the gate, including
+# bare crate imports (`use kiln_text;`), globs (`kiln_commands::*`) and aliases of unlisted
+# paths. Adding an entry is a high-tier change: give the reason, and never list a type whose
+# public API mutates state outside the registry.
+
+[[allow]]
+path = "kiln_commands::Registry"
+reason = "dispatch named commands with JSON params (Registry::execute) and list them"
+
+[[allow]]
+path = "kiln_commands::standard_registry"
+reason = "build the registry with every built-in command"
+
+[[allow]]
+path = "kiln_commands::Context"
+reason = "the state commands act on; its public API is read-only (Context::buffer -> &Buffer)"
+
+[[allow]]
+path = "kiln_commands::CommandError"
+reason = "show command failures to the user"

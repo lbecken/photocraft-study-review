@@ -1,0 +1,5 @@
+id = "io.utf8"
+title = "Open and save UTF-8 files byte-for-byte unchanged when not edited (round-trip)"
+crate = "kiln-workspace"
+tier = "high"
+tests = []

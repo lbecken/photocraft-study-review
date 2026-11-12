@@ -1,0 +1,5 @@
+id = "undo.grouping"
+title = "Consecutive typed characters at adjacent positions group into one undo step"
+crate = "kiln-text"
+tier = "medium"
+tests = []

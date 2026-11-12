@@ -1,0 +1,5 @@
+id = "io.external-change"
+title = "A file changed on disk since it was opened is detected before save"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

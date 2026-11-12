@@ -1,0 +1,5 @@
+id = "undo.roundtrip"
+title = "Any edit sequence followed by undoing every step restores the original text (property test)"
+crate = "kiln-text"
+tier = "medium"
+tests = []

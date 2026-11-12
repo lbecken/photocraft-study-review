@@ -1,0 +1,5 @@
+id = "keymap.default"
+title = "Default keymap binds key chords to command names; every bound name is a registered command"
+crate = "kiln-commands"
+tier = "medium"
+tests = []

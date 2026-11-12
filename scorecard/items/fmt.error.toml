@@ -1,0 +1,5 @@
+id = "fmt.error"
+title = "A rustfmt failure is reported with its message and leaves the buffer unchanged"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

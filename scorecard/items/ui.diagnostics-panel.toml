@@ -1,0 +1,5 @@
+id = "ui.diagnostics-panel"
+title = "The diagnostics panel lists diagnostics; selecting one moves the cursor to it"
+crate = "kiln-ui"
+tier = "low"
+tests = []

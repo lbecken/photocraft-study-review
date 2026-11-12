@@ -1,0 +1,5 @@
+id = "text.rope"
+title = "Buffer storage is a rope: insert/delete at any position in a 10 MB buffer stay within the edit latency budget"
+crate = "kiln-text"
+tier = "medium"
+tests = []

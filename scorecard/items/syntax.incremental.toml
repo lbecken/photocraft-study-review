@@ -1,0 +1,5 @@
+id = "syntax.incremental"
+title = "Incremental reparse after an edit yields the same tree as parsing from scratch"
+crate = "kiln-syntax"
+tier = "medium"
+tests = []

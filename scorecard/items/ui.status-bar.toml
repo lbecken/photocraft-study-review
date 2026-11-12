@@ -1,0 +1,5 @@
+id = "ui.status-bar"
+title = "The status bar shows line and column, encoding and line-ending style"
+crate = "kiln-ui"
+tier = "low"
+tests = []

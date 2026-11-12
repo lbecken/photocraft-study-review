@@ -1,0 +1,5 @@
+id = "ui.project-panel"
+title = "The project tree panel opens a file on click"
+crate = "kiln-ui"
+tier = "low"
+tests = []

@@ -1,0 +1,5 @@
+id = "search.replace"
+title = "Replace one or all matches in a buffer as a single undoable operation, with regex capture groups"
+crate = "kiln-search"
+tier = "medium"
+tests = []

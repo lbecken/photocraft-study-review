@@ -1,0 +1,5 @@
+id = "ui.editor-view"
+title = "The editor view renders text with syntax colours, a cursor and scrolling"
+crate = "kiln-ui"
+tier = "medium"
+tests = []

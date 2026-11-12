@@ -1,0 +1,11 @@
+[package]
+name = "kiln-syntax"
+description = "Kiln L1: Rust syntax (tree-sitter), highlight spans, outline, brackets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

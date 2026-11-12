@@ -1,0 +1,5 @@
+id = "undo.undo"
+title = "Undo reverts the most recent edit operation exactly (operation-based, no snapshots)"
+crate = "kiln-text"
+tier = "high"
+tests = []

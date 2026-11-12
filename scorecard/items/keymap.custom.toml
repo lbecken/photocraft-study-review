@@ -1,0 +1,5 @@
+id = "keymap.custom"
+title = "A user keymap file overrides defaults and is validated; unknown commands are reported"
+crate = "kiln-commands"
+tier = "medium"
+tests = []

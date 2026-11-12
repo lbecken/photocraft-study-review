@@ -1,0 +1,7 @@
+id = "cli.schema"
+title = "`kiln-cli commands --schema` prints every command with schemas and examples"
+crate = "kiln-cli"
+tier = "low"
+tests = [
+    "kiln_cli::cli::commands_schema_through_the_binary",
+]

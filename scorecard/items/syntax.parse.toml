@@ -1,0 +1,5 @@
+id = "syntax.parse"
+title = "Parse Rust with tree-sitter; every file of the pinned compiling corpus parses without error nodes"
+crate = "kiln-syntax"
+tier = "medium"
+tests = []

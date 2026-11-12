@@ -1,0 +1,5 @@
+id = "ui.tabs"
+title = "Open documents appear as tabs; switching and closing tabs dispatch commands"
+crate = "kiln-ui"
+tier = "medium"
+tests = []

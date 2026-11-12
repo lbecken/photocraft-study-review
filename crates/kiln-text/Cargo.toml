@@ -1,0 +1,11 @@
+[package]
+name = "kiln-text"
+description = "Kiln L0: text buffer, positions, edits, line endings, encodings, undo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

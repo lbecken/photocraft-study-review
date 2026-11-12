@@ -1,0 +1,5 @@
+id = "cmd.log-replay"
+title = "The command log replayed on the initial state reproduces the final document state"
+crate = "kiln-commands"
+tier = "high"
+tests = []

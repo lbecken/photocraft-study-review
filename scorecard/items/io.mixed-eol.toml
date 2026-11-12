@@ -1,0 +1,5 @@
+id = "io.mixed-eol"
+title = "Mixed line endings are reported and can be normalised by an explicit command"
+crate = "kiln-text"
+tier = "medium"
+tests = []

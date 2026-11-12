@@ -1,0 +1,5 @@
+id = "diag.cargo-check"
+title = "Run `cargo check --message-format=json` for the project and parse its diagnostics"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

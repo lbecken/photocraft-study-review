@@ -1,0 +1,5 @@
+id = "io.save-atomic"
+title = "Save writes through a temporary file and rename; a failed save leaves the original file intact"
+crate = "kiln-workspace"
+tier = "high"
+tests = []

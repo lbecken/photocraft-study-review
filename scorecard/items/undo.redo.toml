@@ -1,0 +1,5 @@
+id = "undo.redo"
+title = "Redo reapplies an undone operation; a new edit after undo clears the redo stack"
+crate = "kiln-text"
+tier = "high"
+tests = []

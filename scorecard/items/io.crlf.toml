@@ -1,0 +1,5 @@
+id = "io.crlf"
+title = "Detect LF or CRLF on open and write the same line endings on save"
+crate = "kiln-text"
+tier = "high"
+tests = []

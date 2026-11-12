@@ -1,0 +1,8 @@
+# Enforced budgets (CHARTER §4 gate step `budgets`; claim C6). No runner exists yet: while this
+# list is empty the step reports EMPTY; a budget listed here fails the gate until its measuring
+# runner is implemented. An unenforced budget is never counted as held.
+#
+# [[target]]
+# name = "open-10mb-file"
+# metric = "wall_ms"
+# max = 200

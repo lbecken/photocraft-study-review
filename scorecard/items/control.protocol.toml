@@ -1,0 +1,5 @@
+id = "control.protocol"
+title = "JSON-lines control protocol: one request per line, one response per line, ids echoed"
+crate = "kiln-control"
+tier = "high"
+tests = []

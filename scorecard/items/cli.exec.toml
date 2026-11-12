@@ -1,0 +1,9 @@
+id = "cli.exec"
+title = "`kiln-cli exec <name> <json>` runs a command and prints its JSON result, or a structured error with exit code 2"
+crate = "kiln-cli"
+tier = "medium"
+tests = [
+    "kiln_cli::cli::exec_insert_through_the_binary",
+    "kiln_cli::cli::exec_error_is_json_on_stderr_with_exit_2",
+    "kiln_cli::tests::exec_invalid_params_exits_2_with_structured_error",
+]

@@ -1,0 +1,5 @@
+id = "nav.goto-symbol"
+title = "Go to a symbol of the current file chosen from the outline"
+crate = "kiln-commands"
+tier = "medium"
+tests = []

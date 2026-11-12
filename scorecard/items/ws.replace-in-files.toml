@@ -1,0 +1,5 @@
+id = "ws.replace-in-files"
+title = "Replace across project files from a previewed result set; each file change is undoable"
+crate = "kiln-workspace"
+tier = "high"
+tests = []

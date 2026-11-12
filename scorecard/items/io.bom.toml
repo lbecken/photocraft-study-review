@@ -1,0 +1,5 @@
+id = "io.bom"
+title = "A UTF-8 byte-order mark is detected on open and preserved on save"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

@@ -1,0 +1,5 @@
+id = "ui.search-panel"
+title = "The search panel runs find-in-files and opens a result on click"
+crate = "kiln-ui"
+tier = "low"
+tests = []

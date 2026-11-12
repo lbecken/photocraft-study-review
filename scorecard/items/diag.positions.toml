@@ -1,0 +1,5 @@
+id = "diag.positions"
+title = "Diagnostics map to document positions and follow later edits"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

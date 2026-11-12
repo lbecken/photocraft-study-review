@@ -1,0 +1,5 @@
+id = "ui.window"
+title = "The desktop app opens a window showing the open document"
+crate = "kiln-ui"
+tier = "medium"
+tests = []

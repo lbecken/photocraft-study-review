@@ -1,0 +1,5 @@
+id = "syntax.brackets"
+title = "Find the matching bracket for (), [], {} ignoring brackets in strings and comments"
+crate = "kiln-syntax"
+tier = "low"
+tests = []

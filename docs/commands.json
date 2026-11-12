@@ -1,0 +1,116 @@
+{
+  "commands": [
+    {
+      "doc": "Insert text at a char offset of the scratch buffer.",
+      "examples": [
+        {
+          "description": "append to an empty buffer",
+          "initial_text": "",
+          "params": {
+            "offset": 0,
+            "text": "fn main() {}"
+          },
+          "result": {
+            "len_chars": 12
+          }
+        },
+        {
+          "description": "offsets count chars, not bytes",
+          "initial_text": "héllo",
+          "params": {
+            "offset": 2,
+            "text": "X"
+          },
+          "result": {
+            "len_chars": 6
+          }
+        }
+      ],
+      "name": "buffer.insert",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `buffer.insert`.",
+        "properties": {
+          "offset": {
+            "description": "Char index (Unicode scalar values, not bytes) before which to insert; equal to the\nbuffer length to append.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "description": "Text to insert.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offset",
+          "text"
+        ],
+        "title": "InsertParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `buffer.insert`.",
+        "properties": {
+          "len_chars": {
+            "description": "Buffer length in chars after the insert.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "len_chars"
+        ],
+        "title": "InsertResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Return the whole text of the scratch buffer.",
+      "examples": [
+        {
+          "description": "read the buffer",
+          "initial_text": "let x = 1;",
+          "params": {},
+          "result": {
+            "len_chars": 10,
+            "text": "let x = 1;"
+          }
+        }
+      ],
+      "name": "buffer.text",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `buffer.text` (none).",
+        "title": "TextParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `buffer.text`.",
+        "properties": {
+          "len_chars": {
+            "description": "Its length in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "description": "The whole buffer text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "len_chars"
+        ],
+        "title": "TextResult",
+        "type": "object"
+      }
+    }
+  ]
+}

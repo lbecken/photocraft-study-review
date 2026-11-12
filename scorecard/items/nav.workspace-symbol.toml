@@ -1,0 +1,5 @@
+id = "nav.workspace-symbol"
+title = "Find a symbol by name across the project's Rust files"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []

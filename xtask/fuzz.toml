@@ -1,0 +1,7 @@
+# Command fuzz smoke targets (CHARTER §4 gate step `fuzz`). No runner exists yet: while this
+# list is empty the step reports EMPTY; a target listed here fails the gate until the task that
+# implements the runner lands (with its runner).
+#
+# [[target]]
+# name = "commands-random-params"
+# description = "random JSON params against every command; registry never panics"

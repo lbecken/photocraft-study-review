@@ -1,0 +1,5 @@
+id = "ws.find-in-files"
+title = "Literal and regex search across project files with results grouped by file, with line and column"
+crate = "kiln-workspace"
+tier = "medium"
+tests = []
