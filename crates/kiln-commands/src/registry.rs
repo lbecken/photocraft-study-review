@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use kiln_text::Buffer;
-use kiln_workspace::{MemoryFs, PathError, RelPath, Vfs};
+use kiln_workspace::{Document, MemoryFs, PathError, RelPath, Vfs};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,9 @@ use serde_json::{Value, json};
 pub struct Context {
     buffer: Buffer,
     vfs: Box<dyn Vfs>,
+    docs: BTreeMap<u64, Document>,
+    /// The id the next opened document gets (ids start at 1 and are never reused).
+    next_doc: u64,
     log: Vec<LogEntry>,
 }
 
@@ -55,6 +58,8 @@ impl Context {
         Self {
             buffer: Buffer::new(),
             vfs,
+            docs: BTreeMap::new(),
+            next_doc: 1,
             log: Vec::new(),
         }
     }
@@ -77,6 +82,47 @@ impl Context {
     pub fn log(&self) -> &[LogEntry] {
         &self.log
     }
+
+    /// The open documents by id, in increasing id order.
+    pub(crate) fn docs(&self) -> &BTreeMap<u64, Document> {
+        &self.docs
+    }
+
+    /// The open document `id`, or a `rejected` error.
+    pub(crate) fn doc(&self, id: u64) -> Result<&Document, CommandError> {
+        self.docs.get(&id).ok_or_else(|| no_such_doc(id))
+    }
+
+    /// The open document `id` for editing, or a `rejected` error.
+    pub(crate) fn doc_mut(&mut self, id: u64) -> Result<&mut Document, CommandError> {
+        self.docs.get_mut(&id).ok_or_else(|| no_such_doc(id))
+    }
+
+    /// The open document `id` and the VFS, both mutable (for save).
+    pub(crate) fn doc_and_vfs_mut(
+        &mut self,
+        id: u64,
+    ) -> Result<(&mut Document, &mut dyn Vfs), CommandError> {
+        let doc = self.docs.get_mut(&id).ok_or_else(|| no_such_doc(id))?;
+        Ok((doc, self.vfs.as_mut()))
+    }
+
+    /// Add `doc` under the next id and return that id.
+    pub(crate) fn add_doc(&mut self, doc: Document) -> u64 {
+        let id = self.next_doc;
+        self.next_doc += 1;
+        self.docs.insert(id, doc);
+        id
+    }
+
+    /// Remove document `id`, or a `rejected` error.
+    pub(crate) fn remove_doc(&mut self, id: u64) -> Result<Document, CommandError> {
+        self.docs.remove(&id).ok_or_else(|| no_such_doc(id))
+    }
+}
+
+fn no_such_doc(id: u64) -> CommandError {
+    CommandError::rejected(format!("no open document {id}"))
 }
 
 /// One successfully executed command, in execution order.
@@ -129,6 +175,18 @@ pub struct Example {
     pub params: Value,
     /// The exact expected result.
     pub result: Value,
+}
+
+/// The fresh context an example runs on: scratch buffer `initial_text`, MemoryFs `files`.
+fn example_context(ex: &Example) -> Result<Context, PathError> {
+    let mut fs = MemoryFs::new();
+    for (path, content) in &ex.files {
+        fs.insert(&RelPath::new(path)?, content.as_bytes());
+    }
+    Ok(Context {
+        buffer: Buffer::from_text(ex.initial_text),
+        ..Context::with_vfs(Box::new(fs))
+    })
 }
 
 /// A named command with typed params and result.
@@ -225,6 +283,7 @@ type Runner = Box<dyn Fn(&mut Context, Value) -> Result<Value, CommandError> + S
 
 struct Entry {
     doc: &'static str,
+    mutating: bool,
     params_schema: Value,
     result_schema: Value,
     params_validator: jsonschema::Validator,
@@ -320,6 +379,7 @@ impl Registry {
             name,
             Entry {
                 doc: C::DOC,
+                mutating: C::MUTATING,
                 params_schema,
                 result_schema,
                 params_validator,
@@ -342,7 +402,8 @@ impl Registry {
     }
 
     /// Execute `name` with JSON `params`: validate params against the params schema, run,
-    /// then validate the result against the result schema.
+    /// then validate the result against the result schema. Only a successful command is
+    /// appended to the context's log; a failed one leaves the context unchanged.
     pub fn execute(
         &self,
         ctx: &mut Context,
@@ -362,6 +423,7 @@ impl Registry {
                 details: errors,
             });
         }
+        let logged = params.clone();
         let result = (entry.run)(ctx, params)?;
         let errors = validation_errors(&entry.result_validator, &result);
         if !errors.is_empty() {
@@ -372,14 +434,24 @@ impl Registry {
                 ),
             });
         }
+        ctx.log.push(LogEntry {
+            name: name.to_owned(),
+            params: logged,
+            mutating: entry.mutating,
+        });
         Ok(result)
     }
 
     /// Execute every entry of `log` in order on `ctx` and return their results; stop at the
     /// first error (entries before it stay applied).
     pub fn replay(&self, ctx: &mut Context, log: &[LogEntry]) -> Result<Vec<Value>, ReplayError> {
-        let _ = (ctx, log);
-        Ok(Vec::new())
+        log.iter()
+            .enumerate()
+            .map(|(index, e)| {
+                self.execute(ctx, &e.name, e.params.clone())
+                    .map_err(|error| ReplayError { index, error })
+            })
+            .collect()
     }
 
     /// Machine-readable description of every command (the content of `docs/commands.json`).
@@ -391,6 +463,7 @@ impl Registry {
                 json!({
                     "name": name,
                     "doc": e.doc,
+                    "mutating": e.mutating,
                     "params_schema": e.params_schema,
                     "result_schema": e.result_schema,
                     "examples": e.examples,
@@ -401,8 +474,9 @@ impl Registry {
     }
 
     /// Check every command's contract: each example's params validate, the example runs on a
-    /// fresh context and returns exactly the expected result, which validates against the result
-    /// schema. Returns one line per problem; empty means sound. An empty registry is a problem.
+    /// fresh context (scratch buffer `initial_text`, MemoryFs `files`, then every `setup`
+    /// command, each of which must succeed) and returns exactly the expected result, which
+    /// validates against the result schema. Returns one line per problem; empty means sound. An empty registry is a problem.
     pub fn audit(&self) -> Vec<String> {
         let mut problems = Vec::new();
         if self.entries.is_empty() {
@@ -417,7 +491,24 @@ impl Registry {
                 for err in validation_errors(&e.result_validator, &ex.result) {
                     problems.push(format!("{label}: expected result invalid: {err}"));
                 }
-                let mut ctx = Context::with_text(ex.initial_text);
+                let mut ctx = match example_context(ex) {
+                    Ok(ctx) => ctx,
+                    Err(err) => {
+                        problems.push(format!("{label}: bad file path: {err}"));
+                        continue;
+                    }
+                };
+                let mut setup_ok = true;
+                for (k, (setup_name, setup_params)) in ex.setup.iter().enumerate() {
+                    if let Err(err) = self.execute(&mut ctx, setup_name, setup_params.clone()) {
+                        problems.push(format!("{label}: setup {k} (`{setup_name}`) failed: {err}"));
+                        setup_ok = false;
+                        break;
+                    }
+                }
+                if !setup_ok {
+                    continue;
+                }
                 match self.execute(&mut ctx, name, ex.params.clone()) {
                     Ok(actual) if actual == ex.result => {}
                     Ok(actual) => problems.push(format!(
@@ -505,6 +596,91 @@ mod tests {
         fn run(_: &mut Context, p: EchoParams) -> Result<EchoOut, CommandError> {
             Ok(EchoOut { n: p.n })
         }
+    }
+
+    struct NeedsSetup;
+    impl Command for NeedsSetup {
+        const NAME: &'static str = "test.needs-setup";
+        const DOC: &'static str = "Examples with a failing setup and a bad file path.";
+        const MUTATING: bool = true;
+        type Params = EchoParams;
+        type Output = EchoOut;
+        fn examples() -> Vec<Example> {
+            vec![
+                Example {
+                    description: "setup fails",
+                    initial_text: "",
+                    files: vec![("ok.txt", "x")],
+                    setup: vec![("test.echo", json!({"n": "not a number"}))],
+                    params: json!({"n": 1}),
+                    result: json!({"n": 1}),
+                },
+                Example {
+                    description: "bad path",
+                    initial_text: "",
+                    files: vec![("../x", "x")],
+                    setup: vec![],
+                    params: json!({"n": 1}),
+                    result: json!({"n": 1}),
+                },
+                Example {
+                    description: "sound",
+                    initial_text: "",
+                    files: vec![("ok.txt", "x")],
+                    setup: vec![("test.echo", json!({"n": 3}))],
+                    params: json!({"n": 1}),
+                    result: json!({"n": 1}),
+                },
+            ]
+        }
+        fn run(_: &mut Context, p: EchoParams) -> Result<EchoOut, CommandError> {
+            Ok(EchoOut { n: p.n })
+        }
+    }
+
+    #[test]
+    fn audit_reports_failing_setup_and_bad_example_paths() {
+        let mut r = Registry::new();
+        r.register::<Echo>().unwrap();
+        r.register::<NeedsSetup>().unwrap();
+        let problems = r.audit();
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(
+            problems[0].contains("setup 0 (`test.echo`) failed"),
+            "{problems:?}"
+        );
+        assert!(problems[1].contains("bad file path"), "{problems:?}");
+    }
+
+    #[test]
+    fn execute_logs_only_successes_with_mutating_flag() {
+        let mut r = Registry::new();
+        r.register::<Echo>().unwrap();
+        r.register::<NeedsSetup>().unwrap();
+        let mut ctx = Context::new();
+        r.execute(&mut ctx, "test.echo", json!({"n": 1})).unwrap();
+        assert!(r.execute(&mut ctx, "test.echo", json!({})).is_err());
+        assert!(r.execute(&mut ctx, "nope.nope", json!({})).is_err());
+        r.execute(&mut ctx, "test.needs-setup", json!({"n": 2}))
+            .unwrap();
+        assert_eq!(
+            ctx.log(),
+            [
+                LogEntry {
+                    name: "test.echo".into(),
+                    params: json!({"n": 1}),
+                    mutating: false
+                },
+                LogEntry {
+                    name: "test.needs-setup".into(),
+                    params: json!({"n": 2}),
+                    mutating: true
+                },
+            ]
+        );
+        let d = r.describe();
+        assert_eq!(d["commands"][0]["mutating"], false);
+        assert_eq!(d["commands"][1]["mutating"], true);
     }
 
     #[test]

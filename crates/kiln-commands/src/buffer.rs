@@ -161,7 +161,12 @@ mod tests {
     #[test]
     fn standard_registry_passes_its_own_audit() {
         let r = standard_registry().unwrap();
-        assert_eq!(r.names(), vec!["buffer.insert", "buffer.text"]);
+        let buffer_names: Vec<_> = r
+            .names()
+            .into_iter()
+            .filter(|n| n.starts_with("buffer."))
+            .collect();
+        assert_eq!(buffer_names, vec!["buffer.insert", "buffer.text"]);
         assert_eq!(r.audit(), Vec::<String>::new());
     }
 }

@@ -5,6 +5,7 @@
       "examples": [
         {
           "description": "append to an empty buffer",
+          "files": [],
           "initial_text": "",
           "params": {
             "offset": 0,
@@ -12,10 +13,12 @@
           },
           "result": {
             "len_chars": 12
-          }
+          },
+          "setup": []
         },
         {
           "description": "offsets count chars, not bytes",
+          "files": [],
           "initial_text": "héllo",
           "params": {
             "offset": 2,
@@ -23,9 +26,11 @@
           },
           "result": {
             "len_chars": 6
-          }
+          },
+          "setup": []
         }
       ],
+      "mutating": true,
       "name": "buffer.insert",
       "params_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -73,14 +78,17 @@
       "examples": [
         {
           "description": "read the buffer",
+          "files": [],
           "initial_text": "let x = 1;",
           "params": {},
           "result": {
             "len_chars": 10,
             "text": "let x = 1;"
-          }
+          },
+          "setup": []
         }
       ],
+      "mutating": false,
       "name": "buffer.text",
       "params_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -109,6 +117,1248 @@
           "len_chars"
         ],
         "title": "TextResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Close a document. A dirty document is refused unless `discard` is true. The id is never reused.",
+      "examples": [
+        {
+          "description": "close a clean document",
+          "files": [
+            [
+              "a.txt",
+              "x"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "closed": true,
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "discard unsaved changes",
+          "files": [
+            [
+              "a.txt",
+              "x"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "discard": true,
+            "doc": 1
+          },
+          "result": {
+            "closed": true,
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 1,
+                "text": "y"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.close",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.close`.",
+        "properties": {
+          "discard": {
+            "default": false,
+            "description": "Close even if the document has unsaved changes (they are lost; the file is untouched).",
+            "type": "boolean"
+          },
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "CloseParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.close`.",
+        "properties": {
+          "closed": {
+            "description": "Whether the document is now closed (true).",
+            "type": "boolean"
+          },
+          "doc": {
+            "description": "Id of the closed document (never reused).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "closed"
+        ],
+        "title": "CloseResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Delete the chars `start..end` of a document and return them.",
+      "examples": [
+        {
+          "description": "delete a word",
+          "files": [
+            [
+              "a.txt",
+              "hello world"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "end": 11,
+            "start": 5
+          },
+          "result": {
+            "dirty": true,
+            "len_chars": 5,
+            "removed": " world"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.delete",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.delete`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "description": "Char index after the last one to remove (`start <= end <= len_chars`).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "First char index to remove.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "start",
+          "end"
+        ],
+        "title": "DeleteParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.delete` and `doc.replace`.",
+        "properties": {
+          "dirty": {
+            "description": "Whether the text now differs from the file's last opened or saved text.",
+            "type": "boolean"
+          },
+          "len_chars": {
+            "description": "Length in chars after the edit.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "removed": {
+            "description": "The text that was removed.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed",
+          "len_chars",
+          "dirty"
+        ],
+        "title": "RemovedResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Return a document's path, encoding, line endings, length, dirty flag and undo/redo availability.",
+      "examples": [
+        {
+          "description": "an edited document",
+          "files": [
+            [
+              "src/a.rs",
+              "a\r\nb\r\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "can_redo": false,
+            "can_undo": true,
+            "dirty": true,
+            "doc": 1,
+            "encoding": "utf-8",
+            "len_chars": 7,
+            "len_lines": 3,
+            "line_ending": "crlf",
+            "mixed_line_endings": false,
+            "path": "src/a.rs"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "src/a.rs"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 1,
+                "text": "X"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "doc.info",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "DocParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "EncodingName": {
+            "description": "Encoding detected when the document was opened (used for save).",
+            "oneOf": [
+              {
+                "const": "utf-8",
+                "description": "UTF-8 without a byte-order mark.",
+                "type": "string"
+              },
+              {
+                "const": "utf-8-bom",
+                "description": "UTF-8 with a byte-order mark.",
+                "type": "string"
+              },
+              {
+                "const": "utf-16le",
+                "description": "UTF-16 little-endian with a byte-order mark.",
+                "type": "string"
+              },
+              {
+                "const": "utf-16be",
+                "description": "UTF-16 big-endian with a byte-order mark.",
+                "type": "string"
+              }
+            ]
+          },
+          "LineEndingName": {
+            "description": "Dominant line ending of a document's current text.",
+            "oneOf": [
+              {
+                "const": "none",
+                "description": "The text has no line break.",
+                "type": "string"
+              },
+              {
+                "const": "lf",
+                "description": "`\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "crlf",
+                "description": "`\\r\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "cr",
+                "description": "A lone `\\r`.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.info`.",
+        "properties": {
+          "can_redo": {
+            "description": "Whether `doc.redo` would change the text.",
+            "type": "boolean"
+          },
+          "can_undo": {
+            "description": "Whether `doc.undo` would change the text.",
+            "type": "boolean"
+          },
+          "dirty": {
+            "description": "Whether the text differs from the file's last opened or saved text.",
+            "type": "boolean"
+          },
+          "doc": {
+            "description": "Id of the document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "encoding": {
+            "$ref": "#/$defs/EncodingName",
+            "description": "Encoding detected at open (used for save)."
+          },
+          "len_chars": {
+            "description": "Length in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "len_lines": {
+            "description": "Number of lines (line breaks + 1).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line_ending": {
+            "$ref": "#/$defs/LineEndingName",
+            "description": "Dominant line ending of the current text."
+          },
+          "mixed_line_endings": {
+            "description": "True iff the current text has line breaks of more than one kind.",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "The document's path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc",
+          "path",
+          "encoding",
+          "line_ending",
+          "mixed_line_endings",
+          "len_chars",
+          "len_lines",
+          "dirty",
+          "can_undo",
+          "can_redo"
+        ],
+        "title": "InfoResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Insert text at a char offset of a document. Successive one-char inserts form one undo step (kiln-text typing-group rule).",
+      "examples": [
+        {
+          "description": "insert into an opened file",
+          "files": [
+            [
+              "a.txt",
+              "hello\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "offset": 5,
+            "text": " world"
+          },
+          "result": {
+            "dirty": true,
+            "len_chars": 12
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.insert",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.insert`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Char index before which to insert; equal to the length to append.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "description": "Text to insert.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc",
+          "offset",
+          "text"
+        ],
+        "title": "InsertParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.insert`.",
+        "properties": {
+          "dirty": {
+            "description": "Whether the text now differs from the file's last opened or saved text.",
+            "type": "boolean"
+          },
+          "len_chars": {
+            "description": "Length in chars after the edit.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "len_chars",
+          "dirty"
+        ],
+        "title": "InsertResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "List the open documents, sorted by id.",
+      "examples": [
+        {
+          "description": "two documents, one edited",
+          "files": [
+            [
+              "a.txt",
+              "a"
+            ],
+            [
+              "b.txt",
+              "b"
+            ]
+          ],
+          "initial_text": "",
+          "params": {},
+          "result": {
+            "docs": [
+              {
+                "dirty": false,
+                "doc": 1,
+                "path": "a.txt"
+              },
+              {
+                "dirty": true,
+                "doc": 2,
+                "path": "b.txt"
+              }
+            ]
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "doc.open",
+              {
+                "path": "b.txt"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 2,
+                "offset": 0,
+                "text": "!"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "doc.list",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.list` (none).",
+        "title": "ListParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "ListItem": {
+            "description": "One open document in `doc.list`.",
+            "properties": {
+              "dirty": {
+                "description": "Whether it has unsaved changes.",
+                "type": "boolean"
+              },
+              "doc": {
+                "description": "Id of the document.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "path": {
+                "description": "Its path.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "doc",
+              "path",
+              "dirty"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.list`.",
+        "properties": {
+          "docs": {
+            "description": "The open documents, sorted by id.",
+            "items": {
+              "$ref": "#/$defs/ListItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "docs"
+        ],
+        "title": "ListResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Open a file as a document and return its id. Opening a path that is already open returns the existing document unchanged, with `already_open: true`.",
+      "examples": [
+        {
+          "description": "open a CRLF file",
+          "files": [
+            [
+              "a.rs",
+              "fn a() {}\r\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "path": "a.rs"
+          },
+          "result": {
+            "already_open": false,
+            "doc": 1,
+            "encoding": "utf-8",
+            "len_chars": 11,
+            "line_ending": "crlf",
+            "mixed_line_endings": false,
+            "path": "a.rs"
+          },
+          "setup": []
+        },
+        {
+          "description": "re-opening an open, edited path returns the existing document",
+          "files": [
+            [
+              "a.txt",
+              "a\nb\r\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "path": "a.txt"
+          },
+          "result": {
+            "already_open": true,
+            "doc": 1,
+            "encoding": "utf-8",
+            "len_chars": 6,
+            "line_ending": "lf",
+            "mixed_line_endings": true,
+            "path": "a.txt"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "\n"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.open",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.open`.",
+        "properties": {
+          "path": {
+            "description": "Root-relative path of the file (`/`-separated; no `.`, `..` or empty segments).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "OpenParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "EncodingName": {
+            "description": "Encoding detected when the document was opened (used for save).",
+            "oneOf": [
+              {
+                "const": "utf-8",
+                "description": "UTF-8 without a byte-order mark.",
+                "type": "string"
+              },
+              {
+                "const": "utf-8-bom",
+                "description": "UTF-8 with a byte-order mark.",
+                "type": "string"
+              },
+              {
+                "const": "utf-16le",
+                "description": "UTF-16 little-endian with a byte-order mark.",
+                "type": "string"
+              },
+              {
+                "const": "utf-16be",
+                "description": "UTF-16 big-endian with a byte-order mark.",
+                "type": "string"
+              }
+            ]
+          },
+          "LineEndingName": {
+            "description": "Dominant line ending of a document's current text.",
+            "oneOf": [
+              {
+                "const": "none",
+                "description": "The text has no line break.",
+                "type": "string"
+              },
+              {
+                "const": "lf",
+                "description": "`\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "crlf",
+                "description": "`\\r\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "cr",
+                "description": "A lone `\\r`.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.open`.",
+        "properties": {
+          "already_open": {
+            "description": "True iff the path was already open (the existing document is returned, unchanged).",
+            "type": "boolean"
+          },
+          "doc": {
+            "description": "Id of the document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "encoding": {
+            "$ref": "#/$defs/EncodingName",
+            "description": "Encoding detected at open."
+          },
+          "len_chars": {
+            "description": "Length of the current text in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line_ending": {
+            "$ref": "#/$defs/LineEndingName",
+            "description": "Dominant line ending of the current text."
+          },
+          "mixed_line_endings": {
+            "description": "True iff the current text has line breaks of more than one kind.",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "The document's path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc",
+          "already_open",
+          "path",
+          "encoding",
+          "line_ending",
+          "mixed_line_endings",
+          "len_chars"
+        ],
+        "title": "OpenResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Redo the most recently undone step of a document.",
+      "examples": [
+        {
+          "description": "redo an undone insert",
+          "files": [
+            [
+              "a.txt",
+              "x"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "dirty": true,
+            "len_chars": 3,
+            "redone": true
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 1,
+                "text": "yz"
+              }
+            ],
+            [
+              "doc.undo",
+              {
+                "doc": 1
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.redo",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "DocParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.redo`.",
+        "properties": {
+          "dirty": {
+            "description": "Whether the text now differs from the file's last opened or saved text.",
+            "type": "boolean"
+          },
+          "len_chars": {
+            "description": "Length in chars afterwards.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "redone": {
+            "description": "True iff a step was redone (false: nothing to redo, nothing changed).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "redone",
+          "len_chars",
+          "dirty"
+        ],
+        "title": "RedoResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Replace the chars `start..end` of a document with text, as one undo step, and return the removed text.",
+      "examples": [
+        {
+          "description": "rename an identifier",
+          "files": [
+            [
+              "a.rs",
+              "fn a() {}\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "end": 4,
+            "start": 3,
+            "text": "main"
+          },
+          "result": {
+            "dirty": true,
+            "len_chars": 13,
+            "removed": "a"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.replace",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.replace`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "description": "Char index after the last one to replace (`start <= end <= len_chars`).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "First char index to replace.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "description": "Replacement text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc",
+          "start",
+          "end",
+          "text"
+        ],
+        "title": "ReplaceParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.delete` and `doc.replace`.",
+        "properties": {
+          "dirty": {
+            "description": "Whether the text now differs from the file's last opened or saved text.",
+            "type": "boolean"
+          },
+          "len_chars": {
+            "description": "Length in chars after the edit.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "removed": {
+            "description": "The text that was removed.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed",
+          "len_chars",
+          "dirty"
+        ],
+        "title": "RemovedResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Write the document to its file in its encoding, keeping line endings verbatim (atomic replace). Ends the current typing group.",
+      "examples": [
+        {
+          "description": "save an edit",
+          "files": [
+            [
+              "a.txt",
+              "hello\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "bytes_written": 12,
+            "dirty": false,
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 5,
+                "text": " world"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.save",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "DocParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.save`.",
+        "properties": {
+          "bytes_written": {
+            "description": "Number of bytes written to the file.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "dirty": {
+            "description": "Whether the document is dirty after the save (false).",
+            "type": "boolean"
+          },
+          "doc": {
+            "description": "Id of the document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "bytes_written",
+          "dirty"
+        ],
+        "title": "SaveResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Return the whole current text of a document.",
+      "examples": [
+        {
+          "description": "line breaks are returned verbatim",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nb"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "len_chars": 4,
+            "text": "a\r\nb"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "doc.text",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "DocParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.text`.",
+        "properties": {
+          "len_chars": {
+            "description": "Its length in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "description": "The document's whole current text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "len_chars"
+        ],
+        "title": "TextResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Undo the most recent undo step of a document.",
+      "examples": [
+        {
+          "description": "undo a typing group",
+          "files": [
+            [
+              "a.txt",
+              "x"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "dirty": false,
+            "len_chars": 1,
+            "undone": true
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "a"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 1,
+                "text": "b"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "nothing to undo",
+          "files": [
+            [
+              "a.txt",
+              "x"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "dirty": false,
+            "len_chars": 1,
+            "undone": false
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "doc.undo",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "DocParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.undo`.",
+        "properties": {
+          "dirty": {
+            "description": "Whether the text now differs from the file's last opened or saved text.",
+            "type": "boolean"
+          },
+          "len_chars": {
+            "description": "Length in chars afterwards.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "undone": {
+            "description": "True iff a step was undone (false: nothing to undo, nothing changed).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "undone",
+          "len_chars",
+          "dirty"
+        ],
+        "title": "UndoResult",
         "type": "object"
       }
     }

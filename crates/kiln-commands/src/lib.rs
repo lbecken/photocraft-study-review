@@ -3,7 +3,8 @@
 //! Responsibility (CHARTER §3): the command registry. Every state change goes through a
 //! named command whose JSON params and results are described by JSON Schemas (generated from
 //! the typed Rust structs) and validated by the registry. The UI, the CLI, the control
-//! protocol and tests all go through [`Registry::execute`]. (Command log for replay: not yet.)
+//! protocol and tests all go through [`Registry::execute`], which records every successful
+//! command in the context's log ([`Context::log`]); [`Registry::replay`] re-executes a log.
 //!
 //! May depend on: L0–L2. Headless and deterministic.
 //!
@@ -12,6 +13,7 @@
 //! [`Example`], then run `cargo xtask schema --write` to refresh `docs/commands.json`.
 
 mod buffer;
+mod doc;
 mod registry;
 
 pub use registry::{
@@ -22,5 +24,6 @@ pub use registry::{
 pub fn standard_registry() -> Result<Registry, RegistryError> {
     let mut registry = Registry::new();
     buffer::register(&mut registry)?;
+    doc::register(&mut registry)?;
     Ok(registry)
 }
