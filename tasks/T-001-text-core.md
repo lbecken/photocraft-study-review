@@ -362,7 +362,7 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   conversions, 100 line reads; text and len_lines checked every 25 edits and at the end, the other
   lengths and the removed text after every edit, to keep the debug-build model fast) → compile;
   AC-12 → `equality_ignores_history_and_clones_are_independent` → compile;
-  AC-13 → `kiln_cli::acceptance_t001::cli_exec_buffer_insert_still_prints_len_chars` → PASS on
+  AC-13 → `kiln_cli::guard_t001::cli_exec_buffer_insert_still_prints_len_chars` → PASS on
   base. Kept as a regression guard: AC-13 is a compatibility property, so a failure on base is
   impossible by design; its "existing tests pass" half is the gate's test step.
   Every kiln-text test fails on base only because the new API is missing (compile), so the
