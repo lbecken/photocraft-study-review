@@ -463,6 +463,45 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `gate_xtask:"main"` `failed_step` is main's step unprefixed (`red`); AC-10's dependency "outside
   the workspace" is outside the repository at an absolute path (inside the repo its package id
   differs per checkout, so it could never be fresh); refusal exit 1 (base exits 2 on errors).
+- 2026-11-12 23:50 · R-019 · round 2 · did: (1) fixed my defect in
+  `allows_acceptance_scorecard_and_review_paths_for_medium_only`: `crates/a/tests/acceptance_t008.rs`
+  lies inside T-007's `touches: [crates/a]`, so it is allowed; the case is now
+  `crates/b/tests/acceptance_t008.rs` (another task's acceptance file outside `touches`) → refused.
+  (2) fixed a fixture bug: the child-environment scrub removed a `CARGO_TARGET_DIR` the test
+  itself had set whenever the parent shell exported one, so those builds used cargo's default
+  target (same directory for the AC-10/11/12/13 cases, so their results stood; AC-14's private
+  regeneration target and the new private xtask build did not). Explicitly set variables are now kept.
+  (3) moved the toy-repo fixture into `xtask/tests/acceptance_t005_support.rs` (an allowed path; as
+  its own target it has 0 tests), included by `#[path]` from the T-005 files. (4) D-019 tests, new
+  file `xtask/tests/acceptance_t005_r2.rs`, all fail on base by assertion: (c)
+  `config_is_checked_just_before_touches` (broken config + outside path → `config`; + draft →
+  `state`; + changed front matter → `front-matter`); (d) `guard_files_are_allowed_paths_for_medium_only`
+  (`guard_t007*.rs` directly in `crates|apps/*/tests` and `xtask/tests` allowed for medium;
+  other task's number, `tests/sub/`, outside `tests/`, `.txt` refused; low refused); (e)
+  `join_finds_acceptance_and_guard_tests_under_xtask_tests` (acceptance + guard in `xtask/tests`
+  → `joined`, `base_fail_kind:"fails"`, so a guard passing on base is not "passes"; a guard that
+  fails after the join keeps the result from `joined` — INFERRED: "finds" means found guards run);
+  (f) `xtask_refuses_a_checkout_it_was_not_built_from`: builds a private copy of this checkout's
+  xtask (tracked files copied, read only; persistent private target under `CARGO_TARGET_TMPDIR`,
+  ~12 s cold), runs it in a second `git worktree` of that copy with changed xtask source → exit 2,
+  one stderr line naming both checkouts (also from a subdirectory); legitimate: own checkout and its
+  subdirectory → exit 0; an unrelated scratch repository (how every T-005 test drives xtask) with
+  the private binary and with `CARGO_BIN_EXE_xtask` → exit 0. Guard `xtask/tests/guard_t005_r2.rs`
+  `front_matter_may_lag_or_match_mains_state` (ruling (a); passes on base, which has no
+  front-matter check): branch copy unchanged since merge base while main advanced `state` →
+  merged; branch copy synced to main's → merged. Rulings (a)–(c) contradict none of my R-010 tests
+  (AC-4 changes front matter against both main and merge base; AC-18 keeps every other check passing).
+  · gate attempts: 1 (last: red test; the gate's `test` step runs `cargo test --workspace` without
+  `--no-fail-fast`, so it stops at the first failing target, `acceptance_t005`, and its count omits
+  the later targets; run separately: acceptance_t005 16/16 fail, acceptance_t005_r2 4/4 fail,
+  guard_t005 3/3 pass, guard_t005_r2 1/1 pass, all else green) · not run: the queue exception of (f)
+  with the real Kiln gate (too heavy for a test: it would run the whole Kiln gate on a copy); it is
+  exercised only in toy repos (AC-1/2/14) · missing context: none.
+  QUESTION (f): the ruling does not say how "the checkout it was built from differs" is told apart
+  from a legitimate run in an unrelated repository. My tests assume: another checkout (worktree) of
+  the same repository → refused; a different repository → allowed. Proposed wording: "refuses when
+  the workspace it runs in is a different checkout of the same repository (same git common
+  directory) than the one it was built from".
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

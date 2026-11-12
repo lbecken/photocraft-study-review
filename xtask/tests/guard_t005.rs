@@ -29,7 +29,13 @@ mod support {
 
     /// A director-shell environment: no inherited cargo/git variables, offline cargo.
     pub fn hygiene(c: &mut Command) -> &mut Command {
+        // Keep what the caller set explicitly (e.g. its own CARGO_TARGET_DIR).
+        let explicit: Vec<std::ffi::OsString> =
+            c.get_envs().map(|(k, _)| k.to_os_string()).collect();
         for (k, _) in std::env::vars_os() {
+            if explicit.contains(&k) {
+                continue;
+            }
             let Some(k) = k.to_str() else { continue };
             if (k.starts_with("CARGO_") && k != "CARGO_HOME") || k.starts_with("GIT_") {
                 c.env_remove(k);
