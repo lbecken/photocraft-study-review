@@ -296,6 +296,42 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   vs create_dir on disk assumed) · next: join with T-002 acceptance tests, review.
 <!-- end implementer log -->
 ### test author
+- 2026-11-12 · R-008 · in_progress · did: wrote 15 acceptance tests in
+  `crates/kiln-workspace/tests/acceptance_t002.rs` from the Interface and ACs only (did not read
+  `task/T-002`); set `tests` of ws.vfs, io.utf8, io.bom, io.encoding, io.save-atomic to the
+  spec's table names. Criterion → tests → result on base (all `compile`: the whole interface is
+  new, so the single target fails with E0432/E0425, 32 errors; reviewer revert check needed):
+  AC-1 → `relpath_accepts_and_rejects_exact_cases`; AC-2 → `memory_and_disk_vfs_agree_on_random_operation_sequences`
+  (600 fixed-seed ops, MemoryFs vs DiskFs vs a byte-map model, final contents, no dirs created);
+  AC-3 → `unedited_utf8_files_round_trip_byte_for_byte` (11-file corpus, both VFSs),
+  `line_endings_round_trip_verbatim`; AC-4 → `utf8_bom_detected_stripped_and_restored_on_save`,
+  `bom_only_file_round_trips`; AC-5 → `utf16_le_and_be_with_bom_open_and_save` (hand-written
+  bytes incl. D834 DD1E; edited bytes built with std `encode_utf16`); AC-6 →
+  `invalid_bytes_are_reported_with_offset_never_replaced` (the 6 named + 14 more); AC-7 →
+  `encode_decode_round_trip` (2008 strings × 4 encodings, leading-U+FEFF ambiguity asserted
+  exactly, also `name()`); AC-8 → `dirty_follows_text_versus_last_saved` (incl. 400-step naive
+  model on a UTF-16BE doc, save-when-clean); AC-9 → `failed_save_leaves_file_intact_and_document_dirty`;
+  AC-10 → `disk_save_replaces_via_rename_without_leftovers`, `save_through_symlink_updates_target`;
+  AC-11 → `vfs_errors_name_relative_paths_only`; AC-12 → `disk_vfs_results_do_not_depend_on_root`
+  (not in a scorecard item; the spec's table names none for AC-12). Edge/hostile: empty, BOM-only,
+  double BOM, NUL, lone CR, CR/LF split by edit, 4-byte chars, U+10FFFF, overlong/surrogate/
+  out-of-range UTF-8, odd UTF-16, lone/unpaired surrogates at end and mid, paths `.`, `a/.`,
+  `../a`, `/`, `\`, NUL; symlink; path replaced by directory; root not a directory. Sanity:
+  compiled and ran the file against a throwaway reference stub outside the repository
+  (15/15 pass, clippy `-D warnings` clean, rerun-stable); the stub is not committed.
+  Unix-only checks (mode bits, inode, symlink) go through `#[cfg(unix)]` helpers; on non-Unix the
+  mode/inode asserts are vacuous. · gate attempts: 1 (last: red clippy — only
+  `acceptance_t002.rs`, compile case; fmt pass; `cargo xtask no-skip` pass run separately) ·
+  not run: gate steps after clippy (blocked by the compile case) · missing context: none ·
+  next: join.
+  QUESTION: AC-11/VfsError — for `write_atomic` into a missing parent, is `NotFound.path` the
+  requested file or the missing parent? Tests assert only `NotFound{..}` and that Display contains
+  `nodir`. Proposed wording: "`path` is the RelPath passed to the call".
+  QUESTION: `PathError.path`/`reason` contents are unspecified; tests assert only rejection and a
+  non-empty Display. Proposed: "`path` equals the input string".
+  QUESTION: AC-9 DiskFs (path became a directory) says only "returns an error"; tests do not
+  assert the variant. Proposed: "returns `VfsError::NotAFile`", consistent with `write_atomic` on
+  MemoryFs.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
