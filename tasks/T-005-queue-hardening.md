@@ -317,6 +317,41 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   director review.
 <!-- end planner log -->
 ### implementer
+- 2026-11-12T23:12Z · R-006 · ready · ACs in my words: the queue refuses (exit 1, one
+  `queue: refused: <check>: …` line, nothing changed or written) a task whose main task file,
+  front matter, state, changed paths, join record, newest review, approval row, policy files or
+  main's post-merge history do not satisfy the table; gates with main's xtask built from
+  `base_sha` (plus the task's own when it touches a gate path, prefixing `main:`/`task:`);
+  resolves generated-only rebase conflicts by taking main's side and regenerating in file order
+  (one commit, `regenerated` field); seeds targets with copies of non-member artifacts only. ·
+  did: new `xtask/src/{policy,precheck,seed}.rs`, rewrote `queue.rs` run/gate (`GateRunner`
+  gains `GateXtask` + `build_main_xtask`; fakes kept), `worktree.rs`/`join.rs` seed via
+  `seed.rs`, `main.rs` prints refusals; `xtask/generated.toml`, `xtask/ledger.toml`;
+  `docs/development.md` (worktrees, queue, join, toolchain row). Main's xtask is built in
+  `.git/kiln-queue/main-xtask/` from a private-index export of `base_sha` (not the primary
+  checkout, so a toy repo without a committed `Cargo.lock` cannot dirty main). Seeding keeps
+  mtimes and, for in-checkout non-member path deps, copies the source checkout's mtimes onto
+  byte-identical source files so they stay fresh (otherwise a fresh checkout's newer mtimes
+  rebuild them). Exercised the built binary on toy scratch repos (not the real repo): AC-1
+  both variants (`main:red`/`main+task`, `red`/`main`), AC-3 state and AC-2 touches refusals
+  (exit 1), AC-14 (`regenerated:["docs/scorecard.md"]`, idempotent) also with a `Cargo.lock`
+  entry, AC-10/11/12 (worktree runs its own source, main's target manifest unchanged, helper
+  `fresh:true`, app rebuilt, only helper files seeded), AC-13 (task target manifest unchanged by
+  `join --revert-check`, `result_kind: fails`). This task is the last one queued by the **old**
+  queue (it runs the task branch's own gate); the reviewer should run the new queue against a
+  scratch repo. · gate attempts: 1 (last: green) · not run: the new queue/worktree/join against
+  the real repository (forbidden for this run); a real `Cargo.lock` conflict with registry
+  packages (lock-version check is unit-tested only); seeding of the real 1.9 GB target (size
+  not measured) · missing context: (1) `config` has no place in the check order — I put it
+  after `state`, right before `touches`, the first check that needs it; (2) `front-matter`
+  read literally ("identical to main's") refuses every real task, because the director changes
+  `state` on main after the branch forks; I accept a head copy equal to main's **or** to the
+  merge-base copy (i.e. the branch did not change it), and refuse a deletion; (3) whether
+  regeneration runs only after a generated conflict (I did so) or on every queue run; (4)
+  which `Cargo.lock` packages the version check covers — I compare packages with a `source`
+  (registry/git), not path packages; (5) failure to build main's xtask has no specified
+  result — it is an error (exit 2) with no record. · next: director join with the acceptance
+  tests, reviewer.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
