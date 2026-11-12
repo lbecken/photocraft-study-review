@@ -1,7 +1,9 @@
 //! `cargo xtask join T-NNN` and `cargo xtask join --revert-check T-NNN` (METHODOLOGY §6).
 //!
 //! Acceptance tests are the integration-test targets `acceptance_tNNN*` (files
-//! `crates/*/tests/acceptance_tNNN*.rs` or `apps/*/tests/…`) written on `task/T-NNN-tests`.
+//! `crates/*/tests/acceptance_tNNN*.rs`, `apps/*/tests/…` or `xtask/tests/…`) written on
+//! `task/T-NNN-tests`. Regression guards (`guard_tNNN*.rs`, D-010) in the same places are not
+//! acceptance evidence: they are meant to pass on base and run in the gate.
 //!
 //! `join`:
 //! 1. **base**: in `.worktrees/T-NNN-tests` (base + tests only) build and run the acceptance
@@ -31,7 +33,7 @@ use crate::git::{dirty_paths, git, git_try, rev};
 use crate::queue::GateRunner;
 use crate::testbins::{self, Outcome};
 use crate::timefmt::{Clock, format_utc};
-use crate::util::{append_jsonl, capture, cargo, rust_files};
+use crate::util::{append_jsonl, capture, cargo};
 use crate::worktree::Spec;
 
 /// Acceptance results in one checkout.
@@ -54,14 +56,28 @@ pub trait TestOracle {
 /// The real oracle.
 pub struct CargoOracle;
 
-/// Acceptance target names present on disk in `dir` (file stems under `*/tests/`).
+/// Acceptance target names present on disk in `dir`: stems of `<prefix>*.rs` files directly in
+/// `crates/*/tests/`, `apps/*/tests/` or `xtask/tests/` (the same places the queue's
+/// allowed-path rule accepts, T-005 D-019 (e)).
 pub fn acceptance_targets(dir: &Path, prefix: &str) -> Result<BTreeSet<String>> {
-    let mut out = BTreeSet::new();
+    let mut tests_dirs = vec![dir.join("xtask").join("tests")];
     for top in ["crates", "apps"] {
-        for f in rust_files(dir, &dir.join(top), &[])? {
-            let in_tests = f.parent().is_some_and(|p| p.ends_with("tests"));
+        let Ok(rd) = std::fs::read_dir(dir.join(top)) else {
+            continue;
+        };
+        for e in rd {
+            tests_dirs.push(e?.path().join("tests"));
+        }
+    }
+    let mut out = BTreeSet::new();
+    for t in tests_dirs {
+        let Ok(rd) = std::fs::read_dir(&t) else {
+            continue;
+        };
+        for e in rd {
+            let f = e?.path();
             let stem = f.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-            if in_tests && stem.starts_with(prefix) {
+            if f.is_file() && f.extension().is_some_and(|x| x == "rs") && stem.starts_with(prefix) {
                 out.insert(stem.to_owned());
             }
         }
@@ -210,7 +226,7 @@ pub fn join(
         rec.result = "no_acceptance_tests".into();
         append_jsonl(&metrics, &rec)?;
         bail!(
-            "no acceptance tests ({prefix}*.rs under crates/*/tests or apps/*/tests) on {}",
+            "no acceptance tests ({prefix}*.rs under crates/*/tests, apps/*/tests or xtask/tests) on {}",
             tests.branch()
         );
     }
@@ -649,6 +665,30 @@ mod tests {
         );
         let e = revert_check(root, "T-009", &[], &FixedClock, &FileOracle).unwrap_err();
         assert!(e.to_string().contains("no commits beyond main"), "{e}");
+    }
+
+    #[test]
+    fn acceptance_targets_include_xtask_tests() {
+        let repo = testrepo::init(
+            "acc-dirs",
+            &[
+                ("crates/k/tests/acceptance_t005_a.rs", ""),
+                ("apps/c/tests/acceptance_t005.rs", ""),
+                ("xtask/tests/acceptance_t005.rs", ""),
+                ("xtask/tests/guard_t005.rs", ""),
+                ("xtask/tests/acceptance_t006.rs", ""),
+                ("xtask/src/acceptance_t005_not.rs", ""),
+                ("crates/k/tests/sub/acceptance_t005_deep.rs", ""),
+                ("crates/k/tests/acceptance_t005.txt", ""),
+            ],
+        );
+        let got = acceptance_targets(repo.path(), "acceptance_t005").unwrap();
+        let want: BTreeSet<String> = ["acceptance_t005", "acceptance_t005_a"]
+            .map(String::from)
+            .into();
+        assert_eq!(got, want);
+        let guards = acceptance_targets(repo.path(), "guard_t005").unwrap();
+        assert_eq!(guards, BTreeSet::from(["guard_t005".to_owned()]));
     }
 
     #[test]

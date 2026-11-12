@@ -14,6 +14,7 @@ mod metrics;
 mod noskip;
 mod policy;
 mod precheck;
+mod provenance;
 mod queue;
 mod registries;
 mod schema;
@@ -319,6 +320,11 @@ fn real_main() -> Result<bool> {
 }
 
 fn main() -> ExitCode {
+    // Refuse a binary built from another checkout than the one it runs in (D-019 (f)).
+    if let Err(e) = provenance::check(&provenance::Inputs::current()) {
+        eprintln!("xtask: {e}");
+        return ExitCode::from(2);
+    }
     match real_main() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,

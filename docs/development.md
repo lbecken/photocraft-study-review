@@ -171,6 +171,30 @@ costs roughly main's dependency artifacts (`du -sh .worktrees/T-NNN/target`), no
 `target/` — no workspace-crate files and no `incremental/` data. `worktree new` prints the
 number of files and MB copied. Remove finished worktrees.
 
+### Stale-binary guard
+
+Cargo names a workspace crate's artifacts by its path relative to the workspace root, so two
+checkouts sharing a target directory get the same artifact names, and mtime-based freshness can
+serve one checkout's `xtask` in the other (T-005 join triage, D-019). Every `xtask` invocation
+therefore first checks where the binary was built from (its compile-time `CARGO_MANIFEST_DIR`)
+and refuses — exit 2, one line `xtask: stale xtask binary: built from <A> but … <B>; …` — when:
+
+- it was launched by cargo for another workspace (`cargo xtask …` / `cargo run -p xtask`, and
+  processes spawned by `cargo test -p xtask`: cargo's runtime `CARGO_MANIFEST_DIR` with
+  `CARGO_PKG_NAME=xtask` must be the build's own xtask package), or
+- the binary sits in `<checkout>/target/…` of a cargo workspace other than the one it was built
+  from.
+
+A test that runs `CARGO_BIN_EXE_xtask` inside a toy repository passes both: the inherited
+`CARGO_MANIFEST_DIR` (if any) is the build's own, and the binary lives in its own checkout's
+target. The queue's run of main's xtask (built in `.git/kiln-queue/main-xtask/`, not any
+checkout's target) against a task worktree is the one sanctioned exception: the queue sets
+`KILN_XTASK_RUN_IN=<canonical worktree path>` for that child (gate and `{xtask}` regeneration
+commands), and the exception holds only when the variable names exactly the workspace the
+command runs in; anywhere else it is ignored. Fix a refusal by rebuilding in the right checkout
+(`touch xtask/src/main.rs` or `cargo clean -p xtask`); never export one checkout's
+`CARGO_TARGET_DIR` while working in another.
+
 ## Merge queue: `cargo xtask queue T-NNN`
 
 Run from the primary checkout, with `main` checked out and clean. In order:
@@ -222,8 +246,8 @@ JSON `{"passed": bool, "failed_step": string|null, …}`.
 **Allowed paths** (`touches` check): `p` is allowed if `p == t` or `p` starts with `t/` for an
 entry `t` of main's `touches` (a trailing `/` on `t` is ignored; `crates/a` allows
 `crates/a/src/x.rs`, not `crates/ab/x.rs`); or `p` is the task file; or `p` is a generated path;
-or, for medium/high only, `p` is an `acceptance_tNNN*.rs` file directly in a `crates/*/tests/`,
-`apps/*/tests/` or `xtask/tests/` directory, `scorecard/items/<id>.toml` for an `<id>` in the
+or, for medium/high only, `p` is an `acceptance_tNNN*.rs` or `guard_tNNN*.rs` file directly in a
+`crates/*/tests/`, `apps/*/tests/` or `xtask/tests/` directory, `scorecard/items/<id>.toml` for an `<id>` in the
 task's `scorecard_items`, or starts with `reviews/T-NNN-`. Deletions count as changes.
 
 ### Policy files (read from main's tree, never from the task branch)
@@ -268,8 +292,10 @@ which ran the task branch's own gate and checked none of the above.
 
 ## Join: `cargo xtask join T-NNN` and `--revert-check`
 
-Acceptance tests live in `crates/*/tests/acceptance_tNNN*.rs` or `apps/*/tests/…` on
-`task/T-NNN-tests`. `join`:
+Acceptance tests live in `crates/*/tests/acceptance_tNNN*.rs`, `apps/*/tests/…` or
+`xtask/tests/…` (directly in that `tests/` directory) on `task/T-NNN-tests`. Regression guards
+(`guard_tNNN*.rs`, D-010) live in the same places; they are meant to pass on base, so join does
+not count them as acceptance evidence — the gate runs them. `join`:
 
 1. builds and runs them in `.worktrees/T-NNN-tests` (base + tests) → `base_fail_kind`:
    `fails` (all compile and fail), `does_not_compile` (weak evidence), `mixed`, or `passes`

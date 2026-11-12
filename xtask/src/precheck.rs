@@ -135,8 +135,11 @@ impl Allowed<'_> {
             ["xtask", "tests", _] => true,
             _ => false,
         };
+        // Acceptance tests and regression guards (D-010, D-019 (d)).
+        let n = number(self.task);
         let acceptance = in_tests_dir
-            && file.starts_with(&format!("acceptance_t{}", number(self.task)))
+            && (file.starts_with(&format!("acceptance_t{n}"))
+                || file.starts_with(&format!("guard_t{n}")))
             && file.ends_with(".rs");
         let item = self
             .scorecard_items
@@ -569,6 +572,8 @@ mod tests {
             "crates/b/tests/acceptance_t007.rs",
             "apps/c/tests/acceptance_t007.rs",
             "xtask/tests/acceptance_t007.rs",
+            "xtask/tests/guard_t007.rs",
+            "crates/b/tests/guard_t007_seed.rs",
             "scorecard/items/text.insert.toml",
             "reviews/T-007-r1.md",
         ] {
@@ -580,7 +585,9 @@ mod tests {
             "tasks/T-008-x.md",
             "crates/a2/tests/acceptance_t008.rs",
             "crates/b/tests/acceptance_t008.rs",
+            "crates/b/tests/guard_t008.rs",
             "crates/b/tests/sub/acceptance_t007.rs",
+            "crates/b/src/guard_t007.rs",
             "crates/b/src/acceptance_t007.rs",
             "xtask/tests/acceptance_t007.txt",
             "scorecard/items/other.toml",
@@ -591,6 +598,7 @@ mod tests {
         }
         let low = rule("low", &touches, &items, &p);
         assert!(!low.allows("crates/b/tests/acceptance_t007.rs"));
+        assert!(!low.allows("xtask/tests/guard_t007.rs"));
         assert!(!low.allows("reviews/T-007-r1.md"));
         assert!(!low.allows("scorecard/items/text.insert.toml"));
         assert!(
