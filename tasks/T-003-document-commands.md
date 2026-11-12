@@ -299,6 +299,71 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   new · next: join with test author's branch, review.
 <!-- end implementer log -->
 ### test author
+- 2026-11-12T23:58Z · R-022 · in_progress · did: wrote 23 acceptance tests from the spec,
+  including the Decisions section and D-020 (I did not read `task/T-003`). They are in three
+  targets: `crates/kiln-commands/tests/acceptance_t003.rs` (18; needs the new API, so it
+  fails on base as `compile`, 44 errors E0432/E0599: `with_files`, `vfs`, `log`, `replay`,
+  `LogEntry`, `ReplayError`, `kiln_workspace`),
+  `crates/kiln-commands/tests/acceptance_t003_registry.rs` (4; base API only, so it compiles
+  on base and fails by assertion: `unknown_command`, or `doc.*` not described) and
+  `apps/kiln-cli/tests/acceptance_t003_cli.rs` (1; fails by assertion: `doc.*` missing from
+  `commands`). One regression guard, `crates/kiln-commands/tests/guard_t003.rs` (2 tests,
+  pass on base by design: AC-10 compatibility). Set `tests` of ws.documents,
+  ws.dirty-tracking, io.crlf and cmd.log-replay to the spec's names. Added
+  `kiln_commands::acceptance_t003_registry::doc_commands_are_described_and_audited` to
+  cmd.schema; it is in the `_registry` target so that it fails on base by assertion.
+  Criterion → tests → base result:
+  AC-1 → `open_edit_save_slice_exact_values`, `typed_doc_open_example_from_the_spec` (compile).
+  AC-2 → `edit_commands_match_buffer_model` (700 fixed-seed commands with a
+  `kiln_text::Buffer` model, ~3% `doc.save`; checks exact results, text after every
+  command and `doc.info` every 7 steps; ≥20 rejected commands, each checked to leave the
+  log, list, text and info unchanged) (compile).
+  AC-3 → `documents_have_independent_text_history_and_dirty_flag`,
+  `close_and_reopen_gives_new_id_and_fresh_history` (compile).
+  AC-4 → `dirty_after_edit_clean_after_save_and_after_full_undo`, `undo_past_save_point_is_dirty`
+  (compile).
+  AC-5 → `lf_and_crlf_detected_on_open_and_kept_on_save`, `mixed_line_endings_reported`,
+  `bom_and_utf16_files_round_trip_through_commands` (compile).
+  AC-6 → `doc_command_errors_are_rejected_or_invalid_params`,
+  `reopening_open_path_returns_existing_id` (compile);
+  `doc_params_schema_violations_are_invalid_params`,
+  `doc_commands_on_a_context_without_files_are_rejected` (assertion).
+  AC-7 → `typing_groups_across_insert_commands_and_save_breaks_group` (compile).
+  AC-8 → `log_lists_successful_commands_with_mutating_flag`,
+  `log_replay_reproduces_documents_and_files`, `replay_of_replayed_log_is_identical`,
+  `replay_stops_at_first_failing_entry_without_rollback` (D-020 ruling 3) (compile).
+  AC-9 → `doc_commands_are_described_and_audited`,
+  `docs_commands_json_has_doc_commands_with_fixtures`, `cli_lists_describes_and_audits_doc_commands`
+  (assertion).
+  AC-10 → `guard_t003::{buffer_commands_behave_as_before, buffer_commands_keep_their_examples_and_schemas}`
+  (pass: regression guard).
+  Interface constructors → `context_constructors_hold_the_given_files_and_text` (compile).
+  Edge and hostile inputs: empty file; BOM and UTF-16LE files; `\xff` and an odd-length
+  UTF-16 file; multibyte and astral chars; lone CR; inserting `\n` into CRLF text; offsets
+  past the end, `u64::MAX`, inverted ranges; doc ids 0, unknown, closed and `u64::MAX`;
+  paths `../x`, ``, `/abs`, `./a`, `a\b`, `a//b`, a directory; wrong types, missing fields,
+  unknown fields, null and array params; unknown command names in the log and in replay;
+  replay on diverging initial files; a rejected insert inside a typing group.
+  Sanity check: I compiled and ran all four targets against a throwaway stub implementation
+  outside the repository. All 25 tests pass, clippy `-D warnings` is clean, and reruns give
+  the same result. Mutants (failed command logged, failed open consumes an id, save does not
+  break the group, dirty close allowed) are each caught. The stub is not committed.
+  · gate attempts: 2 (last: red clippy, only target `acceptance_t003`, the compile case; fmt
+  pass; `cargo xtask no-skip` pass, run separately) · not run: gate steps after clippy (blocked
+  by the compile case) · missing context: none · next: join.
+  QUESTION: is `doc.open` `mutating`? The Interface lists only `doc.text`/`doc.info`/`doc.list`/
+  `buffer.text` as read-only. The tests assert `doc.open` = true, also for a re-open that
+  changes nothing. Proposed wording: "MUTATING is per command, not per invocation; `doc.open` is true".
+  QUESTION: the tests assume that a failed `doc.open` consumes no id (the first successful open
+  after failures is doc 1). I derived this from "a failed command leaves the context
+  unchanged". Proposed: state it in D-1.
+  QUESTION: the tests assume `doc.save` keeps the redo stack (it only saves and calls
+  `break_undo_group`). `undo_past_save_point_is_dirty` redoes after a save. Proposed: say
+  "save does not change the undo/redo history except ending the typing group".
+  Note: AC-1 writes `ctx.vfs().read("a.txt")`, but `Vfs::read` takes `&RelPath`; the tests use
+  `RelPath::new`. "`cargo xtask schema` passes" is a gate step, not a test; it is covered by
+  `docs_commands_json_has_doc_commands_with_fixtures` (commands.json == `describe()`) and the CLI
+  audit. The io.crlf item names crate kiln-text, but its tests live in kiln-commands.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

@@ -2,4 +2,7 @@ id = "io.crlf"
 title = "Detect LF or CRLF on open and write the same line endings on save"
 crate = "kiln-text"
 tier = "high"
-tests = []
+tests = [
+    "kiln_commands::acceptance_t003::lf_and_crlf_detected_on_open_and_kept_on_save",
+    "kiln_commands::acceptance_t003::mixed_line_endings_reported",
+]

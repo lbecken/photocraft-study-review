@@ -2,4 +2,8 @@ id = "cmd.log-replay"
 title = "The command log replayed on the initial state reproduces the final document state"
 crate = "kiln-commands"
 tier = "high"
-tests = []
+tests = [
+    "kiln_commands::acceptance_t003::log_replay_reproduces_documents_and_files",
+    "kiln_commands::acceptance_t003::log_lists_successful_commands_with_mutating_flag",
+    "kiln_commands::acceptance_t003::replay_of_replayed_log_is_identical",
+]

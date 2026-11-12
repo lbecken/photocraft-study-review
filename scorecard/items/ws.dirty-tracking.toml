@@ -2,4 +2,7 @@ id = "ws.dirty-tracking"
 title = "A document is marked modified after an edit and clean again after save or full undo"
 crate = "kiln-workspace"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_commands::acceptance_t003::dirty_after_edit_clean_after_save_and_after_full_undo",
+    "kiln_commands::acceptance_t003::undo_past_save_point_is_dirty",
+]
