@@ -1,0 +1,5 @@
+id = "cli.run"
+title = "`kiln-cli run <script>` prints one response per request; the same script on the same files prints byte-identical output"
+crate = "kiln-cli"
+tier = "high"
+tests = []
