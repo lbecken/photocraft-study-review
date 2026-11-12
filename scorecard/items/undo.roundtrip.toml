@@ -2,4 +2,7 @@ id = "undo.roundtrip"
 title = "Any edit sequence followed by undoing every step restores the original text (property test)"
 crate = "kiln-text"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_text::acceptance_t001::undo_all_restores_original_redo_all_restores_final",
+    "kiln_text::acceptance_t001::noop_and_rejected_edits_do_not_touch_history",
+]

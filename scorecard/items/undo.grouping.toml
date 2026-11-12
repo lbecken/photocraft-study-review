@@ -2,4 +2,7 @@ id = "undo.grouping"
 title = "Consecutive typed characters at adjacent positions group into one undo step"
 crate = "kiln-text"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_text::acceptance_t001::adjacent_typed_chars_group_into_one_step",
+    "kiln_text::acceptance_t001::group_breaks_on_gap_multichar_linebreak_and_explicit_break",
+]

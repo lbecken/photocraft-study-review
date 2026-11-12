@@ -2,4 +2,8 @@ id = "text.lines"
 title = "Line access: line count, line text and line start offsets agree with a naive split for LF, CRLF and CR"
 crate = "kiln-text"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_text::acceptance_t001::lines_match_naive_split_for_lf_crlf_cr",
+    "kiln_text::acceptance_t001::line_endings_style_exact_values",
+    "kiln_text::acceptance_t001::dominant_line_ending_matches_naive_count",
+]

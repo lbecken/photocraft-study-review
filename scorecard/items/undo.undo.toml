@@ -2,4 +2,7 @@ id = "undo.undo"
 title = "Undo reverts the most recent edit operation exactly (operation-based, no snapshots)"
 crate = "kiln-text"
 tier = "high"
-tests = []
+tests = [
+    "kiln_text::acceptance_t001::undo_restores_text_before_each_edit_kind",
+    "kiln_text::acceptance_t001::undo_and_redo_with_empty_history_are_noops",
+]

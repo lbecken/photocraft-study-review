@@ -337,6 +337,59 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   test (`unicode_separators_do_not_break_lines`) guards it. · next: join with T-001-tests, review.
 <!-- end implementer log -->
 ### test author
+- 2026-11-12 · R-005 · ready · did: wrote 21 tests in `crates/kiln-text/tests/acceptance_t001.rs`
+  and 1 in `apps/kiln-cli/tests/acceptance_t001.rs` from the Interface and ACs only (did not look
+  at `task/T-001`); filled the `tests` lists of the 8 scorecard items with the names in the task
+  table (D-3 replaces the bootstrap lists of `text.insert` / `text.delete`). Oracles in the test
+  file: naive `Vec<char>` model, CRLF-first split, a per-step history model that applies the
+  grouping rule, round trips, exact values; fixed-seed SplitMix64 generators.
+  Criterion → tests → result on base (`b8411f5` + these tests):
+  AC-1 → `insert_matches_naive_model`, `insert_rejects_out_of_range_and_leaves_buffer_unchanged`,
+  `delete_and_replace_match_naive_model`, `delete_rejects_inverted_and_out_of_range` (3 seeds ×
+  2 000 ops for each differential test) → compile;
+  AC-2 → `conversions_match_naive_model` (60 buffers, every char/byte/UTF-16 offset and every
+  line/col, incl. one past the end), `conversions_round_trip_on_valid_positions` → compile;
+  AC-3 → `invalid_positions_give_exact_errors` (+ `error_types_implement_error_and_display`) →
+  compile; AC-4 → `lines_match_naive_split_for_lf_crlf_cr` → compile;
+  AC-5 → `line_endings_style_exact_values`, `dominant_line_ending_matches_naive_count` → compile;
+  AC-6 → `undo_restores_text_before_each_edit_kind`, `undo_and_redo_with_empty_history_are_noops`,
+  `redo_reapplies_undone_edit` → compile; AC-8 → `edit_after_undo_clears_redo` → compile;
+  AC-9 → `adjacent_typed_chars_group_into_one_step`,
+  `group_breaks_on_gap_multichar_linebreak_and_explicit_break` → compile;
+  AC-7 → `undo_all_restores_original_redo_all_restores_final` (4 seeds × 250 non-no-op edits) →
+  compile; AC-10 → `noop_and_rejected_edits_do_not_touch_history` → compile;
+  AC-11 → `large_buffer_edits_match_naive_model` (≥ 10 MiB, ~200 000 lines, 250 edits, 252
+  conversions, 100 line reads; text and len_lines checked every 25 edits and at the end, the other
+  lengths and the removed text after every edit, to keep the debug-build model fast) → compile;
+  AC-12 → `equality_ignores_history_and_clones_are_independent` → compile;
+  AC-13 → `kiln_cli::acceptance_t001::cli_exec_buffer_insert_still_prints_len_chars` → PASS on
+  base. Kept as a regression guard: AC-13 is a compatibility property, so a failure on base is
+  impossible by design; its "existing tests pass" half is the gate's test step.
+  Every kiln-text test fails on base only because the new API is missing (compile), so the
+  reviewer's revert check applies.
+  Edge and hostile inputs: empty buffer; CRLF, lone CR, `\r\r\n`, `\n\r`; CRLF joined and split
+  by edits; VT/FF/NEL/U+2028/U+2029, which must not break lines (ropey's default would); 2-, 3-
+  and 4-byte chars; surrogate pairs; offsets inside chars; one-past and `usize::MAX` indices;
+  inverted ranges; no-op edits; rejected edits while redo is pending.
+  Test validation (not committed): I temporarily replaced `crates/kiln-text/src/lib.rs` in this
+  worktree with a throwaway naive implementation of the Interface. All 21 tests passed (the large
+  test took 121 s with that O(n) stub), and clippy `-D warnings` and fmt were clean. I then ran 5
+  hand mutants (U+2028 as a line break, a no-op clears redo, undo leaves the group open, wrong
+  byte error, joining without adjacency), and each was caught by at least 1 test. The source was
+  restored with `git checkout`.
+  QUESTION: (Q-a) for delete/replace with both bounds above `len_chars` (start ≤ end), which
+  index does `OutOfBounds` report? The tests accept start or end. Proposed: "the first bound
+  out of range, start before end (as on main)". (Q-b) is `insert(i, "")` / `delete(i..i)` /
+  `replace(i..i, "")` with `i > len_chars` a no-op `Ok` or `Err(OutOfBounds)`? Not generated.
+  Proposed: validate first, so `Err` (as on main). (Q-c) which variant does an inverted range
+  that is also out of range give? Not generated. Proposed: `InvertedRange` (checked first, as
+  on main). (Q-d) does a rejected edit, or an `undo()`/`redo()` that returns `false`, end an open
+  typing group? Rule (e) says the call "happened", but "no change" points the other way. Not
+  tested. Proposed: they change nothing, including the group.
+  · gate attempts: 1 (last: red clippy, scorecard, test — all from compile errors in
+  `crates/kiln-text/tests/acceptance_t001.rs` alone, as expected for `compile` cases; fmt,
+  layers, ui-commands, schema, no-skip pass) · not run: nothing else · tokens: n/a · missing
+  context: none · next: join with `task/T-001`, reviewer revert check.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

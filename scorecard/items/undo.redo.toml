@@ -2,4 +2,7 @@ id = "undo.redo"
 title = "Redo reapplies an undone operation; a new edit after undo clears the redo stack"
 crate = "kiln-text"
 tier = "high"
-tests = []
+tests = [
+    "kiln_text::acceptance_t001::redo_reapplies_undone_edit",
+    "kiln_text::acceptance_t001::edit_after_undo_clears_redo",
+]

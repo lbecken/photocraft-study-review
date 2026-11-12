@@ -2,4 +2,8 @@ id = "text.positions"
 title = "Convert positions between byte, char, UTF-16 code unit and line/column, exactly inverse on valid positions"
 crate = "kiln-text"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_text::acceptance_t001::conversions_match_naive_model",
+    "kiln_text::acceptance_t001::conversions_round_trip_on_valid_positions",
+    "kiln_text::acceptance_t001::invalid_positions_give_exact_errors",
+]

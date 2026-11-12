@@ -3,9 +3,6 @@ title = "Insert text at a char position; out-of-range positions are rejected and
 crate = "kiln-text"
 tier = "medium"
 tests = [
-    "kiln_text::buffer::tests::insert_into_empty_buffer",
-    "kiln_text::buffer::tests::insert_at_start_middle_and_end",
-    "kiln_text::buffer::tests::insert_uses_char_indices_not_bytes",
-    "kiln_text::buffer::tests::insert_out_of_bounds_is_rejected_and_buffer_unchanged",
-    "kiln_text::buffer::tests::random_edits_match_naive_model",
+    "kiln_text::acceptance_t001::insert_matches_naive_model",
+    "kiln_text::acceptance_t001::insert_rejects_out_of_range_and_leaves_buffer_unchanged",
 ]

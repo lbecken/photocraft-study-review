@@ -3,8 +3,6 @@ title = "Delete a char range and return the removed text; inverted or out-of-ran
 crate = "kiln-text"
 tier = "medium"
 tests = [
-    "kiln_text::buffer::tests::delete_returns_removed_text",
-    "kiln_text::buffer::tests::delete_empty_range_is_noop",
-    "kiln_text::buffer::tests::delete_rejects_inverted_and_out_of_bounds_ranges",
-    "kiln_text::buffer::tests::random_edits_match_naive_model",
+    "kiln_text::acceptance_t001::delete_and_replace_match_naive_model",
+    "kiln_text::acceptance_t001::delete_rejects_inverted_and_out_of_range",
 ]
