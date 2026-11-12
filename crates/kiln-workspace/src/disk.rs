@@ -172,11 +172,14 @@ fn sync_dir(dir: &Path) {
 }
 
 impl DiskFs {
-    /// `write_atomic` with the final rename injectable, so tests can make it fail.
+    /// `write_atomic` with two test seams: `created` runs on the temporary file right after its
+    /// creation (to observe it, or to inject a failure there), and `rename` replaces the final
+    /// rename. `write_atomic` passes a no-op and `fs::rename`.
     fn write_atomic_with(
         &mut self,
         path: &RelPath,
         bytes: &[u8],
+        created: impl FnOnce(&Path) -> io::Result<()>,
         rename: impl FnOnce(&Path, &Path) -> io::Result<()>,
     ) -> Result<(), VfsError> {
         let dest = resolve_symlinks(path, self.resolve(path))?;
@@ -212,7 +215,7 @@ impl DiskFs {
         let mode = if permissions.is_some() { 0o600 } else { 0o666 };
         let (temp, file) = create_temp(dir, mode).map_err(|e| io_error(path, &e))?;
 
-        if let Err(e) = fill_temp(file, bytes, permissions) {
+        if let Err(e) = created(&temp).and_then(|()| fill_temp(file, bytes, permissions)) {
             let _ = fs::remove_file(&temp);
             return Err(io_error(path, &e));
         }
@@ -241,7 +244,7 @@ impl Vfs for DiskFs {
     }
 
     fn write_atomic(&mut self, path: &RelPath, bytes: &[u8]) -> Result<(), VfsError> {
-        self.write_atomic_with(path, bytes, |from, to| fs::rename(from, to))
+        self.write_atomic_with(path, bytes, |_| Ok(()), |from, to| fs::rename(from, to))
     }
 
     fn is_file(&self, path: &RelPath) -> bool {
@@ -451,11 +454,16 @@ mod tests {
             fs::write(dir.join("f"), b"old").unwrap();
             set_mode(&dir.join("f"), target_mode);
             let mut seen = None;
-            fs_.write_atomic_with(&p("f"), b"secret", |from, to| {
-                // Just before the rename: content complete, mode already the target's.
-                seen = Some((mode(from), fs::read(from).unwrap()));
-                fs::rename(from, to)
-            })
+            fs_.write_atomic_with(
+                &p("f"),
+                b"secret",
+                |_| Ok(()),
+                |from, to| {
+                    // Just before the rename: content complete, mode already the target's.
+                    seen = Some((mode(from), fs::read(from).unwrap()));
+                    fs::rename(from, to)
+                },
+            )
             .unwrap();
             assert_eq!(seen, Some((target_mode, b"secret".to_vec())));
             assert_eq!(mode(&dir.join("f")), target_mode);
@@ -471,10 +479,15 @@ mod tests {
         let mut fs_ = DiskFs::new(&dir).unwrap();
         let mut used = None;
         let err = fs_
-            .write_atomic_with(&p("f"), b"new", |from, _to| {
-                used = Some(from.to_path_buf());
-                Err(io::Error::other("injected rename failure"))
-            })
+            .write_atomic_with(
+                &p("f"),
+                b"new",
+                |_| Ok(()),
+                |from, _to| {
+                    used = Some(from.to_path_buf());
+                    Err(io::Error::other("injected rename failure"))
+                },
+            )
             .unwrap_err();
         assert_eq!(
             err,
@@ -518,6 +531,98 @@ mod tests {
         }
         assert_eq!(mode(&dir.join("f")), 0o444);
         assert_eq!(listing(&dir), ["f"]);
+    }
+
+    /// Kills "temp created with the default mode instead of owner-only" (review r2 TG-4): the
+    /// mode is observed on the real save path at the moment the temp file is created, before
+    /// any byte is written to it.
+    #[test]
+    fn save_creates_temp_owner_only_for_an_existing_target() {
+        let dir = fresh_dir("temp-mode-at-create");
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        for target_mode in [0o600, 0o644, 0o666, 0o755] {
+            fs::write(dir.join("f"), b"old").unwrap();
+            set_mode(&dir.join("f"), target_mode);
+            let mut at_create = None;
+            fs_.write_atomic_with(
+                &p("f"),
+                b"secret",
+                |temp| {
+                    at_create = Some((mode(temp), fs::read(temp).unwrap()));
+                    Ok(())
+                },
+                |from, to| fs::rename(from, to),
+            )
+            .unwrap();
+            assert_eq!(
+                at_create,
+                Some((0o600, Vec::new())),
+                "target {target_mode:o}"
+            );
+            assert_eq!(mode(&dir.join("f")), target_mode);
+        }
+    }
+
+    /// Everything a failed save must leave as it was: the listing, and the target's bytes and
+    /// mode.
+    fn snapshot(dir: &Path) -> (Vec<String>, Vec<u8>, u32) {
+        (
+            listing(dir),
+            fs::read(dir.join("f")).unwrap(),
+            mode(&dir.join("f")),
+        )
+    }
+
+    /// Kills "the target is emptied when a save fails after the writability check" (review r2
+    /// TG-5), with three failures that can be provoked as root, all after that check.
+    #[test]
+    fn failed_save_after_writability_check_leaves_target_and_listing_unchanged() {
+        let setup = |name: &str| {
+            let dir = fresh_dir(name);
+            fs::write(dir.join("f"), b"original content").unwrap();
+            set_mode(&dir.join("f"), 0o640);
+            dir
+        };
+
+        // 1. All temporary names taken (public API).
+        let dir = setup("fail-exhausted");
+        for n in 0..TEMP_ATTEMPTS {
+            fs::write(dir.join(format!("{TEMP_PREFIX}{n}")), b"").unwrap();
+        }
+        let before = snapshot(&dir);
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        assert!(fs_.write_atomic(&p("f"), b"x").is_err());
+        assert_eq!(snapshot(&dir), before);
+
+        // 2. Failure right after the temp file was created.
+        let dir = setup("fail-after-create");
+        let before = snapshot(&dir);
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let err = fs_
+            .write_atomic_with(
+                &p("f"),
+                b"x",
+                |_| Err(io::Error::other("injected")),
+                |from, to| fs::rename(from, to),
+            )
+            .unwrap_err();
+        assert!(matches!(err, VfsError::Io { .. }));
+        assert_eq!(snapshot(&dir), before);
+
+        // 3. Failure of the rename, after the temp file was filled.
+        let dir = setup("fail-at-rename");
+        let before = snapshot(&dir);
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let err = fs_
+            .write_atomic_with(
+                &p("f"),
+                b"x",
+                |_| Ok(()),
+                |_, _| Err(io::Error::other("injected")),
+            )
+            .unwrap_err();
+        assert!(matches!(err, VfsError::Io { .. }));
+        assert_eq!(snapshot(&dir), before);
     }
 
     #[test]

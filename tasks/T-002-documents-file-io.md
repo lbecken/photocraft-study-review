@@ -320,6 +320,28 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   that branch · missing context: none (D-014 answered it); note that a new file's mode follows
   the umask, not 0600, which D-014 (2) does not state explicitly · next: join with the
   test author's D-014 tests, review round 2.
+- 2026-11-12 · R-016 · request-changes (review r2, tests only) · did: added a second private
+  seam to `write_atomic_with` (`created`: runs on the temp file right after `create_temp`,
+  may return Err; `write_atomic` passes a no-op, so production behaviour is unchanged). New
+  unit tests in `disk.rs`: `save_creates_temp_owner_only_for_an_existing_target` (TG-4: mode
+  is 0600 and the temp file is empty at creation, for targets 0600/0644/0666/0755) and
+  `failed_save_after_writability_check_leaves_target_and_listing_unchanged` (TG-5: listing,
+  target bytes and target mode identical after three root-provokable failures: all 100 temp
+  names taken, injected failure after create, injected rename failure). Mutants applied
+  locally and reverted (file restored from a backup, diff checked): N3 (temp created 0666 for
+  an existing target) killed by the TG-4 test; N7 (writability check opens with truncate)
+  killed by the TG-5 test, plus `all_temp_names_taken…` and `failed_rename…`. · gate
+  attempts: 1 (last: green) · not run: non-root runs of the new tests (they have no root-only
+  branch) · missing context: see QUESTION · next: director ruling on the QUESTION, review r3.
+  QUESTION: the reworded D-014 (2) says the temp file is *always* created owner-only and a new
+  file gets the platform default mode under the umask. The code creates a new file's temp with
+  `0666 & ~umask` (r2 SG-8), so for new files it does not meet the reworded ruling. Meeting it
+  is a behaviour change: create 0600, then chmod to `0666 & ~umask` before the rename, which
+  needs the process umask. std cannot read it; the options are the `libc` crate (new
+  dependency, `umask(2)` sets the mask while it reads it, so it is racy for threads) or parsing
+  `Umask:` from `/proc/self/status` (Linux ≥ 4.7 only). As instructed I stopped on this point.
+  The module docs describe what the code does (owner-only for an existing target, default mode
+  for a new file); I left them unchanged.
 <!-- end implementer log -->
 ### test author
 - 2026-11-12 · R-008 · in_progress · did: wrote 15 acceptance tests in
