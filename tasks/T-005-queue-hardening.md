@@ -266,6 +266,7 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   c. The `config` check runs just before `touches`.
   d. `guard_tNNN*.rs` test files are allowed paths, like `acceptance_tNNN*.rs`.
   e. `cargo xtask join` also finds acceptance and guard tests under `xtask/tests`.
+     Clarified (D-021): `join` runs guard tests itself — every guard must pass on base and on the joined branch; otherwise the result is `guard_failed`, exit non-zero, and the record carries `guard_total`, `guard_fail_base`, `guard_fail_join`.
   f. `xtask` refuses to run (exit 2, one line naming both paths) when the checkout it was built from differs from the workspace it is run in, except where the queue deliberately runs main's `xtask` against a task worktree.
 
 ## Questions
