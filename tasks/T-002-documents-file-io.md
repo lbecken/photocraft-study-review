@@ -334,4 +334,26 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   MemoryFs.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-12 · R-011 · self_verified · did: review round 1 of joined `ccd3d52` →
+  `reviews/T-002-r1.md`, verdict request-changes. Checked every AC through the public API.
+  Probed data loss with a temporary probe test (not committed), run as root and as `nobody`.
+  Mutation spot-check (D-011): 16 bugs introduced, 13 killed; survivors were the fsync drop,
+  missing temp cleanup on a failed rename, and a non-truncating temp open. Defects:
+  D-1 the temp is opened following symlinks and accepting an existing file, so a symlink at
+  `.<name>.kiln-tmp` gets the document written into its target and replaces the file by the
+  symlink; D-2 names of 246–255 bytes can never be saved; D-3 permissions are applied after
+  the data is written (exposure window). Test gaps TG-1…TG-3 (stale or hostile temp
+  leftovers; fsync; rename-failure cleanup). · gate attempts: 1 (last: green) · not run:
+  non-Unix, real crash injection · missing context: supported platforms · next: implementer
+  fixes D-1…D-3 and adds tests for TG-1; director rules on the spec gaps.
+  QUESTION: SG-1 — may `write_atomic` modify or delete any path other than `path`? Proposed:
+  no; use `create_new` over a bounded deterministic name sequence.
+  QUESTION: SG-2 — should saving onto a read-only file fail with `Io{PermissionDenied}`?
+  Proposed: yes.
+  QUESTION: SG-3 — state that save splits hard links and changes the owner and xattrs; copy
+  the owner when permitted?
+  QUESTION: SG-4 — which platforms are supported? Until ruled, record Unix-only.
+  QUESTION: SG-5/6/7 (test author's) — proposed rulings: `path` is the requested RelPath;
+  `PathError.path` is the input verbatim and `reason` is free text; a save onto a directory
+  returns `NotAFile`.
 <!-- end reviewer log -->
