@@ -392,4 +392,17 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   context: none · next: join with `task/T-001`, reviewer revert check.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-12 · R-009 · joined (`c0a50c5`) · did: round-1 review `reviews/T-001-r1.md`, verdict
+  **approve** (high tier: director approval still required); every AC checked through the API
+  and CLI; revert check plus 13 single-bug mutants on `src/`, run against the acceptance tests
+  only, each restored with `git checkout`: kill count 14/14; probed spec-gap cases and
+  `usize::MAX` inputs (no panic); read that undo is op-based and storage is a rope. Findings:
+  0 defect, 3 spec gap, 0 test gap, 1 nit. · gate attempts: 1 (last: green) · not run:
+  performance re-measurement · tokens: n/a · missing context: none · next: director rules on
+  the spec gaps and records final approval.
+  QUESTION: (SG-1) error precedence for inverted + out-of-range and for start vs end: recommend
+  codifying inverted → start → end (as implemented). (SG-2) a rejected edit or an
+  `undo()`/`redo()` returning `false` does not end a typing group (as implemented); recommend
+  stating it in rule (e) and adding a test. (SG-3) empty edit at an out-of-range index:
+  recommend `Err(OutOfBounds)` (validate first, as implemented) plus one test.
 <!-- end reviewer log -->
