@@ -451,4 +451,12 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   waiver; rebase.
   QUESTION: SG-8 — reword D-014 (2) as "never more readable than the resulting file
   (owner-only for an existing target, `0666 & ~umask` for a new one)"?
+- 2026-11-12 · R-017 · round 3 · did: reviewed delta `2fdce23..587bfae` →
+  `reviews/T-002-r3.md`, verdict approve. The new private `created` hook cannot be reached
+  outside `disk.rs`, and production passes a no-op. Re-ran survivors N3 and N7, plus N5, as
+  root and as `nobody`: all three are killed by the new unit tests, so TG-4 and TG-5 are
+  resolved (TG-5 by unit test, as the director chose). The code and module docs match the
+  final D-014 (2) wording. Outstanding: N-7, the branch is not rebased on `main`
+  (task-file conflict expected at the queue). · gate attempts: 1 (last: green) · not run:
+  crash injection · missing context: none · next: director approval, then rebase and queue.
 <!-- end reviewer log -->
