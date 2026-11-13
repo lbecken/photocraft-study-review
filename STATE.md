@@ -1,33 +1,44 @@
 # State
 
-_Last updated: 2026-11-13 00:20 UTC (session 01)_
+_Last updated: 2026-11-13 03:06 UTC (session 01)_
 
 ## Now
-Iteration 0 — Foundations, nearly complete.
+Iteration 0 — Foundations: all work merged; **retrospective 0 running** (analyst R-052, writes `retrospectives/iter-0.md`).
 
 | Task | State | Notes |
 |---|---|---|
 | T-001 text core | merged | 21 acceptance tests; 1 review round |
 | T-002 documents and file I/O | merged | 25 acceptance tests; 3 review rounds (3 save-path defects found by review) |
 | T-003 document commands | merged | 23 acceptance tests; revert check 23/23; 1 review round |
-| T-004 control protocol + `kiln-cli run` | in_progress | implementer R-026 and test author R-027 running |
-| T-005 queue hardening | tests_joined | manual join (D-015); reviewer R-024 running (restarted after container restart) |
+| T-004 control protocol + CLI | merged | 32 acceptance tests; 3 review rounds; D-032 approval row written after the merge (slip) |
+| T-005 queue hardening | merged | 41 acceptance tests; 3 review rounds, 5 implementation rounds; hardened queue now in force |
+| T-012 publish iteration-0 evaluation | merged | first task through the hardened queue |
 
-GitHub Actions on `main`: 27 runs, latest (`ad81ab4`, T-003 merged) green.
+`main`: gate green, 376 tests; scorecard 22 verified / 3 implemented / 38 planned of 63.
+Evaluation: `evaluations/iter-0.md` (22 confirmed, 0 rejected, 3 not observable from outside).
 
 ## Next
-1. T-005: review → approval row → queue (last use of the bootstrap queue). After it merges, the hardened
-   queue is in force: precheck refusals, main's gate, generated-file regeneration, wrong-checkout guard.
-2. T-004: join → revert check → review → approval → queue. That closes the vertical slice.
-3. Evaluator on the slice (fresh agent, public interfaces only) → `evaluations/`.
-4. Retrospective 0: score claims C1–C8 from `metrics/`; methodology v1.0 → v1.1. Change candidates so far are
-   in `docs/decisions.md` D-010, D-011, D-012, D-015, D-019, D-022 (guards vs acceptance tests; stub/logic
-   commit split and mutation spot-check; generated files; join search path; stale-binary guard; scratch
-   cleanup and disk monitoring; never `git stash`; real timestamps only; tier inflation — all five tasks high).
-5. Follow-up tasks to write: T-006 (spec text + tests for the T-001 and T-003 spec-gap rulings),
-   T-007 (replay verifies results; read-only commands change nothing but the log), budgets runner.
+1. Read the retrospective; decide methodology v1.1 (director edits `methodology/` — a ledger path at a
+   retrospective — with a CHANGELOG entry per change; record the decision in `docs/decisions.md`).
+2. Iteration 1 planning. Drafts waiting: T-006 (low), T-007, T-008, T-009, T-030 (high), evaluator's T-010,
+   T-011. Open questions: T-009 (record-commit signing, `history_anchor`, lint `allow` in test files); the
+   evaluator's CRLF question (detected line ending changes nothing on save). The scorecard item
+   `ws.path-confinement` is held at `<scratchpad>/held/ws.path-confinement.toml` and must land on T-008's
+   branch with a regenerated scorecard (see D-034).
+3. Then the remaining 38 scorecard items: syntax (tree-sitter), search, workspace tree and find-in-files,
+   diagnostics, formatting, command palette/keymap, UI.
+
+## Operating notes for the director (learned the hard way; see decisions D-019…D-034)
+- Never export `CARGO_TARGET_DIR` in a director command; run `cargo xtask …` from the main checkout.
+- Timestamps come from `date -u`, never from memory. One command per line when a later line depends on an
+  earlier one succeeding (`set -e`), and no heredoc in the middle of an `&&` chain.
+- Commit ledger files by explicit path (`git add tasks metrics docs/decisions.md …`), never `git add -A`.
+- A ledger change that alters a generated file (new scorecard item, evaluation) must go through the queue.
+- Write and verify the approval row before queuing; the hardened queue now enforces it.
+- Agents interrupted by a container restart are relaunched fresh on the owner-specified builder model.
+- Watch free disk (`df -h`); remove worktrees after merge; agents' scratch builds are not cleaned up for them.
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, `docs/decisions.md`, then `tasks/` (state in front
-matter, role logs at the bottom) and `metrics/`. Worktrees live in `.worktrees/` (not pushed). Director
-commands must never export `CARGO_TARGET_DIR` (see D-019). Run IDs used so far: R-001 … R-027.
+matter, role logs at the bottom), `metrics/` and `retrospectives/`. Worktrees live in `.worktrees/` (not
+pushed). Run IDs used so far: R-001 … R-052.
