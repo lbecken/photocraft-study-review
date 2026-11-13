@@ -15,11 +15,11 @@ repository; this note says where to look and what is in flight.
 ## In flight (builder agents on the owner-specified model; cap: three compiling at once)
 | Task | Role / run | State of the work |
 |---|---|---|
-| T-013 process tooling (high, gate paths) | rework continuation: implementer R-091, test author R-092 (fresh agents after the 11:11Z restart) | Rulings j–q in the task file (D-047). R-089/R-090 were cut off by the usage limit with work committed. Next: both report → `cargo xtask join T-013` → metrics → round-2 review (delta, final; fresh reviewer, give it `reviews/T-013-r1.md`) → approval row `Approve T-013 … gate paths` → queue. |
-| T-015 scaffold (high) | merged `d90e542` (D-048, D-049) | Done. |
-| T-016 tree-sitter (high) | test author R-093 (fresh, finishing R-083) | Then implementer, join, review. |
-| T-032 refusal reasons (high) | `in_progress`, worktrees created, nobody dispatched yet | ADR-0004 accepted (D-050). Dispatch implementer and test author when a compile slot frees; ask both to report spec-vs-merged-T-015 mismatches first. |
-| T-017 regex (high) | `ready`, not dispatched | |
+| Merged in iteration 1 so far | T-006, T-012, T-014, T-013, T-015, T-016, T-032 | T-013 landed at 12:15Z: budgets are enforced by the queue, `metrics` stamps times from the clock and validates transitions (in_progress → self_verified → tests_joined → reviewed → queued → merged), `cargo xtask publish` exists, the gate has 11 steps. |
+| T-017 regex (high) | implementer R-104 done (gate green); test author R-105 running | Then `cargo xtask join T-017`, review round 1 (fresh reviewer; dependency change), approval row beginning `Approve T-017`, queue. |
+| T-010 line/position commands (medium, independent-test arm) | implementer R-107, test author R-108 running since 12:28Z | Then join, review, approve, queue. T-018 depends on it. |
+| Specs T-008, T-020, T-009 | planner R-109 editing in the primary checkout | T-008: apply spec check R-101 (`tasks/spec-checks/T-008.md`), then a short re-check and dispatch (not together with T-010, T-024, T-030). T-020: size limit per D-056. T-009: T-013 follow-ups (D-053) and the approval-refusal message (D-058); needs a spec check (gate paths). Commit the planner's files by path before any queue run. |
+| Next to make ready (medium, no spec check needed) | T-011 (odd: implementer writes the acceptance tests first), T-030 (even: independent test author), T-020 after the planner's edit | Pairs not to run together are listed below. |
 
 ## Plan for the rest of iteration 1 (all specs are in `tasks/`, state `draft` unless noted)
 - Tooling track: T-013 → T-009 (queue follow-ups, gate paths) → T-028 (fuzz and budgets runners) → T-029 (command fuzz target).
@@ -92,3 +92,10 @@ Three fresh agents are running: T-013 reviewer (R-081), T-015 reviewer (R-082), 
 5. Then T-009 (after T-013), and the rest of the plan above. One spec edit still owed: T-022 line ~65
    (`replacement_for` now returns `Result`).
 Disk: check `df -h /home/user` before every dispatch; delete a tests worktree's `target/` after its join.
+
+## Addendum 2026-11-13 12:30Z (director)
+- Rules added since the handoff was written: approval rows carry one decision and begin `Approve T-NNN` (D-058; check with grep before queuing); briefs give full 40-hex commit ids (D-050); a guard that only proves the current task left something alone is not a permanent test and tests do not pin message texts or whole documents that planned tasks change (D-043, D-052); pre-dispatch spec checks are booked to their task as reviewer runs; `iter-1` takes only director, planner, evaluator and retrospective runs (D-055).
+- Still unbooked by hand: spec checks R-067 (T-016 and T-017, 294,896 tokens) and R-069 (T-032, 59,214 tokens) — count them in the iteration-1 evaluation.
+- Owed: publish the ADR-0004 sentence in `docs/CHARTER.md` §3 as a low-tier task (not a ledger path); T-022 spec line about `replacement_for` returning `Result`.
+- Run ids used: up to R-109. Helper for booking runs from agent transcripts: session scratchpad `book.sh` (not in the repository; the command is `cargo xtask metrics add …`).
+- Third container restart at 11:11Z, after a usage-limit stop at about 08:13Z; agents were relaunched fresh. The usage window that began 11:10Z ends about 16:10Z.
