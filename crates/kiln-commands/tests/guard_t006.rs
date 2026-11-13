@@ -2,28 +2,34 @@
 //! each test passes on the base by design and fails if the ruling it pins is broken. Every
 //! test dispatches commands by name on an in-memory file system (`Context::with_files`).
 
-use kiln_commands::{Context, Registry, standard_registry};
-use kiln_workspace::RelPath;
 use serde_json::{Value, json};
+use support::*;
 
-fn reg() -> Registry {
-    standard_registry().expect("standard registry builds")
-}
+#[cfg(test)]
+mod support {
+    use kiln_commands::{Context, Registry, standard_registry};
+    use kiln_workspace::RelPath;
+    use serde_json::Value;
 
-fn ctx_files(files: &[(&str, &[u8])]) -> Context {
-    Context::with_files(files).unwrap_or_else(|e| panic!("with_files({files:?}): {e:?}"))
-}
+    pub fn reg() -> Registry {
+        standard_registry().expect("standard registry builds")
+    }
 
-fn ok(r: &Registry, ctx: &mut Context, name: &str, params: Value) -> Value {
-    r.execute(ctx, name, params.clone())
-        .unwrap_or_else(|e| panic!("{name} {params} failed: {e:?}"))
-}
+    pub fn ctx_files(files: &[(&str, &[u8])]) -> Context {
+        Context::with_files(files).unwrap_or_else(|e| panic!("with_files({files:?}): {e:?}"))
+    }
 
-fn file(ctx: &Context, path: &str) -> Vec<u8> {
-    let p = RelPath::new(path).unwrap_or_else(|e| panic!("RelPath::new({path:?}): {e:?}"));
-    ctx.vfs()
-        .read(&p)
-        .unwrap_or_else(|e| panic!("read {path}: {e:?}"))
+    pub fn ok(r: &Registry, ctx: &mut Context, name: &str, params: Value) -> Value {
+        r.execute(ctx, name, params.clone())
+            .unwrap_or_else(|e| panic!("{name} {params} failed: {e:?}"))
+    }
+
+    pub fn file(ctx: &Context, path: &str) -> Vec<u8> {
+        let p = RelPath::new(path).unwrap_or_else(|e| panic!("RelPath::new({path:?}): {e:?}"));
+        ctx.vfs()
+            .read(&p)
+            .unwrap_or_else(|e| panic!("read {path}: {e:?}"))
+    }
 }
 
 /// R4 (D-023 SG-4): `MUTATING` belongs to the command, so a no-op re-open is still mutating.
