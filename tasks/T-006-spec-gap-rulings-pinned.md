@@ -2,7 +2,7 @@
 id: T-006
 title: "State the D-013 and D-023 spec-gap rulings in the public docs and pin each with a regression guard"
 tier: low               # ADR-0002: rustdoc + regression guards, no behaviour change; no boundary criterion applies (Decisions D-1)
-state: self_verified
+state: merged
 owner_role: planner
 scorecard_items: []
 depends_on: [T-001, T-003]

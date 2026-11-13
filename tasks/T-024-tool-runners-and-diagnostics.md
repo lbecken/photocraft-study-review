@@ -1,7 +1,7 @@
 ---
 id: T-024
 title: "Run cargo and rustfmt behind the tool trait with a recording and a replaying fake, and turn `cargo check --message-format=json` into diagnostics mapped to document positions that follow later edits"
-tier: high              # ADR-0002: spawns processes; CLI option on the session's trust boundary (running cargo executes project build scripts)
+tier: high              # ADR-0002: introduces the spawn path; CLI opt-in flag on the session's trust boundary (running cargo executes project build scripts)
 state: draft
 owner_role: planner
 scorecard_items: [diag.tool-fake, diag.cargo-check, diag.positions]
@@ -17,6 +17,7 @@ touches:
   - apps/kiln-cli/tests/fixtures/t024           # fixture crates and recordings (test author)
   - docs/protocol/tool.md                       # new: runners, --tools, recording format
   - docs/protocol/diag.md                       # new
+  - docs/control-protocol.md                    # ONE line in the `kiln-cli` section: `--tools` (director, R-060 answer 4)
   - docs/commands.json                          # generated
 budget_tokens: 850000   # high (v1.1)
 iteration: 1
@@ -43,8 +44,8 @@ Exactly one marked test per tool spawns the real one.
 
 No gate path. Reading list: CHARTER §3 decision 4; `tasks/T-015-*.md` (tool contract, reasons,
 `Parts`, `DiagState`); `tasks/T-018-*.md` (anchors); `tasks/T-022-*.md` "Text of a file";
-`apps/kiln-cli/src/main.rs` options; `docs/control-protocol.md` "kiln-cli" (read only: under
-the R-056 ruling this task documents `--tools` in `docs/protocol/tool.md`; Question Q-5).
+`apps/kiln-cli/src/main.rs` options; `docs/control-protocol.md` "kiln-cli" (this task adds one
+line there for `--tools`; the full text is in `docs/protocol/tool.md`).
 
 ## Interface
 
@@ -80,11 +81,22 @@ an equal request, or with the last one once they run out. It re-creates errors a
 equal request recorded → `ToolError::NoRecording`. A malformed file → `load` error naming the
 line number.
 
-### `kiln-cli --tools <mode>` (on `run`, `control`, `exec`)
-`real` (default with `--root`), `none` (default with `--memory`), `record:<file>`,
-`replay:<file>`. `<file>` is a host path resolved against the current directory, like `--log`.
-`real` or `record:` with `--memory` is a usage error (exit 2). So is an unloadable replay file
-(the message names the line), and so is an unknown mode. `kiln_control::Host` gains
+### `kiln-cli --tools <mode>` (on `run`, `control`, `exec`): spawning is opt-in (director, R-060)
+- **Default `none`, always**, with `--root` and with `--memory`. Without an explicit
+  `--tools real` or `--tools record:<file>`, no command starts a process. Every tool command
+  then returns `{"code":"rejected","kind":"tool_unavailable","message":"external tools are off for
+  this session (start with --tools real to run them)"}` (T-015's `NoTools` Display; with
+  `--tools replay:` the recorded result instead).
+- `real`: the `ProcessRunner`. `record:<file>`: the `RecordingRunner`, which also runs the real
+  tools and so is an opt-in too. `replay:<file>`: the `ReplayRunner`, which never spawns.
+- `<file>` is a host path resolved against the current directory, like `--log`.
+- `real` or `record:` with `--memory` is a usage error (exit 2). So is an unloadable replay
+  file (the message names the line), and so is an unknown mode.
+- `Host::in_memory`/`on_disk` keep `NoTools`; only an explicit `set_tools` installs a runner.
+- `docs/protocol/tool.md` and the one new line in `docs/control-protocol.md` say: "`--tools
+  real` runs `cargo` and `rustfmt` in the project root; `cargo check` executes the project's
+  build scripts and procedural macros, so use it only on projects you trust."
+- `kiln_control::Host` gains `kiln_control::Host` gains
 `pub fn set_tools(&mut self, tools: Box<dyn ToolRunner>)`.
 
 ### Commands
@@ -139,7 +151,8 @@ all of the above, including the warning in (e).
 - (d) Unix; tool from `PATH`; cwd = the `DiskFs` root. Offsets are chars.
 - (e) Threat model: `cargo check` runs the project's build scripts and proc macros. A hostile
   repository therefore runs code as the user, which is inherent to the tool. `docs/protocol/diag.md`
-  says so, and `--tools none` turns it off. The reviewer checks that only `ProcessRunner`
+  says so, and nothing spawns without the explicit `--tools real`/`record:` flag (default
+  `none`). The reviewer checks that only `ProcessRunner`
   spawns. They also check that no request field can choose the program, args or environment:
   args are fixed by the commands. A tool cannot outlive its limit: it is killed and reaped,
   with no zombie and no stuck reader thread. A huge or non-UTF-8 output is bounded or refused.
@@ -157,7 +170,7 @@ all of the above, including the warning in (e).
   at char 20, because `pub fn f() -> u8 {\r\n` is 20 chars, and the text is ASCII. If the
   file is open and clean, then after `doc.insert {offset:0, text:"// x\r\n"}` (6 chars),
   `diag.list` gives `start 42, end 45, line 2, col 16`.
-- (h) Evaluator calls: `diag.tool-fake` → `kiln-cli run s.jsonl --root fx --tools replay:rec.jsonl`
+- (h) Evaluator calls (real tools only with `--tools real`): `diag.tool-fake` → `kiln-cli run s.jsonl --root fx --tools replay:rec.jsonl`
   with `PATH` set to an empty directory gives the same output twice and spawns nothing.
   `--tools record:` with the real tools produces a file that replays to identical responses.
   `diag.cargo-check` → `diag.check` on a fixture crate, compared with `cargo check
@@ -168,7 +181,9 @@ all of the above, including the warning in (e).
 - AC-1 (`diag.tool-fake`, CLI): with `--tools replay:<committed recording>` and `PATH` pointing
   to an empty directory, a script running `tool.versions`, `diag.check` and `diag.list` gives
   byte-identical stdout on two runs, and the recorded results. A request not in the recording →
-  `rejected`/`no_recording`. With `--tools none`: `tool_unavailable`. Oracle: exact value +
+  `rejected`/`no_recording`. With no `--tools` option, and with `--tools none`, on `--root` and on
+  `--memory`: `tool_unavailable` with the exact pinned message, and nothing is spawned (an
+  executable `cargo` script on a private `PATH` that writes a marker file is never run). Oracle: exact value +
   differential.
 - AC-2 (`diag.tool-fake`, the one marked real-tool test): `#[test] fn real_cargo_and_rustfmt_record_and_replay`.
   It copies a fixture crate and the repository's `rust-toolchain.toml` to a temp dir, then
@@ -227,8 +242,9 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   real cargo in a scratch crate (removed): with CRLF, `byte_start` counts CRLF bytes, columns
   are 1-based chars, and `--all-targets` duplicates lib messages. So the positions use
   line/col, and rule 4 merges duplicates. `--tools` is documented in `docs/protocol/tool.md`
-  under the R-056 ruling, so the CLI section of `control-protocol.md` stays stale (Q-5).
+  under the R-056 ruling (later R-060: one line in the CLI section is allowed).
   Pinned: none n/a. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: applied answers 4, 7 and 9. Spawning is opt-in: the default is `--tools none` everywhere, and only `real`/`record:` run tools, with the pinned `tool_unavailable` result otherwise and AC-1 checking that nothing spawns. Added one line to `docs/control-protocol.md` with the build-script warning. Stays high: this task introduces the spawn path. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -157,3 +157,5 @@
 {"kind":"transition","task":"T-006","iteration":1,"at":"2026-11-13T04:05:18Z","from":"ready","to":"in_progress"}
 {"kind":"transition","task":"T-006","iteration":1,"at":"2026-11-13T04:11:20Z","from":"in_progress","to":"self_verified"}
 {"kind":"run","task":"T-006","iteration":1,"run":"R-061","role":"implementer","tier":"low","started_at":"2026-11-13T04:05:30Z","ended_at":"2026-11-13T04:11:30Z","wall_s":360,"tokens":131202,"tool_calls":37,"gate_attempts":2,"outcome":"completed","missing_context":"rejected kinds are computed in kiln-control, out of reach of kiln-commands tests; the dispatch told the agent to set CARGO_TARGET_DIR although AGENTS.md v1.1 forbids it","note":"low tier: 6 regression guards, each shown to fail under a seeded bug; gate attempt 1 failed clippy::panic in guard helpers"}
+{"kind":"transition","task":"T-006","iteration":1,"at":"2026-11-13T04:12:20Z","from":"self_verified","to":"queued"}
+{"kind":"transition","task":"T-006","iteration":1,"at":"2026-11-13T04:12:20Z","from":"queued","to":"merged"}

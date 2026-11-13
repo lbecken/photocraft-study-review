@@ -69,7 +69,7 @@ No new error kind. `docs/protocol/fmt.md` documents the command, the fixed rustf
     `14..18` (` b()`) with `b() `.
   - stdin `fn main( {` → exit 1, stderr starting `error: this file contains an unclosed
     delimiter` → `rejected`/`format_error`.
-- (h) Evaluator calls: `kiln-cli run --root <dir>` (real tools) or `--tools replay:<rec>` with
+- (h) Evaluator calls: `kiln-cli run --root <dir> --tools real` (real tools; opt-in, T-024) or `--tools replay:<rec>` with
   `doc.open`, `fmt.document`, `doc.text`, `doc.undo`, `doc.info`.
 
 ## Acceptance criteria
@@ -89,8 +89,8 @@ No new error kind. `docs/protocol/fmt.md` documents the command, the fixed rustf
   idempotence.
 - AC-4 (`fmt.error`, CLI, replay): recordings of a syntax error (exit 1) and of a timeout give
   `rejected`/`format_error` and `rejected`/`tool_timeout`. The message starts with `rustfmt
-  failed: error:`. `doc.text`, `doc.info` and `cursor.get` are unchanged. With `--tools none`
-  → `tool_unavailable`. Oracle: exact value.
+  failed: error:`. `doc.text`, `doc.info` and `cursor.get` are unchanged. With no `--tools` option
+  (the default `none`) → `tool_unavailable`. Oracle: exact value.
 - AC-5 (worked examples): each holds through replayed recordings of exactly those inputs.
   Oracle: exact value.
 
@@ -124,6 +124,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   T-024's runner, which this task does not touch, so no ADR-0002 high criterion applies (the
   director may judge "spawns processes" to cover callers too; then high). Arm even. Pinned (e),
   (f) n/a. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: tier medium confirmed (R-060 answer 7: callers through the runner trait are medium). Real tools only with the explicit `--tools real` (T-024's opt-in default `none`). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
