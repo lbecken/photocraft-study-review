@@ -22,7 +22,11 @@
 //!
 //! Confinement (T-008, `docs/protocol/paths.md`):
 //! - The root is resolved once, at construction (`fs::canonicalize`; a root given as a symlink
-//!   to a directory is that directory).
+//!   to a directory is that directory), and that *directory* is the root: its device and inode
+//!   are kept. Every call resolves the stored root path again and walks from there only if it
+//!   still reaches that same directory; if the root path or a directory above it has been
+//!   replaced since (for example by a symlink to another directory), or leads nowhere, the
+//!   call is refused with `OutsideRoot` before anything else is looked at.
 //! - Every `read`, `write_atomic` and `is_file` first computes the *location* of its path by
 //!   walking it from the root one component at a time, as the kernel does: each symlink is
 //!   read and its target's components are walked in its place (an absolute target from `/`),
@@ -41,10 +45,12 @@
 //!   directory and renames it onto the location.
 //! - Precedence: `OutsideRoot`, then `NotFound`, then `NotAFile`, then `Io`. Nothing is cached:
 //!   every call walks again, so what an earlier `read` saw does not authorise a later save.
-//! - Accepted limitation (Decisions D-3 of T-008): the walk and the following open or rename
-//!   are separate system calls. Another process that changes the tree *during* one call (for
-//!   example swaps a component for a symlink, or the file for a FIFO, between the walk and the
-//!   open) can make that call reach outside the root or block. A hard link inside the root to a
+//! - Link targets ending in `/` require a directory, as the kernel does.
+//! - Accepted limitation (Decisions D-3 of T-008): the root check, the walk and the following
+//!   open or rename are separate system calls. Another process that changes the tree *during*
+//!   one call (for example swaps the root, a component or the file for a symlink, or the file
+//!   for a FIFO, between the walk and the open) can make that call reach outside the root or
+//!   block. A hard link inside the root to a
 //!   file outside cannot be detected by path.
 //! - Documented limitations (D-014 (4)): because the content is swapped in as a new inode, a
 //!   hard link to the target keeps the old content (the link is split), the file's owner and
@@ -62,7 +68,7 @@ use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Write};
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 
 use crate::path::RelPath;
@@ -79,8 +85,12 @@ const MAX_SYMLINK_HOPS: usize = 40;
 /// reach must stay inside it (module docs).
 #[derive(Debug)]
 pub struct DiskFs {
-    /// The root as resolved at construction: absolute, without symlinks, `.` or `..`.
+    /// The root as resolved at construction: absolute, without symlinks, `.` or `..`. Each
+    /// call resolves it again ([`DiskFs::current_root`]).
     root: PathBuf,
+    /// Device and inode of the root directory at construction: the root *is* this directory,
+    /// whatever later happens to the path that led to it.
+    root_id: (u64, u64),
 }
 
 /// One step of the walk to a location.
@@ -92,6 +102,9 @@ enum Step {
     Parent,
     /// An entry of the directory reached so far.
     Name(OsString),
+    /// The entry reached by the steps before must be a directory (a link target ending in
+    /// `/`, as the kernel requires).
+    DirMark,
 }
 
 /// What the walk found at a location.
@@ -136,6 +149,7 @@ impl DiskFs {
         match fs::metadata(root) {
             Ok(meta) if meta.is_dir() => Ok(DiskFs {
                 root: fs::canonicalize(root).map_err(root_error)?,
+                root_id: (meta.dev(), meta.ino()),
             }),
             Ok(_) => Err(VfsError::Io {
                 path: placeholder(),
@@ -146,31 +160,45 @@ impl DiskFs {
         }
     }
 
-    /// Whether `location` (absolute, symlink-free) is the root or below it, component by
-    /// component.
-    fn inside(&self, location: &Path) -> bool {
-        location.starts_with(&self.root)
-    }
-
-    /// An error met while walking from `dir`: `OutsideRoot` once the walk is outside the root
-    /// (so nothing about the outside is reported), otherwise `make()`.
-    fn walk_error(&self, rel: &RelPath, dir: &Path, make: impl FnOnce() -> VfsError) -> VfsError {
-        if self.inside(dir) {
-            make()
+    /// The path at which the root directory is reached now: the stored root resolved again
+    /// (`fs::canonicalize`), which must still be the directory found at construction (same
+    /// device and inode). If the root path, or a directory above it, has since been replaced
+    /// (for example by a symlink to another directory), or no longer leads anywhere, every
+    /// location is outside the root: `OutsideRoot`. If the root directory itself was only
+    /// reached through a new path (an ancestor renamed and linked back), that path is used.
+    fn current_root(&self, rel: &RelPath) -> Result<PathBuf, VfsError> {
+        let outside = || VfsError::OutsideRoot { path: rel.clone() };
+        let root = fs::canonicalize(&self.root).map_err(|_| outside())?;
+        let meta = fs::symlink_metadata(&root).map_err(|_| outside())?;
+        if meta.is_dir() && (meta.dev(), meta.ino()) == self.root_id {
+            Ok(root)
         } else {
-            VfsError::OutsideRoot { path: rel.clone() }
+            Err(outside())
         }
     }
 
     /// Walk `rel` from the root to its location, following every symlink physically (module
     /// docs). `Err(OutsideRoot)` if the location is outside the root; nothing is opened.
     fn locate(&self, rel: &RelPath) -> Result<Location, VfsError> {
+        let root = self.current_root(rel)?;
+        // Whether `location` (absolute, symlink-free) is the root or below it, component by
+        // component.
+        let inside = |location: &Path| location.starts_with(&root);
+        // An error met while walking from `dir`: `OutsideRoot` once the walk is outside the
+        // root (so nothing about the outside is reported), otherwise `make()`.
+        let walk_error = |dir: &Path, make: &dyn Fn() -> VfsError| {
+            if inside(dir) {
+                make()
+            } else {
+                VfsError::OutsideRoot { path: rel.clone() }
+            }
+        };
         let mut pending: VecDeque<Step> = rel
             .segments()
             .map(|s| Step::Name(OsString::from(s)))
             .collect();
         // The directory reached so far: absolute, without symlinks, `.` or `..`.
-        let mut dir = self.root.clone();
+        let mut dir = root.clone();
         let mut hops = 0;
         let (path, found) = loop {
             let Some(step) = pending.pop_front() else {
@@ -186,21 +214,31 @@ impl DiskFs {
                     dir.pop();
                     continue;
                 }
+                // Reached only after a directory: nothing to check.
+                Step::DirMark => continue,
                 Step::Name(name) => name,
             };
+            // The last real step: only `DirMark`s may follow.
+            let last = pending.iter().all(|s| matches!(s, Step::DirMark));
+            // This entry must be a directory (a link target ending in `/`).
+            let must_be_dir = matches!(pending.front(), Some(Step::DirMark));
             let candidate = dir.join(&name);
             match fs::symlink_metadata(&candidate) {
                 Ok(meta) if meta.file_type().is_symlink() => {
                     hops += 1;
                     if hops > MAX_SYMLINK_HOPS {
-                        return Err(self.walk_error(rel, &dir, || VfsError::Io {
+                        return Err(walk_error(&dir, &|| VfsError::Io {
                             path: rel.clone(),
                             kind: io::ErrorKind::Other,
                             message: "too many levels of symbolic links".to_owned(),
                         }));
                     }
                     let target = fs::read_link(&candidate)
-                        .map_err(|e| self.walk_error(rel, &dir, || io_error(rel, &e)))?;
+                        .map_err(|e| walk_error(&dir, &|| io_error(rel, &e)))?;
+                    // `Path::components` drops a trailing `/`, which requires a directory.
+                    if target.as_os_str().as_encoded_bytes().last() == Some(&b'/') {
+                        pending.push_front(Step::DirMark);
+                    }
                     for component in target.components().rev() {
                         match component {
                             Component::RootDir | Component::Prefix(_) => {
@@ -213,7 +251,7 @@ impl DiskFs {
                     }
                 }
                 Ok(meta) if meta.is_dir() => dir = candidate,
-                Ok(meta) if pending.is_empty() => {
+                Ok(meta) if last && !must_be_dir => {
                     let found = if meta.is_file() {
                         Found::File(meta)
                     } else {
@@ -221,7 +259,7 @@ impl DiskFs {
                     };
                     break (candidate, found);
                 }
-                // A non-directory before the last component.
+                // A non-directory before the last component, or where a directory is required.
                 Ok(_) => break (candidate, Found::NoParent),
                 Err(e)
                     if matches!(
@@ -229,17 +267,17 @@ impl DiskFs {
                         io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
                     ) =>
                 {
-                    let found = if pending.is_empty() {
+                    let found = if last && !must_be_dir {
                         Found::Missing
                     } else {
                         Found::NoParent
                     };
                     break (candidate, found);
                 }
-                Err(e) => return Err(self.walk_error(rel, &dir, || io_error(rel, &e))),
+                Err(e) => return Err(walk_error(&dir, &|| io_error(rel, &e))),
             }
         };
-        if !self.inside(&path) {
+        if !inside(&path) {
             return Err(VfsError::OutsideRoot { path: rel.clone() });
         }
         Ok(Location { path, dir, found })
@@ -832,6 +870,159 @@ mod tests {
             results
         };
         assert_eq!(run("root-a"), run("root-b"));
+    }
+
+    /// `work/` with `root/f.txt`, `outside/secret.txt` and `other/` (for parent swaps).
+    fn swap_fixture(name: &str) -> PathBuf {
+        let work = fresh_dir(name);
+        fs::create_dir_all(work.join("parent/root")).unwrap();
+        fs::create_dir_all(work.join("outside")).unwrap();
+        fs::write(work.join("parent/root/f.txt"), b"in\n").unwrap();
+        fs::write(work.join("outside/secret.txt"), b"s3cr3t-content\n").unwrap();
+        work
+    }
+
+    /// Review r1 D-1 (ruling v4): the root path replaced by a symlink to another directory
+    /// between two requests; a session keeps its root directory.
+    #[test]
+    fn root_replaced_by_a_symlink_between_requests_is_outside() {
+        use std::os::unix::fs::symlink;
+        let work = swap_fixture("root-swap");
+        let root = work.join("parent/root");
+        let mut fs_ = DiskFs::new(&root).unwrap();
+        let mut doc = crate::Document::open(&fs_, &p("f.txt")).unwrap();
+        doc.buffer_mut().insert(0, "PWNED ").unwrap();
+        fs::rename(&root, work.join("parent/root.real")).unwrap();
+        symlink("../outside", &root).unwrap();
+        // The swap works: the outside file is reachable through the root path now.
+        assert_eq!(
+            fs::read(root.join("secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        fs::write(root.join("f.txt"), b"outside f\n").unwrap();
+        let before = listing(&work.join("outside"));
+        for path in ["secret.txt", "f.txt", "new.txt"] {
+            let want = VfsError::OutsideRoot { path: p(path) };
+            assert_eq!(fs_.read(&p(path)), Err(want.clone()), "read {path}");
+            assert_eq!(
+                fs_.write_atomic(&p(path), b"PWNED"),
+                Err(want),
+                "write {path}"
+            );
+            assert!(!fs_.is_file(&p(path)));
+        }
+        assert_eq!(
+            doc.save(&mut fs_),
+            Err(VfsError::OutsideRoot { path: p("f.txt") })
+        );
+        assert!(doc.is_dirty());
+        assert_eq!(
+            fs::read(work.join("outside/secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        assert_eq!(
+            fs::read(work.join("outside/f.txt")).unwrap(),
+            b"outside f\n"
+        );
+        assert_eq!(listing(&work.join("outside")), before);
+        assert_eq!(
+            fs::read(work.join("parent/root.real/f.txt")).unwrap(),
+            b"in\n"
+        );
+
+        // Renamed with nothing in its place: still nothing read or written anywhere.
+        fs::remove_file(&root).unwrap();
+        assert!(fs_.read(&p("f.txt")).is_err());
+        assert!(fs_.write_atomic(&p("g.txt"), b"x").is_err());
+        assert!(!work.join("parent/root.real/g.txt").exists());
+        // A new directory at the root path is not the root either.
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("f.txt"), b"new dir\n").unwrap();
+        assert_eq!(
+            fs_.read(&p("f.txt")),
+            Err(VfsError::OutsideRoot { path: p("f.txt") })
+        );
+    }
+
+    /// Review r1 D-1 (ruling v4): a directory above the root replaced by a symlink to another
+    /// directory that has a `root` of its own.
+    #[test]
+    fn parent_replaced_by_a_symlink_between_requests_is_outside() {
+        use std::os::unix::fs::symlink;
+        let work = swap_fixture("parent-swap");
+        fs::create_dir_all(work.join("outside/root")).unwrap();
+        fs::write(work.join("outside/root/secret.txt"), b"s3cr3t-content\n").unwrap();
+        let root = work.join("parent/root");
+        let mut fs_ = DiskFs::new(&root).unwrap();
+        assert_eq!(fs_.read(&p("f.txt")).unwrap(), b"in\n");
+        fs::rename(work.join("parent"), work.join("parent.real")).unwrap();
+        symlink("outside", work.join("parent")).unwrap();
+        assert_eq!(
+            fs::read(root.join("secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        for path in ["secret.txt", "new.txt"] {
+            let want = VfsError::OutsideRoot { path: p(path) };
+            assert_eq!(fs_.read(&p(path)), Err(want.clone()), "read {path}");
+            assert_eq!(
+                fs_.write_atomic(&p(path), b"PWNED"),
+                Err(want),
+                "write {path}"
+            );
+        }
+        assert_eq!(
+            fs::read(work.join("outside/root/secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        assert_eq!(listing(&work.join("outside/root")), ["secret.txt"]);
+
+        // The parent renamed and linked back to itself: the root directory is unchanged and
+        // reached through a new path, so the session keeps working there.
+        fs::remove_file(work.join("parent")).unwrap();
+        symlink("parent.real", work.join("parent")).unwrap();
+        assert_eq!(fs_.read(&p("f.txt")).unwrap(), b"in\n");
+        fs_.write_atomic(&p("f.txt"), b"saved\n").unwrap();
+        assert_eq!(
+            fs::read(work.join("parent.real/root/f.txt")).unwrap(),
+            b"saved\n"
+        );
+        assert!(
+            fs::symlink_metadata(work.join("parent"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+    }
+
+    /// Review r1 N-1 (ruling v7): a link target ending in `/` requires a directory.
+    #[test]
+    fn link_target_with_trailing_slash_requires_a_directory() {
+        use std::os::unix::fs::symlink;
+        let dir = fresh_dir("trail");
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        fs::create_dir(dir.join("real")).unwrap();
+        fs::write(dir.join("real/t.txt"), b"t").unwrap();
+        symlink("real/t.txt/", dir.join("trail")).unwrap();
+        symlink("real/new.txt/", dir.join("newtrail")).unwrap();
+        symlink("real/", dir.join("dtrail")).unwrap();
+        symlink("trail", dir.join("viatrail")).unwrap();
+        // The kernel agrees: the file cannot be reached through the trailing slash.
+        assert!(fs::read(dir.join("trail")).is_err());
+        for path in ["trail", "viatrail", "newtrail"] {
+            let want = VfsError::NotFound { path: p(path) };
+            assert_eq!(fs_.read(&p(path)), Err(want.clone()), "read {path}");
+            assert_eq!(fs_.write_atomic(&p(path), b"x"), Err(want), "write {path}");
+            assert!(!fs_.is_file(&p(path)));
+        }
+        assert_eq!(fs::read(dir.join("real/t.txt")).unwrap(), b"t");
+        assert!(!dir.join("real/new.txt").exists());
+        // A directory through a trailing slash is still a directory; below it, files work.
+        assert_eq!(
+            fs_.read(&p("dtrail")),
+            Err(VfsError::NotAFile { path: p("dtrail") })
+        );
+        assert_eq!(fs_.read(&p("dtrail/t.txt")).unwrap(), b"t");
+        assert_eq!(listing(&dir.join("real")), ["t.txt"]);
     }
 
     /// Fixed-seed differential test: MemoryFs is the reference model of DiskFs.
