@@ -194,12 +194,17 @@ or flag relaxes the guard (D-026 R8). Fix a refusal by rebuilding in the right c
 Run from the primary checkout, with `main` checked out and clean. In order:
 
 1. takes `.git/kiln-queue.lock` (a lock whose process is gone is reclaimed); refuses (error,
-   exit 2, no record) if `main` is not checked out, the working tree has changes outside
-   `metrics/`, `.worktrees/T-NNN` is missing, dirty or not on `task/T-NNN`, or the branch has no
+   exit 2, no record) if `main` is not checked out, the working tree has (non-evidence) changes outside
+   `metrics/` (the `ledger` refusal of step 2 is checked first, right after `main`), `.worktrees/T-NNN` is missing, dirty or not on `task/T-NNN`, or the branch has no
    commits beyond `main`;
-2. runs the **preconditions** below; the first that fails is a refusal: exit 1, one stderr line
+2. refuses at `ledger` (exit 1, one line, nothing changed) if the primary checkout has
+   uncommitted changes — modified, staged or untracked — to an evidence file: anything under
+   `metrics/` except the queue's own output log `metrics/queue.jsonl`, `docs/decisions.md`,
+   `tasks/`, `reviews/`, `xtask/generated.toml` or `xtask/ledger.toml`. Evidence is read only
+   from main's committed tree, so commit the ledger on `main` first (D-026 R6, D-027);
+3. runs the **preconditions** below; the first that fails is a refusal: exit 1, one stderr line
    `queue: refused: <check>: <reason>`, nothing changed and no record written;
-3. builds main's xtask from `base_sha` (= `main`) in a private build tree
+4. builds main's xtask from `base_sha` (= `main`) in a private build tree
    `.git/kiln-queue/main-xtask/` (`src/` is a fresh export of `base_sha` through a private git
    index — not a worktree, never a task's tree — and `target/` is used for nothing else). Every
    run rebuilds the xtask crate from that fresh export: before `cargo build` the queue removes
@@ -209,9 +214,9 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    registry dependencies are kept and may be reused — an accepted residual risk: task code that
    rewrites a dependency's artifact in that directory is not detected. If the build fails the
    queue stops with an error and writes no record (main itself is broken: an incident);
-4. rebases `task/T-NNN` onto `main` in `.worktrees/T-NNN` (generated-file conflicts: below;
+5. rebases `task/T-NNN` onto `main` in `.worktrees/T-NNN` (generated-file conflicts: below;
    any other conflict: `git rebase --abort`, record `conflict`, `failed_step: "rebase"`);
-5. runs **main's gate**: main's xtask binary `ci --report <file>` with the rebased worktree as
+6. runs **main's gate**: main's xtask binary `ci --report <file>` with the rebased worktree as
    working directory and `CARGO_TARGET_DIR=.worktrees/T-NNN/target`. If the task changes a gate
    path (below; the queue prints them: a stderr line `queue: T-NNN changes gate paths: …` and
    `gate paths changed: …` in the summary), the task's own rebased gate
@@ -219,7 +224,7 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    override (D-3). Before the gate, the lock rule is applied once more to the rebased tree: if
    its `Cargo.lock` changes the version of a package of main's lock, the run is refused at
    `dependencies` and the branch is put back;
-6. fast-forwards `main` only if green (never pushes). On every other outcome — `gate_failed`,
+7. fast-forwards `main` only if green (never pushes). On every other outcome — `gate_failed`,
    `ff_failed`, `conflict`, a refusal after the rebase, or an error — `task/T-NNN` is put back
    on the commit it pointed at before the run (`git rebase --abort`, `git reset --hard`,
    `git clean -d --force`; ignored files such as `target/` stay) and its worktree is clean, so
@@ -245,7 +250,7 @@ JSON `{"passed": bool, "failed_step": string|null, …}`.
 | `state` | main's `state` is `queued`, or `reviewed` (medium/high), or `self_verified` (low) |
 | `config` | main's `xtask/generated.toml` and `xtask/ledger.toml` exist and are valid (below) |
 | `touches` | every path of `git diff --name-only --no-renames <merge-base> <task head>` is allowed (below) |
-| `join` | medium/high: the primary checkout's `metrics/tasks.jsonl` has a `kind:"join"`, `result:"joined"` record of the task whose `joined_sha` is the task head or an ancestor of it. Read only from this record — the rebase flattens the join merge (D-6) |
+| `join` | medium/high: main's committed `metrics/tasks.jsonl` (never the working copy) has a `kind:"join"`, `result:"joined"` record of the task whose `joined_sha` is the task head or an ancestor of it. Read only from this record — the rebase flattens the join merge (D-6) |
 | `review` | medium/high: on the task head, `reviews/T-NNN-r<N>.md` with the highest N has `verdict: approve` and a `reviewed_sha` that is a full 40-hex lowercase commit id (no branch name, `HEAD`, abbreviation or other revision expression) naming a commit that is the head or an ancestor of it; every commit after `reviewed_sha` changes only `reviews/T-NNN-*`, the task file, generated paths and the task's acceptance/guard test files (allowed-path rule below); anything else is a stale review (D-026 R2) |
 | `gate-path` | a task whose changed paths include a **gate path** is tier high (D-026 R3). Gate paths: anything under `xtask/` or `.github/`; any path with a `.cargo` directory segment; any file named `build.rs`, `rust-toolchain.toml`, `rust-toolchain`, `clippy.toml`, `.clippy.toml`, `rustfmt.toml` or `.rustfmt.toml` (at any depth); and the root `Cargo.toml` when its `[workspace.lints]`, `[workspace.metadata]` or any `[profile.*]` table at the task head differs from main's or from the merge base's (an unparsable manifest counts as differing) |
 | `dependencies` | a task whose changed paths include a `Cargo.lock` or a `Cargo.toml` whose dependency tables differ between the merge base and the head (`[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `[target.*]` forms, `[workspace.dependencies]`, `[patch.*]`, `[replace]`; a new manifest with any of them counts) is tier high; and for every changed `Cargo.lock`, no registry or git package of main's lock has a different version at the task head (D-026 R4) |
@@ -293,8 +298,10 @@ task branch is reset to its pre-queue head and `main` is unchanged. Regeneration
 such a conflict; a rebase without conflicts keeps the task's generated files as committed (its
 gate checks them).
 
-`metrics/` is exempt from the clean check because the queue appends there; the director commits
-metrics records (a ledger path).
+`metrics/queue.jsonl` is the queue's own output log: the queue appends to it in the working
+tree, it is exempt from the `ledger` and clean checks, and `main-history` reads it as it is. The
+director commits it with the other metrics records (a ledger path). Every other evidence file
+must be committed on `main` before a queue run (`ledger` above).
 
 This queue was introduced by T-005. T-005 itself was the last task queued by the old queue,
 which ran the task branch's own gate and checked none of the above.

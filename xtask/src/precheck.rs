@@ -2,10 +2,12 @@
 //! `front-matter`, `state`, `config`, `touches`, `join`, `review`, `gate-path`, `dependencies`,
 //! `approval`, `main-history` (the queue checks `ledger` before all of them).
 //!
-//! Every input is read from **main's** tree (task file, policy files, `docs/decisions.md`), from
-//! the task branch head (its task-file copy, review files, changed paths) or from the primary
-//! checkout's `metrics/` records — never from the task branch's copy of a rule file. A failed
-//! check is a [`Refusal`]; nothing is changed or written.
+//! Every input is read from a committed tree (D-026 R6): **main's** (task file, policy files,
+//! `docs/decisions.md`, `metrics/tasks.jsonl`) or the task branch head's (its task-file copy,
+//! review files, changed paths) — never from an uncommitted working-copy file, and never from
+//! the task branch's copy of a rule file. The `main-history` check reads the queue's own output
+//! log `metrics/queue.jsonl` as it is (not evidence). A failed check is a [`Refusal`]; nothing is
+//! changed or written.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -13,7 +15,6 @@ use std::path::Path;
 use crate::frontmatter::{self, Value};
 use crate::git::{git, git_try};
 use crate::policy::{GENERATED_FILE, LEDGER_FILE, Policy, path_under};
-use crate::util::read_jsonl;
 
 /// A queue precondition that does not hold: printed as `queue: refused: <check>: <reason>`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -183,6 +184,18 @@ pub fn show(root: &Path, rev: &str, path: &str) -> anyhow::Result<Option<String>
         crate::util::capture(crate::git::cmd(root).args(["show", &format!("{rev}:{path}")]))?
             .stdout,
     ))
+}
+
+/// The JSON lines of `path` in main's committed tree (missing: none; malformed: an error).
+fn committed_jsonl(root: &Path, path: &str) -> anyhow::Result<Vec<serde_json::Value>> {
+    let text = show(root, "main", path)?.unwrap_or_default();
+    text.lines()
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty())
+        .map(|(i, l)| {
+            serde_json::from_str(l).map_err(|e| anyhow::anyhow!("main:{path}:{}: {e}", i + 1))
+        })
+        .collect()
 }
 
 /// Whether commit `a` is `b` or an ancestor of it (unknown objects: no).
@@ -606,7 +619,7 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
     if tier != "low" {
         // join
         const J: &str = "join";
-        let recs = or_refuse(J, read_jsonl(&root.join("metrics/tasks.jsonl")))?;
+        let recs = or_refuse(J, committed_jsonl(root, "metrics/tasks.jsonl"))?;
         let mut joined = 0;
         let mut ok = false;
         for r in recs.iter().filter(|r| {
@@ -624,7 +637,9 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
             return refuse(
                 J,
                 if joined == 0 {
-                    format!("metrics/tasks.jsonl has no `joined` join record for {task}")
+                    format!(
+                        "main's committed metrics/tasks.jsonl has no `joined` join record for {task}"
+                    )
                 } else {
                     format!(
                         "no `joined` join record of {task} has a joined_sha that is an ancestor of {head}"
@@ -809,7 +824,11 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
 
     // main-history
     const MH: &str = "main-history";
-    let queue = or_refuse(MH, read_jsonl(&root.join("metrics/queue.jsonl")))?;
+    // The queue's own output log, not evidence (D-026 R6 clarification): read as it is.
+    let queue = or_refuse(
+        MH,
+        crate::util::read_jsonl(&root.join("metrics/queue.jsonl")),
+    )?;
     let last_merged = queue
         .iter()
         .rev()

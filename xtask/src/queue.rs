@@ -250,6 +250,20 @@ impl Drop for Restore<'_> {
     }
 }
 
+/// Whether `p` (in the primary checkout) is an evidence file whose uncommitted change is
+/// refused at `ledger` (D-026 R6, director clarification): everything under `metrics/` except
+/// the queue's own output log `metrics/queue.jsonl`, `docs/decisions.md`, `tasks/`, `reviews/`
+/// and the two policy files.
+pub fn is_evidence_path(p: &str) -> bool {
+    let p = p.trim_matches('"');
+    (crate::policy::path_under(p, "metrics") && p != "metrics/queue.jsonl")
+        || p == "docs/decisions.md"
+        || crate::policy::path_under(p, "tasks")
+        || crate::policy::path_under(p, "reviews")
+        || p == crate::policy::GENERATED_FILE
+        || p == crate::policy::LEDGER_FILE
+}
+
 /// Exclusive queue lock, released on drop.
 pub struct Lock(PathBuf);
 
@@ -521,6 +535,23 @@ pub fn run(
             "{} must have `main` checked out (found `{head}`)",
             root.display()
         );
+    }
+    // D-026 R6: evidence is read from main's committed tree, so uncommitted evidence would be
+    // silently ignored; refuse instead, before any other check.
+    let ledger: Vec<String> = dirty_paths(root, None)?
+        .iter()
+        .map(|l| l[3..].to_owned())
+        .filter(|p| is_evidence_path(p))
+        .collect();
+    if !ledger.is_empty() {
+        return Err(Refusal {
+            check: "ledger",
+            reason: format!(
+                "uncommitted changes to evidence files ({}); commit the ledger on main first (evidence is read from main's committed tree)",
+                ledger.join(", ")
+            ),
+        }
+        .into());
     }
     let dirty = dirty_paths(root, Some("metrics/"))?;
     if !dirty.is_empty() {
@@ -1427,10 +1458,15 @@ mod tests {
                 &serde_json::json!({"kind": "join", "task": "T-001", "result": result, "joined_sha": sha}),
             )
             .unwrap();
+            // D-026 R6: an uncommitted record is refused, not read.
+            assert_refused(root, "ledger", "metrics/tasks.jsonl");
+            g(root, &["add", "metrics/tasks.jsonl"]);
+            g(root, &["commit", "-q", "-m", "join record"]);
         };
         join(&joined, "acceptance_failed");
         assert_refused(root, "join", "no `joined`");
-        join(&base_sha_of(root), "joined"); // an ancestor of the head, but main's: fine too
+        // An ancestor of the head that is main's own commit: fine too.
+        join(&g(root, &["merge-base", "main", "task/T-001"]), "joined");
         let review = |round: u32, verdict: &str, sha: &str| {
             format!(
                 "---\ntask: T-001\nround: {round}\nreviewed_sha: {sha}\nverdict: {verdict}\n---\n"
@@ -1520,10 +1556,6 @@ mod tests {
         );
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(r.result, "merged");
-    }
-
-    fn base_sha_of(root: &Path) -> String {
-        rev(root, "main").unwrap()
     }
 
     #[test]
@@ -1689,14 +1721,34 @@ mod tests {
         assert!(run(root, "T-001", &clock(), &gate(true, true)).is_err());
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "feature", &[("feature.txt", "f")]);
-        // Dirty main (metrics/ is exempt, tracked or not).
+        // D-026 R6: uncommitted evidence (tracked or not) is refused at `ledger`; the queue's
+        // own log metrics/queue.jsonl is exempt.
         testrepo::commit(root, "metrics file", &[("metrics/tasks.jsonl", "")]);
-        testrepo::write(root, "metrics/tasks.jsonl", "{}\n");
-        testrepo::write(root, "metrics/new.jsonl", "{}\n");
-        assert_eq!(
-            dirty_paths(root, Some("metrics/")).unwrap(),
-            Vec::<String>::new()
+        for (p, c) in [
+            ("metrics/tasks.jsonl", "{}\n"),
+            ("metrics/new.jsonl", "{}\n"),
+            ("docs/decisions.md", "x"),
+            ("tasks/T-002-x.md", "x"),
+            ("reviews/T-001-r1.md", "x"),
+            ("xtask/ledger.toml", "x"),
+            ("xtask/generated.toml", "x"),
+        ] {
+            let had = root
+                .join(p)
+                .is_file()
+                .then(|| std::fs::read(root.join(p)).unwrap());
+            testrepo::write(root, p, c);
+            assert_refused(root, "ledger", p);
+            match had {
+                Some(b) => std::fs::write(root.join(p), b).unwrap(),
+                None => std::fs::remove_file(root.join(p)).unwrap(),
+            }
+        }
+        testrepo::write(root, "metrics/queue.jsonl", "");
+        assert!(
+            is_evidence_path("metrics/tasks.jsonl") && !is_evidence_path("metrics/queue.jsonl")
         );
+        assert!(!is_evidence_path("docs/decisions.md.bak") && !is_evidence_path("STATE.md"));
         testrepo::write(root, "scratch.txt", "x");
         let e = run(root, "T-001", &clock(), &gate(true, true)).unwrap_err();
         assert!(e.to_string().contains("dirty"), "{e}");
