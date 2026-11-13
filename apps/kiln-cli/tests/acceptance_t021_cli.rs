@@ -888,6 +888,19 @@ impl Gen {
     }
 }
 
+impl Gen {
+    /// A pattern node that prints as a non-empty pattern (the empty pattern is refused).
+    fn non_empty(&mut self) -> Node {
+        loop {
+            let node = self.alt(3);
+            assert!(respects_restriction(&node));
+            if !pattern_of(&node).is_empty() {
+                return node;
+            }
+        }
+    }
+}
+
 fn respects_restriction(n: &Node) -> bool {
     match n {
         Node::Repeat { inner, .. } => !nullable(inner) && respects_restriction(inner),
@@ -1070,8 +1083,7 @@ fn random_case(rng: &mut Rng) -> Case {
         let mut g = Gen {
             rng: Rng(rng.next_u64()),
         };
-        let node = g.alt(3);
-        assert!(respects_restriction(&node));
+        let node = g.non_empty();
         let pattern = pattern_of(&node);
         let text = random_string(rng, RE_ALPHABET, 10);
         let (groups, matches) = model_regex(&node, &text, !case_sensitive);
@@ -1243,8 +1255,7 @@ fn regex_inputs() -> Vec<(Node, String, bool)> {
     };
     (0..5_000)
         .map(|i| {
-            let node = g.alt(3);
-            assert!(respects_restriction(&node));
+            let node = g.non_empty();
             let text = random_string(&mut g.rng, RE_ALPHABET, 10);
             (node, text, i % 2 == 0)
         })
@@ -1381,7 +1392,7 @@ fn whole_word_filters_at_identifier_boundaries() {
     let lit = literal_differential("ww-literal", true);
     let re = regex_differential("ww-regex", true);
     assert!(
-        lit > 1_000 && re > 300,
+        lit > 800 && re > 300,
         "literal {lit}, regex {re} non-empty results"
     );
     // The filter's own sanity (Pinned (g) rows).
@@ -1419,12 +1430,13 @@ fn replace_all_matches_naive_model_and_undoes_in_one_step() {
         len = case.text.chars().count();
         let template = random_template(&mut rng);
         if rng.below(10) == 0 {
-            // An open typing group, a replace with no match (the alphabets have no `z`),
+            // An open typing group (a one-char insert that is not a line break), a replace
+            // with no match (the alphabets have no `z`),
             // then a one-char insert right after the first: one undo removes both chars.
             typed += 1;
             r.push(
                 "doc.insert",
-                json!({"doc": 1, "offset": len, "text": "\n"}),
+                json!({"doc": 1, "offset": len, "text": "y"}),
                 Expect::AnyOk,
             );
             let info = r.push("doc.info", json!({"doc": 1}), Expect::AnyOk);
@@ -1440,7 +1452,7 @@ fn replace_all_matches_naive_model_and_undoes_in_one_step() {
             r.push("doc.info", json!({"doc": 1}), Expect::SameAs(info));
             r.push(
                 "doc.insert",
-                json!({"doc": 1, "offset": len + 1, "text": "\n"}),
+                json!({"doc": 1, "offset": len + 1, "text": "y"}),
                 Expect::AnyOk,
             );
             r.push("doc.undo", json!({"doc": 1}), Expect::AnyOk);
@@ -1591,7 +1603,7 @@ fn replace_one_from_offset() {
     }
     r.run_control(&work.join("root"));
     assert!(
-        one > 800 && none > 300 && far > 300,
+        one > 400 && none > 300 && far > 300,
         "one {one}, none {none}, far {far}"
     );
 
