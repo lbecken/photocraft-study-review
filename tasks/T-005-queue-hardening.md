@@ -470,6 +470,44 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   --workspace` with registry dependencies (offline) · missing context: none · next: director
   rules on the two QUESTIONs (fixture/test update by the test author), then join with the R1–R9
   tests and re-gate.
+- 2026-11-13T03:10Z · R-041 · in_progress (round 5, after review r2) · did: D-030 R10–R13,
+  one commit per ruling (8304edf R10+F18, plus R11/R13/F16, a0f0dc6 R12; 93 unit tests). R10:
+  any `Cargo.toml` whose `[lints]` or package `build` key the task changes, and any file a
+  `build` key names (head or main), is a gate path. F18 (my choice): a manifest value counts as
+  changed by the task only if the head differs from main's **and** from the merge base's.
+  R11: version changes of main's registry/git packages need tier high plus an approval cell
+  containing `dependency versions` (same cell, case-sensitive); then they merge, the
+  rebased-tree check also lets them through; conflict regeneration of `Cargo.lock` stays
+  strict. R12: after every appended record, `git commit -- metrics/queue.jsonl` on main,
+  subject `queue: record T-NNN <result>` + `Task:`/`Role: director`; on a merge it sits on top of
+  the fast-forwarded head (main = head_sha + record commit), otherwise it is main's only change;
+  the branch is still put back (R5); refusals write nothing; the record commit is a ledger
+  commit so the next `main-history` tolerates it (needs `metrics/` in ledger.toml); a repo
+  with no git identity gets `kiln queue <queue@kiln.invalid>`; `ledger` covers all of
+  `metrics/`; main-history reads committed records only. R13: unit tests kill both mutations
+  (prune+bail removed with future-dated fakes; rebased-tree check disabled). Residual risks
+  listed in docs verbatim. F17 left: the clean-main check refuses untracked drafts anyway.
+  QUESTION (for the test author, R12-inherent): these assert main == merged head, main unmoved
+  after a non-merge, `log -1` is the regeneration commit, or an uncommitted queue.jsonl:
+  acceptance_t005 — gate_runs_mains_xtask_and_records_it, generated_only_conflict_is_regenerated_and_merged,
+  invalid_policy_files_are_refused, main_history_tolerates_only_ledger_commits,
+  mixed_or_failed_regeneration_conflict_is_rejected, refusals_change_nothing,
+  refuses_front_matter_changes_on_task_branch, refuses_high_without_approval_row,
+  refuses_missing_or_failed_join, refuses_missing_rejected_or_stale_review,
+  refuses_unaccepted_states, self_weakened_gate_fails_under_mains_gate; acceptance_t005_r3 —
+  approval_rows_in_code_blocks_or_prose_do_not_count, dependency_and_lock_changes_need_tier_high,
+  gate_paths_need_tier_high_and_are_named, gate_paths_on_a_high_task_need_a_gate_paths_approval,
+  lock_version_change_is_refused_with_or_without_a_conflict,
+  regeneration_that_changes_a_non_generated_path_is_not_merged,
+  review_sha_must_be_a_full_ancestor_and_only_evidence_may_follow,
+  tampered_cached_gate_binary_does_not_decide_the_gate, uncommitted_evidence_does_not_count;
+  guard_t005_r2 — front_matter_may_lag_or_match_mains_state. With a temporary, uncommitted copy
+  whose `main_sha()` skips record commits, all pass except the three that check `log -1`, a
+  commit count, or the old exemption (copy deleted).
+  · gate attempts: 1 (last: red test only — the R12-inherent failures above; fmt, clippy,
+  layers, ui-commands, schema, scorecard green; 3 later steps not run) · not run: real queue on
+  the main repository; registry `cargo update` · missing context: none · next: test author
+  updates the fixture for record commits; join; re-gate.
 <!-- end implementer log -->
 ### test author
 - 2026-11-12 23:30 · R-010 · in_progress · did: 16 acceptance tests in
