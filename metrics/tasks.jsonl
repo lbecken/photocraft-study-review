@@ -152,3 +152,5 @@
 {"kind":"transition","task":"T-013","iteration":1,"at":"2026-11-13T03:57:30Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-013","iteration":1,"at":"2026-11-13T03:57:30Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-013","iteration":1,"at":"2026-11-13T03:57:54Z","from":"ready","to":"in_progress"}
+{"kind":"transition","task":"T-006","iteration":1,"at":"2026-11-13T04:05:03Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-006","iteration":1,"at":"2026-11-13T04:05:03Z","from":"specified","to":"ready"}
