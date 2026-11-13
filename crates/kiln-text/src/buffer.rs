@@ -8,6 +8,7 @@ use ropey::Rope;
 use crate::history::{History, Op};
 use crate::line_ending::{BreakCounts, LineEnding, LineEndings};
 use crate::position::{LineCol, PositionError};
+use crate::selection::{AnchorId, Movement, Selection, is_word_char, map_position};
 
 /// An editable text buffer addressed by **char indices** (Unicode scalar values).
 ///
@@ -16,15 +17,59 @@ use crate::position::{LineCol, PositionError};
 /// and lone `\r`. Undo/redo is operation-based: each step stores the inverse edit, never a
 /// snapshot.
 ///
-/// `PartialEq`/`Eq` compare the text only; the history is ignored. A clone carries an
-/// independent copy of the history.
+/// The buffer also holds one [`Selection`] and any number of anchors. Both are mapped through
+/// every primitive edit (insert, delete, replace, each edit of a batch, and each edit that undo
+/// and redo apply) by the Mapping rule (described on [`Selection`]); setting them is not an edit
+/// and touches neither the history nor an open typing group.
+///
+/// `PartialEq`/`Eq` compare the text only; the history, selection and anchors are ignored. A
+/// clone carries an independent copy of all of them.
 #[derive(Clone, Debug, Default)]
 pub struct Buffer {
     rope: Rope,
     /// Line breaks per kind, kept up to date on every edit.
     breaks: BreakCounts,
     history: History,
+    selection: Selection,
+    /// Live anchors by id, ids in creation order.
+    anchors: Vec<(AnchorId, usize)>,
+    /// The id the next `add_anchor` returns.
+    next_anchor: u64,
 }
+
+/// Why [`Buffer::apply_edits`] rejected a list of edits. Nothing changes when it is returned.
+///
+/// Edits are checked in index order; for each index the edit's own range is checked first and
+/// its order against the previous edit second, and the first failure is reported.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BatchError {
+    /// Edit `index` starts before the end of edit `index - 1`, or at the same start.
+    Unordered {
+        /// Index of the offending edit.
+        index: usize,
+    },
+    /// Edit `index` is out of bounds or inverted.
+    Edit {
+        /// Index of the offending edit.
+        index: usize,
+        /// The error [`Buffer::replace`] reports for that range.
+        error: EditError,
+    },
+}
+
+impl fmt::Display for BatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BatchError::Unordered { index } => write!(
+                f,
+                "edit {index} starts before the end or at the start of the previous edit"
+            ),
+            BatchError::Edit { index, error } => write!(f, "edit {index}: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for BatchError {}
 
 impl PartialEq for Buffer {
     fn eq(&self, other: &Self) -> bool {
@@ -99,7 +144,7 @@ impl Buffer {
         Self {
             rope: Rope::from_str(text),
             breaks: BreakCounts::of(text),
-            history: History::default(),
+            ..Self::default()
         }
     }
 
@@ -295,12 +340,18 @@ impl Buffer {
     ///
     /// An open typing group is itself the most recent step, so `undo` never returns `false`
     /// while a group is open; a successful `undo` ends the group.
+    ///
+    /// The step's inverse edits are applied from the last one (highest position) to the first,
+    /// and the selection and anchors are mapped through each of them.
     pub fn undo(&mut self) -> bool {
-        let Some(op) = self.history.pop_undo() else {
+        let Some(step) = self.history.pop_undo() else {
             return false;
         };
-        self.apply(op.at, op.at + op.inserted_chars, &op.removed);
-        self.history.undone(op);
+        let starts = step.starts_after();
+        for (op, at) in step.ops.iter().zip(starts).rev() {
+            self.apply(at, at + op.inserted_chars, &op.removed);
+        }
+        self.history.undone(step);
         true
     }
 
@@ -310,12 +361,17 @@ impl Buffer {
     /// "Changes nothing" includes the open typing group: after a `redo` that returns `false`,
     /// the next qualifying single-char insert still joins the group. A successful `redo` ends
     /// the group.
+    ///
+    /// The step's edits are re-applied as they were first applied (from the last one to the
+    /// first), and the selection and anchors are mapped through each of them.
     pub fn redo(&mut self) -> bool {
-        let Some(op) = self.history.pop_redo() else {
+        let Some(step) = self.history.pop_redo() else {
             return false;
         };
-        self.apply(op.at, op.at + op.removed_chars, &op.inserted);
-        self.history.redone(op);
+        for op in step.ops.iter().rev() {
+            self.apply(op.at, op.at + op.removed_chars, &op.inserted);
+        }
+        self.history.redone(step);
         true
     }
 
@@ -334,9 +390,243 @@ impl Buffer {
         self.history.break_group();
     }
 
+    /// Number of line breaks of kind `kind` in the text (CRLF matched first).
+    pub fn line_break_count(&self, kind: LineEnding) -> usize {
+        match kind {
+            LineEnding::Lf => self.breaks.lf,
+            LineEnding::Crlf => self.breaks.crlf,
+            LineEnding::Cr => self.breaks.cr,
+        }
+    }
+
+    /// The selection (a new buffer's is `0, 0`).
+    pub fn selection(&self) -> Selection {
+        self.selection
+    }
+
+    /// Set the selection. Not an edit: the history and an open typing group are unchanged.
+    ///
+    /// Fails with OutOfBounds, or InsideLineBreak for a position between the \r and \n of a CRLF.
+    /// `anchor` is checked before `head`; on error nothing changes.
+    pub fn set_selection(&mut self, s: Selection) -> Result<(), PositionError> {
+        self.check_position(s.anchor)?;
+        self.check_position(s.head)?;
+        self.selection = s;
+        Ok(())
+    }
+
+    /// Place an anchor at `pos` (same validity as [`Self::set_selection`]); it follows edits
+    /// by the Mapping rule until removed. Not an edit.
+    pub fn add_anchor(&mut self, pos: usize) -> Result<AnchorId, PositionError> {
+        self.check_position(pos)?;
+        let id = AnchorId::new(self.next_anchor);
+        self.next_anchor += 1;
+        self.anchors.push((id, pos));
+        Ok(id)
+    }
+
+    /// The anchor's current position; `None` once removed.
+    pub fn anchor(&self, id: AnchorId) -> Option<usize> {
+        self.anchors
+            .binary_search_by_key(&id, |&(i, _)| i)
+            .ok()
+            .map(|k| self.anchors[k].1)
+    }
+
+    /// Remove an anchor; `false` if it does not exist (any more). Not an edit.
+    pub fn remove_anchor(&mut self, id: AnchorId) -> bool {
+        match self.anchors.binary_search_by_key(&id, |&(i, _)| i) {
+            Ok(k) => {
+                self.anchors.remove(k);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// The head's new position for one movement step (does not change the buffer).
+    ///
+    /// `from` beyond the text is taken as `len_chars()`, and `from` between the `\r` and `\n`
+    /// of a CRLF as the position before the `\r`.
+    /// - `Char`: one char, two over a CRLF, never past either end.
+    /// - `Word` forward: skip non-word chars, then word chars (word char: `_` or
+    ///   alphanumeric); backward: the mirror image.
+    /// - `Line`: the same column on the next or previous line, clamped to that line's content
+    ///   length; up from the first line gives 0, down from the last gives `len_chars()`.
+    pub fn moved(&self, from: usize, by: Movement, forward: bool) -> usize {
+        let len = self.len_chars();
+        let from = self.snap(from.min(len));
+        match (by, forward) {
+            (Movement::Char, true) => {
+                if from >= len {
+                    len
+                } else if self.rope.char(from) == '\r'
+                    && from + 1 < len
+                    && self.rope.char(from + 1) == '\n'
+                {
+                    from + 2
+                } else {
+                    from + 1
+                }
+            }
+            (Movement::Char, false) => {
+                if from == 0 {
+                    0
+                } else if from >= 2
+                    && self.rope.char(from - 1) == '\n'
+                    && self.rope.char(from - 2) == '\r'
+                {
+                    from - 2
+                } else {
+                    from - 1
+                }
+            }
+            (Movement::Word, true) => {
+                let mut i = from;
+                while i < len && !is_word_char(self.rope.char(i)) {
+                    i += 1;
+                }
+                while i < len && is_word_char(self.rope.char(i)) {
+                    i += 1;
+                }
+                i
+            }
+            (Movement::Word, false) => {
+                let mut i = from;
+                while i > 0 && !is_word_char(self.rope.char(i - 1)) {
+                    i -= 1;
+                }
+                while i > 0 && is_word_char(self.rope.char(i - 1)) {
+                    i -= 1;
+                }
+                i
+            }
+            (Movement::Line, forward) => {
+                let line = self.rope.char_to_line(from);
+                let col = from - self.rope.line_to_char(line);
+                let target = if forward {
+                    if line + 1 >= self.len_lines() {
+                        return len;
+                    }
+                    line + 1
+                } else {
+                    if line == 0 {
+                        return 0;
+                    }
+                    line - 1
+                };
+                self.rope.line_to_char(target) + col.min(self.line_content_len(target))
+            }
+        }
+    }
+
+    /// Apply `edits` (ranges in the current text) as one undo step.
+    ///
+    /// Batch rule: `edits[i].start < edits[i+1].start` and `edits[i].end <= edits[i+1].start`;
+    /// each range in bounds and not inverted. Checked in index order, each edit's own range
+    /// before its order; the first failure is returned and nothing changes. The effect is that
+    /// of applying the edits from the last to the first, mapping the selection and anchors
+    /// through each. No-op edits (empty range, empty text) are skipped. A batch that changes
+    /// anything is one undo step that ends any open typing group and is never joined; a batch
+    /// of only no-ops (or an empty list) changes nothing, the history and typing group
+    /// included.
+    pub fn apply_edits(&mut self, edits: &[(Range<usize>, &str)]) -> Result<(), BatchError> {
+        for (index, (range, _)) in edits.iter().enumerate() {
+            self.check_range(range)
+                .map_err(|error| BatchError::Edit { index, error })?;
+            if let Some((prev, _)) = index.checked_sub(1).map(|i| &edits[i])
+                && (range.start <= prev.start || range.start < prev.end)
+            {
+                return Err(BatchError::Unordered { index });
+            }
+        }
+        let mut ops = Vec::new();
+        for (range, text) in edits.iter().rev() {
+            if range.is_empty() && text.is_empty() {
+                continue;
+            }
+            let removed = self.apply(range.start, range.end, text);
+            ops.push(Op::new(range.start, removed, text));
+        }
+        if !ops.is_empty() {
+            ops.reverse();
+            self.history.record_batch(ops);
+        }
+        Ok(())
+    }
+
+    /// Rewrite every line break as `to`, as one undo step; returns the number of breaks rewritten.
+    ///
+    /// Behaves as one [`Self::apply_edits`] call with one edit per line break whose text
+    /// differs from `to`, in text order. If no break differs, nothing changes (history and an
+    /// open typing group included) and the result is 0.
+    pub fn normalize_line_endings(&mut self, to: LineEnding) -> usize {
+        let target = match to {
+            LineEnding::Lf => "\n",
+            LineEnding::Crlf => "\r\n",
+            LineEnding::Cr => "\r",
+        };
+        let mut edits: Vec<(Range<usize>, &str)> = Vec::new();
+        let mut chars = self.rope.chars().enumerate().peekable();
+        while let Some((i, c)) = chars.next() {
+            let kind = match c {
+                '\r' if chars.peek().map(|&(_, n)| n) == Some('\n') => {
+                    chars.next();
+                    LineEnding::Crlf
+                }
+                '\r' => LineEnding::Cr,
+                '\n' => LineEnding::Lf,
+                _ => continue,
+            };
+            if kind != to {
+                let width = if kind == LineEnding::Crlf { 2 } else { 1 };
+                edits.push((i..i + width, target));
+            }
+        }
+        let changed = edits.len();
+        // The edits are sorted, disjoint and in bounds by construction.
+        if self.apply_edits(&edits).is_err() {
+            unreachable!("line-break edits are always a valid batch");
+        }
+        changed
+    }
+
+    /// Position validity of the selection and anchors: `0..=len_chars()`, not between the
+    /// `\r` and `\n` of a CRLF.
+    fn check_position(&self, pos: usize) -> Result<(), PositionError> {
+        self.char_to_line_col(pos).map(|_| ())
+    }
+
+    /// True iff `pos` lies between the `\r` and `\n` of a CRLF.
+    fn inside_crlf(&self, pos: usize) -> bool {
+        pos > 0
+            && pos < self.len_chars()
+            && self.rope.char(pos - 1) == '\r'
+            && self.rope.char(pos) == '\n'
+    }
+
+    /// `pos`, moved to before the `\r` if it lies inside a CRLF.
+    fn snap(&self, pos: usize) -> usize {
+        if self.inside_crlf(pos) { pos - 1 } else { pos }
+    }
+
+    /// Map the selection and every anchor through the edit that just replaced `[s, e)` by `n`
+    /// chars (Mapping rule, then the CRLF snap in the new text).
+    fn map_positions(&mut self, s: usize, e: usize, n: usize) {
+        let sel = self.selection;
+        self.selection = Selection {
+            anchor: self.snap(map_position(sel.anchor, s, e, n)),
+            head: self.snap(map_position(sel.head, s, e, n)),
+        };
+        for k in 0..self.anchors.len() {
+            let p = self.snap(map_position(self.anchors[k].1, s, e, n));
+            self.anchors[k].1 = p;
+        }
+    }
+
     /// Replace chars `start..end` (already validated) with `text`, keep the break counts up to
-    /// date, and return the removed text. Reads only the edited region and one char on each
-    /// side of it.
+    /// date, map the selection and anchors, and return the removed text. Reads only the edited
+    /// region and one char on each side of it (plus one char per mapped position).
     fn apply(&mut self, start: usize, end: usize, text: &str) -> String {
         // A char's line-break kind depends only on its neighbours (`\r` on the next char,
         // `\n` on the previous one), so a window with one unchanged char of margin on each
@@ -358,6 +648,7 @@ impl Buffer {
         if !text.is_empty() {
             self.rope.insert(start, text);
         }
+        self.map_positions(start, end, text.chars().count());
         removed
     }
 
@@ -1080,6 +1371,79 @@ mod tests {
         assert!(b.can_redo() && !b.can_undo());
         assert!(b.redo());
         assert_eq!(b.text(), "abcd");
+    }
+
+    // ---- T-018 unit tests ------------------------------------------------------------------
+
+    /// w3: selection and anchor calls are not edits, whether they succeed or fail.
+    #[test]
+    fn selection_and_anchor_calls_leave_history_shape() {
+        let mut b = Buffer::from_text("a\r\nb");
+        b.insert(0, "x").unwrap();
+        let before = b.history.shape();
+        assert_eq!(before, (1, 0, true));
+        b.set_selection(Selection { anchor: 1, head: 0 }).unwrap();
+        assert!(b.set_selection(Selection { anchor: 3, head: 0 }).is_err());
+        let id = b.add_anchor(5).unwrap();
+        assert!(b.add_anchor(6).is_err());
+        assert!(b.remove_anchor(id) && !b.remove_anchor(id));
+        assert_eq!(b.history.shape(), before);
+    }
+
+    /// w2: a normalize that changes nothing leaves the history and the open group as they are;
+    /// one that changes something is one closed step.
+    #[test]
+    fn normalize_history_shape() {
+        let mut b = Buffer::from_text("p\nq");
+        b.insert(0, "x").unwrap();
+        assert_eq!(b.normalize_line_endings(LineEnding::Lf), 0);
+        assert_eq!(b.history.shape(), (1, 0, true));
+        assert_eq!(b.normalize_line_endings(LineEnding::Crlf), 1);
+        assert_eq!(b.history.shape(), (2, 0, false));
+        assert!(b.undo());
+        assert_eq!(b.text(), "xp\nq");
+        assert_eq!(b.history.shape(), (1, 1, false));
+    }
+
+    #[test]
+    fn rejected_batch_changes_nothing() {
+        let mut b = Buffer::from_text("abc");
+        b.insert(3, "d").unwrap();
+        let id = b.add_anchor(4).unwrap();
+        let shape = b.history.shape();
+        assert_eq!(
+            b.apply_edits(&[(0..1, "x"), (2..9, "y")]),
+            Err(BatchError::Edit {
+                index: 1,
+                error: EditError::OutOfBounds {
+                    index: 9,
+                    len_chars: 4
+                }
+            })
+        );
+        assert_eq!(b.text(), "abcd");
+        assert_eq!(b.anchor(id), Some(4));
+        assert_eq!(b.history.shape(), shape);
+    }
+
+    #[test]
+    fn step_starts_after_shift_by_earlier_ops() {
+        let mut b = Buffer::from_text("abcdef");
+        b.apply_edits(&[(0..1, "XYZ"), (2..4, ""), (5..5, "!")])
+            .unwrap();
+        assert_eq!(b.text(), "XYZbe!f");
+        assert!(b.undo());
+        assert_eq!(b.text(), "abcdef");
+        assert!(b.redo());
+        assert_eq!(b.text(), "XYZbe!f");
+    }
+
+    #[test]
+    fn moved_clamps_invalid_from() {
+        let b = Buffer::from_text("a\r\nb");
+        assert_eq!(b.moved(9, Movement::Char, true), 4);
+        assert_eq!(b.moved(2, Movement::Char, false), 0);
+        assert_eq!(b.moved(2, Movement::Char, true), 3); // from 1, over the CRLF
     }
 
     #[test]

@@ -31,12 +31,24 @@
 //! otherwise the first of `start`, `end` beyond `len_chars()` is `OutOfBounds`. An edit that
 //! would be a no-op at an index beyond `len_chars()` (for example `insert(9, "")` on a
 //! 3-char buffer) is therefore `Err(OutOfBounds)`, not `Ok`.
+//!
+//! ## Selection, anchors and batches (T-018)
+//! A buffer has one [`Selection`] and any number of anchors ([`Buffer::add_anchor`]); both
+//! follow every primitive edit by the Mapping rule (task T-018: `p < s` stays, `p > e` shifts,
+//! `p == s < e` goes to `s`, otherwise to `s + n`; then out of a CRLF to before its `\r`). Setting the selection or
+//! adding/removing an anchor is not an edit: it changes neither the history nor an open typing
+//! group. [`Buffer::apply_edits`] applies a sorted list of non-overlapping edits as one undo
+//! step that ends any open typing group and is never joined; undoing it applies the inverse
+//! edits from the highest position to the lowest. [`Buffer::normalize_line_endings`] is one
+//! such batch with one edit per line break that differs from the target.
 
 mod buffer;
 mod history;
 mod line_ending;
 mod position;
+mod selection;
 
-pub use buffer::{Buffer, EditError};
+pub use buffer::{BatchError, Buffer, EditError};
 pub use line_ending::{LineEnding, LineEndings};
 pub use position::{LineCol, PositionError};
+pub use selection::{AnchorId, Movement, Selection};
