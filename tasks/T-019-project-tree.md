@@ -18,7 +18,7 @@ touches:
   - docs/protocol/paths.md                              # implementer: the first sentence only (Q-6, D-095)
   - crates/kiln-workspace/tests/acceptance_t019_workspace.rs  # test author: AC-7 (Rust API)
   - apps/kiln-cli/tests/acceptance_t019_cli.rs          # test author: AC-1 … AC-6 through kiln-cli
-  - apps/kiln-cli/tests/guard_t019_cli.rs               # test author: guards, if any (pass on base)
+  - apps/kiln-cli/tests/guard_t019_cli.rs               # test author: the guards under Acceptance criteria (pass on base)
   - docs/commands.json                                  # generated (`cargo xtask schema --write`)
   - Cargo.lock                                          # generated; new packages only, no locked version changes (Pinned (b))
 budget_tokens: 1100000  # high (D-091 change 3)
@@ -136,7 +136,9 @@ followed, opened or read.
    directory reports it as `File`. No other
    source is consulted: no `.git/info/exclude`, no global excludes, no `.ignore`. An ignored
    entry is counted once in `ignored` and not descended. `.gitignore` files themselves are
-   listed unless ignored.
+   listed unless ignored. Whether a `.gitignore` that its own or a shallower file's patterns
+   ignore is still read is open (Q-8); AC-1's generator produces no pattern that matches the
+   name `.gitignore` until it is ruled.
 4. `Symlink` and `Other` entries are listed with their kind and never descended or read.
 5. Depth (Q-1): a `Dir` entry whose path has 128 segments is listed and not descended;
    it is counted in `too_deep`.
@@ -270,6 +272,12 @@ sentences of Pinned (i).
     `list_dir` locates its directory again, T-008 "nothing is cached").
   - S12. "Entries are in preorder, each directory's entries in byte order of their names; no
     case folding." Evidence: AC-2.
+  - S13, `docs/protocol/paths.md` (Q-6; its first sentence only, replaced by): "Every `path` in
+    a request names an entry below the root (`--root`, or the current directory): a file for
+    `doc.open` and for the file a `doc.save` writes, a directory for `project.tree`
+    (`docs/protocol/project.md`)." Evidence: AC-4 (`outside_root` for `project.tree`), AC-5
+    (`not_a_file` for a file). The rest of `paths.md` is unchanged; its rules apply to the
+    `path` of `project.tree` as they stand (S2).
 
 ## Acceptance criteria
 Acceptance-test protocol (high tier, METHODOLOGY §4, §6): an **independent test author** writes
@@ -294,7 +302,8 @@ fixtures are built in fresh temporary directories.
   `kiln-cli exec project.tree '{}' --root <dir>`. Generator limits, outside which git and this
   task differ (S6, Pinned (e)): names from `[a-e0-9._-]` (no `\`, no braces, valid UTF-8), no
   name `.git`, patterns only of the forms of S5 (no braces, tabs, BOM or trailing spaces),
-  depth below 128, no FIFO, and any symlink pointing inside the tree. Oracle: git.
+  no pattern that matches the name `.gitignore` (Q-8), depth below 128, no FIFO, and any
+  symlink pointing inside the tree. Oracle: git.
 - AC-2 (`ws.open-project`, order and counts; `acceptance_t019_cli.rs`, fails on base): the worked example (Pinned (g)) gives exactly the
   stated result. For the random trees of AC-1, the entries are the naive model's preorder with
   byte-sorted siblings, and `ignored` equals the model's count. Oracle: naive model + exact
@@ -428,7 +437,7 @@ Probes (all under a fresh scratch directory, removed afterwards; `kiln-cli` is
 - P14 a directory of 200,000 empty files: `scandir` + byte sort in Python 0.13 s; JSON of
   50,000 entries 2,050,013 bytes, of 200,000 entries 8,200,013 bytes.
 
-### Questions for the director (R-156). The spec above is written for each recommendation, marked PENDING.
+### Questions for the director (R-156; ruled in D-095 below, and the sections above follow the rulings)
 - Q-1 (deep trees; blocker 1). Options: (A) a depth bound: a directory whose path has N
   segments is listed and not descended, counted in a new result field `too_deep`; with N = 128
   the cost model is 0.02 s (P11) and a 4 KB path cannot be reached with short names. (B) No
@@ -490,6 +499,18 @@ Probes (all under a fresh scratch directory, removed afterwards; `kiln-cli` is
 - Q-6: yes. `docs/protocol/paths.md` joins `touches` for its first sentence only; T-036 and T-037 run after this task.
 - Q-7: as recommended. `truncated` is true only if an entry beyond `limit` exists; the counts cover what was walked before the stop.
 - Dependency: the `ignore` crate named in Pinned (b) is accepted for this task by the director as the owner's delegate, subject to the review; the approval row is written at the merge as for every high-tier task.
+- Q-8 (director, D-097): yes, a `.gitignore` is read even when a pattern ignores it. Measured by the director with git 2.43.0 on 2026-11-13: in a repository whose root `.gitignore` holds `.*` and whose `sub/.gitignore` holds `secret.txt`, `git ls-files -o --exclude-standard -z` lists `sub/keep.txt` and `top.txt` and not `sub/secret.txt`, and `git check-ignore -v sub/secret.txt` names `sub/.gitignore:1`. The implementer need not repeat the probe; the test author may now generate patterns that match the name `.gitignore`, and the listing itself omits an ignored `.gitignore` like any other ignored entry.
+
+### Open after R-162 (planner)
+- Q-8 (found re-reading the rules as a builder): is a `.gitignore` read when a pattern ignores
+  it (for example `.gitignore` or `.*` in the root's file, or `*` in a shallower one)? Options:
+  (A) yes, read whenever it is a `File` in a visited directory, ignored or not (believed to be
+  git's behaviour; not probed in this run, which ran no git); it is then not listed but its
+  patterns apply; (B) no: an ignored `.gitignore` contributes nothing. Recommended: (A), after
+  the implementer confirms git's behaviour by a probe (`git ls-files -z` on a fixture whose
+  root `.gitignore` holds `.gitignore` and `*.log`, and a subdirectory `.gitignore` holding
+  `!keep.log`) and records it; if git differs, follow git. Until ruled, AC-1's generator
+  avoids patterns that match the name `.gitignore` (rule 3).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -510,6 +531,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 - 2026-11-13 · R-060 · draft · did: T-008 no longer precedes T-015 (contracts first), so it is now an explicit dependency: shared `vfs.rs`/`disk.rs` and `OutsideRoot`. The `ignore` crate stays in the crate manifest (R-060 answer 1). · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-066 · draft · did: needs T-032 transitively (through T-008); the `not_a_file` wording for `list_dir` of a file is in T-008 (finding 23). It can now export its types without touching `kiln-workspace/src/lib.rs` (T-015 glob re-exports, finding 6). · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-156 · draft · did: spec check: read the spec against main 891ae13 (T-008, T-010, T-011, T-015, T-017, T-018, T-032, T-035 merged); 8 blockers (listed under "Spec check R-156"): 4 fixed in place (3–6), 4 turned into questions: Q-1 (deep trees: T-008's per-call walk costs ~d²/2 lstats, 4,096-byte paths fail), Q-2 (non-regular `.gitignore` contradicts AC-4), Q-3 (`path` semantics), Q-5 (matcher wider than "gitignore(5)"); 7 questions with recommendations, spec written for them and marked PENDING. Applied D-091 changes 3 (ceiling), 5 (Pinned (i) S1–S12 with evidence), 6 (no pins of commands/kinds/messages/unreadable root), 18 (not applicable: no CLI change, stated). Tier stays high (dependency; confinement boundary). Not split (one item; walk needs list_dir). Probes P0–P14 recorded above; no cargo build or test run, so the walk's real cost, the Kiln side of S6 and the lock resolution are unmeasured; `ignore` 0.4.34's release date not checked (offline). spec check: booked to iter-2. · gate attempts: 0 · not run: cargo build/test, cargo update · missing context: none · next: director rules Q-1…Q-7, then dispatch.
+- 2026-11-13 · R-162 · draft · did: finalised on D-095 (Q-1…Q-7 as recommended): PENDING marks removed and the rulings written into the rules, Interface, Pinned (i) and ACs; Q-6's `paths.md` sentence written as S13. Q-1 addition: no document sentence states a walk time; S7 lost its response-size figure (P14 is a Python model), S8 now asks the implementer to measure AC-6's two chains on the built `kiln-cli` and record them; AC-4's 5 s and AC-6's 30 s are stated as hang detectors, not speed claims (AC-6's former "within 10 s" removed). Q-5 addition: each S6 difference enters the document only when a test in `tests/project.rs` or a recorded `kiln-cli` + `git ls-files -z` probe shows it; S9 and S10 likewise need the implementer's recorded probe. Acceptance-test protocol stated for high tier (independent test author writes `acceptance_t019_cli.rs`, `acceptance_t019_workspace.rs`, `guard_t019_cli.rs`; implementer adds none); each AC names its file and fail-on-base (AC-7 compile-only, made up by the mutation spot-check); guards defined (pass on base); scorecard names for AC-1…AC-6. Re-read top to bottom: found one open point, Q-8 (is an ignored `.gitignore` still read), held out of AC-1's generator until ruled. spec check: booked to iter-2. · gate attempts: 0 · not run: git, cargo (as instructed) · missing context: none · next: director rules Q-8 (or accepts the recommendation), then dispatch.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
