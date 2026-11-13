@@ -198,3 +198,4 @@
 {"kind":"run","task":"T-015","iteration":1,"run":"R-088","role":"reviewer","tier":"high","started_at":"2026-11-13T07:58:40Z","ended_at":"2026-11-13T08:05:09Z","wall_s":389,"tokens":24016,"tool_calls":17,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"round 2 (delta, final): approve; 4 r1 findings resolved; delta mutants 6 introduced / 6 killed / 1 by acceptance+guards / 0 survived; revert-check run (mixed)"}
 {"kind":"transition","task":"T-015","iteration":1,"at":"2026-11-13T08:05:34Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-015","iteration":1,"at":"2026-11-13T08:05:34Z","from":"reviewed","to":"queued"}
+{"kind":"transition","task":"T-015","iteration":1,"at":"2026-11-13T08:07:50Z","from":"queued","to":"merged"}
