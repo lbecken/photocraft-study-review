@@ -2,7 +2,7 @@
 id: T-040
 title: "Publish the iteration-1 evaluation"
 tier: low
-state: ready
+state: in_progress
 owner_role: director
 scorecard_items: []
 depends_on: []
