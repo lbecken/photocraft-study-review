@@ -2,9 +2,15 @@
 //! directories (under `CARGO_TARGET_TMPDIR`).
 
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
+
+/// Every spawned `kiln-cli` is killed and the test fails after this long (D-028 (8)).
+const TIMEOUT: Duration = Duration::from_secs(60);
 
 const SESSION: &str = r#"{"id":1,"command":"doc.open","params":{"path":"a.txt"}}
 {"id":2,"command":"doc.insert","params":{"doc":1,"offset":5,"text":" world"}}
@@ -33,12 +39,66 @@ fn root(name: &str) -> PathBuf {
     dir
 }
 
+/// Run `cmd` to completion with stdout/stderr captured, killing it after [`TIMEOUT`].
+#[cfg(test)]
+fn output_with_timeout(cmd: &mut Command) -> Output {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let drain = |r: Option<Box<dyn Read + Send>>| {
+        thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut r) = r {
+                let _ = r.read_to_end(&mut buf);
+            }
+            buf
+        })
+    };
+    let out = drain(
+        child
+            .stdout
+            .take()
+            .map(|o| Box::new(o) as Box<dyn Read + Send>),
+    );
+    let err = drain(
+        child
+            .stderr
+            .take()
+            .map(|e| Box::new(e) as Box<dyn Read + Send>),
+    );
+    let status = wait_or_kill(&mut child);
+    Output {
+        status,
+        stdout: out.join().unwrap(),
+        stderr: err.join().unwrap(),
+    }
+}
+
+#[cfg(test)]
+fn wait_or_kill(child: &mut Child) -> std::process::ExitStatus {
+    let deadline = Instant::now() + TIMEOUT;
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("kiln-cli did not finish within {TIMEOUT:?}");
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[cfg(test)]
 fn kiln_cli(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
-        .args(args)
-        .output()
-        .unwrap()
+    output_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+            .args(args)
+            .stdout(Stdio::piped()),
+    )
 }
 
 #[cfg(test)]
@@ -203,11 +263,12 @@ fn usage_errors_exit_2_with_empty_stdout() {
 fn run_defaults_to_the_current_directory() {
     let root = root("cwd");
     let script = write_script(root.parent().unwrap(), SESSION);
-    let out = Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
-        .args(["run", script.to_str().unwrap()])
-        .current_dir(&root)
-        .output()
-        .unwrap();
+    let out = output_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+            .args(["run", script.to_str().unwrap()])
+            .current_dir(&root)
+            .stdout(Stdio::piped()),
+    );
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     assert_eq!(fs::read(root.join("a.txt")).unwrap(), b"hello world\n");
 }
@@ -237,7 +298,23 @@ fn control_answers_each_request_before_the_next() {
         .spawn()
         .unwrap();
     let mut stdin = child.stdin.take().unwrap();
+    // Lines arrive through a channel so that a missing response fails after TIMEOUT instead
+    // of blocking the suite.
+    let (tx, rx) = mpsc::channel::<String>();
     let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    thread::spawn(move || {
+        loop {
+            let mut line = String::new();
+            match stdout.read_line(&mut line) {
+                Ok(0) | Err(_) => return,
+                Ok(_) => {
+                    if tx.send(line).is_err() {
+                        return;
+                    }
+                }
+            }
+        }
+    });
     let requests = [
         r#"{"id":1,"command":"doc.open","params":{"path":"a.txt"}}"#,
         "garbage",
@@ -249,13 +326,114 @@ fn control_answers_each_request_before_the_next() {
         stdin.write_all(r.as_bytes()).unwrap();
         stdin.write_all(b"\n").unwrap();
         stdin.flush().unwrap();
-        let mut line = String::new();
-        stdout.read_line(&mut line).unwrap();
+        let Ok(line) = rx.recv_timeout(TIMEOUT) else {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("no response to {r} within {TIMEOUT:?}");
+        };
         let v: serde_json::Value = serde_json::from_str(&line).unwrap();
         oks.push(v["ok"].as_bool().unwrap());
     }
     drop(stdin);
     assert_eq!(oks, [true, false, true, true]);
-    assert!(child.wait().unwrap().success());
+    assert!(wait_or_kill(&mut child).success());
     assert_eq!(fs::read(root.join("a.txt")).unwrap(), b"!hello\n");
+}
+
+#[test]
+fn help_prints_usage_and_exits_0() {
+    for args in [
+        &["--help"][..],
+        &["-h"],
+        &["run", "--help"],
+        &["run", "s.jsonl", "-h"],
+        &["exec", "--help"],
+        &["control", "--help"],
+        &["commands", "-h"],
+    ] {
+        let out = kiln_cli(args);
+        assert_eq!(out.status.code(), Some(0), "{args:?}: {out:?}");
+        let text = String::from_utf8(out.stdout).unwrap();
+        assert!(text.starts_with("usage:"), "{args:?}: {text}");
+        assert!(text.contains("never saved"), "{args:?}: exec is explained");
+    }
+    // `-h` as the value of --root is a root, not a help request.
+    assert_eq!(
+        kiln_cli(&["run", "s.jsonl", "--root", "-h"]).status.code(),
+        Some(2)
+    );
+}
+
+#[test]
+fn bad_root_error_names_the_path() {
+    let base = fresh("bad-root");
+    let missing = base.join("no-such-root");
+    let file = base.join("file");
+    fs::write(&file, b"x").unwrap();
+    let script = write_script(&base, SESSION);
+    for root in [&missing, &file] {
+        let r = root.to_str().unwrap();
+        for args in [
+            vec!["run", script.to_str().unwrap(), "--root", r],
+            vec!["control", "--root", r],
+            vec!["exec", "doc.list", "{}", "--root", r],
+        ] {
+            let out = kiln_cli(&args);
+            assert_eq!(out.status.code(), Some(2), "{args:?}");
+            assert!(out.stdout.is_empty());
+            let err = String::from_utf8(out.stderr).unwrap();
+            assert!(err.contains(r), "{args:?}: {err}");
+        }
+    }
+}
+
+#[test]
+fn run_exits_1_when_stdout_cannot_be_written() {
+    // Linux only, like the rest of the disk layer (D-014: Unix).
+    let full = Path::new("/dev/full");
+    let root = root("full");
+    let script = write_script(root.parent().unwrap(), SESSION);
+    let sink = fs::OpenOptions::new().write(true).open(full).unwrap();
+    let out = output_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+            .args([
+                "run",
+                script.to_str().unwrap(),
+                "--root",
+                root.to_str().unwrap(),
+            ])
+            .stdout(sink),
+    );
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("stdout"));
+}
+
+#[test]
+fn exec_edits_are_not_saved_across_calls() {
+    let root = root("exec-session");
+    let r = root.to_str().unwrap();
+    let out = kiln_cli(&["exec", "doc.open", r#"{"path":"a.txt"}"#, "--root", r]);
+    assert_eq!(out.status.code(), Some(0));
+    let out = kiln_cli(&["exec", "doc.save", r#"{"doc":1}"#, "--root", r]);
+    assert_eq!(out.status.code(), Some(2));
+    let err: serde_json::Value = serde_json::from_slice(&out.stderr).unwrap();
+    assert_eq!(err["code"], "rejected");
+    assert_eq!(fs::read(root.join("a.txt")).unwrap(), b"hello\n");
+}
+
+#[test]
+fn error_responses_carry_kind_through_run() {
+    let root = root("kinds");
+    let script = write_script(
+        root.parent().unwrap(),
+        "nope\n{\"command\":\"doc.open\",\"params\":{\"path\":\"missing.txt\"}}\n",
+    );
+    let out = run(&script, &root, &[]);
+    assert_eq!(out.status.code(), Some(3));
+    let kinds: Vec<String> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap()["error"]["kind"].to_string())
+        .collect();
+    assert_eq!(kinds, ["\"syntax\"", "\"not_found\""]);
 }

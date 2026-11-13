@@ -11,16 +11,18 @@
 //! kiln-cli exec <name> <json> [--text <initial buffer text>] [--root <dir> | --memory]
 //! kiln-cli run <script> [--root <dir> | --memory] [--log <file>]
 //! kiln-cli control [--root <dir>]
+//! kiln-cli --help | -h | <subcommand> --help
 //! ```
 //!
 //! `--root` (default: the current directory) is the root of the disk file system the commands
 //! act on; paths inside commands are relative to it. `--memory` selects an empty in-memory
 //! file system instead (for tests). `<script>` and `--log <file>` are host paths, resolved
-//! against the current directory, not against `--root`.
+//! against the current directory, not against `--root`. `exec` is one command in a fresh
+//! session: it can read files, but an edit made with it is never saved (use `run`/`control`).
 //!
-//! Exit codes: `commands`/`exec`: 0 success, 1 audit problems or internal error, 2 usage or
+//! Exit codes: `--help`: 0. `commands`/`exec`: 0 success, 1 audit problems or internal error, 2 usage or
 //! command error. `run`: 0 every response ok, 3 at least one failed request, 2 usage error,
-//! unreadable script, bad root or unwritable log (nothing on stdout). `control`: 0 at end of
+//! unreadable script, bad root or unwritable log (nothing on stdout), 1 if writing stdout fails. `control`: 0 at end of
 //! input, 2 usage error or bad root, 1 if reading stdin or writing stdout fails.
 
 use std::io::{BufRead, Write};
@@ -29,14 +31,27 @@ use std::process::ExitCode;
 
 use kiln_commands::{Context, Registry, standard_registry};
 use kiln_control::Host;
-use kiln_workspace::DiskFs;
+use kiln_workspace::{DiskFs, VfsError};
 use serde_json::{Value, json};
 
 const USAGE: &str = "usage:
   kiln-cli commands [--schema | --audit]
   kiln-cli exec <name> <json-params> [--text <initial-text>] [--root <dir> | --memory]
   kiln-cli run <script> [--root <dir> | --memory] [--log <file>]
-  kiln-cli control [--root <dir>]";
+  kiln-cli control [--root <dir>]
+  kiln-cli --help | -h | <subcommand> --help
+
+  run      run a script of JSON-lines requests, one response line per request
+  control  read JSON-lines requests from stdin, answer each on stdout
+  exec     run ONE command in a fresh session: it can read files, but an edit made
+           with it is never saved; to edit and save files use `run` or `control`
+  commands list the commands (--schema: params/result schemas and examples)
+
+  --root <dir>  root of the files the commands act on (default: current directory)
+  --memory      an empty in-memory file system instead (for tests)
+  --log <file>  after the script, write the successful requests as a replayable script
+
+The protocol is described in docs/control-protocol.md.";
 
 /// Result of one CLI invocation, separated from process I/O so it can be unit-tested.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -144,6 +159,48 @@ fn bad_root(e: impl std::fmt::Display) -> Outcome {
     Outcome::err(2, format!("kiln-cli: bad --root: {e}\n"))
 }
 
+/// "root `<root>`: <reason>", as `kiln_control::Host::on_disk` reports it.
+fn root_error(root: &std::path::Path, e: &VfsError) -> String {
+    let reason = match e {
+        VfsError::NotFound { .. } => "not found".to_owned(),
+        VfsError::Io {
+            kind: std::io::ErrorKind::NotADirectory,
+            ..
+        } => "not a directory".to_owned(),
+        other => {
+            let text = other.to_string();
+            text.strip_prefix("(root): ").unwrap_or(&text).to_owned()
+        }
+    };
+    format!("root `{}`: {reason}", root.display())
+}
+
+/// Help is asked for: `--help`/`-h` as the first argument, or in an option position of a
+/// subcommand (not as the value of `--root`, `--log` or `--text`).
+fn wants_help(args: &[String]) -> bool {
+    let is_help = |a: &str| a == "--help" || a == "-h";
+    let Some(first) = args.first() else {
+        return false;
+    };
+    if is_help(first) {
+        return true;
+    }
+    if !["commands", "exec", "run", "control"].contains(&first.as_str()) {
+        return false;
+    }
+    let mut takes_value = false;
+    for a in &args[1..] {
+        if takes_value {
+            takes_value = false;
+        } else if is_help(a) {
+            return true;
+        } else {
+            takes_value = matches!(a.as_str(), "--root" | "--log" | "--text");
+        }
+    }
+    false
+}
+
 fn exec(registry: &Registry, name: &str, params: &str, opts: &Opts) -> Outcome {
     let params: Value = match serde_json::from_str(params) {
         Ok(v) => v,
@@ -163,7 +220,7 @@ fn exec(registry: &Registry, name: &str, params: &str, opts: &Opts) -> Outcome {
         Fs::Disk(root) => {
             let fs = match DiskFs::new(&root) {
                 Ok(fs) => fs,
-                Err(e) => return bad_root(e),
+                Err(e) => return bad_root(root_error(&root, &e)),
             };
             let mut ctx = Context::with_vfs(Box::new(fs));
             // The initial scratch text enters through the registry like any other change.
@@ -269,6 +326,9 @@ fn control(
 
 /// The subcommands that only produce an [`Outcome`] (everything but `control`).
 fn run(args: &[String]) -> Outcome {
+    if wants_help(args) {
+        return Outcome::ok(format!("{USAGE}\n"));
+    }
     let registry = match standard_registry() {
         Ok(r) => r,
         Err(e) => return Outcome::err(1, format!("registry failed to build: {e}\n")),
@@ -315,7 +375,7 @@ fn run(args: &[String]) -> Outcome {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().map(String::as_str) == Some("control") {
+    if args.first().map(String::as_str) == Some("control") && !wants_help(&args) {
         let rest: Vec<&str> = args[1..].iter().map(String::as_str).collect();
         let opts = match parse_opts(&rest, &["--root"]) {
             Some((pos, opts)) if pos.is_empty() => opts,
@@ -339,10 +399,20 @@ fn main() -> ExitCode {
 }
 
 fn finish(outcome: Outcome) -> ExitCode {
-    // Write failures (closed pipe) cannot be reported anywhere useful; the exit code stands.
-    let _ = std::io::stdout().write_all(outcome.stdout.as_bytes());
+    let mut stdout = std::io::stdout().lock();
+    let written = stdout
+        .write_all(outcome.stdout.as_bytes())
+        .and_then(|()| stdout.flush());
     let _ = std::io::stderr().write_all(outcome.stderr.as_bytes());
-    ExitCode::from(outcome.code)
+    match written {
+        Ok(()) => ExitCode::from(outcome.code),
+        // D-028 (3): output that did not reach stdout is a failure (exit 1), whatever the
+        // responses were.
+        Err(e) => {
+            let _ = writeln!(std::io::stderr(), "kiln-cli: cannot write to stdout: {e}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -461,6 +531,46 @@ mod tests {
         assert_eq!((out.code, out.stdout.as_str()), (2, ""));
         assert_eq!(call(&["run"]).code, 2);
         assert_eq!(call(&["run", "a", "b"]).code, 2);
+    }
+
+    #[test]
+    fn help_is_recognised_only_in_option_positions() {
+        let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(wants_help(&v(&["--help"])));
+        assert!(wants_help(&v(&["-h", "run"])));
+        assert!(wants_help(&v(&["run", "s", "--help"])));
+        assert!(wants_help(&v(&["exec", "-h"])));
+        assert!(!wants_help(&v(&["run", "s", "--root", "-h"])));
+        assert!(!wants_help(&v(&[
+            "exec",
+            "buffer.text",
+            "{}",
+            "--text",
+            "--help"
+        ])));
+        assert!(!wants_help(&v(&["frobnicate", "--help"])));
+        assert!(!wants_help(&v(&[])));
+        let out = call(&["exec", "--help"]);
+        assert_eq!((out.code, out.stdout.starts_with("usage:")), (0, true));
+        assert!(out.stdout.contains("never saved"));
+        let out = call(&["exec", "buffer.text", "{}", "--text", "--help", "--memory"]);
+        assert_eq!(out.code, 0);
+        assert!(out.stdout.contains("--help"), "{out:?}");
+    }
+
+    #[test]
+    fn bad_root_message_names_the_root() {
+        let out = call(&["exec", "doc.list", "{}", "--root", "/no/such/kiln/dir"]);
+        assert_eq!(out.code, 2);
+        assert_eq!(
+            out.stderr,
+            "kiln-cli: bad --root: root `/no/such/kiln/dir`: not found\n"
+        );
+        let out = call(&["run", "s.jsonl", "--root", "/no/such/kiln/dir"]);
+        assert_eq!(
+            out.stderr,
+            "kiln-cli: bad --root: root `/no/such/kiln/dir`: not found\n"
+        );
     }
 
     #[test]
