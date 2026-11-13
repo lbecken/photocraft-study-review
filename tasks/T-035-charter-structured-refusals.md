@@ -94,6 +94,14 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   ADR-0004's words with no reference?
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T17:29Z · R-148 · ready · did: checked CHARTER §3 item 2 on base
+  73d35f55018275c0b937dc1f1e0bd35491d4b3cc (merge base; main has since moved to
+  af61bda078ed4b9df565ca4ddb3974b7188bd6a8, ledger-only commits) equals the "Today it reads" block; appended the
+  ADR-0004 sentence so item 2 equals the "after" block (3 lines become 5, 3-space indent);
+  `git diff main -- docs/CHARTER.md` (and main...HEAD) shows only item 2 changed; `git status` shows no other path
+  · gate attempts: 1 (last: green; fmt, clippy, layers, ui-commands, hygiene, schema, scorecard,
+  test 638 passed, no-skip; fuzz, budgets EMPTY) · not run: nothing beyond the gate (no
+  behaviour to drive) · missing context: none · next: director review (AC-1 on the diff).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

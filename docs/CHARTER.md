@@ -62,7 +62,9 @@ Decisions:
 1. **Headless core.** L0–L4 have no UI or GPU dependency. Everything the UI can do, the CLI can do.
 2. **One command registry.** Commands declare typed params/results (serde + JSON Schema); the
    registry rejects invalid params. UI, CLI, control protocol and tests all go through it.
-   (PhotoCraft planned a validated schema and never built it.)
+   (PhotoCraft planned a validated schema and never built it.) Refusals carry a structured
+   reason; the protocol's error kinds are derived from it and listed in the command
+   description generated from code (ADR-0004).
 3. **Operation-based undo**, not whole-document snapshots.
 4. **Determinism.** No wall-clock, randomness or thread-timing dependence in L0–L4 behaviour;
    external tools are behind a trait with a recorded-output fake.
