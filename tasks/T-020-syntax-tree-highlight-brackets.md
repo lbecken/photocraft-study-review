@@ -2,10 +2,10 @@
 id: T-020
 title: "Report a document's syntax tree with incremental reparse, highlight spans that partition the text, and bracket matching that ignores strings and comments"
 tier: medium            # ADR-0002 default: in-memory behaviour, new command group; tree-sitter and the oracle dev-deps were added by T-016
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: [syntax.parse, syntax.incremental, syntax.highlight, syntax.brackets]
-depends_on: [T-015, T-016, T-032]   # all merged (R-157 spec check against main 891ae13)
+depends_on: [T-015, T-016, T-032]   # all merged (spec check R-157 on main 891ae13; re-read R-165 on c538ef8)
 touches:
   - crates/kiln-syntax/src/highlight.rs       # slot from T-016
   - crates/kiln-syntax/src/brackets.rs        # slot from T-016
@@ -13,8 +13,9 @@ touches:
   - crates/kiln-syntax/src/lib.rs             # R-157: the crate doc's "Status" paragraph only (it says highlight and brackets are empty)
   - crates/kiln-syntax/tests/highlight.rs     # implementer's own integration tests
   - crates/kiln-commands/src/syntax.rs        # syntax.* + SyntaxState (slot from T-015)
-  - crates/kiln-commands/src/reason.rs        # R-109: one row, RejectReason::TooLarge (D-056 size limit); R-157: one unit assertion (Q-6, PENDING)
-  - apps/kiln-cli/tests/acceptance_t020_cli.rs  # test author (unique stem across crates, D-084 x6)
+  - crates/kiln-commands/src/reason.rs        # R-109: one row, RejectReason::TooLarge (D-056 size limit); R-157/D-097 Q-6: one unit assertion loosened to presence
+  - apps/kiln-cli/tests/acceptance_t020_cli.rs  # test author only (unique stem across crates, D-084 x6); every AC; fails on base
+  # apps/kiln-cli/tests/guard_t020_cli.rs: test author only, if it adds a guard (none required); an allowed path
   - docs/protocol/syntax.md                   # new
   # docs/commands.json changes: generated (`cargo xtask schema --write`)
 budget_tokens: 700000   # medium (v1.2, D-091 change 3)
@@ -33,8 +34,8 @@ the one at an offset, with brackets inside strings, chars and comments ignored. 
 per document between commands and updated incrementally after edits. The result is always the
 tree a fresh parse would give. All three commands are read-only. A document longer than
 1,048,576 chars is refused by every `syntax.*` command with the new kind `too_large`, so no
-command parses an unbounded text (D-056). The limit bounds the length of what is parsed, not
-the time a parse takes (Pinned (e), Q-3 PENDING).
+command parses an unbounded text (D-056). The limit bounds memory, not time: no time bound
+exists for any `syntax.*` command, and the documents say so (Pinned (e), (i); D-097 Q-3).
 
 No gate path and no dependency change: this task edits no `Cargo.toml` and leaves `Cargo.lock`
 as it is (the crates it uses, `tree-sitter`, `tree-sitter-rust` and the dev-dependencies `syn`
@@ -77,26 +78,29 @@ state: document text, dirty flag, undo history (including an open typing group),
 command log and selections. A command's result never depends on the cache except for `mode`,
 which says how the tree was obtained: `full` if no tree was cached for the document,
 `unchanged` if the text equals the cached text, `incremental`/`full` per `SyntaxTree::update`
-otherwise. (Q-2 PENDING: `mode` is a result that depends on the cache, which T-007 (b)'s
-definition of observable state would count; recommended: keep `mode` and name it as the one
-exception.)
+otherwise. `mode` is the one place where a result shows the cache (D-097 Q-2): without it
+`syntax.incremental` could not be observed through a public interface. The sentence naming
+this exception goes into T-007's spec at T-007's own check; this task does not edit T-007.
 
 `SyntaxTree::parse` and `SyntaxTree::update` return `Result<_, ParseError>` (T-016); the only
 error is `ParseError::NoTree`, which cannot occur with the pinned versions (T-016 Interface).
 If it does, the command fails with `internal`/`other` (`CommandError::Internal { reason:
-InternalReason::Other, message }`, message `tree-sitter returned no tree`), and the cache entry
+InternalReason::Other, message }`, message `tree-sitter returned no tree`, not asserted by any
+test), and the cache entry
 for that document is left as it was (D-044). No `unwrap`/`expect` on these results.
 
 ### Size limit (D-056)
 The limit is 1,048,576 chars (2^20; chars as everywhere in the protocol, so
 `doc.info`'s `len_chars` is the measure). If the document's text has more chars, each of the
 three commands refuses before any parse or update:
-- `rejected`, kind `too_large`, message exactly
-  `document <doc> has <len_chars> chars; syntax commands accept at most 1048576`;
-- the cache entry for that document is left as it was, like every other refusal (Q-1 PENDING;
-  recommended over R-109's "dropped", which contradicts the `Command::run` contract "On error
-  the context must be unchanged", `registry.rs`:328). The cached text is at most the limit, so
-  keeping it holds no more than one call at the limit already did.
+- `rejected`, kind `too_large`, with the message
+  `document <doc> has <len_chars> chars; syntax commands accept at most 1048576` (the wording
+  the implementer uses; messages are not stable, and no test asserts this text: tests assert
+  `code` and `kind` only);
+- the cache entry for that document is left as it was, like every other refusal (D-097 Q-1;
+  `Command::run`'s contract "On error the context must be unchanged", `registry.rs`:328, and
+  `docs/control-protocol.md`). The cached text is at most the limit, so keeping it holds no more
+  than one call at the limit already did.
 
 A document of exactly 1,048,576 chars is accepted. The check is made on every call against
 the current text: a document that shrinks back to the limit is accepted again. New reason row,
@@ -108,15 +112,16 @@ with a `///` doc line:
 test `outside_root_is_appended_and_not_a_file_is_widened` in `reason.rs` asserts
 `RejectReason::ALL.last() == Some(&RejectReason::OutsideRoot)`, which an appended row makes
 false: its first assertion becomes `assert!(RejectReason::ALL.contains(&RejectReason::OutsideRoot))`
-and every other assertion of that test stays as it is (Q-6 PENDING; the implementer logs the
+and every other assertion of that test stays as it is (D-097 Q-6; the implementer logs the
 edit under golden rule 4, as in D-061).
 
 Why a refusal and not a result without a tree: a refusal keeps the three result schemas as
 they are and gives a script one error path keyed by kind, while a "no tree" flag would add a
 nullable variant to every result and still leave highlight and brackets without an answer.
-Why 2^20 chars: the T-016 review measured 247 MB peak for 1 MB of `(` (`reviews/T-016-r1.md`
+Why 2^20 chars (evidence for this spec only; none of these figures goes into a document,
+D-097 Q-3): the T-016 review measured 247 MB peak for 1 MB of `(` (`reviews/T-016-r1.md`
 p6). That was not the worst case: R-157 parsed texts of exactly 1,048,576 chars with the merged
-`tree.rs` in a debug build and measured peak RSS (VmHWM) up to 415 MB after parsing `;`
+`tree.rs` in a debug spike outside the repository and measured peak RSS (VmHWM) up to 415 MB after parsing `;`
 repeated, 449 MB after also computing `errors`, `sexp` (34 MB) and `node_count`, and 631 MB
 while updating `a;` repeated after a one-char insert (old and new tree held at once). A
 cached tree at the limit therefore costs up to about 0.4 GB and a call after an edit up to about
@@ -160,9 +165,10 @@ not inside a string, char or comment), and it has a partner among the anonymous 
 that are direct children of the same parent node, then `bracket` is `{open, close}`: the
 offsets of the opening and closing char. Partners: the parent's direct anonymous leaves of that
 bracket pair are taken left to right, each closing leaf pairs with the nearest unpaired opening
-leaf before it (a stack), and a leaf left unpaired has no partner (Q-4 PENDING; R-109's "the
-parent node has the matching counterpart leaf" is ambiguous when an `ERROR` parent holds
-several, and in `) (` it would pair a `(` with a `)` before it). Otherwise `bracket` is `null`;
+leaf before it (a stack), and a leaf left unpaired has no partner (D-097 Q-4; it replaces
+R-109's "the parent node has the matching counterpart leaf", which was ambiguous when an
+`ERROR` parent holds several). On every parent the pinned grammar builds for valid Rust there
+is at most one pair of each kind, so the stack only matters under `ERROR` nodes. Otherwise `bracket` is `null`;
 for example an unmatched bracket while typing, any other char, or offset `len_chars`. `<`/`>`
 are not brackets. Errors: `offset > len_chars` → `out_of_range`.
 
@@ -174,9 +180,10 @@ Pinned (i).
 - (a) Errors: schema → `no_such_document` → `too_large` (whole document, Size limit) →
   `out_of_range` (`offset`, `start` or `end` beyond `len_chars`) → `inverted_range`
   (`start > end`, both within the text); `internal`/`other` for `ParseError::NoTree` (D-044).
-  Exact message pinned only for `too_large`; the messages of the other refusals are not pinned
-  (`docs/control-protocol.md`: messages are not stable). A refusal leaves the cache as it was
-  (Q-1 PENDING).
+  No message is pinned for tests: tests assert `code` and `kind` (and, for `too_large`, nothing
+  more); `docs/control-protocol.md` says messages are not stable. The `too_large` wording in
+  Size limit is the implementer's text, not a test oracle. A refusal leaves the cache as it was
+  (D-097 Q-1).
 - (b) Files: none. Corpus files are read by tests only, by path from the workspace root:
   `crates/kiln-syntax/tests/corpus/` (T-016 Pinned (b)). They are stored as `<name>.rs.txt`
   and are selected by their `set` (`valid` | `gap` | `invalid`) in `MANIFEST.toml`, not by a
@@ -190,29 +197,35 @@ Pinned (i).
     50 MB of real Rust peaked at 3.1 GB), so documents above 1,048,576 chars are refused with
     `too_large` before any parse (Size limit; figures at the limit there). The earlier "a 10 MB
     document must answer `syntax.tree`" is withdrawn.
-  - Time: the limit does not bound time. R-157 measured parse time with the merged `tree.rs`
-    (debug build): 1,048,576 `"` took 36.9 s; `#!` repeated took 0.49 s for 8,192 chars,
+  - Time: the limit does not bound time (D-097 Q-3). Evidence for this spec only, not text for
+    any document: R-157 measured parse time with the merged `tree.rs` in a debug spike outside
+    the repository: 1,048,576 `"` took 36.9 s; `#!` repeated took 0.49 s for 8,192 chars,
     1.88 s for 16,384, 7.67 s for 32,768 and 30.3 s for 65,536, about four times as long for
     twice the length, so at the limit it would take hours (extrapolated, not run). After an
     edit that leaves the tree with errors, `SyntaxTree::update` parses twice (incremental, then
-    full). No time bound is stated for any `syntax.*` command (Q-3 PENDING).
+    full). No time bound exists for any `syntax.*` command, and no test asserts a time. A
+    deterministic work cap is a follow-up task the director files; it is not specified here.
   - Depth: a valid text can nest deeply within the limit (`fn f() { ` + 500,000 `(` + `1` +
-    500,000 `)` + ` }`, 1,000,012 chars: parses without error in 1.3 s, 177 MB, R-157). Every
-    walk this task adds over the tree is iterative, as T-016's are (`tree.rs` module doc), so
-    deep nesting cannot overflow the stack (AC-10, Q-5 PENDING).
+    500,000 `)` + ` }`, 1,000,012 chars: parses without error in 1.3 s, 177 MB in R-157's debug
+    spike; spec evidence only). Every walk this task adds over the tree is iterative, as
+    T-016's are (`tree.rs` module doc), so deep nesting cannot overflow the stack (AC-10,
+    D-097 Q-5).
   - The reviewer probes that a 50 MB document of `(` is refused without the parse: same
     script with and without the three refused calls, compared by elapsed time and max RSS
     (`/usr/bin/time -f '%e s %M KB'`). Baseline measured by R-157 with the current `kiln-cli`
     (`doc.open` + `doc.info` of 50,000,000 `(` through `kiln-cli run --root`): 1.12 s,
-    168,228 KB. No bound is pinned; the reviewer reports both figures.
+    168,228 KB (debug binary). No bound is pinned; the reviewer reports both figures.
 - (f) Snapshots: one merged unit test pins the position of the last reason row:
   `crates/kiln-commands/src/reason.rs` `outside_root_is_appended_and_not_a_file_is_widened`
-  (`ALL.last() == OutsideRoot`); handled in Size limit (Q-6 PENDING). The tests that read
+  (`ALL.last() == OutsideRoot`); handled in Size limit (D-097 Q-6). The tests that read
   `error_kinds` (`acceptance_t032_control.rs` compares it with `RejectReason::ALL`;
   `acceptance_t010_api.rs`, `positions.rs`, `acceptance_t010.rs`, `acceptance_t008_cli.rs`,
   `acceptance_t032_cli.rs` look for given entries) and `acceptance_t003_registry.rs`
   (`docs/commands.json == describe()`) hold after regeneration; the two `rows.len() == 23`
-  checks read the table of `docs/control-protocol.md`, which this task does not edit. No test
+  checks read the table of `docs/control-protocol.md`, which this task does not edit. T-039's
+  merged tests (`acceptance_t039_cli.rs`: option sets against `kiln-cli --help`;
+  `guard_t039_cli.rs`: no-op `doc.undo`/`doc.redo` behaviour) are untouched by a new command
+  group (R-165, main `c538ef8`). No test
   on main names a `syntax.*` command.
 - (g) Worked examples (leaves checked with tree-sitter 0.27.2 / rust 0.24.2 in a spike; offsets
   computed by script). T-016 pins `tree-sitter =0.27.1` / `tree-sitter-rust =0.24.2`; R-067
@@ -228,7 +241,7 @@ Pinned (i).
   - `fn a() { (` → `syntax.tree` has `has_error: true`; `match-bracket {offset:9}` → `null`.
   - `fn f() {}` → `sexp` = T-016's example; first call `mode: "full"`, second `unchanged`;
     after `doc.insert {offset:8, text:" "}`, `mode: "incremental"`.
-  - Pending Q-4 (stack pairing; R-157 naive model on the pinned grammar's tree): `) ( ( ) ] [`
+  - Stack pairing (D-097 Q-4; R-157 naive model on the pinned grammar's tree): `) ( ( ) ] [`
     (11 chars; the root's `ERROR` node holds `)`@0, `(`@2, a `unit_expression` with `(`@4 and
     `)`@6, an inner `ERROR` with `]`@8, and `[`@10) → offsets 0, 2, 8, 10 give `null`; 4 and 6
     give `{open:4, close:6}`. `fn a() { ( ) (` → 9 and 11 give `{open:9, close:11}`; 7 and 13
@@ -239,10 +252,10 @@ Pinned (i).
     false`; `syntax.*` → `unknown_command`; 0.09 s, 22,468 KB max RSS): `"//" + "é" * 1048574`
     has 1,048,576 chars and 2,097,150 UTF-8 bytes → accepted; one more char
     (`doc.insert {doc:1, offset:0, text:"x"}`) → 1,048,577 →
-    `{"code":"rejected","kind":"too_large","message":"document 1 has 1048577 chars; syntax commands accept at most 1048576"}`;
+    `{"code":"rejected","kind":"too_large","message":"document 1 has 1048577 chars; syntax commands accept at most 1048576"}`
+    (the message shown is the implementer's wording; tests check `code` and `kind` only);
     `doc.undo {doc:1}` → 1,048,576 → accepted again, `mode: "unchanged"` (the refused calls
-    left the cache entry of the first call; Q-1 PENDING; under R-109's "dropped" it would be
-    `full`).
+    left the cache entry of the first call, D-097 Q-1).
 - (h) Evaluator calls: `kiln-cli run` with `doc.open` of a corpus file then `syntax.tree`
   (`syntax.parse`); edits followed by `syntax.tree`, compared with `syntax.tree` of a fresh
   session on the edited text (`syntax.incremental`); `syntax.highlight` (`syntax.highlight`);
@@ -262,34 +275,50 @@ Pinned (i).
      document, `unchanged` when the text equals the text of the document's last successful
      `syntax.*` call, and otherwise `incremental` or `full`, where `incremental` only occurs
      for a tree without errors. A refused call does not change what the next call reports."
-     Evidence: AC-2, AC-8 (last sentence pending Q-1).
+     Evidence: AC-2, AC-8.
   4. "Highlight spans are sorted, contiguous and non-overlapping, cover the requested range
      exactly, and adjacent spans of the same kind are merged." Evidence: AC-3.
   5. "Brackets inside strings, character literals and comments are never matched; a bracket
      without a partner gives `null`." Evidence: AC-6, AC-7.
-  6. "No time bound is given for any `syntax.*` command: parsing time depends on the text, not
-     only on its length. In a debug build, 32,768 characters of `#!` repeated took about 8 s
-     to parse and 65,536 characters about 30 s, four times as long for twice the length; a call
-     after an edit that leaves the tree with errors parses the text twice." Evidence: Pinned
-     (e), R-157 spike (Q-3 PENDING).
-  7. NEEDS A MEASUREMENT before it is written: a memory sentence. The implementer measures
-     max RSS with `/usr/bin/time -f '%e s %M KB' kiln-cli run <script> --root <dir>` on a debug
-     build for two documents of exactly 1,048,576 chars, `;` repeated and `a;` repeated, with
-     the script `doc.open`, `syntax.tree`, `doc.insert {offset:0, text:" "}`, `syntax.tree`,
-     `syntax.highlight`, and records command and output in its log. The sentence then reads:
-     "Memory grows with the length and content of the text; the largest peak measured at the
-     limit was about <N> MB (a document of 1,048,576 characters of `a;` repeated, or `;`, as
-     measured), in a debug build." If no measurement is recorded, no memory sentence is
-     written.
+  6. Time (D-097 Q-3). Fixed part: "No time bound exists for any `syntax.*` command: the size
+     limit bounds memory, not time. Parsing time depends on the text, not only on its length,
+     and a call after an edit that leaves the tree with errors parses the text twice."
+     Evidence: Pinned (e) (the twice-parse is `SyntaxTree::update`'s documented behaviour).
+     Measured part, written only with the implementer's own figures: the implementer builds
+     `kiln-cli` in release (`cargo build --release -p kiln-cli` in its worktree) and runs, for
+     files of `#!` repeated to 16,384, 32,768 and 65,536 chars, a script of `doc.open` and
+     `syntax.tree` under `/usr/bin/time -f '%e s %M KB' target/release/kiln-cli run <script>
+     --root <dir>`, and records the commands and outputs in its log. The sentence then reads:
+     "Measured with a release build of `kiln-cli` (`syntax.tree` after `doc.open`): a text of
+     `#!` repeated took <t1> s at 16,384 characters, <t2> s at 32,768 and <t3> s at 65,536."
+     with the three measured values. R-157's debug figures in Pinned (e) are not copied.
+  7. Memory (D-097 Q-3). Written only with the implementer's figures: on the same release
+     build, max RSS of `kiln-cli run <script> --root <dir>` under `/usr/bin/time -f '%e s %M KB'`
+     for two documents of exactly 1,048,576 chars, `;` repeated and `a;` repeated, with the
+     script `doc.open`, `syntax.tree`, `doc.insert {doc:1, offset:0, text:" "}`, `syntax.tree`,
+     `syntax.highlight {doc:1}`; command and output in the log. The sentence then reads:
+     "Memory grows with the length and content of the text; measured with a release build of
+     `kiln-cli`, the largest peak at the limit was about <N> MB (1,048,576 characters of
+     <`;` or `a;`> repeated, after one edit)." Both measurements are required (D-097 Q-3: the
+     documents give the measured figures); a document figure without its command and output in
+     the implementer's log is a review finding, and the reviewer re-runs the commands.
   No sentence of `docs/control-protocol.md` changes.
 
 ## Acceptance criteria
-All through `kiln-cli run`/`control` or `kiln_control::Host` on files from the pinned corpus
-(`crates/kiln-syntax/tests/corpus/`, selected by MANIFEST `set`), copied to a temp root.
+Acceptance-test protocol (medium tier, even task number: METHODOLOGY §6, D-035 (16)). An
+independent test author writes every acceptance test in **`apps/kiln-cli/tests/acceptance_t020_cli.rs`**
+on `task/T-020-tests`, and any regression guard in `apps/kiln-cli/tests/guard_t020_cli.rs`
+(none is required by this spec). The implementer adds no `acceptance_t*` or `guard_t*` file
+and does not read the tests branch before the first join. Every criterion below is tested in
+`acceptance_t020_cli.rs` and **fails on base** by assertion: on base no `syntax.*` command
+exists, so each request gets `unknown_command` (checked by R-157 on main's binary). All drive
+`kiln-cli run`/`control` (or `kiln_control::Host`) on files from the pinned corpus
+(`crates/kiln-syntax/tests/corpus/`, selected by MANIFEST `set`) or on the files named,
+copied to a temp root.
 - AC-1 (`syntax.parse`): every `valid` corpus file gives `has_error: false` and `errors: []`.
   Every `invalid` file gives `has_error: true` and ≥ 1 error inside the text. Oracle: rustc (the
   corpus's recorded rustc run, tied to the bytes by hash and checked by T-016's
-  `corpus_is_pinned_and_compiles`).
+  `corpus_is_pinned_and_compiles`). File `acceptance_t020_cli.rs`; fails on base.
 - AC-2 (`syntax.incremental`): for every `valid` file, ≥ 100 fixed-seed random
   `doc.insert`/`doc.delete`/`doc.replace`/`doc.undo` per file, each followed by `syntax.tree`.
   Its `has_error`, `errors`, `sexp` and `node_count` equal `syntax.tree` in a fresh session
@@ -299,62 +328,71 @@ All through `kiln-cli run`/`control` or `kiln_control::Host` on files from the p
   result has `has_error: false` (`SyntaxTree::update` reports `Incremental` only for an
   error-free incremental tree and otherwise reparses, so `full` with `has_error: false` is
   allowed). Edits keep every text at or below the size limit. Oracle: from-scratch parse.
+  File `acceptance_t020_cli.rs`; fails on base.
 - AC-3 (`syntax.highlight`, partition): for every corpus file and ≥ 50 random sub-ranges, the
   spans are sorted, contiguous, non-overlapping, merged and cover the range exactly, and every
   kind is one of the seven; an empty sub-range gives `spans: []`. Oracle: constructed property.
+  File `acceptance_t020_cli.rs`; fails on base.
 - AC-4 (`syntax.highlight`, differential with proc-macro2): on every `valid` file, tokenize with
   `proc_macro2` (span locations, `byte_range`). Consider only `Literal` tokens whose source
   slice equals the token's text, which excludes desugared doc comments. Those slices equal the
   union of `string` and `number` spans: string, byte string, char and C string literals are
   `string`, numeric ones `number`. Every `keyword` span's text is in the pinned list. Every
-  `comment` span starts with `//` or `/*`. Oracle: an independent tokenizer.
+  `comment` span starts with `//` or `/*`. Oracle: an independent tokenizer. File
+  `acceptance_t020_cli.rs`; fails on base.
 - AC-5 (`syntax.highlight`, functions and types): on every `valid` file, each fn definition
   name found by `syn` (free fns, impl and trait methods, outside fn bodies) is a `function`
   span at the ident's offset. The worked example holds exactly. Oracle: syn + exact value.
+  File `acceptance_t020_cli.rs`; fails on base.
 - AC-6 (`syntax.brackets`, differential): on every `valid` file, take each proc-macro2 `Group`
   delimited by parentheses, brackets or braces whose source chars at the open and close span
   are that delimiter (doc-comment groups excluded). `match-bracket` at the open offset and at
   the close offset both return that pair. At every other offset whose char is a bracket,
   `bracket` is `null`, because those brackets are in strings, chars or comments. Oracle: an
-  independent tokenizer.
-- AC-7 (`syntax.brackets`, editing): the worked examples hold (the two pending Q-4 included).
-  `offset` = `len_chars` → `null`; `len_chars + 1` → `out_of_range`. Oracle: exact value.
-- AC-8 (`syntax.parse`, size limit; through `kiln-cli run`, cheap: about 2 MB of input, one
-  comment token, no large parse; base half measured at 0.09 s, Pinned (g)): a file holding `//`
+  independent tokenizer. File `acceptance_t020_cli.rs`; fails on base.
+- AC-7 (`syntax.brackets`, editing): the worked examples of Pinned (g) hold, the two
+  stack-pairing examples included. `offset` = `len_chars` → `null`; `len_chars + 1` →
+  `rejected`/`out_of_range` (`code` and `kind` asserted). Oracle: exact value. File
+  `acceptance_t020_cli.rs`; fails on base.
+- AC-8 (`syntax.parse`, size limit; through `kiln-cli run`; about 2 MB of input, one comment
+  token, no large parse): a file holding `//`
   followed by 1,048,574 `é` (1,048,576 chars, 2,097,150 bytes, so a byte-based limit fails the
   test), opened as doc 1: `syntax.tree` → `ok`, `has_error: false`, `mode: "full"`;
   `syntax.match-bracket {offset:0}` → `{bracket: null}`. Then
   `doc.insert {doc:1, offset:0, text:"x"}` and each of `syntax.tree`, `syntax.highlight {doc:1}`,
   `syntax.match-bracket {doc:1, offset:0}` and `syntax.match-bracket {doc:1, offset:2000000}`
-  → `rejected`/`too_large` with the exact message of the worked example (so `too_large`
-  precedes `out_of_range`). Then `doc.undo {doc:1}` and `syntax.tree` → `ok` with
-  `mode: "unchanged"` (the refused calls left the cache entry of the first call; Q-1 PENDING —
-  under R-109's wording this would be `"full"`). `kiln-cli commands --schema` lists an
-  `error_kinds.rejected` entry with kind `too_large`. Every response line is checked; the
-  `sexp` is not pinned. Oracle: exact value + the naive model of (g).
+  → `code: "rejected"`, `kind: "too_large"` (so `too_large` precedes `out_of_range`; the
+  message is not asserted). Then `doc.undo {doc:1}` and `syntax.tree` → `ok` with
+  `mode: "unchanged"` (the refused calls left the cache entry of the first call, D-097 Q-1).
+  `kiln-cli commands --schema` lists an `error_kinds.rejected` entry with kind `too_large`
+  (its `when` text is not asserted). Every response line is checked; the `sexp` is not pinned.
+  Oracle: exact value + the naive model of (g). File `acceptance_t020_cli.rs`; fails on base.
 - AC-9 (read-only; supports `syntax.parse`): `kiln-cli commands --schema` gives `mutating: false`
   for the three commands. In one session on a corpus file: `doc.info` and `cursor.get` before
   and after a sequence of all three commands (valid params and a refused one each) are equal;
   and `doc.insert` of `"a"`, then the three commands, then `doc.insert` of `"b"` at the next
   offset, then one `doc.undo` restores the text from before `"a"` (the typing group was not
-  ended). Oracle: exact value (T-007 (b)'s definition of observable state).
-- AC-10 (`syntax.brackets`, `syntax.highlight`, deep nesting; Q-5 PENDING): a file holding
+  ended). Oracle: exact value (T-007 (b)'s definition of observable state; `mode` is the
+  named exception, D-097 Q-2, and is not compared). File `acceptance_t020_cli.rs`; fails on
+  base (the three commands are missing from `commands --schema`).
+- AC-10 (`syntax.brackets`, `syntax.highlight`, deep nesting; D-097 Q-5): a file holding
   `fn f() { ` + 500,000 `(` + `1` + 500,000 `)` + ` }` (1,000,012 chars): `syntax.tree` → `ok`,
   `has_error: false`; `syntax.highlight` → `ok` with spans covering `0..1000012`;
   `syntax.match-bracket {offset:9}` → `{open:9, close:1000009}` and `{offset:4}` →
-  `{open:4, close:5}`. The process exits normally (no stack overflow). Measured by R-157 with
-  the merged `tree.rs` (debug): parse 1.3 s, 177 MB; `errors`+`sexp`+`node_count` 0.65 s;
-  one iterative walk over every node 0.33 s, 245 MB peak in all. Oracle: exact value.
+  `{open:4, close:5}`. The process exits normally (no stack overflow). No time is asserted.
+  (Spec evidence only: R-157's debug spike parsed this text without error, the work of
+  `syntax.tree` plus one full walk took about 2.3 s and 245 MB.) Oracle: exact value. File
+  `acceptance_t020_cli.rs`; fails on base.
 
-Every criterion is an **acceptance** test: on base no `syntax.*` command exists, so each fails
-by assertion (`unknown_command`), and `acceptance_t020_cli.rs` compiles on base (it drives
-`kiln-cli` and uses `syn`/`proc-macro2`, already `kiln-cli` dev-dependencies). No guard is
-added. No test asserts the number or order of `error_kinds` entries, whole-document bytes, the
-text of `docs/protocol/syntax.md` (the reviewer checks it against Pinned (i) on the diff), the
-list of registered commands, or a message other than the `too_large` one (D-091 change 6).
-`kiln-cli` has no `toml` dev-dependency (adding one is outside `touches`): tests read
-`MANIFEST.toml` by its `path = "…"` and `set = "…"` lines. Every spawned `kiln-cli` has a
-timeout (D-028 (8)).
+`acceptance_t020_cli.rs` compiles on base (it drives `kiln-cli` and uses `syn`/`proc-macro2`,
+already `kiln-cli` dev-dependencies). No test asserts a message text, a time, the number or
+order of `error_kinds` entries, a `when` text, whole-document bytes, the text of
+`docs/protocol/syntax.md` (the reviewer checks it against Pinned (i) on the diff) or the list
+of registered commands (D-091 change 6). `kiln-cli` has no `toml` dev-dependency (adding one is
+outside `touches`): tests read `MANIFEST.toml` by its `path = "…"` and `set = "…"` lines. Every
+spawned `kiln-cli` has a timeout (D-028 (8)); it is a **hang detector**, not an assertion about
+speed: it is set generously, labelled as a hang detector in the test, and its failure message
+says the process hung.
 
 ## Scorecard items and intended test names
 | Item | Tests |
@@ -362,7 +400,7 @@ timeout (D-028 (8)).
 | syntax.parse | `kiln_cli::acceptance_t020_cli::corpus_parses_through_protocol`, `kiln_cli::acceptance_t020_cli::oversized_documents_are_refused`, `kiln_cli::acceptance_t020_cli::syntax_commands_are_read_only` |
 | syntax.incremental | `kiln_cli::acceptance_t020_cli::incremental_equals_fresh_session` |
 | syntax.highlight | `kiln_cli::acceptance_t020_cli::highlight_partitions_text`, `kiln_cli::acceptance_t020_cli::highlight_agrees_with_tokenizer`, `kiln_cli::acceptance_t020_cli::highlight_marks_fn_names` |
-| syntax.brackets | `kiln_cli::acceptance_t020_cli::brackets_agree_with_token_groups`, `kiln_cli::acceptance_t020_cli::bracket_worked_examples`, `kiln_cli::acceptance_t020_cli::deep_nesting_is_answered` (Q-5 PENDING) |
+| syntax.brackets | `kiln_cli::acceptance_t020_cli::brackets_agree_with_token_groups`, `kiln_cli::acceptance_t020_cli::bracket_worked_examples`, `kiln_cli::acceptance_t020_cli::deep_nesting_is_answered` |
 
 The director ties the names to the items at the join (METHODOLOGY §6); the test author lists
 them in its log.
@@ -375,7 +413,7 @@ them in its log.
 - Drop cache entries of closed documents on the next successful `syntax.*` call; ids are never
   reused, so this is not observable.
 - A memory budget across documents, a limit inside `kiln-syntax`, a time or work cap on
-  parsing (Q-3), and the same limit for T-023's outline commands are out of scope (T-023's spec
+  parsing (a follow-up task the director files, D-097 Q-3), and the same limit for T-023's outline commands are out of scope (T-023's spec
   should adopt `too_large` when it is next revised; noted for the director).
 - Refusal declarations per command (T-038): T-038 runs after this task and declares the
   `syntax.*` refusals itself (D-092); this task adds none.
@@ -392,13 +430,14 @@ them in its log.
 - `syntax.rs` reaches the document and `SyntaxState` together through `Context::parts()`
   (`registry.rs`, `pub(crate)`); `registry.rs` is not edited.
 - Your tests: `crates/kiln-syntax/tests/highlight.rs`, unit tests in touched files, unit tests
-  of the `TooLarge` row in `syntax.rs`. Every command has at least one `Example` (the audit runs
+  of the `TooLarge` row in `syntax.rs`. No `acceptance_t*` or `guard_t*` file (the test
+  author's). Measure and log the figures of Pinned (i) 6 and 7 on a release build. Every command has at least one `Example` (the audit runs
   it on a `MemoryFs`).
 - Dispatch: `reason.rs` is shared with T-027 (stage 2, a mapping), T-038 (runs after this task)
-  and T-019 only if its Q-4 is ruled (B); never in flight with them. The reason row conflicts
-  only by position and is resolved by hand on rebase (D-6). T-021 adds no reason row and shares
-  no path with this task except the generated `docs/commands.json`; T-019 the same (plus its
-  own `Cargo.lock`, not touched here).
+  (T-019's Q-4 was ruled (A): no `reason.rs` change, D-095); never in flight with them. The
+  reason row conflicts only by position and is resolved by hand on rebase (D-6). T-019 and
+  T-021 share only the generated `docs/commands.json`, which does not count as overlapping
+  `touches` (D-097), so both may be in flight with this task.
 
 ## Questions and rulings
 - Director (2026-11-13, D-044): when the parse contract returns `ParseError::NoTree`, the command fails with code `internal`, kind `other`, as proposed.
@@ -406,66 +445,14 @@ them in its log.
   defines a size limit before dispatch; the T-016 nits (suffix inside a char; "only adds
   packages") go to this spec. Applied by R-109 (Size limit, AC-8, Implementer notes, Goal).
 
-Spec check R-157 (against main `891ae13`; the spec is written for each recommendation, marked
-PENDING, until the director rules):
-- Q-1 (planner, R-157) — the cache on a `too_large` refusal. (A) Leave it as it was, like
-  every refusal: consistent with `Command::run` ("On error the context must be unchanged",
-  `registry.rs`:328) and `docs/control-protocol.md` ("a refused request leaves the session
-  unchanged"); the next call after the text returns to the cached text reports `unchanged`;
-  the kept entry is at most the limit. (B) Drop it (R-109): releases one tree of at most the
-  limit, but is a change made by a failing command, observable through `mode`, and contradicts
-  both sentences above. Recommended: (A). Written: Size limit, Pinned (a), (g), (i) 3, AC-8.
-- Q-2 (planner, R-157) — `mode` exposes the cache. R-060 ruled the cache is not state because
-  "no command result exposes" it, but `mode` does: `syntax.tree` twice gives `full`, then
-  `unchanged`, so by T-007 (b)'s definition ("what some command result can expose") a
-  read-only command would change observable state. (A) Keep `mode`; rule that the syntax cache
-  is observable only through `mode`, which T-007 (b) excludes by name (one sentence in T-007's
-  spec, not this task's file). (B) Remove `mode`: `syntax.incremental` is then observable only
-  as equality with a fresh parse, and whether a tree was reused cannot be seen through any
-  interface (the evaluator's "wired but inert" risk). (C) Declare the three commands
-  mutating: the cache then is state, but `mutating: true` misdescribes read-only queries and
-  every log entry claims a change that did not happen. Recommended: (A). Written:
-  Interface (unchanged text, marked PENDING).
-- Q-3 (planner, R-157) — time is not bounded at the limit (Pinned (e): `#!` repeated grows
-  with the square of the length, 30 s for 65,536 chars in a debug build; hours at the limit,
-  extrapolated). (a) Document it (Pinned (i) 6), no time bound, keep 2^20 chars; a deterministic
-  work cap in `kiln-syntax` (for instance cancelling a parse from tree-sitter's progress
-  callback after a count of calls, not a clock: CHARTER §3 decision 4) becomes a follow-up
-  task that changes T-016's API. (b) Lower the limit: no length keeps `#!` input fast that does
-  not also refuse ordinary files (16,384 chars already take 1.9 s; this workspace has a
-  85,052-byte file). (c) Add the work cap in this task: changes `tree.rs`'s API and T-016's
-  contract, outside `touches`. The memory rationale for 2^20 is also corrected (Size limit:
-  up to 0.65 GB measured, not "a quarter GB"); halving the limit would halve that. Recommended:
-  (a), with the limit kept. Written: Goal, Pinned (e), (i) 6, Out of scope.
-- Q-4 (planner, R-157) — bracket partner when the parent holds several brackets of one pair
-  (only `ERROR` parents do on the pinned grammar; in `) ( ( ) ] [` R-109's rule would pair
-  `(`@2 with `)`@0). (a) Stack pairing over the parent's direct bracket leaves, left to right;
-  unpaired → `null`. (b) A partner only when the parent has exactly one opening and one closing
-  leaf of that pair, the opening first; else `null`. (c) Leave it unspecified: the test author
-  cannot test error trees and the implementer chooses. Recommended: (a) (it equals (b) wherever
-  (b) answers, and also pairs `( ) (`). Written: match-bracket rule, Pinned (g), AC-7.
-- Q-5 (planner, R-157) — deep nesting. A valid 1,000,012-char text nests 500,000 deep (Pinned
-  (e)); a recursive walk would overflow the stack and abort `kiln-cli` (not a catchable
-  panic). (A) Add AC-10 and the iterative-walk requirement (cheap: 1.3 s parse measured).
-  (B) No criterion; the reviewer probes it. Recommended: (A). Written: Pinned (e), AC-10,
-  test name.
-- Q-6 (planner, R-157) — the merged unit test pins `OutsideRoot` as the last reason row.
-  (A) Append `TooLarge` last (the documented convention, "Later tasks append rows") and change
-  that one assertion to `ALL.contains(&OutsideRoot)`, logged under golden rule 4 (precedent
-  D-061; the pin is the kind D-091 change 6 forbids: a list a drafted task changes). (B) Insert
-  `TooLarge` before `OutsideRoot` so no merged test is edited; breaks the append convention and
-  the next task that appends hits the same test. Recommended: (A). Written: Size limit,
-  `touches` comment, Pinned (f).
-- Note for the director (not a question for this task): METHODOLOGY §5.2 forbids "equal"
-  `touches` for in-flight tasks; T-019, T-020 and T-021 all change the generated
-  `docs/commands.json`, which `xtask/generated.toml` regenerates on conflict and the
-  `touches` check exempts. D-092's plan to run them in parallel needs that exemption stated.
-- Split (D-091): not recommended. The four items share one module (`syntax.rs`), one cache,
-  the size limit, the reason row, one document and one acceptance file; split tasks would each
-  touch `syntax.rs`, `syntax.md` and `docs/commands.json` and so run one after another anyway,
-  each with its own test-author and review cycle (three cycles instead of one). Splitting
-  highlight out would isolate its rule-heavy review at the cost of one more cycle; the
-  split-before-dispatch rule binds high-tier bundles only, and this task is medium.
+Spec check R-157 (against main `891ae13`) asked six questions; the options it weighed are in
+its log entry and report. Q-1: the cache on a `too_large` refusal (keep, or drop as R-109
+wrote). Q-2: `mode` shows the cache, against R-060's premise. Q-3: the size limit does not bound
+time (`#!` repeated, quadratic). Q-4: bracket partners under a parent holding several. Q-5: a
+deep-nesting criterion. Q-6: the merged unit assertion that pins `OutsideRoot` as the last
+reason row. Split (D-091): not recommended; the four items share `syntax.rs`, the cache, the
+limit, the reason row, `syntax.md` and the acceptance file. All six are ruled below and applied
+in the sections above by R-165.
 ### Rulings on Q-1 to Q-6 of the spec check R-157 (director, D-097)
 - Q-1: keep. A refused request leaves the session as it was, the cache entry included (`Command::run`'s contract and `docs/control-protocol.md`).
 - Q-2: (A). `mode` stays in the result; it is the one place where a result shows the cache, because without it `syntax.incremental` could not be observed through a public interface. The sentence that names this exception is added to T-007's spec when that task is checked before dispatch; this task does not edit T-007.
@@ -553,6 +540,25 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: Q-1 (cache on refusal), Q-2 (`mode` versus T-007 (b)), Q-3 (no time bound),
   Q-4 (bracket pairing), Q-5 (deep-nesting criterion), Q-6 (the `OutsideRoot`-last unit
   assertion) — see "Questions and rulings".
+- 2026-11-13 · R-165 · draft · did: applied the director's rulings D-097 (Q-1 to Q-6, generated
+  files): PENDING marks removed; Q-2 stated in Interface without editing T-007; Q-3: every
+  debug-spike figure is labelled spec evidence only, Pinned (i) 6 keeps a fixed no-time-bound
+  sentence and requires the implementer's release-build measurements through `kiln-cli`
+  (commands given) for the time and memory figures; no test asserts a time, and the
+  per-process timeout is labelled a hang detector; AC-10's spike timings moved out of the
+  oracle. No test asserts a message: AC-7 and AC-8 assert `code` and `kind` only; the
+  `too_large` text stays as the implementer's wording (no ruling requires a test to read it;
+  R-157 had written that AC-8 checks it). Acceptance-test protocol stated (even arm: the test
+  author writes `acceptance_t020_cli.rs` and any `guard_t020_cli.rs`; the implementer adds
+  neither); each AC names its file and fails on base. Dispatch note: T-019's Q-4 is ruled (A),
+  so `reason.rs` is not shared with it; `docs/commands.json` is not an overlap (D-097).
+  Questions section reduced to the record plus the rulings. Main moved to `c538ef8` (T-039):
+  only the `doc.undo`/`doc.redo` DOC strings, the CLI section of `docs/control-protocol.md`,
+  `doc-positions.md` and two new tests (`--help` option sets, no-op undo/redo) changed;
+  nothing this spec relies on changed (AC-9's typing-group step agrees with the new
+  `doc.undo` description). Re-read top to bottom: no remaining contradiction found between
+  Interface, Pinned, ACs and `touches`. · gate attempts: 0 · not run: no cargo, no new probes ·
+  missing context: none · next: director (state).
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

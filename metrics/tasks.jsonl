@@ -408,3 +408,6 @@
 {"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:48:24Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:48:24Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:48:24Z","from":"ready","to":"in_progress"}
+{"kind":"run","task":"iter-2","iteration":2,"run":"R-165","role":"planner","tier":null,"started_at":"2026-11-13T21:45:43Z","ended_at":"2026-11-13T21:48:44Z","wall_s":181,"tokens":47477,"tool_calls":41,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"spec check: T-020 finalised on the rulings of D-097 (PENDING marks removed; spike figures kept as evidence for the spec only, document figures to be measured by the implementer on a release build; no test asserts a time or a message; acceptance-test protocol stated); tokens = agent total minus 287,617 at the end of R-157"}
+{"kind":"transition","task":"T-020","iteration":2,"at":"2026-11-13T21:48:54Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-020","iteration":2,"at":"2026-11-13T21:48:54Z","from":"specified","to":"ready"}
