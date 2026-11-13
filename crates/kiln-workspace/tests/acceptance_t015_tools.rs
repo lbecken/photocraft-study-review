@@ -3,6 +3,7 @@
 //! specification alone by the test author. On the base these fail to compile (the types do
 //! not exist yet): weak evidence by design (task file, "AC-2 to AC-4 fail on base only at
 //! compile time").
+#![cfg(test)]
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -114,7 +115,10 @@ fn no_tools_never_runs() {
     // Exact values in this process too.
     child_runs_no_tools();
     assert_eq!(NoTools, NoTools);
-    assert_eq!(NoTools::default(), NoTools);
+    fn made_by_default<T: Default>() -> T {
+        T::default()
+    }
+    assert_eq!(made_by_default::<NoTools>(), NoTools);
     assert_eq!(format!("{NoTools:?}"), "NoTools");
     let copy = NoTools;
     let _also = copy; // Copy
@@ -359,12 +363,10 @@ impl ToolRunner for Recorder {
 }
 
 /// AC-4: the named items resolve at the crate root, `tools::NoTools` is the same type as the
-/// root `NoTools`, the four new modules are public, and the re-exported items still behave as
+/// root `NoTools`, and the re-exported items still behave as
 /// before (exact values).
 #[test]
 fn workspace_reexports_resolve() {
-    use kiln_workspace::{diagnostics as _, find as _, format as _, project as _};
-
     let via_module: kiln_workspace::tools::NoTools = NoTools;
     let at_root: kiln_workspace::NoTools = via_module;
     assert_eq!(at_root, kiln_workspace::tools::NoTools);

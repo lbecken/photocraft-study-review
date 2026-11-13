@@ -3,6 +3,7 @@
 //! Per D-043 they pin behaviour that must not change, not listings meant to grow: the command
 //! list is only required to keep today's commands (the `schema` gate step compares the whole
 //! list at the join).
+#![cfg(test)]
 
 use kiln_commands::{CommandError, Context, Registry, standard_registry};
 use kiln_workspace::RelPath;
@@ -138,6 +139,13 @@ fn document_ids_and_refusals_are_unchanged() {
     }
     assert_eq!(ctx.log().len(), log_len, "refusals are not logged");
     assert_eq!(ok(&r, &mut ctx, "doc.list", json!({})), list);
+
+    // Closing the newest document does not give its id back.
+    ok(&r, &mut ctx, "doc.close", json!({"doc": 4}));
+    assert_eq!(
+        id(ok(&r, &mut ctx, "doc.open", json!({"path": "a.txt"}))),
+        5
+    );
 
     // Save goes to the document's own file and the files of the others stay.
     ok(

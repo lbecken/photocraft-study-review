@@ -3,6 +3,7 @@
 //! `set_tools` replaces the runner and nothing else, and no command swaps the runner. On the
 //! base these fail to compile (`Context::tools`/`set_tools` do not exist yet): weak evidence by
 //! design (task file, "AC-2 to AC-4 fail on base only at compile time").
+#![cfg(test)]
 
 use std::path::Path;
 

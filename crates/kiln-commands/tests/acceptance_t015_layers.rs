@@ -3,6 +3,7 @@
 //! `cargo metadata` (offline, no resolution) and fails on base by assertion: today neither
 //! edge exists. Only the presence of each edge is checked, so later tasks that add their own
 //! dependencies do not break it; `cargo xtask layers` (a gate step) checks the layer rule.
+#![cfg(test)]
 
 use std::path::Path;
 use std::process::{Command, Stdio};
