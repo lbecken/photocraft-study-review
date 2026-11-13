@@ -15,7 +15,7 @@ touches:
   - crates/kiln-workspace/tests/project.rs              # implementer's own integration tests
   - crates/kiln-commands/src/project.rs                 # implementer: `project.tree` (slot from T-015)
   - docs/protocol/project.md                            # implementer: new; the sentences of Pinned (i)
-  - docs/protocol/paths.md                              # implementer: the first sentence only, PENDING Q-6
+  - docs/protocol/paths.md                              # implementer: the first sentence only (Q-6, D-095)
   - crates/kiln-workspace/tests/acceptance_t019_workspace.rs  # test author: AC-7 (Rust API)
   - apps/kiln-cli/tests/acceptance_t019_cli.rs          # test author: AC-1 … AC-6 through kiln-cli
   - apps/kiln-cli/tests/guard_t019_cli.rs               # test author: guards, if any (pass on base)
@@ -91,7 +91,7 @@ pub struct ProjectTree {
     pub entries: Vec<TreeEntry>,
     pub ignored: usize,
     pub skipped: usize,
-    pub too_deep: usize,     // PENDING Q-1
+    pub too_deep: usize,     // Q-1 (D-095)
     pub truncated: bool,
 }
 pub fn tree(vfs: &dyn Vfs, under: Option<&RelPath>, limit: usize) -> Result<ProjectTree, VfsError>;
@@ -116,27 +116,31 @@ devices are `Other`. Nothing is opened except the directory being listed; no ent
 followed, opened or read.
 
 ### Walk rules (exact; `tree` and `project.tree`)
-1. Start at `under` (default: the root). `under` itself is not listed. Entry paths are
-   root-relative and begin with `under` as given (PENDING Q-3). Visit each directory's entries
+1. Start at `under` (default: the root). `under` itself is not listed and is not subject to
+   rules 2–3 (a named ignored, `target` or `.git` directory is listed). Entry paths are
+   root-relative and begin with `under` as given, also when `under` is reached through an
+   in-root link (Q-3). Visit each directory's entries
    in name byte order; output is preorder (a directory, then its contents, then its next
    sibling).
 2. Always skipped (counted in `ignored`, not descended): the entry whose path is exactly
    `target` when it is a `Dir`, and every entry named `.git`, whatever its kind.
 3. `.gitignore` files: an entry named `.gitignore` of kind `File` in a visited directory, and the
-   `.gitignore` of the root and of every directory on `under`'s path (PENDING Q-3), applies to
+   `.gitignore` of the root and of every directory on `under`'s lexical prefix, each read at its lexical path (Q-3), applies to
    that directory's subtree: patterns relative to the file's directory, `!` negation, a
    trailing `/` for directories only, `**`, a deeper file overriding a shallower one, and a
    file under an ignored directory cannot be re-included, as in git. It is read through
    `Vfs::read`; a leading UTF-8 BOM is dropped and the content is split into lines; lines that
-   are not valid UTF-8, and lines the matcher refuses, are skipped (PENDING Q-5). A
-   `.gitignore` entry of kind `Symlink`, `Other` or `Dir` is not read (PENDING Q-2). No other
+   are not valid UTF-8, and lines the matcher refuses, are skipped (Q-5). A
+   `.gitignore` entry of kind `Symlink`, `Other` or `Dir` is not read and contributes no
+   patterns (Q-2); on `under`'s prefix, a `.gitignore` is read only if `Vfs::list_dir` of its
+   directory reports it as `File`. No other
    source is consulted: no `.git/info/exclude`, no global excludes, no `.ignore`. An ignored
    entry is counted once in `ignored` and not descended. `.gitignore` files themselves are
    listed unless ignored.
 4. `Symlink` and `Other` entries are listed with their kind and never descended or read.
-5. Depth (PENDING Q-1): a `Dir` entry whose path has 128 segments is listed and not descended;
+5. Depth (Q-1): a `Dir` entry whose path has 128 segments is listed and not descended;
    it is counted in `too_deep`.
-6. Limit (PENDING Q-7): the walk stops when it would list entry `limit + 1`. Then `entries`
+6. Limit (Q-7): the walk stops when it would list entry `limit + 1`. Then `entries`
    holds exactly `limit` entries and `truncated` is true; `truncated` is false iff every entry
    was listed. `ignored`, `skipped` and `too_deep` count what the walk met before it stopped.
 
@@ -144,13 +148,13 @@ followed, opened or read.
 Params `{"path"?: string, "limit"?: integer 1..=1000000 (default 50000)}`, unknown keys refused
 (`invalid_params`, as other commands). Result:
 `{"entries":[{"kind":"file","path":"src/main.rs"}, …], "ignored": n, "skipped": n, "too_deep": n, "truncated": bool}`
-with kinds `file`, `dir`, `symlink`, `other` (`too_deep` PENDING Q-1). Refusals (`rejected`):
+with kinds `file`, `dir`, `symlink`, `other`. Refusals (`rejected`):
 `invalid_path` (the `path` fails the lexical `RelPath` check, before the file system),
 `outside_root`, `not_found`, `not_a_file` (the `path`'s location is a file or special file),
 `io_error`. All are existing kinds; there is no new one, and no `reason.rs` change: the kind
 comes from the existing `From<&VfsError> for RejectReason`. The message names the path as
-given and never a host path; its wording is not pinned (PENDING Q-4 proposes
-`cannot list <path>: not a directory` for `not_a_file`). At least one `Example` (run by the
+given and never a host path; its wording is not pinned in any test; for `not_a_file` it is
+`cannot list <path>: not a directory` (Q-4), with no new `VfsError` variant. At least one `Example` (run by the
 audit on `MemoryFs`). `docs/protocol/project.md` documents the command, the walk rules and the
 sentences of Pinned (i).
 
@@ -179,7 +183,7 @@ sentences of Pinned (i).
   links to `/`, to `..`, a symlinked subdirectory, a `.gitignore` that is a link to an outside
   file. It must not hang Kiln: FIFOs anywhere, a `.gitignore` that is a FIFO (listed `other`,
   never opened; `git ls-files` itself hangs on it, probe P7), link loops (listed, not
-  followed), deep nesting (rule 5; PENDING Q-1). Bounded by `limit`: the number of listed
+  followed), deep nesting (rule 5). Bounded by `limit`: the number of listed
   entries, not the work (Pinned (i) S7). Accepted (T-008 D-3): a change by another process
   while the command runs. Not testable in the gate (it runs as uid 0, probe P13): an
   unreadable subdirectory; the reviewer probes it as an unprivileged user (T-036's identity U).
@@ -205,8 +209,10 @@ sentences of Pinned (i).
   with `git ls-files -z --cached --others --exclude-standard` in a fresh `git init` of the same
   directory (global config disabled as in AC-1), within the pattern forms of S5.
 - (i) Sentences `docs/protocol/project.md` adds that state a guarantee or a limit, for the
-  implementer to copy (wording may be joined into paragraphs, not widened). A sentence marked
-  PENDING follows the ruling named. Each carries its evidence.
+  implementer to copy (wording may be joined into paragraphs, not widened). Each carries its
+  evidence. No sentence states a time or a speed for a walk unless the implementer measured it
+  on the built `kiln-cli` and recorded the command and output in its log (D-095, Q-1); the
+  spec check's cost figures (P11, P14) are a model, not a measurement of Kiln.
   - S1. "`project.tree` reads directories and `.gitignore` files and nothing else; it never
     writes, creates or changes a file." Evidence: AC-4 (outside files byte-identical), AC-1
     (trees unchanged); reviewer's `grep` for write calls.
@@ -215,39 +221,49 @@ sentences of Pinned (i).
     is listed or read." Evidence: AC-4.
   - S3. "Symbolic links found in the project are listed with kind `symlink` and never followed,
     whatever they point to; FIFOs, sockets and devices are listed with kind `other` and never
-    opened, so they cannot make the command wait." Evidence: AC-4 (5 s bound, FIFO, links to
-    `..`, to `.` and outside).
-  - S4 (PENDING Q-2). "A `.gitignore` is read only when it is a regular file; a `.gitignore`
-    that is a symbolic link, a FIFO or a directory is listed and its patterns are not used."
+    opened, so they cannot make the command wait." Evidence: AC-4 (FIFO, loop, links to `.`
+    and outside; its 5 s timeout is a hang detector, not a speed claim).
+  - S4 (Q-2). "A `.gitignore` is read only when it is a regular file; a `.gitignore` that is a
+    symbolic link, a FIFO or a directory is listed and contributes no patterns."
     Evidence: AC-4; git 2.43 also ignores an in-tree `.gitignore` symlink (probe P6).
   - S5. "For patterns of the forms `*.x`, `/a`, `b/`, `!c`, `**/d` and `e/**`, in `.gitignore`
     files at any depth, the `file` and `symlink` entries are exactly the paths
     `git ls-files --cached --others --exclude-standard` lists in a fresh repository of the same
     directory with no global or system configuration, apart from the root's `target`
     directory." Evidence: AC-1.
-  - S6 (PENDING Q-5). Known differences from git, each kept only if the implementer's unit test
-    shows it (record the test and its output in the log; drop a bullet that does not hold, add
-    one that a test finds): "`{a,b}` in a pattern matches `a` and `b` (git matches the literal
-    name `{a,b}`); a trailing tab is removed from a pattern (git keeps it); a directory that
-    holds its own `.git` is listed with its contents (git lists it as one entry `dir/`); names
-    that are not UTF-8 or contain `\` are not listed and are counted in `skipped` (git lists
-    them)." Evidence, git side: probes P2, P4, P8, P9. Kiln side, by reading: `globset` 0.4.21
-    always expands alternates; `add_line` trims with `trim_right` (`gitignore.rs`:470–475);
-    rule 2 skips only the `.git` entry; `RelPath::new` refuses `\`.
+  - S6 (Q-5). Known differences from git, written as limits: "`{a,b}` in a pattern matches `a`
+    and `b` (git matches the literal name `{a,b}`); a trailing tab is removed from a pattern
+    (git keeps it); a directory that holds its own `.git` is listed with its contents (git
+    lists it as one entry `dir/`); names that are not UTF-8 or contain `\` are not listed and
+    are counted in `skipped` (git lists them)." Each difference goes into the document only
+    when the implementer shows it on Kiln, by a test in `crates/kiln-workspace/tests/project.rs`
+    or by a probe (the `kiln-cli` command, its output, and `git ls-files -z` on the same
+    directory), recorded in its log. A bullet the test or probe does not confirm is dropped; a
+    further difference the implementer finds is added the same way. The names case is also
+    shown by AC-7. Spec-check evidence, git side only: probes P2, P4, P8, P9; Kiln side, by
+    reading the source only: `globset` 0.4.21 always expands alternates, `add_line` trims with
+    `trim_right` (`gitignore.rs`:470–475), rule 2 skips only the `.git` entry, `RelPath::new`
+    refuses `\`.
   - S7. "`limit` bounds the number of entries listed, not the work: each directory visited is
     read whole and sorted before any rule applies, and ignored entries do not count toward
-    `limit`. A response with 50,000 entries is about 2 MB." Evidence: by construction (rule
-    order (c)); probe P14 (50,000 entries `wide/f000000.rs` … : 2,050,013 bytes of JSON).
-  - S8 (PENDING Q-1). "A directory 128 levels below the root is listed but not descended, and
-    counted in `too_deep`." Evidence: AC-6; probe P11 (cost model).
+    `limit`." Evidence: by construction (rule order (c)); AC-5. A response size may be added
+    only from the implementer's measurement of `kiln-cli exec project.tree` output (P14 is a
+    Python model of the JSON).
+  - S8 (Q-1). "A directory whose path has 128 segments is listed but not descended, and is
+    counted in `too_deep`." Evidence: AC-6. The implementer measures the walk of AC-6's two
+    chains on the built `kiln-cli` (debug build, `time`) and records the commands and times in
+    its log; no time goes into the document unless measured so.
   - S9. "A directory whose location on the host has a path of 4,096 bytes or more cannot be
     listed, and the command fails with `io_error`; whether that happens depends on how long the
     root's own host path is." Evidence: probe P10 (`doc.open` of a directory at an absolute
-    path of 4,094 bytes → `not_a_file`, of 4,096 bytes → `io_error`; PATH_MAX 4096).
+    path of 4,094 bytes → `not_a_file`, of 4,096 bytes → `io_error`; PATH_MAX 4096). That probe
+    is of `doc.open`; the implementer repeats it with `project.tree {"path": …}` on the built
+    `kiln-cli` and records the command and output before copying the sentence.
   - S10. "A directory or a `.gitignore` that cannot be read (for example for lack of
-    permission) makes the whole command fail with `io_error`." Evidence: reviewer probe as an
-    unprivileged user (not testable in the gate, Pinned (e)); the implementer records the
-    command and output if it shows it.
+    permission) makes the whole command fail with `io_error`." Evidence: not testable in the
+    gate (uid 0, Pinned (e)); the implementer shows it by a probe as an unprivileged user
+    (T-036's identity U) and records the command and output, and the reviewer repeats it. If
+    neither can run it, the sentence is left out and the reviewer records that.
   - S11. "The listing is not a snapshot: if another process changes the tree while the command
     runs, the result can mix the states before and after, and the residual limits of
     `docs/protocol/paths.md` apply to each directory read." Evidence: by construction (each
@@ -256,8 +272,20 @@ sentences of Pinned (i).
     case folding." Evidence: AC-2.
 
 ## Acceptance criteria
-All CLI calls run under a timeout; fixtures are built in fresh temporary directories.
-- AC-1 (`ws.open-project`, CLI, git oracle): for ≥ 10 hand-built fixture trees and ≥ 100
+Acceptance-test protocol (high tier, METHODOLOGY §4, §6): an **independent test author** writes
+`apps/kiln-cli/tests/acceptance_t019_cli.rs`, `crates/kiln-workspace/tests/acceptance_t019_workspace.rs`
+and `apps/kiln-cli/tests/guard_t019_cli.rs` on `task/T-019-tests`, from this spec only, before
+the first join. The implementer adds no `acceptance_t*` or `guard_t*` file and nothing under
+`scorecard/`; its own tests go in `crates/kiln-workspace/tests/project.rs` and unit tests.
+Every acceptance test **fails on base** (main without this task) by assertion or command
+error: on base `kiln-cli exec project.tree` exits 2 with `unknown_command` (probe P0), so each
+CLI test asserting `ok` fails by assertion. AC-7 drives new Rust API and fails on base only by
+compiling, which is weak evidence (§6), made up for by the reviewer's mutation spot-check. The
+guards **pass on base** and on the joined branch. The test author runs its tests against a
+naive stub and ≥ 5 seeded bugs and lists the kills (§6). All CLI calls run under a timeout;
+fixtures are built in fresh temporary directories.
+
+- AC-1 (`ws.open-project`, CLI, git oracle; `acceptance_t019_cli.rs`, fails on base): for ≥ 10 hand-built fixture trees and ≥ 100
   fixed-seed random trees (a hand-written PRNG in the test; no new dev-dependency) with random
   `.gitignore` files: copy each to a temporary directory and run `git init`. Then run
   `git ls-files -z --cached --others --exclude-standard` with `GIT_CONFIG_GLOBAL=/dev/null`,
@@ -267,43 +295,56 @@ All CLI calls run under a timeout; fixtures are built in fresh temporary directo
   task differ (S6, Pinned (e)): names from `[a-e0-9._-]` (no `\`, no braces, valid UTF-8), no
   name `.git`, patterns only of the forms of S5 (no braces, tabs, BOM or trailing spaces),
   depth below 128, no FIFO, and any symlink pointing inside the tree. Oracle: git.
-- AC-2 (`ws.open-project`, order and counts): the worked example (Pinned (g)) gives exactly the
+- AC-2 (`ws.open-project`, order and counts; `acceptance_t019_cli.rs`, fails on base): the worked example (Pinned (g)) gives exactly the
   stated result. For the random trees of AC-1, the entries are the naive model's preorder with
   byte-sorted siblings, and `ignored` equals the model's count. Oracle: naive model + exact
   value.
-- AC-3 (`ws.open-project`, memory = disk): the same trees given as a `--memory-seed` manifest
+- AC-3 (`ws.open-project`, memory = disk; `acceptance_t019_cli.rs`, fails on base): the same trees given as a `--memory-seed` manifest
   (`docs/protocol/cli-memory-seed.md`) and as a `--root` directory give identical
   `project.tree` results through `kiln-cli exec`, apart from directories without files, which
   do not exist in memory. Oracle: differential.
-- AC-4 (confinement, CLI): a root holding `out -> ../outside` (a real directory holding a real
+- AC-4 (`ws.open-project`, confinement, CLI; `acceptance_t019_cli.rs`, fails on base): a root holding `out -> ../outside` (a real directory holding a real
   file and a `.gitignore` containing `*`; the test first asserts both exist), `self -> .`,
   `loop1 -> loop2`, `loop2 -> loop1`, a FIFO `p`, and a `.gitignore` that is a symlink to an
   outside file containing `*`, plus a regular file `keep.rs`, gives:
   - `project.tree {}` lists `.gitignore`, `keep.rs`, `loop1`, `loop2`, `out`, `p`, `self` with
     kinds `symlink`, `file`, `symlink`, `symlink`, `symlink`, `other`, `symlink`, and nothing
-    under any of them (so neither outside `*` pattern had an effect; PENDING Q-2);
+    under any of them (so neither outside `*` pattern had an effect, Q-2);
   - `project.tree {"path":"out"}` → `rejected` / `outside_root`;
-  - `project.tree {"path":"self"}` → the root's entries again, each path beginning `self/`
-    (PENDING Q-3);
-  - each call returns within 5 s, and the outside files are byte-identical afterwards.
+  - `project.tree {"path":"self"}` → the same seven entries, each path beginning `self/`
+    (`self/.gitignore`, `self/keep.rs`, …, `self/self`), with the same kinds (Q-3);
+  - each call finishes before a 5 s timeout (a hang detector for the FIFO and the loop, not a
+    speed claim), and the outside files are byte-identical afterwards.
   Oracle: exact value.
-- AC-5 (limits and refusals): on the worked example, `limit: 3` gives the first 3 entries and
-  `truncated: true`; `limit: 8` gives all 8 and `truncated: false` (PENDING Q-7).
+- AC-5 (`ws.open-project`, limits and refusals; `acceptance_t019_cli.rs`, fails on base): on the
+  worked example, `limit: 3` gives the first 3 entries and `truncated: true`; `limit: 8` gives
+  all 8 and `truncated: false` (Q-7).
   `path: "a.rs"` → `not_a_file`, `path: "nope"` → `not_found`, `path: "../x"` →
   `invalid_path`, `path: "a"` → `a/b.rs` only. `limit: 0` → `invalid_params`. Oracle: exact
   value.
-- AC-6 (depth, PENDING Q-1): a chain of 130 nested directories `d/d/…/d` with a file at the
-  bottom gives 128 `dir` entries, `too_deep: 1` and no `file` entry; a chain of 2,100 nested
-  directories returns within 10 s with `ok` and `too_deep: 1`. Oracle: exact value.
-- AC-7 (Rust API, extra): `Vfs::list_dir` on `MemoryFs` and `DiskFs` gives byte-sorted
+- AC-6 (`ws.open-project`, depth; `acceptance_t019_cli.rs`, fails on base): a chain of 130
+  nested directories `d/d/…/d` with a file at the bottom gives 128 `dir` entries, `too_deep: 1`
+  and no `file` entry. A chain of 2,100 nested directories gives `ok`, 128 `dir` entries and
+  `too_deep: 1` (not `io_error`: the walk never reaches a 4,096-byte path). Each call runs
+  under the test's ordinary process timeout of 30 s (AGENTS.md: every spawned process has
+  one), which only detects a hang and states no speed. Oracle: exact value.
+- AC-7 (Rust API, extra; `acceptance_t019_workspace.rs`, fails on base by compiling only): `Vfs::list_dir` on `MemoryFs` and `DiskFs` gives byte-sorted
   entries with their kinds; on disk a name containing `\` and a name that is not UTF-8 are
   omitted and counted in `skipped`; `list_dir` of a file → `NotAFile`, of a missing path →
   `NotFound`, of a link to an outside directory → `OutsideRoot`. Oracle: exact value.
+- Guards (`guard_t019_cli.rs`, pass on base and joined): on AC-4's fixture, `doc.open` keeps
+  T-008's results: `out/<outside file>` → `outside_root`, `self/keep.rs` → ok, `p` →
+  `not_a_file` within the 5 s hang timeout, `loop1` → `io_error`; and `doc.open` of a
+  directory still gives `not_a_file`. They show that adding `list_dir` left the open path
+  confined. They assert kinds only, no message text (Pinned (f)).
 
 ## Scorecard items and intended test names
 | Item | Tests |
 |---|---|
-| ws.open-project | `kiln_cli::acceptance_t019_cli::tree_equals_git_ls_files`, `kiln_cli::acceptance_t019_cli::tree_order_and_counts`, `kiln_cli::acceptance_t019_cli::memory_and_disk_trees_agree`, `kiln_cli::acceptance_t019_cli::symlinks_are_listed_not_followed` |
+| ws.open-project | `kiln_cli::acceptance_t019_cli::tree_equals_git_ls_files` (AC-1), `kiln_cli::acceptance_t019_cli::tree_order_and_counts` (AC-2), `kiln_cli::acceptance_t019_cli::memory_and_disk_trees_agree` (AC-3), `kiln_cli::acceptance_t019_cli::symlinks_are_listed_not_followed` (AC-4), `kiln_cli::acceptance_t019_cli::limits_and_refusals` (AC-5), `kiln_cli::acceptance_t019_cli::deep_trees_stop_at_the_depth_bound` (AC-6) |
+
+Names are intended; the test author may rename and lists the final names in its log. AC-7 and
+the guards are not tied to the item.
 
 The test author lists the tests in its log; the director ties them to the item at the join
 (METHODOLOGY §6). The test author does not edit `scorecard/`.
@@ -312,7 +353,7 @@ The test author lists the tests in its log; the director ties them to the item a
 - Watching for changes; caching the tree; `.ignore`/global excludes/`.git/info/exclude`;
   Windows; find-in-files (T-022); declaring `project.tree`'s refusal kinds (T-038, after this
   task, D-092). The project is the session root: there is no `project.open` command.
-- No `reason.rs` or `VfsError` variant change (PENDING Q-4), no `kiln-control` or `kiln-cli`
+- No `reason.rs` or `VfsError` variant change (Q-4), no `kiln-control` or `kiln-cli`
   change, no `docs/control-protocol.md` change.
 - Your tests: `crates/kiln-workspace/tests/project.rs`, unit tests in the touched files.
 - Determinism: output depends only on the tree's names, kinds and `.gitignore` contents (and,
