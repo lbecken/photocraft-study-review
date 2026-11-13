@@ -2,7 +2,7 @@
 id: T-011
 title: "Let kiln-cli seed the in-memory file system from a manifest, so memory and disk sessions can be compared"
 tier: medium            # ADR-0002: a CLI option that fills the in-memory VFS; reads one host file given on the command line (as `run` reads its script), writes nothing to disk, spawns nothing, no boundary or dependency
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: [ws.vfs]
 depends_on: [T-004]
@@ -153,7 +153,12 @@ the same data.
   T-011 adds no kind, so it does not touch that file.
 
 ## Questions and rulings
-None open.
+Director rulings after review round 1 (2026-11-13, decision D-067; review `reviews/T-011-r1.md`, run R-119: code correct in every probe; one test gap, three spec gaps, two nits). In this arm the implementer owns the acceptance tests; each test change is its own commit on `task/T-011-tests` that says what the spec requires.
+- u1 (test gap). A manifest that holds a file `d` and a file `dx/y` is accepted: a path is in conflict with another only when one is a directory prefix of the other at a `/` boundary. The acceptance test that claims to cover this must really seed both files and read both back; the unit test that has it the wrong way round is corrected. The reviewer's surviving mutant (a string-prefix conflict check) must be caught by an acceptance test.
+- u2 (duplicate keys). A manifest in which any JSON object repeats a key is malformed and is refused like every other malformed manifest (same exit code and refusal prefix; the reason text is free). `{"files":[…],"files":[]}` must not seed an empty file system. One acceptance test.
+- u3 (`exec` order). For `exec`, invalid params JSON is reported before the manifest is read, as it already is with `--root`. This is now stated in `docs/protocol/cli-memory-seed.md` and held by one acceptance test.
+- u4 (order of checks inside a manifest). Not observable through the CLI because the reason text is free; it stays a unit-test matter. No change.
+- u5 (nits). The AC-1 generator makes sets of 1–5 files as the spec says; the "second session starts from the manifest" check asserts what its comment claims.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
