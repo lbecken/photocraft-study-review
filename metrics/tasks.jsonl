@@ -414,3 +414,5 @@
 {"kind":"run","task":"T-042","iteration":2,"run":"R-166","role":"implementer","tier":"low","started_at":"2026-11-13T21:48:37Z","ended_at":"2026-11-13T21:49:39Z","wall_s":62,"tokens":84466,"tool_calls":9,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"low-tier documentation task: golden rule 9 and the ruling-acknowledgement bullet in AGENTS.md, the iteration-2 row of CHARTER section 5 per ADR-0005; the spec's checks run (one of its grep commands needed -e); hygiene green; full gate left to the queue on the director's instruction (disk); head abd8962c03d06f5a17029d435601e71deb4ae7ea"}
 {"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:49:59Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:49:59Z","from":"self_verified","to":"queued"}
+{"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:56:10Z","from":"queued","to":"merged"}
+{"kind":"transition","task":"T-020","iteration":2,"at":"2026-11-13T21:56:20Z","from":"ready","to":"in_progress"}
