@@ -244,6 +244,38 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   not run: acceptance tests (not visible to me); no test of a panicking command (none exists
   in the registry); Windows/macOS · tokens: unknown · missing context: none · next: join with
   the test author's branch.
+- 2026-11-13 · R-035 · in_progress (review r1 request-changes, D-028) · did: (1) rewrote
+  `docs/control-protocol.md` "Paths": lexical refusals listed, symlinks followed including
+  out of the root, confinement tracked as T-008; also removed other over-claims (determinism
+  now says OS error text in `message` can differ between platforms; "never panics" → panics
+  reported as `internal`/`panic`, document may be partly changed; log replay reproduces files
+  only if the same requests succeed again; no request size limit stated). (2) `--help`, `-h`,
+  `<subcommand> --help|-h` print usage on stdout, exit 0 (not when `-h` is the value of
+  `--root`/`--log`/`--text`). (3) stdout write failure → exit 1 with a stderr message, for
+  every Outcome-based subcommand (run, exec, commands), not only `run`. (4) usage text and doc
+  say `exec` is one command in a fresh session, edits never saved, use `run`/`control`.
+  (5) every error object now has `kind` (23 `(code, kind)` pairs, table in the doc; a unit test
+  checks the doc lists them all). `rejected` kinds are derived in kiln-control from the
+  lower-layer message (anchored on the known request/document path), falling back to `other`.
+  (6) echo clipping to ≤200 chars (199 + `…`) in `message` and `details`: request strings and
+  keys in raw/JSON/Rust-escaped form, the value a schema detail points at, the open document's
+  path, and as a backstop any >200-char run of non-white-space. (7) bad-root errors name the
+  path (`kiln-cli: bad --root: root `<p>`: not found|not a directory`; `HostError` too).
+  (8) every spawn in `apps/kiln-cli/tests/run.rs` has a 60 s timeout (try_wait loop + kill;
+  control test reads lines through a channel). No new public API. Re-ran the worked example
+  in a temp dir: stdout, `l.jsonl`, `a.txt` (`hello world\n`), exit 3 and the control
+  transcript match the document (stdout lines compared with `diff`). Commit ac24a4c.
+  · gate attempts: 1 (last: green, 278 tests) · not run: the test author's new D-028 tests
+  (not visible); a panicking command (SG-2, still untestable); non-Linux; permission-denied
+  `io_error` on disk (sandbox runs as root; covered via ENAMETOOLONG instead) · missing
+  context: the kind vocabulary and what counts as an "echoed value" were not specified, I chose
+  them as above · next: join and review.
+  Concern for the reviewer: `kind` for `rejected` is parsed from message text because
+  `CommandError::Rejected` carries no structured reason (kiln-commands is outside touches); a
+  later change to a lower-layer message would silently turn its kind into `other`. A
+  structured reason in kiln-commands would be the robust fix (new task). Residual clipping gap:
+  a >200-char value containing white space that is echoed by a message of a later request and
+  is neither in that request nor the open document's path is not clipped.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13 · R-027 · in_progress · did: wrote `apps/kiln-cli/tests/acceptance_t004.rs` (13 tests,
