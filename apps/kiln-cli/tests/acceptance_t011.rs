@@ -879,6 +879,38 @@ fn ac4_bad_manifests_are_refused_before_any_request() {
     assert!(!first_stderr_line(&out).starts_with("kiln-cli: bad --memory-seed"));
 }
 
+/// Ruling u3 (D-067): for `exec`, params that are not JSON are reported (`invalid_json`, exit 2)
+/// before the manifest is read, as with `--root`; with valid params the manifest is checked.
+#[test]
+fn ac4_exec_reports_invalid_params_json_before_the_manifest() {
+    let work = fresh("ac4u3");
+    std::fs::write(
+        work.join("odd.json"),
+        r#"{"files":[{"path":"a","hex":"abc"}]}"#,
+    )
+    .unwrap();
+    for manifest in ["missing.json", "odd.json"] {
+        let out = kiln(&["exec", "doc.open", "{", "--memory-seed", manifest], &work);
+        assert_eq!(code(&out), 2, "{manifest}");
+        assert!(out.stdout.is_empty(), "{manifest}");
+        let err: Value = serde_json::from_str(first_stderr_line(&out).as_str())
+            .unwrap_or_else(|e| panic!("{manifest}: not a JSON error ({e}): {}", stderr(&out)));
+        assert_eq!(err["code"], json!("invalid_json"), "{manifest}");
+        // Positive control: valid params, so the manifest is read and refused.
+        let out = kiln(
+            &[
+                "exec",
+                "doc.open",
+                r#"{"path":"a"}"#,
+                "--memory-seed",
+                manifest,
+            ],
+            &work,
+        );
+        assert_bad_manifest(&out, manifest, "valid params");
+    }
+}
+
 /// Pinned (d): the manifest path is resolved against the current directory (relative or
 /// absolute), and a refusal names it as given on the command line.
 #[test]
