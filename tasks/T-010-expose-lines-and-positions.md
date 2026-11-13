@@ -173,7 +173,12 @@ model in the test (split on `\r\n|\r|\n`; UTF-8 and UTF-16 lengths of prefixes) 
   error-kind line.
 
 ## Questions and rulings
-None open.
+Director rulings on the builders' pre-code checks (2026-11-13, decision D-059; questions from the test author R-108 and the implementer R-107, answered to both at once, each checked against the code on main `7dccc49`). Where a ruling differs from text above, the ruling governs.
+- q1 (AC-4). The `--log` file has no `mutating` field (`Host::log_script` writes `{"command","id","params"}` only) and `kiln-control` is not in `touches`. AC-4 reads: after `doc.line`/`doc.position` requests `doc.info` shows the document unchanged; `run --log` lists the successful requests as script lines; `kiln-cli commands --schema` shows `"mutating": false` for both commands; and the registry's session log (`Context::log()`) records them with `mutating: false`.
+- q2 (`out_of_range` description). The widening to "an offset, line or column beyond the end" is dropped: the `out_of_range` row of the reason table is not edited by this task, and no test asserts a new description for it. Three merged tests pin today's text, and the wording is not worth changing a T-032 contract test. `docs/protocol/doc-positions.md` states that a line or column beyond the end is refused with `out_of_range`. The task adds exactly one row to the table: `NotABoundary`.
+- q3 (stale sentence). D-2's remark that the task adds an error-kind line to `docs/control-protocol.md` is struck; that file is not touched (Pinned (b), AC-6).
+- q4 (`doc` parameter). `doc` has the same schema as in the existing doc commands (an unsigned integer, as `doc.info` takes it); `doc: 0` is refused with `no_such_document`, not `invalid_params`.
+- q5 (existing unit test). The unit test `describe_lists_doc_commands_with_mutating_flag` in `crates/kiln-commands/src/doc.rs` is updated by the implementer to include the two commands; its hard-coded number of doc commands becomes a check that the expected names are present, so later tasks do not edit it (logged under golden rule 4).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
