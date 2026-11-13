@@ -661,6 +661,80 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   in this worktree's copy of the task file. · next: director; join.
 <!-- end implementer log -->
 ### test author
+- 2026-11-13T22:39Z · R-169 · ready · rulings acknowledged, all accepted and acted on: D-044
+  (`NoTree` → `internal`/`other`; no test can provoke it, none written); D-056 (limit 2^20
+  chars, `rejected`/`too_large`); D-097 Q-1 (a refusal keeps the cache: AC-8 expects `mode:
+  "unchanged"` after undo), Q-2 (`mode` is the one cache-dependent field; AC-9 does not compare
+  it), Q-3 (no time asserted; every process timeout is a labelled hang detector, 600 s), Q-4
+  (stack pairing: AC-7 examples), Q-5 (AC-10), Q-6 (implementer's `reason.rs` edit; nothing
+  for tests). · did: `apps/kiln-cli/tests/acceptance_t020_cli.rs`, 10 tests, all through the
+  built `kiln-cli` (`run --root` scripts, `control --root` sessions, `commands --schema`), each
+  fixture in a fresh dir under `CARGO_TARGET_TMPDIR` removed on drop. No guard file (none
+  required). Criterion → test → result on base (all by assertion, the first `syntax.*`
+  response is `unknown_command`, or for AC-9 the missing schema entry):
+  AC-1 `corpus_parses_through_protocol` (valid/invalid by MANIFEST `set`; plus T-016's MISSING
+  `;`@18..18 in `errors` and `sexp` of `fn f() { let x = 1 }`) assertion;
+  AC-2 `incremental_equals_fresh_session` (Pinned (g) `fn f() {}` sexp/full/unchanged/
+  incremental, plus `unchanged` after an edit followed by `syntax.highlight` or
+  `match-bracket`, per Interface "whichever of the three"; then 100 fixed-seed edits per valid
+  file in three parallel `control` sessions, each step's tree fields equal to a fresh `run`
+  session on the same text, `mode` rule checked) assertion;
+  AC-3 `highlight_partitions_text` (all 45 corpus files, 60 ranges each incl. start-only,
+  end-only, empty; sub-range = whole-text spans clipped; CRLF-interior bounds; empty doc;
+  `out_of_range`, `inverted_range`, `start: null` → `invalid_params`/`schema`) assertion;
+  AC-4 `highlight_agrees_with_tokenizer` (proc-macro2 literals = string∪number chars; keyword
+  texts in the pinned list; comments start `//`/`/*`) assertion;
+  AC-5 `highlight_marks_fn_names` (syn fn names; worked example exact and clipped to 10..17;
+  plus a hand-derived rules fixture, see below) assertion;
+  AC-6 `brackets_agree_with_token_groups` (every bracket char of every valid file) assertion;
+  AC-7 `bracket_worked_examples` (all (g) bracket examples, both ends of each pair, `len` →
+  null, `len+1` → `out_of_range`, `<`/`>` and string/comment brackets null, doc 0
+  `no_such_document`, the examples reached by insert/replace/undo on one doc) assertion;
+  AC-8 `oversized_documents_are_refused` (as specified, plus `syntax.highlight` at the limit =
+  one `comment` span, `highlight` with `start: 2000000` and `5..2` → `too_large`, doc 2 →
+  `no_such_document`) assertion;
+  AC-9 `syntax_commands_are_read_only` (`mutating: false`; `doc.info`, `cursor.get`,
+  `doc.text`, `doc.list` equal around valid and refused calls; typing group) assertion;
+  AC-10 `deep_nesting_is_answered` (exact spans worked out from the rules, pairs 9/1000009 and
+  4/5, exit 0) assertion.
+  Scorecard: syntax.parse → `corpus_parses_through_protocol`,
+  `oversized_documents_are_refused`, `syntax_commands_are_read_only`; syntax.incremental →
+  `incremental_equals_fresh_session`; syntax.highlight → `highlight_partitions_text`,
+  `highlight_agrees_with_tokenizer`, `highlight_marks_fn_names`; syntax.brackets →
+  `brackets_agree_with_token_groups`, `bracket_worked_examples`, `deep_nesting_is_answered`
+  (all `kiln_cli::acceptance_t020_cli::…`, the names of the spec's table).
+  Interpreted: (1) AC-5 adds `pub fn m(&mut self) -> S { let mut v = super::f(); self.g();
+  h::<u8>(); }` with spans I worked out by hand from rules 4–6 (not a spec value; it was the
+  only way to kill a dropped `mutable_specifier` rule); AC-10's exact spans likewise. If the
+  director rejects hand-derived values, both reduce to the partition check. (2) AC-5 "a
+  `function` span at the ident's offset" read as a span exactly equal to the ident's range.
+  (3) AC-1 "≥ 1 error inside the text" read as ≥ 1 error and every error within `0..len`.
+  Self-check: a scratch stub of the three commands (kiln-syntax `highlight.rs`/`brackets.rs`,
+  kiln-commands `syntax.rs`, the `TooLarge` row) passed all 10, then was removed with
+  `git checkout` and never committed. Checking against it caught one wrong test of mine (a
+  `(source_file` sexp prefix that the spec does not give: an invalid file can have an `ERROR`
+  root), which I removed. Seeded bugs → tests that killed them: no `mutable_specifier` →
+  fn_names; clip off by one → partition, tokenizer, fn_names, oversized, deep; no merge → the
+  same five; char literal not `string` → tokenizer; no `field_expression` callee → fn_names;
+  no `function_signature_item` → fn_names; textual bracket stack ignoring strings/comments →
+  token_groups, worked_examples; limit `>=` → oversized; limit in bytes → oversized; refusal
+  drops the cache → oversized; mode always `full` → incremental, oversized; no `end` range
+  check → partition; `mutating: true` → read_only; `incremental` reported with errors →
+  incremental; `out_of_range` before `too_large` → oversized; error kinds swapped → parse;
+  match-bracket bypassing the cache → incremental. 17 of 18 killed; the survivor: pairing with
+  the first unpaired opener instead of the nearest (QUESTION below). Run time of the file on
+  this machine (4 cores, shared, debug, against the stub): about 31 s, mostly AC-2 (as
+  information, not asserted). · gate attempts: 0 (as directed, only this target: `cargo test
+  -p kiln-cli --test acceptance_t020_cli` 10 failed on base as above; `cargo fmt --check`
+  clean; `cargo clippy -p kiln-cli --tests -- -D warnings` clean on base and with the stub) ·
+  not run: `cargo xtask ci` (whole gate), the tests against the real implementation · missing
+  context: none · next: director (join).
+  QUESTION: Q-4's stack (nearest unpaired opener) cannot be told apart from "first unpaired
+  opener" by any input the spec gives or the valid corpus holds: no parent there has two
+  openers before a closer. Proposed: the planner adds a worked example from a node dump where
+  an `ERROR` parent holds `( ( )` as direct leaves (e.g. checked on `) ( ( )`, if that keeps
+  all three under one `ERROR`), with its expected pairs; the test author then adds it to
+  `bracket_worked_examples`.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
