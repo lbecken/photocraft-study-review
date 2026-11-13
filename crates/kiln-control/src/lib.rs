@@ -13,8 +13,8 @@
 //!
 //! `code` and `kind` are stable machine-readable values (`kind` refines `code`; the full list is in
 //! `docs/control-protocol.md`); `message` and `details` are for humans and may contain operating-system
-//! error text. Any value from the session that an error message or detail echoes back is cut
-//! to at most 200 characters.
+//! error text. Error lines are size-capped ([`cap_error`]): every string in `message` and
+//! `details` is at most 200 characters and the whole line at most 4096 bytes.
 //!
 //! The `kind` of a `rejected` error is derived from the message the lower layers produce
 //! (`kiln-commands` reports `rejected` with a message only); `rejected_kind` holds that
@@ -40,10 +40,6 @@ impl fmt::Display for HostError {
 }
 
 impl std::error::Error for HostError {}
-
-/// The longest echo of a session value inside an error message or detail, in characters
-/// (a longer value is cut to `MAX_ECHO - 1` characters followed by `…`).
-const MAX_ECHO: usize = 200;
 
 /// Every `(code, kind)` pair an error response can carry.
 #[cfg(test)]
@@ -79,7 +75,7 @@ pub struct Host {
     registry: Registry,
     ctx: Context,
     /// Path of each open document, from successful `doc.open` / `doc.close` responses (used
-    /// only to classify and clip error messages that name a document's path).
+    /// only to classify error messages that name a document's path).
     doc_paths: BTreeMap<u64, String>,
 }
 
@@ -115,21 +111,14 @@ impl Host {
         if is_blank(line) {
             return None;
         }
-        let (parsed, request) = parse_request(line);
+        let request = parse_request(line);
         let mut response = match request {
             Err(failure) => failure.into_response(),
             Ok(request) => self.execute(request),
         };
-        // The one place every error response leaves the host: echoes of any input value of
-        // the session (this line, and every earlier successful request in the log) are clipped.
-        if let Some(error) = response.get_mut("error") {
-            let raw = match &parsed {
-                Some(_) => None,
-                None => Some(Value::String(String::from_utf8_lossy(line).into_owned())),
-            };
-            let mut sources: Vec<&Value> = parsed.iter().chain(raw.iter()).collect();
-            sources.extend(self.ctx.log().iter().map(|e| &e.params));
-            clip_error(error, &sources);
+        // The one place every response leaves the host: error lines get the size caps.
+        if response.get("error").is_some() {
+            cap_error(&mut response);
         }
         Some(canonical(&response))
     }
@@ -232,66 +221,53 @@ pub const MAX_ERROR_LINE: usize = 4096;
 /// anywhere inside `details` is cut to [`MAX_ERROR_STRING`] characters; then, if the compact
 /// line is longer than [`MAX_ERROR_LINE`] bytes, `details` becomes `{"truncated":true}`.
 pub fn cap_error(line: &mut Value) {
-    let _ = line;
+    let wrapped = line.get("error").is_some_and(Value::is_object);
+    let error = if wrapped {
+        &mut line["error"]
+    } else {
+        &mut *line
+    };
+    if let Some(message) = error.get_mut("message") {
+        cap_strings(message);
+    }
+    if let Some(details) = error.get_mut("details") {
+        cap_strings(details);
+    }
+    if canonical(line).len() > MAX_ERROR_LINE {
+        let error = if wrapped {
+            &mut line["error"]
+        } else {
+            &mut *line
+        };
+        if let Some(details) = error.get_mut("details") {
+            *details = json!({"truncated": true});
+        }
+    }
 }
 
 /// `text` with every line cut to [`MAX_ERROR_STRING`] characters (for error text on stderr).
 pub fn cap_text(text: &str) -> String {
-    text.to_owned()
+    let mut out = String::with_capacity(text.len().min(MAX_ERROR_LINE));
+    for line in text.split_inclusive('\n') {
+        match line.strip_suffix('\n') {
+            Some(body) => {
+                out.push_str(&cap_string(body));
+                out.push('\n');
+            }
+            None => out.push_str(&cap_string(line)),
+        }
+    }
+    out
 }
 
 /// The capped error object `{"code","kind","message"[,"details"]}` for `e`, raised by
 /// `command` with `params` (as the protocol reports it, without `id`).
 pub fn command_error_json(command: &str, params: &Value, e: &CommandError) -> Value {
-    let _ = (command, params);
-    e.to_json()
-}
-
-/// Clip, in an error object `{"code","kind","message"[,"details"]}`, every echo of a value
-/// from `sources` in `message` and in each `details` entry to at most 200 characters.
-/// `sources` are the input values the error may echo (requests, params, arguments).
-pub fn clip_error(error: &mut Value, sources: &[&Value]) {
-    if let Some(Value::String(message)) = error.get_mut("message") {
-        *message = clip_text(message, sources);
-    }
-    if let Some(Value::Array(details)) = error.get_mut("details") {
-        for detail in details.iter_mut() {
-            if let Value::String(d) = detail {
-                *d = clip_detail(d, sources);
-            }
-        }
-    }
-}
-
-/// `text` with every echo of a value from `sources` clipped to at most 200 characters.
-///
-/// A value is recognised as is, JSON-escaped and Rust-escaped; any run of more than 200
-/// non-white-space characters that is left is clipped too. Text of at most 200 characters is
-/// returned unchanged (nothing in it can be a longer echo).
-pub fn clip_text(text: &str, sources: &[&Value]) -> String {
-    clip_with(text, sources, None)
-}
-
-/// As [`clip_text`], for a schema-validation detail: also the compact JSON of the value the
-/// detail's JSON pointer names in a source (or in its `params`), or of a whole source.
-fn clip_detail(detail: &str, sources: &[&Value]) -> String {
-    clip_with(detail, sources, Some(detail))
-}
-
-fn clip_with(text: &str, sources: &[&Value], detail: Option<&str>) -> String {
-    if text.chars().count() <= MAX_ECHO {
-        return text.to_owned();
-    }
-    let mut forms = Vec::new();
-    for source in sources {
-        collect_long_strings(source, &mut forms);
-        if let Some(d) = detail {
-            detail_value_forms(d, source, &mut forms);
-        }
-    }
-    forms.sort_by_key(|f| std::cmp::Reverse(f.len()));
-    forms.dedup();
-    clip_echoes(text, &forms)
+    let path = params.get("path").and_then(Value::as_str);
+    let mut response = Failure::from_command(Value::Null, command, e, path).into_response();
+    let mut error = response["error"].take();
+    cap_error(&mut error);
+    error
 }
 
 /// The message of the `internal` error a panicking command produces (marks kind `panic`).
@@ -304,7 +280,7 @@ struct Request {
     params: Value,
 }
 
-/// An error response before echo clipping.
+/// An error response before the size caps.
 struct Failure {
     id: Value,
     code: String,
@@ -358,7 +334,7 @@ impl Failure {
         }
     }
 
-    /// The response (echoes are clipped later, in [`Host::handle_line`]).
+    /// The response (capped later, in [`Host::handle_line`]).
     fn into_response(self) -> Value {
         let mut error = Map::new();
         error.insert("code".into(), Value::String(self.code));
@@ -427,94 +403,29 @@ fn is_decode_reason(reason: &str) -> bool {
         && (head.starts_with("invalid ") || head.contains(": invalid "))
 }
 
-/// `s` cut to at most [`MAX_ECHO`] characters (`…` marks a cut).
-fn clip(s: &str) -> String {
-    if s.chars().count() <= MAX_ECHO {
+/// `s` cut to at most [`MAX_ERROR_STRING`] characters: the first 199 and `…`. Works on
+/// characters, so a multi-byte character is never split.
+fn cap_string(s: &str) -> String {
+    if s.chars().count() <= MAX_ERROR_STRING {
         return s.to_owned();
     }
-    let mut out: String = s.chars().take(MAX_ECHO - 1).collect();
+    let mut out: String = s.chars().take(MAX_ERROR_STRING - 1).collect();
     out.push('…');
     out
 }
 
-/// The forms in which `s` can appear inside a message (as is, JSON-escaped, Rust-escaped),
-/// when longer than [`MAX_ECHO`] characters.
-fn push_forms(s: &str, forms: &mut Vec<String>) {
-    if s.chars().count() <= MAX_ECHO {
-        return;
-    }
-    forms.push(s.to_owned());
-    let json = Value::String(s.to_owned()).to_string();
-    forms.push(json[1..json.len() - 1].to_owned());
-    let debug = format!("{s:?}");
-    forms.push(debug[1..debug.len() - 1].to_owned());
-}
-
-/// Every long string (keys and values) of `value`.
-fn collect_long_strings(value: &Value, forms: &mut Vec<String>) {
+/// Cap every string inside `value` (array items and object values, at any depth).
+fn cap_strings(value: &mut Value) {
     match value {
-        Value::String(s) => push_forms(s, forms),
-        Value::Array(items) => items.iter().for_each(|v| collect_long_strings(v, forms)),
-        Value::Object(map) => {
-            for (k, v) in map {
-                push_forms(k, forms);
-                collect_long_strings(v, forms);
+        Value::String(s) => {
+            if s.chars().count() > MAX_ERROR_STRING {
+                *s = cap_string(s);
             }
         }
+        Value::Array(items) => items.iter_mut().for_each(cap_strings),
+        Value::Object(map) => map.values_mut().for_each(cap_strings),
         _ => {}
     }
-}
-
-/// A schema-validation detail reads `<pointer>: <value> <reason>` (or `<reason>` at the root,
-/// where the value is the whole params object): push the compact JSON of the value that
-/// pointer names in `source` (or in `source.params`), and of `source` and its `params`, when
-/// long.
-fn detail_value_forms(detail: &str, source: &Value, forms: &mut Vec<String>) {
-    let params = source.get("params");
-    let mut candidates: Vec<&Value> = vec![source];
-    candidates.extend(params);
-    if let Some((pointer, _)) = detail.split_once(": ")
-        && pointer.starts_with('/')
-    {
-        candidates.extend(source.pointer(pointer));
-        candidates.extend(params.and_then(|p| p.pointer(pointer)));
-    }
-    for value in candidates {
-        if value.is_array() || value.is_object() {
-            let compact = value.to_string();
-            if compact.chars().count() > MAX_ECHO {
-                forms.push(compact);
-            }
-        }
-    }
-}
-
-/// `text` with every occurrence of each of `forms` (longest first) clipped, then every run of
-/// more than [`MAX_ECHO`] non-white-space characters clipped (an echo the forms missed).
-fn clip_echoes(text: &str, forms: &[String]) -> String {
-    let mut text = text.to_owned();
-    for form in forms {
-        if text.contains(form.as_str()) {
-            text = text.replace(form.as_str(), &clip(form));
-        }
-    }
-    clip_runs(&text)
-}
-
-fn clip_runs(text: &str) -> String {
-    let mut out = String::with_capacity(text.len().min(4096));
-    let mut run = String::new();
-    for c in text.chars() {
-        if c.is_whitespace() {
-            out.push_str(&clip(&run));
-            run.clear();
-            out.push(c);
-        } else {
-            run.push(c);
-        }
-    }
-    out.push_str(&clip(&run));
-    out
 }
 
 /// True iff `line` is empty or consists only of whitespace (any Unicode white space; a line
@@ -523,53 +434,43 @@ fn is_blank(line: &[u8]) -> bool {
     std::str::from_utf8(line).is_ok_and(|s| s.chars().all(char::is_whitespace))
 }
 
-/// Validate one non-blank line as a protocol request. Returns the parsed JSON (if the line was
-/// JSON) and the request or its error.
-fn parse_request(line: &[u8]) -> (Option<Value>, Result<Request, Failure>) {
+/// Validate one non-blank line as a protocol request.
+fn parse_request(line: &[u8]) -> Result<Request, Failure> {
     let null = Value::Null;
-    let text = match std::str::from_utf8(line) {
-        Ok(t) => t,
-        Err(e) => {
-            let f = Failure::protocol(
-                null,
-                "invalid_json",
-                "not_utf8",
-                format!("request is not valid UTF-8: {e}"),
-            );
-            return (None, Err(f));
-        }
-    };
-    let value: Value = match serde_json::from_str(text) {
-        Ok(v) => v,
-        Err(e) => {
-            let f = Failure::protocol(
-                null,
-                "invalid_json",
-                "syntax",
-                format!("request is not JSON: {e}"),
-            );
-            return (None, Err(f));
-        }
-    };
-    let request = validate(&value);
-    (Some(value), request)
+    let text = std::str::from_utf8(line).map_err(|e| {
+        Failure::protocol(
+            null.clone(),
+            "invalid_json",
+            "not_utf8",
+            format!("request is not valid UTF-8: {e}"),
+        )
+    })?;
+    let value: Value = serde_json::from_str(text).map_err(|e| {
+        Failure::protocol(
+            null.clone(),
+            "invalid_json",
+            "syntax",
+            format!("request is not JSON: {e}"),
+        )
+    })?;
+    validate(value)
 }
 
-fn validate(value: &Value) -> Result<Request, Failure> {
+fn validate(value: Value) -> Result<Request, Failure> {
     let invalid = |id: &Value, kind, message: &str| {
         Failure::protocol(id.clone(), "invalid_request", kind, message)
     };
-    let Value::Object(obj) = value else {
+    let Value::Object(mut obj) = value else {
         return Err(invalid(
             &Value::Null,
             "not_an_object",
             "request must be a JSON object",
         ));
     };
-    let id = match obj.get("id") {
+    let id = match obj.remove("id") {
         None => Value::Null,
-        Some(v @ Value::String(_)) => v.clone(),
-        Some(Value::Number(n)) if n.is_i64() || n.is_u64() => Value::Number(n.clone()),
+        Some(v @ Value::String(_)) => v,
+        Some(Value::Number(n)) if n.is_i64() || n.is_u64() => Value::Number(n),
         Some(_) => {
             return Err(invalid(
                 &Value::Null,
@@ -594,8 +495,8 @@ fn validate(value: &Value) -> Result<Request, Failure> {
             format!("unknown top-level key(s) {list}; allowed: `command`, `id`, `params`");
         return Err(invalid(&id, "unknown_key", &message));
     }
-    let command = match obj.get("command") {
-        Some(Value::String(s)) => s.clone(),
+    let command = match obj.remove("command") {
+        Some(Value::String(s)) => s,
         Some(_) => {
             return Err(invalid(
                 &id,
@@ -605,9 +506,9 @@ fn validate(value: &Value) -> Result<Request, Failure> {
         }
         None => return Err(invalid(&id, "missing_command", "`command` is missing")),
     };
-    let params = match obj.get("params") {
+    let params = match obj.remove("params") {
         None => Value::Object(Map::new()),
-        Some(v @ Value::Object(_)) => v.clone(),
+        Some(v @ Value::Object(_)) => v,
         Some(_) => {
             return Err(invalid(
                 &id,
@@ -1036,32 +937,125 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut h = Host::on_disk(&dir).unwrap();
-        let long = "n".repeat(300);
-        let line = format!(r#"{{"command":"doc.open","params":{{"path":"{long}"}}}}"#);
+        let line = json!({"command": "doc.open", "params": {"path": "n".repeat(300)}}).to_string();
         let v = call(&mut h, &line);
         assert_eq!(v["error"]["kind"], "io_error", "{v}");
         assert_eq!(v["error"]["code"], "rejected");
-        let msg = v["error"]["message"].as_str().unwrap();
-        assert!(!msg.contains(&"n".repeat(MAX_ECHO)), "{msg}");
+        assert!(v["error"]["message"].as_str().unwrap().chars().count() <= MAX_ERROR_STRING);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// No error text of `v` contains more than MAX_ECHO consecutive chars of `needle`'s
-    /// repeated unit.
-    fn assert_clipped(v: &Value, unit: &str) {
-        let too_long = unit.repeat(MAX_ECHO / unit.chars().count() + 1);
-        let mut texts = vec![v["error"]["message"].as_str().unwrap().to_owned()];
-        if let Some(d) = v["error"]["details"].as_array() {
-            texts.extend(d.iter().map(|d| d.as_str().unwrap().to_owned()));
+    /// Every string inside `v`, at any depth.
+    fn strings(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::String(s) => out.push(s.clone()),
+            Value::Array(a) => a.iter().for_each(|x| strings(x, out)),
+            Value::Object(m) => m.values().for_each(|x| strings(x, out)),
+            _ => {}
         }
-        for t in texts {
-            assert!(!t.contains(&too_long), "not clipped: {t}");
-            assert!(t.chars().count() < 3 * MAX_ECHO, "too long: {t}");
+    }
+
+    /// The D-031 caps hold for the response line `line`.
+    fn assert_capped(line: &str) {
+        assert!(
+            line.len() <= MAX_ERROR_LINE,
+            "{} bytes: {line:.200}",
+            line.len()
+        );
+        let v: Value = serde_json::from_str(line).unwrap();
+        let mut all = Vec::new();
+        strings(&v["error"]["message"], &mut all);
+        strings(&v["error"]["details"], &mut all);
+        for s in all {
+            assert!(s.chars().count() <= MAX_ERROR_STRING, "{s:.300}");
         }
     }
 
     #[test]
-    fn echoed_values_are_clipped_to_200_chars() {
+    fn cap_string_cuts_on_characters() {
+        assert_eq!(cap_string("short"), "short");
+        let exact = "x".repeat(MAX_ERROR_STRING);
+        assert_eq!(cap_string(&exact), exact);
+        // Multi-byte characters (2-, 3- and 4-byte) are never split.
+        for c in ['é', '€', '😀'] {
+            let s = c.to_string().repeat(MAX_ERROR_STRING + 1);
+            let capped = cap_string(&s);
+            assert_eq!(capped.chars().count(), MAX_ERROR_STRING);
+            assert!(capped.ends_with('…'));
+            assert!(capped.chars().take(MAX_ERROR_STRING - 1).all(|x| x == c));
+        }
+        // A cut right after a multi-byte character at position 199.
+        let s = format!("{}é{}", "a".repeat(198), "b".repeat(10));
+        assert_eq!(cap_string(&s), format!("{}é…", "a".repeat(198)));
+    }
+
+    #[test]
+    fn cap_error_caps_strings_in_message_and_nested_details() {
+        let long = "w x ".repeat(100);
+        let mut e = json!({
+            "code": "invalid_params",
+            "kind": "schema",
+            "message": long,
+            "details": [long, {"deep": [long, 1, null]}, "short"],
+        });
+        cap_error(&mut e);
+        let cut = cap_string(&long);
+        assert_eq!(cut.chars().count(), MAX_ERROR_STRING);
+        assert_eq!(e["message"], cut.as_str());
+        assert_eq!(
+            e["details"],
+            json!([cut, {"deep": [cut, 1, null]}, "short"])
+        );
+        assert_eq!(
+            (e["code"].clone(), e["kind"].clone()),
+            (json!("invalid_params"), json!("schema"))
+        );
+        // Wrapped in a response, the same.
+        let mut r = json!({"error": {"code": "rejected", "kind": "other", "message": long}, "id": 1, "ok": false});
+        cap_error(&mut r);
+        assert_eq!(r["error"]["message"], cut.as_str());
+        assert_eq!(r["id"], 1);
+    }
+
+    #[test]
+    fn cap_error_replaces_details_when_the_line_is_too_long() {
+        // 30 details of 200 chars: each string is within the cap, the line is not.
+        let details: Vec<String> = (0..30).map(|i| format!("{i:03}").repeat(66)).collect();
+        let mut r = json!({"error": {"code": "invalid_params", "kind": "schema",
+            "message": "invalid params", "details": details}, "id": "x", "ok": false});
+        cap_error(&mut r);
+        assert_eq!(r["error"]["details"], json!({"truncated": true}));
+        assert_eq!(r["error"]["message"], "invalid params");
+        assert!(canonical(&r).len() <= MAX_ERROR_LINE);
+        // Just under the limit, details are kept.
+        let few: Vec<String> = details[..10].to_vec();
+        let mut r = json!({"error": {"code": "invalid_params", "kind": "schema",
+            "message": "m", "details": few.clone()}, "id": 1, "ok": false});
+        cap_error(&mut r);
+        assert_eq!(r["error"]["details"], json!(few));
+        // Multi-byte strings: the byte limit is on the encoded line.
+        let wide: Vec<String> = (0..8).map(|_| "😀".repeat(150)).collect();
+        let mut r = json!({"error": {"code": "invalid_params", "kind": "schema",
+            "message": "m", "details": wide}, "id": 1, "ok": false});
+        cap_error(&mut r);
+        assert_eq!(r["error"]["details"], json!({"truncated": true}));
+    }
+
+    #[test]
+    fn cap_text_caps_each_line() {
+        let long = "é".repeat(500);
+        let text = format!("kiln-cli: {long}\nusage:\n  short\n{long}");
+        let capped = cap_text(&text);
+        let lines: Vec<&str> = capped.split('\n').collect();
+        assert_eq!(lines.len(), 4);
+        assert!(lines.iter().all(|l| l.chars().count() <= MAX_ERROR_STRING));
+        assert_eq!(&lines[1..3], &["usage:", "  short"]);
+        assert!(lines[0].starts_with("kiln-cli: éé") && lines[0].ends_with('…'));
+        assert_eq!(cap_text("a\nb\n"), "a\nb\n");
+    }
+
+    #[test]
+    fn every_error_response_is_capped() {
         let mut h = host();
         call(
             &mut h,
@@ -1069,172 +1063,53 @@ mod tests {
         );
         let a = "a".repeat(5000);
         let sp = "a b ".repeat(2000);
-        let quote = r#"\"\n"#.repeat(500);
+        let short_strings = vec!["a b"; 2000];
+        let short_obj: Map<String, Value> =
+            (0..2000).map(|i| (format!("k{i}"), json!("a b"))).collect();
         let lines = [
-            format!(r#"{{"command":"{a}"}}"#),
-            format!(r#"{{"command":"doc.list","{a}":1}}"#),
-            format!(r#"{{"command":"doc.open","params":{{"path":"{a}"}}}}"#),
-            format!(r#"{{"command":"doc.open","params":{{"path":"{sp}"}}}}"#),
-            format!(r#"{{"command":"doc.open","params":{{"path":"../{sp}"}}}}"#),
-            format!(
-                r#"{{"command":"doc.open","params":{{"path":"../{}"}}}}"#,
-                quote
-            ),
-            format!(
-                r#"{{"command":"doc.insert","params":{{"doc":"{sp}","offset":0,"text":"x"}}}}"#
-            ),
-            format!(
-                r#"{{"command":"doc.insert","params":{{"doc":[{}1],"offset":0,"text":"x"}}}}"#,
-                "\"a b\",".repeat(500)
-            ),
-            format!(
-                r#"{{"command":"doc.insert","params":{{"doc":1,"offset":0,"text":"x","{sp}":1}}}}"#
-            ),
+            json!({"command": a}).to_string(),
+            json!({"command": "doc.list", sp.clone(): 1}).to_string(),
+            json!({"command": "doc.open", "params": {"path": sp}}).to_string(),
+            json!({"command": "doc.open", "params": {"path": format!("../{sp}")}}).to_string(),
+            json!({"command": "doc.insert", "params": {"doc": sp, "offset": 0, "text": "x"}})
+                .to_string(),
+            // R2-D1: arrays and objects of short strings to commands without params.
+            json!({"command": "doc.list", "params": {"x": short_strings}}).to_string(),
+            json!({"command": "buffer.text", "params": {"x": short_obj}}).to_string(),
+            json!({"command": "doc.insert", "params": {"doc": [sp, sp], "offset": 0, "text": "x"}})
+                .to_string(),
+            // Many unknown keys: an unbounded message (R2-N2).
+            Value::Object((0..300).map(|i| (format!("key {i}"), json!(1))).collect()).to_string(),
+            format!("{{\"command\":\"{}", "é".repeat(3000)),
         ];
-        for (i, line) in lines.iter().enumerate() {
-            let v = call(&mut h, line);
-            assert_eq!(v["ok"], false, "{i}");
-            assert_clipped(&v, "a");
-            assert_clipped(&v, "a b ");
-            assert_clipped(&v, r#"\"\n"#);
-            assert!(v["error"].to_string().contains('…'), "{i}: {v}");
+        for line in &lines {
+            let out = h.handle_line(line.as_bytes()).unwrap();
+            assert!(out.contains(r#""ok":false"#), "{out:.200}");
+            assert_capped(&out);
         }
-        // Short values are echoed in full.
+        // Short errors are not touched.
         let v = call(&mut h, r#"{"command":"no.such"}"#);
         assert_eq!(v["error"]["message"], "unknown command `no.such`");
     }
 
-    /// `text` holds no window of more than MAX_ECHO chars of the periodic `value`.
-    fn no_long_echo(text: &str, value: &str) -> bool {
-        let chars: Vec<char> = value.chars().collect();
-        (0..4).all(|start| {
-            let window: String = chars.iter().skip(start).take(MAX_ECHO + 1).collect();
-            window.chars().count() <= MAX_ECHO || !text.contains(&window)
-        })
-    }
-
-    fn error_texts(v: &Value) -> Vec<String> {
-        let mut t = vec![v["error"]["message"].as_str().unwrap().to_owned()];
-        if let Some(d) = v["error"]["details"].as_array() {
-            t.extend(d.iter().map(|d| d.as_str().unwrap().to_owned()));
-        }
-        t
-    }
-
     #[test]
-    fn a_long_path_with_spaces_echoed_by_a_later_request_is_clipped() {
-        let dir = std::env::temp_dir().join(format!("kiln-control-later-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        // Segments with spaces, each short enough for the file system, 300+ chars in all.
-        let segs: Vec<String> = (0..6).map(|i| format!("{i} a b c ").repeat(9)).collect();
-        let rel = format!("{}/f.txt", segs.join("/"));
-        assert!(rel.chars().count() > 300);
-        std::fs::create_dir_all(dir.join(segs.join("/"))).unwrap();
-        std::fs::write(dir.join(&rel), b"x").unwrap();
-        let mut h = Host::on_disk(&dir).unwrap();
-        let open = json!({"command": "doc.open", "params": {"path": rel}}).to_string();
-        assert_eq!(call(&mut h, &open)["ok"], true);
-        call(
-            &mut h,
-            r#"{"command":"doc.insert","params":{"doc":1,"offset":0,"text":"!"}}"#,
-        );
-        std::fs::remove_dir_all(dir.join(&segs[0])).unwrap();
-        // The save request itself holds no path; the echo comes from the earlier doc.open.
-        let v = call(&mut h, r#"{"command":"doc.save","params":{"doc":1}}"#);
-        assert_eq!(v["error"]["kind"], "not_found", "{v}");
-        let msg = v["error"]["message"].as_str().unwrap();
-        assert!(msg.starts_with("cannot save 0 a b c"), "{msg}");
-        assert!(msg.contains('…') && msg.ends_with(": not found"), "{msg}");
-        assert!(no_long_echo(msg, &rel), "{msg}");
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn values_with_and_without_spaces_are_clipped_in_message_and_details() {
-        for value in ["v".repeat(1000), "v w ".repeat(250), "\"q\" ".repeat(250)] {
-            let mut h = host();
-            let j = Value::String(value.clone());
-            let lines = [
-                // message: unknown command, invalid path, unknown key
-                format!(r#"{{"command":{j}}}"#),
-                format!(
-                    r#"{{"command":"doc.open","params":{{"path":{}}}}}"#,
-                    Value::String(format!("../{value}"))
-                ),
-                format!(r#"{{"command":"doc.list",{j}:1}}"#),
-                // details: a string where an integer is expected, an array of it, a key
-                format!(
-                    r#"{{"command":"doc.insert","params":{{"doc":{j},"offset":0,"text":"x"}}}}"#
-                ),
-                format!(
-                    r#"{{"command":"doc.insert","params":{{"doc":[{j},{j}],"offset":0,"text":"x"}}}}"#
-                ),
-                format!(
-                    r#"{{"command":"doc.insert","params":{{"doc":1,"offset":0,"text":"x",{j}:1}}}}"#
-                ),
-            ];
-            for line in &lines {
-                let v = call(&mut h, line);
-                assert_eq!(v["ok"], false, "{line:.80}");
-                let escaped = j.to_string();
-                let debug = format!("{value:?}");
-                for t in error_texts(&v) {
-                    for form in [&value, &escaped, &debug] {
-                        assert!(no_long_echo(&t, form), "{t}");
-                    }
-                }
-                assert!(v["error"].to_string().contains('…'), "{v}");
-            }
-        }
-    }
-
-    #[test]
-    fn clip_error_keeps_the_template_and_short_values() {
-        let long = "p q ".repeat(100);
-        let source = json!({"params": {"path": long}});
-        let mut e = json!({
-            "code": "rejected",
-            "kind": "not_found",
-            "message": format!("cannot open {long}: not found"),
-            "details": [format!("/path: {} is bad", Value::String(long.clone())), "short".to_owned()],
-        });
-        clip_error(&mut e, &[&source]);
-        let msg = e["message"].as_str().unwrap();
-        assert!(
-            msg.starts_with("cannot open p q ") && msg.ends_with("…: not found"),
-            "{msg}"
-        );
+    fn command_error_json_has_kind_and_caps() {
+        let e = CommandError::rejected(format!("cannot open {}: not found", "z".repeat(400)));
+        let v = command_error_json("doc.open", &json!({"path": "z".repeat(400)}), &e);
+        assert_eq!(v["code"], "rejected");
+        assert_eq!(v["kind"], "not_found");
+        assert!(v.get("id").is_none());
         assert_eq!(
-            msg.chars().count(),
-            "cannot open ".len() + MAX_ECHO + ": not found".len()
+            v["message"].as_str().unwrap().chars().count(),
+            MAX_ERROR_STRING
         );
-        let d0 = e["details"][0].as_str().unwrap();
-        assert!(
-            d0.starts_with("/path: \"p q") && d0.ends_with("…\" is bad"),
-            "{d0}"
-        );
-        assert_eq!(e["details"][1], "short");
+        let e = CommandError::UnknownCommand {
+            message: "unknown command `q`".into(),
+        };
         assert_eq!(
-            (e["code"].clone(), e["kind"].clone()),
-            (json!("rejected"), json!("not_found"))
+            command_error_json("q", &json!({}), &e),
+            json!({"code": "unknown_command", "kind": "unknown_command", "message": "unknown command `q`"})
         );
-        // Text that cannot hold a long echo is returned as is.
-        assert_eq!(
-            clip_text("cannot open a.txt: not found", &[&source]),
-            "cannot open a.txt: not found"
-        );
-    }
-
-    #[test]
-    fn clip_keeps_200_chars() {
-        let s = "é".repeat(250);
-        let c = clip(&s);
-        assert_eq!(c.chars().count(), MAX_ECHO);
-        assert!(c.ends_with('…'));
-        assert_eq!(clip("short"), "short");
-        assert_eq!(clip_runs(&"x".repeat(MAX_ECHO)), "x".repeat(MAX_ECHO));
-        let r = clip_runs(&format!("{} y", "x".repeat(MAX_ECHO + 1)));
-        assert_eq!(r.chars().count(), MAX_ECHO + 2);
     }
 
     #[test]

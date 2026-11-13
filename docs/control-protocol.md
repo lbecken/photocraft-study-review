@@ -34,7 +34,11 @@ The same protocol is spoken by:
 | `params` | no | object | the command's params; defaults to `{}` |
 | `id` | no | string or integer | echoed in the response; `null` when absent |
 
-Any other top-level key is an error (`invalid_request`). Integer ids are any JSON integer
+Any other top-level key is an error (`invalid_request`).
+
+Offsets and ranges in params (`offset`, `start`, `end`, and `len_chars` in results) count
+characters, that is Unicode scalar values, not bytes or UTF-16 units: `é` is one character, an
+emoji such as `😀` is one character, and a CRLF line break is two characters (`\r`, `\n`). Integer ids are any JSON integer
 (negative allowed) that fits `i64` or `u64`; `1.5`, `1.0`, `null`, `true`, arrays and objects are
 not valid ids.
 
@@ -60,14 +64,15 @@ Failure:
   contain text from the operating system (for example `No such file or directory (os error 2)`
   or `File name too long (os error 36)`), which differs between platforms.
 - `error.details` (a list of strings) is present only for `invalid_params`.
-- An input value that a message or detail echoes back is cut to at most 200 characters: the
-  first 199 followed by `…`; the rest of the message is kept. This covers every value of the
-  current request and of every earlier successful request of the session (a `doc.save` error
-  naming a path opened earlier, say), whether or not it contains white space, and, for
-  `kiln-cli`, every command-line argument; it applies to every error the process reports, on
-  stdout (`run`, `control`) and on stderr (`exec` and the CLI's own messages). In addition, any
-  run of more than 200 non-white-space characters in a message or detail is cut the same way.
-  A valid `id` is always echoed in full.
+- Size caps, whatever the error and wherever its text came from: every string in `message`
+  and every string anywhere inside `details` is at most 200 characters (Unicode scalar
+  values); a longer one is cut to its first 199 characters followed by `…`. A cut never splits
+  a character, and the line stays valid JSON. Then, if the whole error line would be longer
+  than 4096 bytes, `details` is replaced by `{"truncated":true}`. The same caps apply to error
+  text on stderr: the `exec` error object, and every line of the CLI's own messages (at most
+  200 characters each).
+- A valid `id` is always echoed in full; it is not counted against the caps, so a request
+  with an `id` of several kilobytes can get an error line longer than 4096 bytes.
 
 ### Error codes and kinds
 
@@ -99,7 +104,7 @@ Failure:
 
 The `kind` of a `rejected` error is currently derived by `kiln-control` from the message the
 lower layers produce; a refusal it does not recognise is reported as `other`, never dropped.
-Further kinds may be added later; a client should treat an unknown `kind` by its `code`.
+This table is the specified set of `(code, kind)` pairs; no other pair is produced.
 
 A request that fails validation, or a command that returns an error, is not recorded in the
 session log; commands are written so that a refused request leaves the session unchanged.
@@ -159,7 +164,11 @@ kiln-cli commands [--schema | --audit]
 kiln-cli --help | -h | <subcommand> --help
 ```
 
-- `--help` or `-h` (alone, or after a subcommand) prints the usage text on stdout and exits 0.
+- `--help` or `-h` (alone, or after a subcommand) prints the usage text on stdout and exits 0
+  when that output can be written (1 otherwise, as for every subcommand).
+- A usage error prints what was wrong on the first stderr line (for example
+  ``kiln-cli: unknown option `--root=x` for `run` ``, `kiln-cli: missing argument <script>`),
+  then the usage text, and exits 2.
 - `--root <dir>` (default: the current directory) is the root of the disk file system the
   commands act on; paths in requests are relative to it (see Paths for what is and is not
   refused). A root that does not exist or is not a directory is a usage error whose message
@@ -174,7 +183,8 @@ kiln-cli --help | -h | <subcommand> --help
 - `control` reads stdin until end of input; each response is written and flushed before the
   next request is read, so a client can wait for the answer before sending the next request.
 - `exec` runs **one command in a fresh session**, with its params given as a JSON argument,
-  prints the result (not a protocol response) on stdout, or the error JSON on stderr. It can
+  prints the result (not a protocol response) on stdout, or on stderr the same error object a
+  protocol response would carry (`code`, `kind`, `message`, `details`; no `id`). It can
   read files (`doc.open`, `doc.text`, …), but an edit made with it is never saved: the next
   `exec` is a new session in which no document is open. To edit and save files, use `run` or
   `control`. With `--text` the scratch buffer of the `buffer.*` commands starts with that text.
@@ -187,7 +197,7 @@ kiln-cli --help | -h | <subcommand> --help
 | `control` | end of input, whatever the responses | reading stdin or writing stdout failed | usage error, root not a directory | — |
 | `exec` | success | internal error, or writing stdout failed | usage error, bad root, invalid JSON, command error | — |
 | `commands` | success | audit problems, or writing stdout failed | usage error | — |
-| `--help`, `-h` | always | — | — | — |
+| `--help`, `-h` | usage printed | writing stdout failed | — | — |
 
 ## Worked example
 
