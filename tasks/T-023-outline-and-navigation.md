@@ -32,7 +32,7 @@ After this task a script can:
 No gate path. Arm: **odd** (the implementer writes the acceptance tests first on
 `task/T-023-tests`).
 
-Reading list: `tasks/T-016-*.md` (SyntaxTree, corpus); `tasks/T-018-*.md` (selection, `CursorResult`);
+Reading list: `tasks/T-016-*.md` (SyntaxTree, corpus in `crates/kiln-syntax/tests/corpus/`); `tasks/T-018-*.md` (selection, `CursorResult`);
 `tasks/T-019-*.md` (walk); `tasks/T-022-*.md` "Text of a file" (same rule here);
 `tasks/T-010-*.md` (0-based `line`/`col`).
 
@@ -81,6 +81,12 @@ Rules (exact):
     a rank, by path in tree order, then `start`. The first `limit` are kept.
   - `line`/`col` are 0-based, of `name_start`.
 
+Parsing: `nav.outline` and `nav.workspace-symbols` call `SyntaxTree::parse`, which returns
+`Result<SyntaxTree, ParseError>` (T-016); the only error, `ParseError::NoTree`, cannot occur
+with the pinned versions. If it does, the command fails with `internal`/`other` (message
+`tree-sitter returned no tree`); `nav.workspace-symbols` does not add the file to `skipped`
+(PROPOSED, R-079; awaiting the director, see the planner log). No `unwrap`/`expect` on it.
+
 No new error kind. `docs/protocol/nav.md` documents the commands and rules.
 
 ## Pinned
@@ -92,7 +98,8 @@ No new error kind. `docs/protocol/nav.md` documents the commands and rules.
 - (e) Threat model: n/a beyond T-019's walk (reused unchanged).
 - (f) Snapshots: none.
 - (g) Worked examples:
-  - Text (spike-checked leaves) `impl<T> Display for Foo<T> { fn fmt(&self) {} }\nmod m;\ntrait T { fn x(&self); }`
+  - Text (spike-checked leaves; R-079: the tree is identical with tree-sitter 0.27.1, T-016's
+    pin, and 0.27.2) `impl<T> Display for Foo<T> { fn fmt(&self) {} }\nmod m;\ntrait T { fn x(&self); }`
     → items: `impl` `Display for Foo<T>`, name range `20..26`, depth 0; `fn` `fmt`
     `32..35`, depth 1; `mod` `m` `52..53`, depth 0; `trait` `T` `61..62`, depth 0; `fn` `x`
     `68..69`, depth 1.
@@ -104,6 +111,8 @@ No new error kind. `docs/protocol/nav.md` documents the commands and rules.
   `nav.workspace-symbols` over a project root (`nav.workspace-symbol`).
 
 ## Acceptance criteria
+Corpus files are read by path from `crates/kiln-syntax/tests/corpus/`, stored as
+`<name>.rs.txt` and selected by their `set` in `MANIFEST.toml` (T-016 Pinned (b)).
 - AC-1 (`syntax.outline`, differential with syn): on every `valid` corpus file, the
   `nav.outline` items of kinds other than `impl` equal the items found by walking `syn::File`.
   The walk takes `Item::{Fn, Struct, Enum, Trait, Mod}`, recurses into inline `mod` content and
@@ -120,7 +129,8 @@ No new error kind. `docs/protocol/nav.md` documents the commands and rules.
   `nav.goto-symbol` equals `{anchor: name_start, head: name_end}` of that item. The source slice
   of that range equals `name` (except `impl`). `index` = count → `out_of_range`. Oracle:
   consistency with `nav.outline` + exact value.
-- AC-5 (`nav.workspace-symbol`): for a project made of corpus files (with a `.gitignore`d
+- AC-5 (`nav.workspace-symbol`): for a project made of corpus files, each copied into the
+  project as `<stem>.rs` (the command lists only names ending in `.rs`; with a `.gitignore`d
   copy, a `target/` copy and a non-UTF-8 `.rs` file) and ≥ 30 queries, the result equals a
   naive model. The model opens each `project.tree` `.rs` file in a fresh session, calls
   `nav.outline`, then filters and ranks by the rule. After `doc.insert` of `fn zzz_new() {}`
@@ -143,6 +153,7 @@ No new error kind. `docs/protocol/nav.md` documents the commands and rules.
   go first on `task/T-023-tests`.
 
 ## Questions and rulings
+- Director (2026-11-13, D-044): when the parse contract returns `ParseError::NoTree`, the command fails with code `internal`, kind `other`, as proposed.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -160,6 +171,13 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   example was executed against a naive model. Pinned (e), (f) n/a. · gate attempts: 0 · missing
   context: none · next: director.
 - 2026-11-13 · R-066 · draft · did: `invalid_pattern` and the reason API are T-032's (D-041); `depends_on` gains T-032 explicitly. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-079 · draft · did: followed T-016's revised contract (R-077/R-079): corpus
+  path `crates/kiln-syntax/tests/corpus/`, `.rs.txt` files selected by MANIFEST `set`; AC-5
+  copies them as `<stem>.rs` (spec check R-067 note 17); `parse` returns `Result` (handling
+  PROPOSED in Interface). Re-ran the (g) outline text's tree on 0.27.1 and 0.27.2: identical.
+  · gate attempts: 0 · missing context: none · next: director.
+  QUESTION: on `ParseError::NoTree`, fail `nav.outline`/`nav.workspace-symbols` with
+  `internal`/`other` (proposed), or list the file under `skipped` with a new reason?
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

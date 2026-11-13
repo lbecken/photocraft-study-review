@@ -48,9 +48,10 @@ impl Query {
 }
 impl CompiledQuery {
     pub fn find_all(&self, text: &str) -> Vec<Captures>;   // T-017's Captures; literal: one group (0)
-    /// The replacement text for one match: literal mode → `replacement` verbatim;
-    /// regex mode → T-017 expansion.
-    pub fn replacement_for(&self, caps: &Captures, text: &str, replacement: &str) -> String;
+    /// The replacement text for one match: literal mode → `Ok(replacement)` verbatim;
+    /// regex mode → T-017's `Regex::expand`, whose `Err(TemplateError)` is passed through.
+    pub fn replacement_for(&self, caps: &Captures, text: &str, replacement: &str)
+        -> Result<String, TemplateError>;                    // T-017's TemplateError
 }
 ```
 
@@ -61,6 +62,8 @@ impl CompiledQuery {
   Unicode simple case folding, as T-017's case-insensitive mode does. `\r\n` in the pattern
   matches only `\r\n`.
 - Regex: T-017's `Regex` with `case_insensitive = !case_sensitive`, with T-017's iteration.
+  Inline flags in the pattern (`(?i)`, `(?-i)`, `(?s)`, …) are accepted and override
+  `case_sensitive` and the line modes for their scope, as T-017 pins.
 - Whole word (both modes): first the matches the search reports without whole-word, then keep
   those with a word boundary at both ends. Word char = `c == '_' || c.is_alphanumeric()`. A
   match `[s, e)` has boundaries iff (`s == 0` or char `s−1` is not a word char) and
@@ -85,11 +88,20 @@ true), `whole_word?` (default false).
 - Refusals: `QueryError::Empty` and `Pattern` → `rejected`/`invalid_pattern`. The message is
   `empty search pattern`, or `invalid pattern: <PatternError message>`. Then `no_such_document`,
   and `from > len_chars` → `out_of_range`. All kinds exist (T-015); no new kind.
+- Replacement naming a group that does not exist (regex mode; T-017 `TemplateError`): whether a
+  template is an error depends only on the pattern and the template, so `search.replace`
+  checks it before matching, whether or not there is a match, and refuses with
+  `rejected`/`invalid_pattern`, message `invalid replacement: <TemplateError Display>` (e.g.
+  `invalid replacement: no capture group "3"`). Nothing changes. (PROPOSED, R-079: kind and
+  message await the director; see the planner log.)
 
-`docs/protocol/search.md` documents the commands and all rules above, with the examples.
+`docs/protocol/search.md` documents the commands and all rules above, with the examples,
+including T-017's expansion rule (a reference to a group that does not exist is refused, unlike
+the `regex` crate's own expansion) and that inline flags override the options.
 
 ## Pinned
-- (a) Precedence: schema → `no_such_document` → `invalid_pattern` → `out_of_range`.
+- (a) Precedence: schema → `no_such_document` → `invalid_pattern` (the pattern, then the
+  replacement template) → `out_of_range`.
 - (b) Files: none.
 - (c) Order: matches are computed on the document's current text before any replacement;
   replacement texts are computed from those captures.
@@ -107,6 +119,9 @@ true), `whole_word?` (default false).
   - text `a1 b2`, regex `(\w)(\d)`, replacement `$2$1`, `all:true` → `1a 2b`, `replaced: 2`.
     One `doc.undo` → `a1 b2`.
   - literal `$1` replacement in literal mode is inserted verbatim.
+  - text `a1 b2`, regex `(\w)(\d)`, replacement `$3` or `$x`, `all:true` → refused
+    (`rejected`/`invalid_pattern`, per the PROPOSED rule above), text unchanged; `$0-` →
+    `a1- b2-`. (Executed against a naive model of T-017's rule, R-079.)
 - (h) Evaluator calls: `kiln-cli run` with `doc.open`, `search.find` (each option combination),
   `search.replace`, `doc.undo`, `doc.text`.
 
@@ -116,14 +131,18 @@ All through `kiln-cli run` or `kiln_control::Host`.
   é É σ Σ ς ſ s S K k \r \n` and space, `search.find` (literal, both case settings) equals a
   naive scan. The naive scan compares chars with T-017's test predicate ("equal, or equal
   lowercase, or equal uppercase") when case-insensitive. Oracle: naive model.
-- AC-2 (`search.regex`): for ≥ 5,000 random pairs in T-017's regex subset, `search.find` equals
-  a naive backtracking model, written in the test, of T-017's iteration rules. `(`, `[a-`,
+- AC-2 (`search.regex`): for ≥ 5,000 random pairs in T-017's regex subset, generated with
+  T-017's restriction (no `*`, `+`, `?` or lazy form on a sub-pattern that can match the empty
+  string; T-017 AC-1 says why), `search.find` equals a naive backtracking model, written in the
+  test, of T-017's iteration, anchor and capture rules. `(`, `[a-`,
   `a{99999999}` and the empty pattern give `rejected`/`invalid_pattern`, and the session is
   unchanged. Oracle: naive model + exact value.
 - AC-3 (`search.whole-word`): for the AC-1 and AC-2 inputs, `whole_word: true` equals the naive
   filter of the non-whole-word result. The worked examples hold. Oracle: naive model.
-- AC-4 (`search.replace`): for random texts, queries and replacement templates, `all: true`
-  gives `doc.text` equal to the naive replacement, and `replaced` equals the match count.
+- AC-4 (`search.replace`): for random texts, queries and replacement templates (regex mode:
+  T-017's AC-2 template alphabet and its expansion rule), `all: true` gives `doc.text` equal to
+  the naive replacement, and `replaced` equals the match count. A template that names a group
+  that does not exist is refused as in Interface, and the session is unchanged.
   `all: false, from: f` replaces exactly the first match with `start ≥ f`. One `doc.undo`
   restores the original text exactly, and `doc.redo` re-applies. `replaced: 0` leaves
   `can_undo` unchanged. Oracle: naive model + round trip.
@@ -146,6 +165,7 @@ All through `kiln-cli run` or `kiln_control::Host`.
   go on `task/T-021-tests`, committed and failing on base before you write the code.
 
 ## Questions and rulings
+- Director (2026-11-13, D-044): a replacement template that fails to expand is refused as `invalid_pattern`, checked before any matching is done, as proposed.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -162,6 +182,16 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   in-memory, oracle-rich). Every worked example was executed (Python model; regex rows on regex
   1.13.1). Pinned (b), (e), (f) n/a. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-066 · draft · did: `invalid_pattern` is T-032's (D-041); `depends_on` gains T-032; `QueryError` is mapped in `search.rs` (finding 12). · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-079 · draft · did: followed T-017's revised contract (R-077): `expand` returns
+  `Result<String, TemplateError>`, so `replacement_for` does too; refusal for a bad template
+  PROPOSED (`invalid_pattern`, checked before matching); AC-2 takes T-017's generator
+  restriction (spec check R-067 note 14); AC-4 uses T-017's expansion rule; inline flags and
+  the expansion difference go into `docs/protocol/search.md`. New (g) example executed against
+  a naive Python model of T-017's rule. · gate attempts: 0 · missing context: none · next:
+  director.
+  QUESTION: a replacement naming a non-existent group: refuse with `invalid_pattern` and
+  message `invalid replacement: …` (proposed; no new kind), or a new kind through T-032? And
+  is it checked before matching (proposed), so a bad template is refused even with no match?
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

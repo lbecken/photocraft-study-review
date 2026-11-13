@@ -66,3 +66,4 @@ Used so far: R-001 … R-073.
 - T-032 has had its spec-check edits applied (still `draft`); ADR-0004 still `proposed` — accept it, then make T-032 ready once T-015 merges. After ADR-0004 is accepted, publish the CHARTER §3 sentence as a low-tier task.
 - Two spec edits still owed before their tasks are dispatched: T-008 line ~122 must drop its edit of a table cell in `docs/control-protocol.md` (it conflicts with T-032's rule that later tasks do not edit table cells — spec check T-032 finding 4); T-027 line ~72 still says "T-015's `VfsError` mapping" (it is T-032's now).
 - T-015's AC-1 was corrected after dispatch (D-043); both builders were notified.
+- 07:20 UTC: T-016 and T-017 accepted (D-044) and `ready`. Still owed before dispatch of T-022: its line ~65 uses `replacement_for`, which now returns `Result`.

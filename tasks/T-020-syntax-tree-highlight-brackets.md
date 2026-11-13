@@ -32,7 +32,7 @@ tree a fresh parse would give. All four commands are read-only.
 No gate path. Arm: **even** (independent test author).
 
 Reading list: `tasks/T-016-*.md` (SyntaxTree, sexp form, corpus layout);
-`crates/kiln-testkit/corpus/MANIFEST.toml`; `tasks/T-015-*.md` (`SyntaxState`, `Parts`);
+`crates/kiln-syntax/tests/corpus/MANIFEST.toml`; `tasks/T-015-*.md` (`SyntaxState`, `Parts`);
 `tasks/T-007-*.md` (b) read-only property.
 
 ## Interface
@@ -51,6 +51,12 @@ cache that no command result exposes is not state, and T-007's check compares ob
 only. A command's result never depends on the cache except for `mode`, which says how the tree
 was obtained: `full` if no tree was cached for the document, `unchanged` if the text equals the
 cached text, `incremental`/`full` per `SyntaxTree::update` otherwise.
+
+`SyntaxTree::parse` and `SyntaxTree::update` return `Result<_, ParseError>` (T-016); the only
+error is `ParseError::NoTree`, which cannot occur with the pinned versions (T-016 Interface).
+If it does, the command fails with `internal`/`other` (message `tree-sitter returned no tree`),
+and the cache entry for that document is left as it was (PROPOSED, R-079; awaiting the
+director, see Questions). No `unwrap`/`expect` on these results.
 
 ### `syntax.highlight` spans (exact)
 Spans are sorted, contiguous and non-overlapping. They cover `[start, end)` exactly (default
@@ -85,14 +91,19 @@ bracket rule.
 ## Pinned
 - (a) Errors: schema → `no_such_document` → `out_of_range` (offset, `start`, `end`) →
   `inverted_range` (`start > end`).
-- (b) Files: none. Corpus files are read by tests only (by path, `crates/kiln-testkit/corpus/`).
+- (b) Files: none. Corpus files are read by tests only, by path from the workspace root:
+  `crates/kiln-syntax/tests/corpus/` (T-016 Pinned (b)). They are stored as `<name>.rs.txt`
+  and are selected by their `set` (`valid` | `gap` | `invalid`) in `MANIFEST.toml`, not by a
+  glob on `.rs`.
 - (c) Order: n/a beyond (a).
 - (d) Offsets are chars; the tree is of the document's current text (BOM excluded).
 - (e) Threat model: n/a (no boundary). Large inputs: a 10 MB document must answer
   `syntax.tree` (its `sexp` is large; that is accepted).
 - (f) Snapshots: none.
 - (g) Worked examples (leaves checked with tree-sitter 0.27.2 / rust 0.24.2 in a spike; offsets
-  computed by script):
+  computed by script). T-016 pins `tree-sitter =0.27.1` / `tree-sitter-rust =0.24.2`; R-067
+  found 0.27.1 byte-identical to 0.27.2 on its spike inputs, and R-079 dumped every node (kind,
+  field, byte range, named, error) of the texts below with both versions: identical. VERIFIED:
   - `fn f() { let s: u8 = 1; } // c` (30 chars) → spans `0..2 keyword`, `2..3 plain`,
     `3..4 function`, `4..9 plain`, `9..12 keyword`, `12..16 plain`, `16..18 type`,
     `18..21 plain`, `21..22 number`, `22..26 plain`, `26..30 comment`.
@@ -107,16 +118,19 @@ bracket rule.
   `syntax.match-bracket` (`syntax.brackets`).
 
 ## Acceptance criteria
-All through `kiln-cli run`/`control` or `kiln_control::Host` on files from the pinned corpus,
-copied to a temp root.
+All through `kiln-cli run`/`control` or `kiln_control::Host` on files from the pinned corpus
+(`crates/kiln-syntax/tests/corpus/`, selected by MANIFEST `set`), copied to a temp root.
 - AC-1 (`syntax.parse`): every `valid` corpus file gives `has_error: false` and `errors: []`.
   Every `invalid` file gives `has_error: true` and ≥ 1 error inside the text. Oracle: rustc (the
-  corpus is rustc-checked by T-016's test).
+  corpus's recorded rustc run, tied to the bytes by hash and checked by T-016's
+  `corpus_is_pinned_and_compiles`).
 - AC-2 (`syntax.incremental`): for every `valid` file, ≥ 100 fixed-seed random
   `doc.insert`/`doc.delete`/`doc.replace`/`doc.undo` per file, each followed by `syntax.tree`.
   Its `has_error`, `errors`, `sexp` and `node_count` equal `syntax.tree` in a fresh session
-  holding the same text (`doc.text`). `mode` is `incremental` whenever `has_error` is false, and
-  never `full` after the first call when `has_error` is false. Oracle: from-scratch parse.
+  holding the same text (`doc.text`). `mode` is `unchanged` iff the text equals the text at the
+  previous `syntax.tree` call for that document (a random `doc.undo` can restore it);
+  otherwise, after the first call, `incremental` unless the fresh session's `has_error` is
+  true, when it may be `incremental` or `full`. Oracle: from-scratch parse.
 - AC-3 (`syntax.highlight`, partition): for every corpus file and ≥ 50 random sub-ranges, the
   spans are sorted, contiguous, non-overlapping, merged and cover the range exactly, and every
   kind is one of the seven. Oracle: constructed property.
@@ -155,6 +169,7 @@ copied to a temp root.
 - Your tests: `crates/kiln-syntax/tests/highlight.rs`, unit tests in touched files.
 
 ## Questions and rulings
+- Director (2026-11-13, D-044): when the parse contract returns `ParseError::NoTree`, the command fails with code `internal`, kind `other`, as proposed.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -175,6 +190,14 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   comparison · next: director.
 - 2026-11-13 · R-060 · draft · did: recorded the director's ruling on the cache (R-060 answer 2); the stop condition is removed. The same sentence is in T-007 (b). · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-066 · draft · did: raises `out_of_range`/`inverted_range` with structured reasons, so `depends_on` gains T-032 (D-041). · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-079 · draft · did: followed T-016's revised contract (R-077/R-079): corpus
+  path `crates/kiln-syntax/tests/corpus/`, `.rs.txt` files selected by MANIFEST `set`; the
+  version note in (g); `parse`/`update` return `Result` (handling PROPOSED below); AC-2's mode
+  rule per spec check R-067 note 16; AC-1 oracle is the recorded rustc run. · gate attempts: 0
+  · missing context: none · next: director.
+  QUESTION: map `ParseError::NoTree` in `syntax.*` to `internal`/`other` (proposed; no new
+  kind), or another kind? It cannot occur with the pinned versions.
+  Re-ran (g)'s trees on 0.27.1 and 0.27.2 in a scratch spike (removed): identical.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

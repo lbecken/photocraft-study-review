@@ -2,7 +2,7 @@
 id: T-016
 title: "Parse Rust with tree-sitter in kiln-syntax: a syntax tree with error spans, a pinned S-expression form and incremental update, checked against a pinned compiling corpus"
 tier: high              # ADR-0002: adds external dependencies (tree-sitter, tree-sitter-rust) and dev-dependencies
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: []     # library contract only; syntax.* items are claimed through commands by T-020 / T-023
 depends_on: []
@@ -10,8 +10,7 @@ touches:
   - crates/kiln-syntax/Cargo.toml          # + tree-sitter, tree-sitter-rust; dev: syn, proc-macro2, toml
   - crates/kiln-syntax/src                 # lib.rs, tree.rs; empty highlight.rs, brackets.rs, outline.rs
   - crates/kiln-syntax/tests/tree.rs       # implementer's own integration tests
-  - crates/kiln-testkit/corpus             # the pinned corpus (written by the TEST AUTHOR, see Pinned (b))
-  - crates/kiln-testkit/corpus-rustc-run.toml  # the recorded compiler run (written by the IMPLEMENTER, see Pinned (b))
+  - crates/kiln-syntax/tests/corpus        # TEST AUTHOR only: corpus files, MANIFEST.toml (hashes), corpus-rustc-run.toml; see Pinned (b)
   - apps/kiln-cli/Cargo.toml               # [dev-dependencies] syn, proc-macro2 only (oracles for T-020/T-023)
   - Cargo.lock                             # generated; the queue regenerates it, so overlap with another in-flight task on this path is permitted
 budget_tokens: 850000   # high (v1.1)
@@ -27,7 +26,7 @@ origin_task: null
 `SyntaxTree` that reports whether it holds error or missing nodes, and where. It can render the
 tree in a pinned S-expression form with char offsets, and update it for a new text
 incrementally. The result always equals a parse from scratch. A pinned corpus of compiling Rust
-files lives in `crates/kiln-testkit/corpus/`. That gives the constructed oracle "compiles ⇒
+files lives in `crates/kiln-syntax/tests/corpus/`. That gives the constructed oracle "compiles ⇒
 parses without error nodes" (CHARTER §3 decision 5, claim C8) its input, here and in T-020 and
 T-023. This task carries the dependency risk alone, so the feature tasks built on it can be
 medium.
@@ -142,16 +141,23 @@ name:(identifier@3..4) parameters:(parameters@4..6) body:(block@7..9)))` (one li
 ## Pinned
 - (a) Errors: one type, `ParseError`, with one variant, `NoTree` (Interface). Malformed Rust is
   not an error: every input yields a tree, and error recovery shows up as `ErrorSpan`s.
-- (b) Corpus layout. The **test author** writes it on `task/T-016-tests`; the implementer
-  never edits it. No corpus file has the extension `.rs`: every source file is stored as
+- (b) Corpus layout. The corpus is a test fixture in `crates/kiln-syntax/tests/corpus/`. The
+  **test author** delivers all of it on `task/T-016-tests`, in the same commits as the
+  acceptance tests: the corpus files, `MANIFEST.toml` (the content hashes) and
+  `corpus-rustc-run.toml` (the run record). Only the test author writes anything under this
+  directory; the implementer never reads or edits it, and the implementer's code and unit
+  tests do not depend on its contents. The directory is listed in `touches` because the
+  queue's allowed-path rule admits only `acceptance_tNNN*.rs`/`guard_tNNN*.rs` files directly
+  in `tests/` (precheck.rs:319–332, 344–360), not fixture files or subdirectories. Cargo builds no
+  test target from it (it has no `.rs` file and no `main.rs`). No corpus file has the extension `.rs`: every source file is stored as
   `<name>.rs.txt`, because the gate's `no-skip` step parses every `.rs` file under `crates/`
   with `syn` and aborts on one that does not parse (noskip.rs:471, 503), and an `invalid` file
   never parses. Every corpus file ends with `\n`.
   - "Compiles", for a corpus file, means: the run recorded in
-    `crates/kiln-testkit/corpus-rustc-run.toml` (below) exited 0 on exactly the bytes whose
+    `corpus/corpus-rustc-run.toml` (below) exited 0 on exactly the bytes whose
     FNV-1a 64 hash is pinned in `MANIFEST.toml`; "rustc rejects" means it exited ≠ 0. No test
     spawns `rustc`.
-  - `crates/kiln-testkit/corpus/rust/*.rs.txt` (set `valid`): ≥ 30 files; the sum of `lines`
+  - `corpus/rust/*.rs.txt` (set `valid`): ≥ 30 files; the sum of `lines`
     over the `valid` set is ≥ 4,000. Each compiles alone, std only, and `syn::parse_file`
     (syn 2.0.119, as locked) succeeds on it. Crate-level `#![allow(...)]` is permitted. Files
     are UTF-8 without BOM. One file uses CRLF line endings and one has non-ASCII identifiers
@@ -187,11 +193,11 @@ name:(identifier@3..4) parameters:(parameters@4..6) body:(block@7..9)))` (one li
     `MIT OR Apache-2.0` only), and for `gap` a `gap = "<one sentence>"`. Nothing is downloaded.
   The pin is the manifest. A file whose bytes do not match its entry, or a file without an
   entry, fails the corpus test.
-  - `crates/kiln-testkit/corpus-rustc-run.toml`, written by the **implementer** (director
-    ruling, R-077): the recorded result of one compiler run, committed next to the corpus as
-    evidence. The implementer copies `corpus/` at a commit of `task/T-016-tests` into a scratch
-    directory outside the worktree and the repository, and runs, there, for each file, with a
-    60 s timeout per file:
+  - `corpus/corpus-rustc-run.toml`, written by the **test author** (director ruling R-079,
+    under "Questions and rulings"): the recorded result of one compiler run, committed with the
+    corpus as evidence. The test author copies the corpus files into a scratch directory
+    outside the worktree and the repository, and runs, there, for each file, with a 60 s
+    timeout per file:
     `rustc +1.97.0 --edition 2024 --crate-type lib --emit metadata --crate-name corpus
     --cap-lints allow --out-dir <scratch>/out <file>`
     (`--crate-name` is needed because `.rs.txt` is not a valid crate name; `--out-dir` keeps
@@ -201,16 +207,17 @@ name:(identifier@3..4) parameters:(parameters@4..6) body:(block@7..9)))` (one li
     command = "rustc +1.97.0 --edition 2024 --crate-type lib --emit metadata --crate-name corpus --cap-lints allow --out-dir <scratch>/out <file>"
     toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"  # `rustc +1.97.0 --version`, verbatim
     date = "<YYYY-MM-DD>"                                # UTC date of the run
-    corpus_commit = "<40 lowercase hex>"                 # the task/T-016-tests commit copied
     [[file]]
     path = "rust/generics.rs.txt"                        # as in MANIFEST.toml
     fnv1a64 = "<16 lowercase hex>"                       # of the bytes compiled
     exit = 0
     ```
     `command` is exactly the string above; `<scratch>` and `<file>` are written literally (no
-    session or machine path goes into the record).
+    session or machine path goes into the record). The per-file `fnv1a64` ties the record to
+    the exact bytes; after any change to a corpus file the test author re-runs and rewrites
+    the record.
   - `corpus_is_pinned_and_compiles` checks, spawning nothing: (i) every file under `corpus/`
-    except `MANIFEST.toml` has exactly one entry, every entry has a file, and `bytes`, `lines`
+    except `MANIFEST.toml` and `corpus-rustc-run.toml` has exactly one entry, every entry has a file, and `bytes`, `lines`
     and `fnv1a64` match; no file ends in `.rs`; (ii) the counts and the line floor above;
     (iii) the run record lists exactly the manifest's paths, each with the manifest's
     `fnv1a64`, `command` equals the pinned string, `toolchain` starts with `rustc 1.97.0 `,
@@ -285,14 +292,18 @@ In every AC, every call of `parse` and `update` returns `Ok`.
 None. Tests: `crates/kiln-syntax/tests/acceptance_t016.rs` (`corpus_is_pinned_and_compiles`,
 `compiling_corpus_parses_without_errors`, `workspace_sources_parse_without_errors`,
 `invalid_corpus_reports_errors`, `incremental_update_equals_fresh_parse`, `sexp_form_is_exact`,
-`hostile_inputs_parse`, `corpus_covers_checklist`).
+`hostile_inputs_parse`, `corpus_covers_checklist`). All of them go in this one file, not in a
+separate `acceptance_t016_*.rs` or `guard_t016*.rs`: `corpus_is_pinned_and_compiles` and
+`corpus_covers_checklist` use no T-016 API and need the `syn`/`toml` dev-dependencies that the
+implementer adds, so in a file of their own they would either pass on base (and the join
+refuses tests that pass on base) or not build there.
 
 ## Out of scope and implementer notes
 - Highlight, brackets, outline (T-020, T-023); any command (T-020); `kiln-text` types (the API
   takes `&str`).
 - Your tests: unit tests in `src/tree.rs` and `crates/kiln-syntax/tests/tree.rs`. You may write
-  a small private corpus for them in the test files; do not touch `crates/kiln-testkit/corpus`.
-  Your one file there is `crates/kiln-testkit/corpus-rustc-run.toml` (Pinned (b)).
+  a small private corpus for them in the test files; do not read or touch
+  `crates/kiln-syntax/tests/corpus/`.
 - Determinism: tree-sitter parsing is deterministic. Set no timeout or cancellation flag.
 - The crate doc of `crates/kiln-syntax/src/lib.rs` ("intentionally empty") is replaced;
   `missing_docs` is an error under the gate, so every public item has a doc comment.
@@ -301,6 +312,15 @@ None. Tests: `crates/kiln-syntax/tests/acceptance_t016.rs` (`corpus_is_pinned_an
   line, after T-013 merges (T-013 holds that file).
 
 ## Questions and rulings
+- Director ruling R-079 (replaces the R-077 ruling that the implementer makes the recorded
+  compiler run, which METHODOLOGY §6 "Independence" makes impossible before the join): the
+  **test author** owns the corpus and its evidence. It writes the corpus files (`.rs.txt`),
+  records their content hashes in `MANIFEST.toml`, makes the one compiler run in a scratch
+  directory outside the worktree, and commits the run record `corpus-rustc-run.toml`
+  (command line, toolchain version, per-file exit status, date) on `task/T-016-tests` with
+  the corpus. All of it lives in `crates/kiln-syntax/tests/corpus/` (moved from
+  `crates/kiln-testkit/corpus/`), a `touches` path that only the test author writes. The
+  implementer's code and unit tests must not depend on the corpus contents.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -344,6 +364,16 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: T-020 and T-023 need follow-up edits: 0.27.2 → 0.27.1 in T-020 (g); `parse` and
   `update` now return `Result`; R-067 notes 16 (T-020 AC-2 `unchanged`) and 17 (T-023 AC-5
   copies corpus files under `<stem>.rs`).
+- 2026-11-13 · R-079 · draft · did: applied the director's ruling R-079 (recorded under
+  "Questions and rulings"; answers my first R-077 question). The test author now makes the
+  rustc run and commits `corpus-rustc-run.toml` with the corpus; `corpus_commit` dropped (the
+  record is committed with the files it describes; per-file hashes tie it to the bytes). The
+  corpus moved to `crates/kiln-syntax/tests/corpus/`, kept in `touches` because the queue's
+  allowed-path rule (precheck.rs:319–332, 344–360) admits only `acceptance_tNNN*.rs` /
+  `guard_tNNN*.rs` directly in `tests/`; the spec says only the test author writes there.
+  All acceptance tests stay in `acceptance_t016.rs` (join base rule). T-020, T-021 and T-023
+  updated for the new contracts (my second R-077 question). · gate attempts: 0 · missing
+  context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
