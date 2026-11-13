@@ -292,7 +292,10 @@ mod tests {
         assert_eq!(ranges(&f), [(0, 3), (4, 7), (8, 11), (15, 18)]);
         let f = q("Foo", false, false, true).find(t, 100);
         assert_eq!(ranges(&f), [(0, 3), (4, 7)]);
-        assert_eq!(ranges(&q("aa", false, true, true).find("aaa b aa", 9)), [(6, 8)]);
+        assert_eq!(
+            ranges(&q("aa", false, true, true).find("aaa b aa", 9)),
+            [(6, 8)]
+        );
         let f = q("a*", true, true, false).find("baaab", 9);
         assert_eq!(ranges(&f), [(0, 0), (1, 4), (5, 5)]);
     }
@@ -307,7 +310,10 @@ mod tests {
 
     #[test]
     fn literal_mode_escapes_and_folds() {
-        assert_eq!(ranges(&q("a*", false, true, false).find("aa*", 9)), [(1, 3)]);
+        assert_eq!(
+            ranges(&q("a*", false, true, false).find("aa*", 9)),
+            [(1, 3)]
+        );
         assert_eq!(q("σ", false, false, false).find("ΣςσS", 9).total, 3);
         assert_eq!(q("\n", false, true, false).find("a\r\nb\n", 9).total, 2);
         assert_eq!(q("\r\n", false, true, false).find("\r\r\n\n", 9).total, 1);
@@ -328,8 +334,14 @@ mod tests {
             .unwrap_err()
         };
         assert_eq!(e("", true), QueryError::Empty);
-        assert_eq!(e(&"(".repeat(1001), true), QueryError::TooLong { chars: 1001 });
-        assert_eq!(e(&"é".repeat(1001), false), QueryError::TooLong { chars: 1001 });
+        assert_eq!(
+            e(&"(".repeat(1001), true),
+            QueryError::TooLong { chars: 1001 }
+        );
+        assert_eq!(
+            e(&"é".repeat(1001), false),
+            QueryError::TooLong { chars: 1001 }
+        );
         assert!(matches!(e("(", true), QueryError::Pattern(_)));
         assert_eq!(
             e(&"(a)".repeat(101), true).to_string(),
@@ -353,7 +365,10 @@ mod tests {
             Some((CharMatch { start: 3, end: 5 }, "b2-".to_owned()))
         );
         assert_eq!(c.replace_first("a1 b2", 4, "$0").unwrap(), None);
-        assert_eq!(c.check_template("$3").unwrap_err().to_string(), "no capture group \"3\"");
+        assert_eq!(
+            c.check_template("$3").unwrap_err().to_string(),
+            "no capture group \"3\""
+        );
         assert!(c.replace_all("", "$x").is_err());
         let lit = q("b", false, true, false);
         assert!(lit.check_template("$3").is_ok());

@@ -671,7 +671,10 @@ mod tests {
             let template = r.template(t).unwrap();
             let mut got = Vec::new();
             r.for_each_match_bytes(text, &mut |c, b| {
-                got.push((template.expand_bytes(text, b), r.expand(c, text, t).unwrap()));
+                got.push((
+                    template.expand_bytes(text, b),
+                    r.expand(c, text, t).unwrap(),
+                ));
                 ControlFlow::Continue(())
             });
             assert_eq!(got.len(), 2);
@@ -682,7 +685,8 @@ mod tests {
         for t in ["$3", "$x", "a${1}${w2}"] {
             assert_eq!(
                 r.template(t).unwrap_err(),
-                r.expand(&Captures { groups: Vec::new() }, "", t).unwrap_err()
+                r.expand(&Captures { groups: Vec::new() }, "", t)
+                    .unwrap_err()
             );
         }
         assert_eq!(Template::verbatim("$1").expand_bytes("", &[]), "$1");
