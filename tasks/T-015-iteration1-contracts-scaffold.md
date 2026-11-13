@@ -2,7 +2,7 @@
 id: T-015
 title: "Scaffold iteration 1 before fan-out: one empty module per new command group, per-group session state, the external-tool trait with spawning off by default, glob re-exports in kiln-workspace, and the internal dependency edges"
 tier: high              # ADR-0002: dependency-table changes (workspace-internal edges + serde/serde_json in kiln-workspace); no gate path, no §3 contract
-state: in_progress
+state: tests_joined
 owner_role: planner
 scorecard_items: []     # enabling task
 depends_on: []          # no touches held by T-013 (in flight) or any other in-flight task; dispatchable now
@@ -254,6 +254,7 @@ None. Distinct target names: `crates/kiln-commands/tests/acceptance_t015.rs`
 - D-041 (director, R-066): split from the R-060 version. Part (d) of former T-030 and every
   error-kind change move to T-032.
 - Director (2026-11-13, D-043), from spec check round 2: the AC-1 guard must not embed the output of `kiln-cli commands` or `commands --schema` — every later task that adds a command changes it and no later task may edit this guard — and its recorded session must avoid behaviour later tasks are specified to change (a path that names a directory, whose refusal T-008 rewords; request ids longer than 64 characters, whose cap T-030 changes). AC-1 above has been edited accordingly.
+- Director (2026-11-13): AC-5's "`Registry::names()` is unchanged" is tested as "every command registered on base is still registered"; the exact list is the `schema` gate step's business (`docs/commands.json`). An exact-list test would break every later task that adds a command (the test author's question; same reasoning as D-043).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
