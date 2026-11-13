@@ -84,12 +84,12 @@ pub(crate) struct TreeEntryOut {
 pub(crate) struct TreeResult {
     /// Entries in preorder; each directory's entries in byte order of their names.
     entries: Vec<TreeEntryOut>,
-    /// Entries not listed (and not descended) because they are the root's `target` directory,
-    /// are named `.git`, or are ignored by a `.gitignore`.
+    /// Entries not listed (and not descended) because they are the directory whose path is
+    /// exactly `target`, are named `.git`, or are ignored by a `.gitignore`.
     ignored: usize,
     /// Names not listed because they are not UTF-8 or not a valid path segment.
     skipped: usize,
-    /// Directories listed but not descended because their path has 128 segments.
+    /// Directories listed and not descended into because their path has 128 or more segments.
     too_deep: usize,
     /// True iff an entry beyond `limit` exists.
     truncated: bool,
@@ -136,9 +136,9 @@ impl Command for Tree {
     const NAME: &'static str = "project.tree";
     const DOC: &'static str = "List the project (or the directory `path`) as a tree, in \
         preorder with each directory's entries in byte order of their names. Honours the \
-        project's `.gitignore` files, skips the root's `target` directory and every `.git`, \
-        lists symlinks and special files without following or opening them, and does not \
-        descend below 128 path segments. Rules: docs/protocol/project.md.";
+        project's `.gitignore` files, skips the directory whose path is exactly `target` and \
+        every `.git`, lists symlinks and special files without following or opening them, and \
+        lists a directory whose path has 128 or more segments without descending into it. Rules: docs/protocol/project.md.";
     const MUTATING: bool = false;
     type Params = TreeParams;
     type Output = TreeResult;

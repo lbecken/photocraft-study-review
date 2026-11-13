@@ -55,7 +55,7 @@ and their wording is not stable.
    other source is consulted: not `.git/info/exclude`, not global excludes, not `.ignore`.
    `.gitignore` files themselves are listed unless ignored.
 4. Symbolic links and special files are listed with their kind and never descended or read.
-5. Depth: a directory whose path has 128 segments is listed but not descended.
+5. Depth: a directory whose path has 128 or more segments is listed and not descended into.
 6. Limit: the walk stops when it would list entry `limit + 1`; `entries` then holds exactly
    `limit` entries and `truncated` is true.
 
@@ -71,7 +71,10 @@ Example: a root holding `.gitignore` (`*.log` and `/target`), `B.txt`, `a.rs`, `
 
 On disk, the `path` is located as `docs/protocol/paths.md` describes: a `path` whose location
 is outside the root is refused with `outside_root`, and nothing outside the root is listed or
-read.
+read. A `path` with a directory on its prefix whose location is outside the root is refused with
+`outside_root`, even when the path as a whole leads back inside the root and `doc.open` of a
+file below it succeeds, because the walk lists every directory on the prefix to find its
+`.gitignore`.
 
 Symbolic links found in the project are listed with kind `symlink` and never followed, whatever
 they point to; FIFOs, sockets and devices are listed with kind `other` and never opened, so they
@@ -84,16 +87,21 @@ any depth, the `file` and `symlink` entries are exactly the paths
 `git ls-files --cached --others --exclude-standard` lists in a fresh repository of the same
 directory with no global or system configuration, apart from the root's `target` directory.
 
-Known differences from git: `{a,b}` in a pattern matches `a` and `b` (git matches the literal
-name `{a,b}`); a trailing tab is removed from a pattern (git keeps it); a directory that holds
-its own `.git` is listed with its contents (git lists it as one entry `dir/`); names that are
-not UTF-8 or contain `\` are not listed and are counted in `skipped` (git lists them).
+Differences from git found so far (this list is not complete): `{a,b}` in a pattern matches
+`a` and `b` (git matches the literal name `{a,b}`); trailing whitespace is removed from a
+pattern, not only a trailing tab (seen for a tab, a vertical tab, U+00A0 and U+3000; git keeps
+them); POSIX character classes such as `[[:digit:]]` are not supported (git supports them); for
+the pattern `***/z`, git ignores both `z` and `p/z`, and Kiln does not ignore `z`; a directory
+that holds its own `.git` is listed with its contents (git lists it as one entry `dir/`); names
+that are not UTF-8 or contain `\` are not listed and are counted in `skipped` (git lists them).
 
 `limit` bounds the number of entries listed, not the work: each directory visited is read whole
 and sorted before any rule applies, and ignored entries do not count toward `limit`.
 
-A directory whose path has 128 segments is listed but not descended, and is counted in
-`too_deep`.
+No bound exists on the time or memory that `.gitignore` files can cost.
+
+A directory whose path has 128 or more segments is listed and not descended into, and is
+counted in `too_deep`.
 
 A directory whose location on the host has a path of 4,096 bytes or more cannot be listed, and
 the command fails with `io_error`; whether that happens depends on how long the root's own host

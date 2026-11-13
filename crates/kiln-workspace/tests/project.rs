@@ -501,3 +501,24 @@ fn a_gitignore_that_cannot_be_compiled_contributes_no_patterns() {
     );
     assert_eq!((big.ignored, big.truncated), (1, false));
 }
+
+/// Ruling y8: a `path` whose prefix directory is located outside the root is refused with
+/// `OutsideRoot`, even when the whole path leads back inside (where a read below it succeeds).
+#[test]
+fn a_prefix_directory_outside_the_root_refuses_the_path() {
+    let work = work("prefix");
+    let root = work.join("root");
+    write(&root, "real/f", "x");
+    symlink("../outside", root.join("esc")).unwrap();
+    symlink("../root/real", work.join("outside/back")).unwrap();
+    let fs_ = DiskFs::new(&root).unwrap();
+    // The whole path leads back inside the root.
+    assert_eq!(fs_.read(&p("esc/back/f")).unwrap(), b"x");
+    assert_eq!(
+        fs_.list_dir(Some(&p("esc/back"))).unwrap().entries,
+        vec![entry("f", EntryKind::File)]
+    );
+    let err = disk_tree(&root, Some("esc/back")).unwrap_err();
+    assert!(matches!(err, VfsError::OutsideRoot { .. }), "{err:?}");
+    fs::remove_dir_all(&work).unwrap();
+}
