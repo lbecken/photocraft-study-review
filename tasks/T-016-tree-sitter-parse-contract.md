@@ -376,6 +376,35 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   context: none · next: director.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T11:31Z · R-096 · ready (in_progress on main) · did: restated ACs: (1) `parse`/`update` give a
+  `SyntaxTree` whose `has_error`/`errors` report every ERROR and MISSING node as char spans,
+  preorder; (2) `sexp` prints named + MISSING nodes as `(KIND@S..E …)` with `FIELD:` prefixes and
+  quoted, escaped anonymous MISSING kinds; (3) `update` is `Unchanged` iff text equal, else
+  `Incremental`, `Full` only when the incremental tree has an error, always equal to a fresh
+  parse; (4) no panic or stack overflow on hostile/deep input; `Clone + Debug + Send`, no public
+  tree-sitter types, the two pinned `pub(crate)` accessors. Added `tree-sitter =0.27.1`,
+  `tree-sitter-rust =0.24.2` (default features) to `crates/kiln-syntax`; dev-deps `syn`,
+  `proc-macro2`, `toml` (workspace) there and `syn`, `proc-macro2` in `apps/kiln-cli`.
+  `Cargo.lock` adds exactly 7 packages (cc 1.11.1, find-msvc-tools 0.1.15, shlex 2.0.1,
+  streaming-iterator 0.1.9, tree-sitter 0.27.1, tree-sitter-language 0.1.9, tree-sitter-rust
+  0.24.2), none removed or re-versioned. `src/tree.rs`: parser made per call, `set_language`
+  error → `NoTree`; update edits a clone of the old tree over the common char prefix/suffix
+  (byte points), reparses, and on an incremental tree with an error reparses from scratch
+  (`Full`); all walks iterative `TreeCursor`; error walk pruned by tree-sitter error cost (unit
+  test checks it equals an unpruned walk); `node_count` = `descendant_count` (unit test checks it
+  equals a cursor walk); byte→char via a 64-byte block table (none for ASCII). `lib.rs` crate
+  doc replaced; `highlight.rs`, `brackets.rs`, `outline.rs` are `//!` only. Tests: 8 unit tests in
+  `src/tree.rs`, 11 in `tests/tree.rs` (worked example and the three AC-5 MISSING forms exact,
+  (g) has_error values, private valid/invalid snippets, char offsets with é/😀/CRLF, 2,040
+  seeded edits incremental == fresh, hostile inputs incl. 10,000 nested balanced parens, live
+  workspace sources). Checked once by hand with 1 MB of `(` and 1 MB lossy random bytes (14 s
+  debug, passes); the committed test uses 200 kB. Commits 9a5980c4162c8cc4d13e088aa1141bf58a09e23b,
+  e210d6bd36af7cac47af9a383fcf5ffe324b939d. · gate attempts: 1 (last: green; fmt, clippy, layers,
+  ui-commands, schema, scorecard, test 401 passed, no-skip, fuzz EMPTY, budgets EMPTY) · not run:
+  the 50 MB parse (reviewer probe); nothing observable through kiln-cli yet (no command until
+  T-020); never read `tests/corpus/` or the test branch · missing context: none · next: join.
+  One slip: a `cargo test -p kiln-syntax` ran once in the primary checkout by a wrong relative
+  `cd` (build only into its existing target/, no git command, no file edited).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
