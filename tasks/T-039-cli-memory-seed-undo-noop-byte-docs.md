@@ -2,7 +2,7 @@
 id: T-039
 title: "Document `--memory-seed` in control-protocol.md, what a `doc.undo` or `doc.redo` with nothing to do leaves unchanged, and that `byte` counts the decoded text, with tests that pin each"
 tier: low               # ADR-0002: documentation and tests; two command descriptions (DOC strings) change, no behaviour
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: []     # low tier carries no scorecard item (METHODOLOGY §4)
 depends_on: []          # T-011 merged (queue record df1eb20d05d9f12389c221bc8d65761d401dc61e); T-018 merged at 7a2678498df1cb80fa96f06947e919b3f396619d
@@ -213,6 +213,7 @@ compares a whole document. Base = main `d8c4a4199ca622f8a46dd09dcccb50b9f4bc4003
   Alternative: a new page `docs/protocol/undo.md`, which touches no code file and so does not
   meet T-037 and T-038 in `doc.rs`, but is one more page a client must find.
 - Ruling on Q-1 (director, D-092): the two DOC strings, as recommended. T-039 is dispatched first of the tasks that share `doc.rs`.
+- Ruling z1 (director, D-094; METHODOLOGY v1.2 §6, no test pins a message text or a document that a drafted task changes). AC-2, AC-6 and the first half of AC-4 are not tests: no test asserts that `docs/control-protocol.md`, `docs/protocol/doc-positions.md` or the printed description of `doc.undo`/`doc.redo` contains a given sentence (T-036 edits the same CLI section and exit-code table; T-037 and T-038 edit command descriptions). The implementer copies the sentences of Interface (a), (b) and (c) into the documents and the two DOC strings, and the director compares them with the Interface on the diff before queueing (low tier has no reviewer). The second half of AC-4 is already the gate's `schema` step and needs no test. AC-1 stays (it compares option sets with `kiln-cli --help`, not wording). AC-3, AC-5 and AC-7 stay as guards of behaviour, with one limit: a guard asserts exit codes, whether stdout is empty, and for a refusal its `code` and `kind`; it never asserts the text of a message or of stderr. `acceptance_t039_cli.rs` therefore holds AC-1 only.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
