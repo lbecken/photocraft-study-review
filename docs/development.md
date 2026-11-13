@@ -183,10 +183,9 @@ but run in <B> …` — when they are **different working trees of the same repo
 common git directory), e.g. main's build served by `cargo xtask` in `.worktrees/T-NNN`. In its
 own checkout it runs; in an unrelated repository (the toy repositories tests create) it runs; if
 either side is not a git working tree it runs. The queue's run of main's xtask against a task
-worktree is the one sanctioned exception: the queue sets `KILN_XTASK_RUN_IN=<canonical worktree
-path>` for that child (gate and `{xtask}` regeneration commands), and the exception holds only
-when the variable names exactly the workspace the command runs in; anywhere else it is ignored.
-(Main's build tree `.git/kiln-queue/main-xtask/src` is not a working tree anyway.) Fix a refusal by rebuilding in the right checkout
+worktree needs no exception: main's build tree `.git/kiln-queue/main-xtask/src` is an export
+inside the git directory, not a working tree, so the guard lets it run. No environment variable
+or flag relaxes the guard (D-026 R8). Fix a refusal by rebuilding in the right checkout
 (`touch xtask/src/main.rs` or `cargo clean -p xtask`); never export one checkout's
 `CARGO_TARGET_DIR` while working in another.
 

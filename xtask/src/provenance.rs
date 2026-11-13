@@ -16,18 +16,12 @@
 //! directory. In its own checkout it runs; in an unrelated repository (the toy repositories tests
 //! create) it runs; if either side is not a git working tree it runs.
 //!
-//! The queue's deliberate run of main's xtask against a task worktree is an explicit internal
-//! path: the queue sets [`RUN_IN_ENV`] to the canonical path of that worktree for the child it
-//! starts, and the guard accepts it only when the variable names exactly the workspace the
-//! command runs in; anywhere else it is ignored, so a leaked or exported value excuses nothing
-//! else. (Main's xtask is built in `<git-common-dir>/kiln-queue/main-xtask/src`, an export inside
-//! the git directory and not a working tree, so the check would not fire for it anyway; the
-//! queue still uses the explicit path rather than rely on that.)
+//! The queue's deliberate run of main's xtask against a task worktree needs no exception and has
+//! none (D-026 R8): main's xtask is built in `<git-common-dir>/kiln-queue/main-xtask/src`, an
+//! export inside the git directory that is not a working tree, so *built* does not exist and the
+//! guard lets it run. There is no environment variable or flag that relaxes the guard.
 
 use std::path::{Path, PathBuf};
-
-/// Set by the queue for main's xtask: the canonical workspace path it may run in.
-pub const RUN_IN_ENV: &str = "KILN_XTASK_RUN_IN";
 
 /// The xtask package directory this binary was compiled from.
 pub fn built_manifest_dir() -> PathBuf {
@@ -87,8 +81,6 @@ pub struct Inputs {
     pub built: PathBuf,
     /// The cargo workspace containing the working directory.
     pub workspace: Option<PathBuf>,
-    /// Runtime [`RUN_IN_ENV`].
-    pub run_in: Option<PathBuf>,
 }
 
 impl Inputs {
@@ -97,7 +89,6 @@ impl Inputs {
         Inputs {
             built: built_manifest_dir(),
             workspace: crate::util::repo_root().ok(),
-            run_in: std::env::var_os(RUN_IN_ENV).map(PathBuf::from),
         }
     }
 }
@@ -107,9 +98,6 @@ pub fn check(i: &Inputs) -> Result<(), String> {
     let Some(ws) = &i.workspace else {
         return Ok(());
     };
-    if i.run_in.as_deref().is_some_and(|r| canon(r) == canon(ws)) {
-        return Ok(()); // the queue's deliberate main-gate run
-    }
     let built_ws = i.built.parent().unwrap_or(&i.built);
     let (Some(built), Some(run)) = (tree_at(built_ws), tree_at(ws)) else {
         return Ok(());
@@ -129,11 +117,10 @@ mod tests {
     use super::*;
     use crate::git::testrepo::{self, g};
 
-    fn inputs(built_ws: &Path, ws: &Path, run_in: Option<&Path>) -> Inputs {
+    fn inputs(built_ws: &Path, ws: &Path) -> Inputs {
         Inputs {
             built: built_ws.join("xtask"),
             workspace: Some(ws.to_path_buf()),
-            run_in: run_in.map(Path::to_path_buf),
         }
     }
 
@@ -154,32 +141,46 @@ mod tests {
                 "main",
             ],
         );
-        assert_eq!(check(&inputs(p, p, None)), Ok(()), "own checkout");
-        assert_eq!(check(&inputs(&w, &w, None)), Ok(()), "own worktree");
-        let e = check(&inputs(p, &w, None)).unwrap_err();
+        assert_eq!(check(&inputs(p, p)), Ok(()), "own checkout");
+        assert_eq!(check(&inputs(&w, &w)), Ok(()), "own worktree");
+        let e = check(&inputs(p, &w)).unwrap_err();
         assert!(!e.contains('\n'));
         assert!(e.contains(&canon(p).display().to_string()), "{e}");
         assert!(e.contains(&canon(&w).display().to_string()), "{e}");
-        assert!(check(&inputs(&w, p, None)).is_err(), "the reverse too");
-        // The explicit queue path excuses exactly the named workspace, nothing else.
-        assert_eq!(check(&inputs(p, &w, Some(&w))), Ok(()));
-        assert!(check(&inputs(p, &w, Some(p))).is_err(), "leaked value");
-        assert!(check(&inputs(&w, p, Some(&w))).is_err(), "leaked value");
+        assert!(check(&inputs(&w, p)).is_err(), "the reverse too");
     }
 
     #[test]
     fn unrelated_repositories_and_non_worktrees_run() {
         let a = testrepo::init("prov-a", &[("Cargo.toml", "[workspace]\n")]);
         let toy = testrepo::init("prov-toy", &[("Cargo.toml", "[workspace]\n")]);
-        assert_eq!(check(&inputs(a.path(), toy.path(), None)), Ok(()));
+        assert_eq!(check(&inputs(a.path(), toy.path())), Ok(()));
         // Main's xtask in the queue's private export inside the git directory: not a working tree.
         let export = a.path().join(".git/kiln-queue/main-xtask/src");
         std::fs::create_dir_all(export.join("xtask")).unwrap();
         assert_eq!(tree_at(&export), None);
-        assert_eq!(check(&inputs(&export, a.path(), None)), Ok(()));
+        assert_eq!(check(&inputs(&export, a.path())), Ok(()));
         // A subdirectory is not a working tree's top level; no workspace: nothing to compare.
         assert_eq!(tree_at(&a.path().join(".git")), None);
         assert_eq!(check(&Inputs::default()), Ok(()));
+    }
+
+    #[test]
+    fn no_variable_relaxes_the_guard() {
+        // D-026 R8: the queue's old bypass variable is gone from the guard and the queue, and
+        // the guard reads no environment at all.
+        let old = concat!("KILN_", "XTASK_RUN_IN");
+        for (name, src) in [
+            ("provenance.rs", include_str!("provenance.rs")),
+            ("queue.rs", include_str!("queue.rs")),
+        ] {
+            assert!(!src.contains(old), "{name} still mentions {old}");
+        }
+        let guard = include_str!("provenance.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        assert!(!guard.contains(concat!("env::", "var")), "the guard reads no variable");
     }
 
     #[test]
@@ -188,7 +189,6 @@ mod tests {
         let i = Inputs {
             built: built_manifest_dir(),
             workspace: built_manifest_dir().parent().map(Path::to_path_buf),
-            run_in: None,
         };
         assert_eq!(check(&i), Ok(()));
     }

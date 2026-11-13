@@ -108,12 +108,9 @@ impl GateRunner for CargoGate {
                 c.args(["--package", "xtask", "--"]);
                 c
             }
-            GateXtask::Binary(bin) => {
-                // The one sanctioned foreign run: main's xtask in this worktree (provenance.rs).
-                let mut c = std::process::Command::new(bin);
-                c.env(crate::provenance::RUN_IN_ENV, canonical(worktree));
-                c
-            }
+            // Main's xtask in this worktree: built in a non-worktree export, so the stale-binary
+            // guard (provenance.rs) lets it run without any exception.
+            GateXtask::Binary(bin) => std::process::Command::new(bin),
         };
         let status = cmd
             .args(["ci", "--report"])
@@ -144,10 +141,6 @@ impl GateRunner for CargoGate {
             },
         })
     }
-}
-
-fn canonical(p: &Path) -> PathBuf {
-    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 fn common_dir(root: &Path) -> Result<PathBuf> {
@@ -422,8 +415,6 @@ fn regenerate(
                 .args(&argv[1..])
                 .current_dir(wt)
                 .env("CARGO_TARGET_DIR", wt.join("target"))
-                // `{xtask}` is main's xtask run in this worktree (provenance.rs).
-                .env(crate::provenance::RUN_IN_ENV, canonical(wt))
                 .env_remove("RUSTUP_TOOLCHAIN"),
         );
         let failed = match out {
