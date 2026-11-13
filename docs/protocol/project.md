@@ -75,7 +75,7 @@ Symbolic links found in the project are listed with kind `symlink` and never fol
 they point to; FIFOs, sockets and devices are listed with kind `other` and never opened, so they
 cannot make the command wait. A `.gitignore` is read only when it is a regular file; a
 `.gitignore` that is a symbolic link, a FIFO or a directory is listed and contributes no
-patterns.
+patterns. A `.gitignore` whose patterns cannot be compiled contributes no patterns.
 
 For patterns of the forms `*.x`, `/a`, `b/`, `!c`, `**/d` and `e/**`, in `.gitignore` files at
 any depth, the `file` and `symlink` entries are exactly the paths
