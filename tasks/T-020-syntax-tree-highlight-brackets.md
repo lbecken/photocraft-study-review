@@ -9,8 +9,11 @@ depends_on: [T-015, T-016, T-032]
 touches:
   - crates/kiln-syntax/src/highlight.rs       # slot from T-016
   - crates/kiln-syntax/src/brackets.rs        # slot from T-016
+  - crates/kiln-syntax/src/tree.rs            # R-109: unit-test case only (T-016 review N2); no API change
   - crates/kiln-syntax/tests/highlight.rs     # implementer's own integration tests
   - crates/kiln-commands/src/syntax.rs        # syntax.* + SyntaxState (slot from T-015)
+  - crates/kiln-commands/src/reason.rs        # R-109: one row, RejectReason::TooLarge (D-056 size limit)
+  - apps/kiln-cli/tests/acceptance_t020.rs    # test author
   - docs/protocol/syntax.md                   # new
   - docs/commands.json                        # generated
 budget_tokens: 500000   # medium (v1.1, provisional)
@@ -27,13 +30,23 @@ pinned S-expression of T-016, and whether it was reparsed incrementally). It can
 highlight spans that cover the text exactly once, in seven kinds, and for the bracket matching
 the one at an offset, with brackets inside strings, chars and comments ignored. Trees are kept
 per document between commands and updated incrementally after edits. The result is always the
-tree a fresh parse would give. All four commands are read-only.
+tree a fresh parse would give. All three commands are read-only. A document longer than
+1,048,576 chars is refused by every `syntax.*` command with the new kind `too_large`, so no
+command parses an unbounded text (D-056).
 
-No gate path. Arm: **even** (independent test author).
+No gate path and no dependency change: this task edits no `Cargo.toml` and leaves `Cargo.lock`
+as it is (the crates it uses, `tree-sitter`, `tree-sitter-rust` and the dev-dependencies `syn`
+and `proc-macro2` of `kiln-cli`, are on main since T-016; that change added 7 packages and also
+changed the build-only dependency list of the existing `serde_json` entry, D-056). Arm:
+**even** (independent test author).
 
 Reading list: `tasks/T-016-*.md` (SyntaxTree, sexp form, corpus layout);
+`crates/kiln-syntax/src/tree.rs` (the merged API: `parse`, `update`, `text`, `has_error`,
+`errors`, `sexp`, `node_count`, and the crate-internal `root()` and `char_at_byte` for the
+sibling modules); `reviews/T-016-r1.md` S1 and N2; `docs/decisions.md` D-044, D-056;
 `crates/kiln-syntax/tests/corpus/MANIFEST.toml`; `tasks/T-015-*.md` (`SyntaxState`, `Parts`);
-`tasks/T-007-*.md` (b) read-only property.
+`crates/kiln-commands/src/reason.rs` (the `reasons!` table); `tasks/T-007-*.md` (b) read-only
+property.
 
 ## Interface
 
@@ -55,8 +68,33 @@ cached text, `incremental`/`full` per `SyntaxTree::update` otherwise.
 `SyntaxTree::parse` and `SyntaxTree::update` return `Result<_, ParseError>` (T-016); the only
 error is `ParseError::NoTree`, which cannot occur with the pinned versions (T-016 Interface).
 If it does, the command fails with `internal`/`other` (message `tree-sitter returned no tree`),
-and the cache entry for that document is left as it was (PROPOSED, R-079; awaiting the
-director, see Questions). No `unwrap`/`expect` on these results.
+and the cache entry for that document is left as it was (D-044). No `unwrap`/`expect` on these
+results.
+
+### Size limit (D-056)
+The limit is 1,048,576 chars (2^20; chars as everywhere in the protocol, so
+`doc.info`'s `len_chars` is the measure). If the document's text has more chars, each of the
+three commands refuses before any parse or update:
+- `rejected`, kind `too_large`, message exactly
+  `document <doc> has <len_chars> chars; syntax commands accept at most 1048576`;
+- the cache entry for that document is dropped (its memory is released), so the next
+  successful call on that document reports `mode: "full"`.
+
+A document of exactly 1,048,576 chars is accepted. The check is made on every call against
+the current text: a document that shrinks below the limit is accepted again. New reason row,
+appended as the last row of the `RejectReason` table in `crates/kiln-commands/src/reason.rs`
+(after whatever rows are there when this task is implemented), with a `///` doc line:
+`TooLarge = "too_large" => "the document is longer than the command accepts"`; regenerate
+`docs/commands.json`. No other file changes for it (kinds come from reasons, T-032).
+
+Why a refusal and not a result without a tree: a refusal keeps the three result schemas as
+they are and gives a script one error path keyed by kind, while a "no tree" flag would add a
+nullable variant to every result and still leave highlight and brackets without an answer.
+Why 2^20 chars: the T-016 review measured 247 MB peak for 1 MB of `(` (about 245 bytes per
+char, the worst case it found; `reviews/T-016-r1.md` p6), so one cached tree stays near a
+quarter GB at worst, while the largest Rust file in this workspace is 85,052 bytes
+(`find . -name '*.rs' -not -path './target/*' -not -path './.worktrees/*' -printf '%s %p\n' | sort -n | tail -1`
+on main `e614fee`: `xtask/src/queue.rs`) and the largest corpus file 6,052 bytes.
 
 ### `syntax.highlight` spans (exact)
 Spans are sorted, contiguous and non-overlapping. They cover `[start, end)` exactly (default
@@ -85,20 +123,26 @@ then `bracket` is `{open, close}`: the offsets of the opening and closing char. 
 `bracket` is `null`; for example an unmatched bracket while typing, any other char, or offset
 `len_chars`. `<`/`>` are not brackets. Errors: `offset > len_chars` → `out_of_range`.
 
-No new error kind. `docs/protocol/syntax.md` documents the commands, the span rules and the
-bracket rule.
+One new error kind, `too_large` (Size limit above); no other. `docs/protocol/syntax.md`
+documents the commands, the span rules, the bracket rule and the size limit.
 
 ## Pinned
-- (a) Errors: schema → `no_such_document` → `out_of_range` (offset, `start`, `end`) →
-  `inverted_range` (`start > end`).
+- (a) Errors: schema → `no_such_document` → `too_large` (whole document, Size limit) →
+  `out_of_range` (offset, `start`, `end`) → `inverted_range` (`start > end`); `internal`/`other`
+  for `ParseError::NoTree` (D-044). Exact message pinned only for `too_large`; the others keep
+  the messages their reasons already have.
 - (b) Files: none. Corpus files are read by tests only, by path from the workspace root:
   `crates/kiln-syntax/tests/corpus/` (T-016 Pinned (b)). They are stored as `<name>.rs.txt`
   and are selected by their `set` (`valid` | `gap` | `invalid`) in `MANIFEST.toml`, not by a
   glob on `.rs`.
 - (c) Order: n/a beyond (a).
 - (d) Offsets are chars; the tree is of the document's current text (BOM excluded).
-- (e) Threat model: n/a (no boundary). Large inputs: a 10 MB document must answer
-  `syntax.tree` (its `sexp` is large; that is accepted).
+- (e) Threat model: n/a (no security boundary). Large inputs (D-056): parsing is unbounded in
+  memory (T-016 review S1: about 245 bytes per byte of `(`; 50 MB of real Rust peaked at
+  3.1 GB), so documents above 1,048,576 chars are refused with `too_large` before any parse
+  (Size limit). The earlier "a 10 MB document must answer `syntax.tree`" is withdrawn. The
+  reviewer probes that a 50 MB document of `(` is refused without the parse (bounded memory,
+  answer within seconds).
 - (f) Snapshots: none.
 - (g) Worked examples (leaves checked with tree-sitter 0.27.2 / rust 0.24.2 in a spike; offsets
   computed by script). T-016 pins `tree-sitter =0.27.1` / `tree-sitter-rust =0.24.2`; R-067
@@ -112,6 +156,11 @@ bracket rule.
   - `fn a() { (` → `syntax.tree` has `has_error: true`; `match-bracket {offset:9}` → `null`.
   - `fn f() {}` → `sexp` = T-016's example; first call `mode: "full"`, second `unchanged`;
     after `doc.insert {offset:8, text:" "}`, `mode: "incremental"`.
+  - Size limit (naive model `len_chars > 1048576`, executed by R-109 with Python on the
+    strings below; not run against code): `"//" + "é" * 1048574` has 1,048,576 chars and
+    2,097,150 UTF-8 bytes → accepted; one more char (`doc.insert {doc:1, offset:0, text:"x"}`)
+    → 1,048,577 → `{"code":"rejected","kind":"too_large","message":"document 1 has 1048577 chars; syntax commands accept at most 1048576"}`;
+    `doc.undo {doc:1}` → 1,048,576 → accepted again, `mode: "full"`.
 - (h) Evaluator calls: `kiln-cli run` with `doc.open` of a corpus file then `syntax.tree`
   (`syntax.parse`); edits followed by `syntax.tree`, compared with `syntax.tree` of a fresh
   session on the edited text (`syntax.incremental`); `syntax.highlight` (`syntax.highlight`);
@@ -129,8 +178,10 @@ All through `kiln-cli run`/`control` or `kiln_control::Host` on files from the p
   Its `has_error`, `errors`, `sexp` and `node_count` equal `syntax.tree` in a fresh session
   holding the same text (`doc.text`). `mode` is `unchanged` iff the text equals the text at the
   previous `syntax.tree` call for that document (a random `doc.undo` can restore it);
-  otherwise, after the first call, `incremental` unless the fresh session's `has_error` is
-  true, when it may be `incremental` or `full`. Oracle: from-scratch parse.
+  otherwise, after the first call, `incremental` or `full`, and `incremental` only when the
+  result has `has_error: false` (`SyntaxTree::update` reports `Incremental` only for an
+  error-free incremental tree and otherwise reparses, so `full` with `has_error: false` is
+  allowed). Edits keep every text at or below the size limit. Oracle: from-scratch parse.
 - AC-3 (`syntax.highlight`, partition): for every corpus file and ≥ 50 random sub-ranges, the
   spans are sorted, contiguous, non-overlapping, merged and cover the range exactly, and every
   kind is one of the seven. Oracle: constructed property.
@@ -151,11 +202,29 @@ All through `kiln-cli run`/`control` or `kiln_control::Host` on files from the p
   independent tokenizer.
 - AC-7 (`syntax.brackets`, editing): the worked examples hold. `offset` = `len_chars` → `null`;
   `len_chars + 1` → `out_of_range`. Oracle: exact value.
+- AC-8 (`syntax.parse`, size limit; through `kiln-cli run`, cheap: about 2 MB of input, one
+  comment token, no large parse): a file holding `//` followed by 1,048,574 `é` (1,048,576
+  chars, 2,097,150 bytes, so a byte-based limit fails the test), opened as doc 1:
+  `syntax.tree` → `ok`, `has_error: false`, `mode: "full"`; `syntax.match-bracket {offset:0}`
+  → `{bracket: null}`. Then `doc.insert {doc:1, offset:0, text:"x"}` and each of
+  `syntax.tree`, `syntax.highlight {doc:1}`, `syntax.match-bracket {doc:1, offset:0}` and
+  `syntax.match-bracket {doc:1, offset:2000000}` → `rejected`/`too_large` with the exact
+  message of the worked example (so `too_large` precedes `out_of_range`). Then
+  `doc.undo {doc:1}` and `syntax.tree` → `ok` with `mode: "full"` (the refused call dropped
+  the cache entry). Every response line is checked; the `sexp` is not pinned. Oracle: exact
+  value + the naive model of (g).
+
+Every criterion is an **acceptance** test: on base no `syntax.*` command exists, so each fails
+by assertion (`unknown_command`), and `acceptance_t020.rs` compiles on base (it drives
+`kiln-cli` and uses `syn`/`proc-macro2`, already `kiln-cli` dev-dependencies). No guard is
+added. No test asserts the number or order of `error_kinds` entries or whole-document bytes.
+`kiln-cli` has no `toml` dev-dependency (adding one is outside `touches`): tests read
+`MANIFEST.toml` by its `path = "…"` and `set = "…"` lines.
 
 ## Scorecard items and intended test names
 | Item | Tests |
 |---|---|
-| syntax.parse | `kiln_cli::acceptance_t020::corpus_parses_through_protocol` |
+| syntax.parse | `kiln_cli::acceptance_t020::corpus_parses_through_protocol`, `kiln_cli::acceptance_t020::oversized_documents_are_refused` |
 | syntax.incremental | `kiln_cli::acceptance_t020::incremental_equals_fresh_session` |
 | syntax.highlight | `kiln_cli::acceptance_t020::highlight_partitions_text`, `kiln_cli::acceptance_t020::highlight_agrees_with_tokenizer`, `kiln_cli::acceptance_t020::highlight_marks_fn_names` |
 | syntax.brackets | `kiln_cli::acceptance_t020::brackets_agree_with_token_groups`, `kiln_cli::acceptance_t020::bracket_worked_examples` |
@@ -166,10 +235,27 @@ All through `kiln-cli run`/`control` or `kiln_control::Host` on files from the p
 - No-oracle note: the `type` kind has only hand-written expectations (worked example and
   fixtures); no independent tokenizer separates type names from other identifiers.
 - Drop cache entries of closed documents on the next `syntax.*` call; ids are never reused.
-- Your tests: `crates/kiln-syntax/tests/highlight.rs`, unit tests in touched files.
+- The size check reads the document's char length before anything is parsed, updated or
+  cached. A memory budget across documents, a limit inside `kiln-syntax`, and the same limit
+  for T-023's outline commands are out of scope (T-023's spec should adopt `too_large` when it
+  is next revised; noted for the director).
+- `crates/kiln-syntax/src/tree.rs` changes only in its unit tests (T-016 review N2, mutant M19):
+  add to `common_affixes_respect_char_boundaries` the case where the common byte suffix ends
+  inside a multi-byte char: `common_affixes("é", "©") == (0, 0)` (`é` = C3 A9, `©` = C2 A9:
+  one common suffix byte that is not a char start). The public and crate-internal API of
+  `tree.rs` is used as merged (`root()`, `char_at_byte`); it is not changed. If highlight or
+  brackets need a new crate-internal helper there, stop and report instead.
+- Your tests: `crates/kiln-syntax/tests/highlight.rs`, unit tests in touched files, unit tests
+  of the `TooLarge` row in `syntax.rs`.
+- Dispatch: `reason.rs` is shared with T-008, T-010 (in progress) and T-027, so T-020 is never
+  in flight with them; the reason row conflicts only by position and is resolved by hand on
+  rebase (D-6).
 
 ## Questions and rulings
 - Director (2026-11-13, D-044): when the parse contract returns `ParseError::NoTree`, the command fails with code `internal`, kind `other`, as proposed.
+- Director (2026-11-13, D-056): T-020 first exposes the tree through a command, so its spec
+  defines a size limit before dispatch; the T-016 nits (suffix inside a char; "only adds
+  packages") go to this spec. Applied by R-109 (Size limit, AC-8, Implementer notes, Goal).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -198,6 +284,22 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: map `ParseError::NoTree` in `syntax.*` to `internal`/`other` (proposed; no new
   kind), or another kind? It cannot occur with the pinned versions.
   Re-ran (g)'s trees on 0.27.1 and 0.27.2 in a scratch spike (removed): identical.
+- 2026-11-13T12:41Z · R-109 · draft · did: D-056 size limit: chose a structured refusal over a
+  no-tree flag (one error path, result schemas unchanged); limit 1,048,576 chars, new row
+  `TooLarge`/`too_large` (description and message pinned), checked before any parse, refused
+  call drops the cache entry; AC-8 (about 2 MB of `é` in one comment, so cheap and
+  char-not-byte); Pinned (a) order, (e) rewritten (the 10 MB requirement withdrawn), (g) size
+  example run with Python. T-016 review nits: N2 as a `tree.rs` unit case (tree.rs added to
+  `touches`, tests only); N1: T-020 had no "only adds packages" wording, so I added a
+  no-dependency statement that describes T-016's lock change correctly. Drift against the
+  merged API: "four commands" → three; AC-2's mode rule demanded `incremental` where
+  `SyntaxTree::update` may report `full` without errors (fixed to the contract); `reason.rs`
+  and `acceptance_t020.rs` added to `touches`; tests cannot use `toml`. Tier stays medium
+  (adding a reason row is not a contract change, as for T-010). Pinned (b), (c), (f) remain
+  n/a as before. · gate attempts: 0 · not run: no cargo; the limit's memory figure is the
+  T-016 review's, not re-measured · missing context: none · next: director; ready for a check.
+  QUESTION: should T-023 (outline, also tree-based) adopt `too_large` now, or at its own
+  spec check?
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
