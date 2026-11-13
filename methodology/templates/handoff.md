@@ -3,7 +3,7 @@ date: YYYY-MM-DD
 session: sNN             # director session sequence number (not a platform session ID)
 role: director
 iteration: N
-methodology: v1.0
+methodology: v1.1
 main_sha: <sha>
 main_green: true         # last gate / CI result on main
 ---
@@ -29,8 +29,10 @@ task log. This note is for the next director session.
 D-NNN rows and ADRs added this session.
 
 ## Metrics hygiene
-- Runs dispatched this session: n; run records written: n; log entries present: n.
-- Transitions recorded for every state change: yes / no (list gaps).
+- Runs dispatched this session: n; run records written at dispatch: n; log entries present: n.
+- Transitions recorded for every state change: yes / no (list gaps). Director run recorded: yes / no.
+- `iter-N` runs not yet in `metrics/` (interim until T-013): run, role, tokens, start, end.
+- Free disk at session end (`df -h`): … GB; worktrees and scratch builds removed: yes / no.
 
 ## Incidents
 Open incidents and red-main status.

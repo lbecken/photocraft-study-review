@@ -1,8 +1,8 @@
 ---
 iteration: N
 run: R-NNN
-methodology_in: v1.0
-methodology_proposed: v1.1
+methodology_in: v1.1
+methodology_proposed: v1.2
 main_sha: <sha at iteration close>
 claims: {C1: insufficient, C2: insufficient, C3: insufficient, C4: insufficient,
          C5: insufficient, C6: insufficient, C7: insufficient, C8: insufficient}
@@ -13,7 +13,7 @@ claims: {C1: insufficient, C2: insufficient, C3: insufficient, C4: insufficient,
 
 ## Data
 Record counts and completeness: tasks, runs, runs without a log entry or run record,
-transitions missing. Every number below names the command or script that produced it.
+transitions missing, director runs missing. Every number below names its command or script.
 
 ## Metrics (METHODOLOGY §13)
 | Metric | Value | Command |
@@ -25,10 +25,18 @@ transitions missing. Every number below names the command or script that produce
 | Review findings by class and tier | | |
 | Escaped defects (by origin task, tier) | | |
 | Rework ratio | | |
-| Tokens per merged task by tier (median, p75, max) | | |
+| Review rounds per task; acceptance kill rate by round | | |
+| Known defects merged by decision | | |
+| Tokens per merged task by tier and arm (median, p75, max) | | |
+| Director cost | | |
 | Share of scorecard items verified | | |
 | Red-main minutes | | |
 | Budget overruns by tier | | |
+
+## Experiment arm (METHODOLOGY §6)
+| Measure | Independent (even) | Implementer-written (odd) | n each |
+|---|---|---|---|
+| Escaped defects / review findings / kill rate / tokens per merged task | | | |
 
 ## Claims
 | Claim | Verdict | Numbers that decide it | What would change the verdict |
@@ -40,8 +48,8 @@ Rules not followed (with task IDs), rules that cost effort without effect, gaps 
 defect through, open questions O-n now answerable.
 
 ## Proposed changes
-| # | Change (file, section) | Motivating metric or incident | Expected effect | Check |
-|---|---|---|---|---|
+| # | Change (file, section) | Motivating metric or incident | Expected effect | Check | Removes |
+|---|---|---|---|---|---|
 
 ## Budget recalibration
 Proposed tier budgets from the recorded distribution, with the rule used.

@@ -14,7 +14,8 @@ published numbers that measured the wrong thing; an honest "insufficient data" i
 here than a confident verdict.
 
 ## What you receive
-Read access to the whole repository (you write only under `retrospectives/`): `metrics/tasks.jsonl`, `metrics/queue.jsonl`, task files,
+Read access to the whole repository (you write only under `retrospectives/`; your run is booked
+to `iter-N`): `metrics/tasks.jsonl`, `metrics/queue.jsonl`, task files,
 `reviews/`, `evaluations/`, `incidents/`, `docs/decisions.md`, `docs/adr/`, `handoffs/`, git
 history, `methodology/` (METHODOLOGY §13 defines every metric and its source fields), and the
 output of `cargo xtask scorecard` and `cargo xtask metrics`.
@@ -28,16 +29,26 @@ number must be reproducible by running a named command.
    without a transition record, reviews without finding counts. Metrics built on incomplete data
    say so.
 2. **Metrics.** Compute each metric in METHODOLOGY §13 exactly as defined. Report medians and
-   spread with the sample size, by tier where the table says so.
-3. **Claims.** Score each of C1–C8 as supported, refuted or insufficient, with the numbers that
+   spread with the sample size, by tier and by arm where the table says so. Where
+   `cargo xtask metrics report` disagrees with the records, report both and say why (in
+   iteration 0 it read only the first join, so it showed 0 acceptance-caught defects against 2
+   recorded). Director cost is a metric: if `role: director` runs are missing, that is a finding.
+3. **The experiment arm** (METHODOLOGY §6). Compare medium tasks with independent test authors
+   (even ids) and with implementer-written tests (odd ids) on escaped defects, review findings
+   by class, acceptance kill rate and tokens per merged task. State the sample per arm and
+   whether parity assignment confounds it (e.g. one arm got the boundary-like work); with a
+   handful of tasks per arm "insufficient" is the expected honest answer.
+4. **Review rounds.** Rounds per task against the §7 stopping rule; what later rounds found.
+5. **Claims.** Score each of C1–C8 as supported, refuted or insufficient, with the numbers that
    decide it and what result would change your verdict. Separate what the data shows from what
    you infer, and name confounders (small samples, task mix, director classification).
-4. **Where the methodology was wrong.** Rules that were not followed (cite task IDs), rules that
+6. **Where the methodology was wrong.** Rules that were not followed (cite task IDs), rules that
    cost effort and caught nothing, failures no rule addressed, unchecked rules that drifted, and
-   which of the open questions O-n in METHODOLOGY §15 the data now answers.
-5. **Proposed changes.** Each states the file and section, the change, the metric or incident
-   that motivates it, the expected effect, and how it will be checked. Recalibrate the tier
-   token budgets from the recorded distribution and state the rule you used.
+   which of the open questions O-n in METHODOLOGY §15 the data now answers. Include the
+   director: its errors, and which were caught mechanically.
+7. **Proposed changes.** Each states the file and section, the change, the metric or incident
+   that motivates it, the expected effect, how it will be checked, and which rule it lets the
+   director remove. Recalibrate the tier budgets (v1.1 rule: p75 of the tier, rounded up to 50k).
 
 ## What you must not do
 Do not edit `methodology/`, task files, metrics or any other record: you propose, the director
@@ -48,5 +59,5 @@ identifiers; refer to runs by `R-NNN`.
 ## Uncertainty and blocks
 Mark each conclusion as measured or inferred. If a metric cannot be computed because a field is
 missing or a tool does not exist yet, report it as a finding about the methodology, not as zero.
-If your token allotment runs out, finish the data-completeness and claims sections first and
-mark the rest incomplete.
+Write the data-completeness and claims sections first and save the file as you go, so a stopped
+run leaves a usable partial report; mark what is incomplete.

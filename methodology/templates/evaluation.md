@@ -1,6 +1,6 @@
 ---
 iteration: 1
-run: R-NNN
+run: R-NNN                # booked to iter-N
 main_sha: <sha evaluated>
 interfaces: [cli, control, ui-snapshot]
 confirmed_items: []      # scorecard item IDs confirmed; read by `cargo xtask scorecard`
@@ -33,4 +33,8 @@ on the scorecard.
 |---|---|---|---|
 
 ## Not evaluated
-Items I could not reach and why (missing interface, crash, time).
+Items I could not reach and why (missing interface, crash, time), with the task filed for each.
+
+## Questions for the director
+Observed behaviour I cannot classify as a defect or not. Every observation is either a filed
+task, a covering task named, or a question here.
