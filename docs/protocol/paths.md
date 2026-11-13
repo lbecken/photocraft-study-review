@@ -1,7 +1,8 @@
 # Paths and the root
 
-Every `path` in a request (`doc.open`, and the file a `doc.save` writes) names a file below the
-root (`--root`, or the current directory). This page states what Kiln guarantees about where
+Every `path` in a request names an entry below the root (`--root`, or the current directory): a
+file for `doc.open` and for the file a `doc.save` writes, a directory for `project.tree`
+(`docs/protocol/project.md`). This page states what Kiln guarantees about where
 such a path may lead on disk (T-008). It applies to the on-disk file system; the in-memory one
 (`--memory`, tests) has no symlinks or special files.
 
