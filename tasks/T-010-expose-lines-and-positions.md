@@ -2,7 +2,7 @@
 id: T-010
 title: "Expose line access and position conversion as read-only document commands"
 tier: medium            # ADR-0002: new commands in one command group, in-memory reads only; adding a command is not a contract change; no persistence, process, gate, security or dependency criterion
-state: in_progress
+state: tests_joined
 owner_role: planner
 scorecard_items: [text.lines, text.positions]
 depends_on: [T-032]     # D-041: reason enum + generated kind list
