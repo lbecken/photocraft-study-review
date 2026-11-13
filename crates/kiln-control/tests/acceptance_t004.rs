@@ -537,6 +537,15 @@ fn responses_are_canonical_json() {
             ("sub/b.rs", b"fn b(){}\r\n"),
         ],
     );
+    // Real files outside the root, so the escape cases are refused for the right reason.
+    let parent = root.parent().unwrap();
+    std::fs::write(parent.join("up.txt"), b"up\n").unwrap();
+    let abs_file = parent.join("outside-abs.txt");
+    std::fs::write(&abs_file, b"abs\n").unwrap();
+    let abs_line = format!(
+        r#"{{"command":"doc.open","params":{{"path":"{}"}}}}"#,
+        abs_file.to_str().unwrap()
+    );
     let lines: Vec<&[u8]> = vec![
         br#"{"id":"o","command":"doc.open","params":{"path":"a.txt"}}"#,
         br#"{"command":"doc.text","params":{"doc":1}}"#,
@@ -545,7 +554,7 @@ fn responses_are_canonical_json() {
         br#"{"command":"doc.list"}"#,
         br#"{"command":"doc.open","params":{"path":"nope.txt"}}"#,
         br#"{"command":"doc.open","params":{"path":"../up.txt"}}"#,
-        br#"{"command":"doc.open","params":{"path":"/abs.txt"}}"#,
+        abs_line.as_bytes(),
         br#"{"command":"doc.insert","params":{"doc":1,"offset":1000,"text":"x"}}"#,
         br#"{"command":"doc.insert","params":{"doc":1}}"#,
         br#"{"command":"no.such"}"#,
@@ -555,6 +564,10 @@ fn responses_are_canonical_json() {
     ];
     let out = feed(&mut h, &lines);
     assert_eq!(out.len(), lines.len());
+    // `../up.txt` and the absolute path (lines 7 and 8) are refused; the files are unchanged.
+    assert!(!ok_of(&out[6]) && !ok_of(&out[7]), "{:?}", &out[6..8]);
+    assert_eq!(std::fs::read(parent.join("up.txt")).unwrap(), b"up\n");
+    assert_eq!(std::fs::read(&abs_file).unwrap(), b"abs\n");
     let root_s = root.to_string_lossy().into_owned();
     let canon_root = root.canonicalize().unwrap().to_string_lossy().into_owned();
     for l in &out {

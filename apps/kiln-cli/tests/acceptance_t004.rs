@@ -10,7 +10,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -62,13 +62,58 @@ fn snapshot(root: &Path) -> BTreeMap<String, Vec<u8>> {
     out
 }
 
+/// Every spawned `kiln-cli` is killed and the test fails after this long (D-028 ruling 8).
+const TIMEOUT: Duration = Duration::from_secs(120);
+
+/// `cmd.output()` with [`TIMEOUT`]: stdout/stderr are drained on threads, the child is polled
+/// and killed if it outlives the deadline. Stdout is piped unless `cmd` already set it.
+fn output_with_timeout(mut cmd: Command, pipe_stdout: bool) -> Output {
+    if pipe_stdout {
+        cmd.stdout(Stdio::piped());
+    }
+    let mut child = cmd.stderr(Stdio::piped()).spawn().expect("spawn kiln-cli");
+    let drain = |r: Option<Box<dyn std::io::Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut r) = r {
+                let _ = r.read_to_end(&mut buf);
+            }
+            buf
+        })
+    };
+    let out_t = drain(child.stdout.take().map(|r| Box::new(r) as _));
+    let err_t = drain(child.stderr.take().map(|r| Box::new(r) as _));
+    let status = wait_with_timeout(&mut child);
+    Output {
+        status,
+        stdout: out_t.join().expect("stdout reader"),
+        stderr: err_t.join().expect("stderr reader"),
+    }
+}
+
+/// Polls `child` until it exits; kills it and fails the test after [`TIMEOUT`].
+fn wait_with_timeout(child: &mut std::process::Child) -> std::process::ExitStatus {
+    let deadline = Instant::now() + TIMEOUT;
+    loop {
+        if let Some(st) = child.try_wait().expect("try_wait") {
+            return st;
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("kiln-cli did not exit within {TIMEOUT:?}");
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
 fn kiln(args: &[&str], cwd: Option<&Path>) -> Output {
     let mut c = Command::new(bin());
     c.args(args).stdin(Stdio::null());
     if let Some(d) = cwd {
         c.current_dir(d);
     }
-    c.output().expect("kiln-cli runs")
+    output_with_timeout(c, true)
 }
 
 /// `kiln-cli run <script> --root <root> [--log <log>]`, the script written outside the root.
@@ -132,7 +177,7 @@ fn mixed_script() -> Vec<u8> {
         r#"{"id":2,"command":"doc.insert","params":{"text":"é!","offset":0,"doc":1}}"#,
         r#"{"id":3,"command":"doc.open","params":{"path":"missing.txt"}}"#,
         r#"{"id":4,"command":"doc.open","params":{"path":"../outside.txt"}}"#,
-        r#"{"id":5,"command":"doc.open","params":{"path":"/etc/hosts"}}"#,
+        r#"{"id":5,"command":"doc.open","params":{"path":"sub/../../outside.txt"}}"#,
         r#"{"id":6,"command":"doc.insert","params":{"doc":1,"offset":999,"text":"x"}}"#,
         "not json",
         r#"{"command":"no.such"}"#,
@@ -146,6 +191,35 @@ fn mixed_script() -> Vec<u8> {
         s.push(b'\n');
     }
     s
+}
+
+/// The bytes of the real file one level above each root that `../outside.txt` names.
+const OUTSIDE: &[u8] = b"outside the root\n";
+
+/// `mixed_files()` in `root`, plus a real `../outside.txt` next to it.
+fn seed_mixed(root: &Path) {
+    write_files(root, &mixed_files());
+    std::fs::write(root.parent().unwrap().join("outside.txt"), OUTSIDE).unwrap();
+}
+
+/// The path-escaping requests of `mixed_script()` (ids 4 and 5) were refused and the file they
+/// name is untouched.
+fn assert_escapes_refused(out: &Output, root: &Path) {
+    let lines = stdout_lines(out);
+    for (idx, id) in [(3, 4), (4, 5)] {
+        let v = parse(&lines[idx]);
+        assert_eq!(v["id"], serde_json::json!(id), "{v}");
+        assert_eq!(
+            v["ok"],
+            Value::Bool(false),
+            "a path outside the root was opened: {v}"
+        );
+    }
+    assert_eq!(
+        std::fs::read(root.parent().unwrap().join("outside.txt")).unwrap(),
+        OUTSIDE,
+        "the file outside the root changed"
+    );
 }
 
 fn mixed_files() -> Vec<(&'static str, &'static [u8])> {
@@ -410,7 +484,7 @@ fn same_script_gives_byte_identical_output() {
     let root_b = work.join("second-copy-with-a-longer-path").join("nested");
     for r in [&root_a, &root_b] {
         std::fs::create_dir_all(r).unwrap();
-        write_files(r, &mixed_files());
+        seed_mixed(r);
     }
     let script = mixed_script();
 
@@ -434,6 +508,8 @@ fn same_script_gives_byte_identical_output() {
         snapshot(&root_b),
         "files differ between runs"
     );
+    assert_escapes_refused(&out_a, &root_a);
+    assert_escapes_refused(&out_b, &root_b);
     assert_eq!(
         std::fs::read(root_a.join("a.txt")).unwrap(),
         "é!hello\n".as_bytes(),
@@ -447,7 +523,7 @@ fn same_script_gives_byte_identical_output() {
     // A third fresh copy gives the same bytes again.
     let root_c = work.join("c");
     std::fs::create_dir(&root_c).unwrap();
-    write_files(&root_c, &mixed_files());
+    seed_mixed(&root_c);
     let out_c = run_script(&work, &root_c, &script, None);
     assert_eq!(out_c.stdout, out_a.stdout);
 }
@@ -461,13 +537,14 @@ fn log_script_replays_and_is_idempotent() {
     let root2 = work.join("two");
     for r in [&root1, &root2] {
         std::fs::create_dir(r).unwrap();
-        write_files(r, &mixed_files());
+        seed_mixed(r);
     }
     let l1 = work.join("l1.jsonl");
     let l2 = work.join("l2.jsonl");
 
     let out1 = run_script(&work, &root1, &mixed_script(), Some(&l1));
     assert_eq!(code(&out1), 3, "{out1:?}");
+    assert_escapes_refused(&out1, &root1);
     let log1 = std::fs::read_to_string(&l1).expect("--log file written");
 
     // Exactly the successful requests, in order, ids 1-based, keys sorted at every level.
@@ -680,6 +757,81 @@ fn run_survives_hostile_lines() {
     assert_eq!(lines[3], r#"{"id":"last","ok":true,"result":{"docs":[]}}"#);
 }
 
+/// Lexical escapes (`..`, absolute paths) are refused even when the named file exists, and an
+/// edit + save attempted after each refusal writes nothing outside the root.
+#[test]
+fn run_refuses_paths_outside_root_and_writes_nothing_there() {
+    let work = fresh_dir("escape");
+    let root = work.join("root");
+    std::fs::create_dir_all(root.join("sub")).unwrap();
+    write_files(&root, &[("a.txt", b"inside\n")]);
+    let outside = work.join("outside.txt");
+    std::fs::write(&outside, OUTSIDE).unwrap();
+    let abs = outside.to_str().unwrap().to_owned();
+    let mut script = String::new();
+    let escapes = [
+        "../outside.txt",
+        "sub/../../outside.txt",
+        abs.as_str(),
+        "./../outside.txt",
+    ];
+    for (i, p) in escapes.iter().enumerate() {
+        let path = serde_json::to_string(p).unwrap();
+        script.push_str(&format!(
+            concat!(
+                r#"{{"id":"open-{i}","command":"doc.open","params":{{"path":{path}}}}}"#,
+                "\n",
+                r#"{{"command":"doc.insert","params":{{"doc":1,"offset":0,"text":"PWNED"}}}}"#,
+                "\n",
+                r#"{{"command":"doc.save","params":{{"doc":1}}}}"#,
+                "\n",
+            ),
+            i = i,
+            path = path
+        ));
+    }
+    script.push_str(r#"{"id":"in","command":"doc.open","params":{"path":"a.txt"}}"#);
+    script.push('\n');
+    let out = run_script(&work, &root, script.as_bytes(), None);
+    assert_eq!(code(&out), 3, "{out:?}");
+    let lines = stdout_lines(&out);
+    assert_eq!(lines.len(), 3 * escapes.len() + 1, "{out:?}");
+    for (i, p) in escapes.iter().enumerate() {
+        for k in 0..3 {
+            let v = parse(&lines[3 * i + k]);
+            assert_eq!(
+                v["ok"],
+                Value::Bool(false),
+                "{p}: request {k} must fail: {v}"
+            );
+        }
+    }
+    let last = parse(&lines[3 * escapes.len()]);
+    assert_eq!(last["ok"], Value::Bool(true), "{last}");
+    assert_eq!(
+        last["result"]["doc"],
+        serde_json::json!(1),
+        "no earlier open succeeded"
+    );
+    assert_eq!(
+        std::fs::read(&outside).unwrap(),
+        OUTSIDE,
+        "file outside the root changed"
+    );
+    assert_eq!(std::fs::read(root.join("a.txt")).unwrap(), b"inside\n");
+    let mut names: Vec<_> = std::fs::read_dir(&work)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| !n.starts_with("script-"))
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        ["outside.txt", "root"],
+        "nothing new appeared outside the root"
+    );
+}
+
 // ---------------------------------------------------------------- AC-6 (control.protocol)
 
 #[test]
@@ -769,7 +921,7 @@ fn control_mode_answers_each_line_before_next() {
         Some(None),
         "no extra output after EOF"
     );
-    let status = child.wait().unwrap();
+    let status = wait_with_timeout(&mut child);
     assert_eq!(
         status.code(),
         Some(0),
@@ -785,12 +937,13 @@ fn run_output_is_canonical_json() {
     let work = fresh_dir("ac7");
     let root = work.join("root");
     std::fs::create_dir(&root).unwrap();
-    write_files(&root, &mixed_files());
+    seed_mixed(&root);
     let mut script = mixed_script();
     script.extend_from_slice(b"\xc3\x28\n[1,2]\n{\"id\":7}\n");
     let out = run_script(&work, &root, &script, None);
     assert_eq!(stdout_lines(&out).len(), 16, "{out:?}");
     assert_canonical(&out, &[&root, &work]);
+    assert_escapes_refused(&out, &root);
 }
 
 // ---------------------------------------------------------------- AC-8
