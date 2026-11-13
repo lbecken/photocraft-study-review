@@ -2,7 +2,7 @@
 id: T-032
 title: "Give every refusal a structured reason, derive protocol error kinds from reasons alone, and publish the kinds generated from code in the command description"
 tier: high              # ADR-0002: changes CommandError, a CHARTER §3 contract (decision 2) — ADR-0004; no gate path
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []
 depends_on: [T-015]   # T-015 edits registry.rs/lib.rs first
@@ -255,6 +255,12 @@ None. `crates/kiln-commands/tests/acceptance_t032.rs` (`refusals_carry_reasons_a
   `kiln-cli commands` or `commands --schema` output, and its session never names a directory
   (T-008 rewords that refusal) and uses ids of at most 64 characters (T-030 changes the cap).
   AC-4 above has been edited accordingly.
+- Director rulings after review round 1 (2026-11-13, decision D-051; review `reviews/T-032-r1.md`, run R-099), checked against the Interface above and D-043 before the builders got them:
+  r1. (finding 1, test gap; nit 5) `RejectReason` and `InternalReason` are each declared through one `macro_rules!` table in `reason.rs`, one row per variant. The macro emits the enum exactly as pinned above (derives, `serde(rename_all = "snake_case")`, declaration order = row order), `ALL` in row order, and `description()`; `as_str()` stays equal to the serde form, tested over `ALL`. A variant can then not exist without being in `ALL` and having a description, which is the closure ADR-0004 claims. The public API is unchanged. A test that pins the number of variants (`ALL.len() == 21`) is replaced by a check that the 21 (and 3) pinned names are a prefix-ordered subsequence of `ALL` in the pinned order, so later tasks add rows without editing it; the role that owns that test makes the change.
+  r2. (finding 2, test gap) The implementer adds a unit test in `crates/kiln-control/src/lib.rs`: a registered command panics; the host answers that request with an internal error whose `kind` is `panic`, and answers the next request normally.
+  r3. (finding 3, spec gap) Accepted as it is. The AC-4 byte guard cannot name a directory or reach `io_error` or the internal kinds without pinning bytes that T-008 and T-030 change (D-043); those kinds are covered by the acceptance tests on `kind` and `reason` and by r2.
+  r4. (nit 4) The edit to the T-015 default-runner unit test in `registry.rs` was asked for by the director (D-048): accepted.
+  r5. The two problems the reviewer found that predate T-032 (opening a FIFO hangs `kiln-cli`; a symlink to a file outside the root opens) belong to T-008 and are given to its spec check.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
