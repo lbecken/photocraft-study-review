@@ -8,7 +8,8 @@
 //! 3. the preconditions of `crate::precheck` (task file, front matter, state, config, touches,
 //!    join, review, approval, main history), all read from main or the metrics records; a
 //!    failure is a [`Refusal`] and writes nothing;
-//! 4. build main's xtask from `base_sha` in a private build tree (`<git-common-dir>/kiln-queue/`);
+//! 4. build main's xtask from `base_sha` in a private build tree (`<git-common-dir>/kiln-queue/`),
+//!    recompiling the xtask crate from a fresh export on every run (never a cached binary);
 //! 5. rebase `task/T-NNN` onto `main` in `.worktrees/T-NNN`; a conflict only on generated paths
 //!    (`xtask/generated.toml`) takes main's side and continues, and afterwards every generated
 //!    file is regenerated and committed; any other conflict aborts and rejects;
@@ -152,31 +153,16 @@ fn common_dir(root: &Path) -> Result<PathBuf> {
     })
 }
 
-/// Build the xtask of commit `sha` in the private build tree
-/// `<git-common-dir>/kiln-queue/main-xtask/` (`src/`: a fresh export of `sha`, never a worktree;
-/// `target/`: used for nothing else). A binary already built from `sha` is reused.
-pub fn build_main_xtask(root: &Path, sha: &str) -> Result<PathBuf> {
-    let base = common_dir(root)?.join("kiln-queue").join("main-xtask");
-    let (src, target) = (base.join("src"), base.join("target"));
-    let bin = target
-        .join("debug")
-        .join(format!("xtask{}", std::env::consts::EXE_SUFFIX));
-    let stamp = base.join("built-from");
-    if bin.is_file() && std::fs::read_to_string(&stamp).ok().as_deref() == Some(sha) {
-        return Ok(bin);
-    }
-    let _ = std::fs::remove_file(&stamp);
-    if src.exists() {
-        std::fs::remove_dir_all(&src)?;
-    }
-    std::fs::create_dir_all(&src)?;
-    // Export with a private index: the repository's own index and worktrees are untouched.
-    let index = base.join("export.index");
+/// Write the tree of commit `sha` to `dest` (which must not exist), with a private index: the
+/// repository's own index and worktrees are untouched. `dest` is a plain directory, never a git
+/// working tree.
+pub fn export_tree(root: &Path, sha: &str, dest: &Path, index: &Path) -> Result<()> {
+    std::fs::create_dir_all(dest)?;
     let export = |args: &[&str]| -> Result<()> {
         let out = capture(
             crate::git::cmd(root)
                 .args(args)
-                .env("GIT_INDEX_FILE", &index),
+                .env("GIT_INDEX_FILE", index),
         )?;
         if !out.ok {
             bail!("git {} failed: {}", args.join(" "), out.stderr.trim());
@@ -184,14 +170,45 @@ pub fn build_main_xtask(root: &Path, sha: &str) -> Result<PathBuf> {
         Ok(())
     };
     export(&["read-tree", sha])?;
-    let prefix = format!("{}/", src.display());
+    let prefix = format!("{}/", dest.display());
     export(&[
         "checkout-index",
         "--all",
         "--force",
         &format!("--prefix={prefix}"),
     ])?;
-    let _ = std::fs::remove_file(&index);
+    let _ = std::fs::remove_file(index);
+    Ok(())
+}
+
+/// Build the xtask of commit `sha` in the private build tree
+/// `<git-common-dir>/kiln-queue/main-xtask/` and return the binary (D-026 R1).
+///
+/// Every run starts from a fresh export of `sha` (`src/`, never a worktree) and, before
+/// building, removes from the private `target/` every artifact of a workspace member of that
+/// export (and all uplifted binaries, `incremental/` data and unknown files), so the xtask crate
+/// is always compiled from the sources at `sha`; a binary or member artifact left by an earlier
+/// run, or written there by task code during an earlier gate, is never reused. Artifacts of
+/// non-member packages (registry dependencies) may be reused: an accepted, documented residual
+/// risk.
+pub fn build_main_xtask(root: &Path, sha: &str) -> Result<PathBuf> {
+    let base = common_dir(root)?.join("kiln-queue").join("main-xtask");
+    let (src, target) = (base.join("src"), base.join("target"));
+    let bin = target
+        .join("debug")
+        .join(format!("xtask{}", std::env::consts::EXE_SUFFIX));
+    // Left by older queues that reused a binary stamped with its sha; no longer read.
+    let _ = std::fs::remove_file(base.join("built-from"));
+    if src.exists() {
+        std::fs::remove_dir_all(&src)?;
+    }
+    export_tree(root, sha, &src, &base.join("export.index"))?;
+    let members = crate::seed::member_names(&src)
+        .with_context(|| format!("list the workspace members of main at {sha}"))?;
+    crate::seed::prune_to_non_members(&target, &members)?;
+    if bin.exists() {
+        bail!("could not remove the previous main xtask {}", bin.display());
+    }
     let mut c = std::process::Command::new("cargo");
     c.args(["build", "--quiet", "--package", "xtask"]);
     if src.join("Cargo.lock").is_file() {
@@ -208,7 +225,6 @@ pub fn build_main_xtask(root: &Path, sha: &str) -> Result<PathBuf> {
             tail(&out.stderr, 30)
         );
     }
-    std::fs::write(&stamp, sha)?;
     Ok(bin)
 }
 
@@ -1200,6 +1216,81 @@ mod tests {
         }
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(r.result, "merged");
+    }
+
+    #[test]
+    fn main_xtask_is_rebuilt_from_base_on_every_run() {
+        // D-026 R1, with real cargo on a tiny workspace (no dependencies).
+        let repo = testrepo::init(
+            "q-rebuild",
+            &[
+                (
+                    "Cargo.toml",
+                    "[workspace]\nresolver = \"2\"\nmembers = [\"xtask\"]\n",
+                ),
+                (
+                    "xtask/Cargo.toml",
+                    "[package]\nname = \"xtask\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+                ),
+                (
+                    "xtask/src/main.rs",
+                    "fn main() { println!(\"built from base\"); }\n",
+                ),
+                (".gitignore", "target/\n"),
+            ],
+        );
+        let root = repo.path();
+        let sha = rev(root, "main").unwrap();
+        let out = |bin: &Path| {
+            let o = std::process::Command::new(bin).output().unwrap();
+            String::from_utf8_lossy(&o.stdout).trim().to_owned()
+        };
+        let bin = build_main_xtask(root, &sha).unwrap();
+        assert_eq!(out(&bin), "built from base");
+        let src = bin
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("src");
+        assert_eq!(
+            crate::provenance::tree_at(&src),
+            None,
+            "the export is not a working tree"
+        );
+        // Task code during a gate overwrites the cached binary and the member's deps artifact
+        // (newer mtime, so a freshness check would trust it) and edits the export.
+        let fake = "#!/bin/sh\necho poisoned\n";
+        let deps = bin.parent().unwrap().join("deps");
+        for e in std::fs::read_dir(&deps).unwrap() {
+            let p = e.unwrap().path();
+            let n = p.file_name().unwrap().to_string_lossy().into_owned();
+            if n.starts_with("xtask-") && !n.contains('.') {
+                std::fs::write(&p, fake).unwrap();
+            }
+        }
+        std::fs::write(&bin, fake).unwrap();
+        std::fs::write(
+            src.join("xtask/src/main.rs"),
+            "fn main() { println!(\"edited\"); }\n",
+        )
+        .unwrap();
+        assert_eq!(out(&bin), "poisoned");
+        let bin2 = build_main_xtask(root, &sha).unwrap();
+        assert_eq!(bin2, bin);
+        assert_eq!(out(&bin2), "built from base", "rebuilt, not reused");
+        assert!(
+            !bin.parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("built-from")
+                .exists()
+        );
     }
 
     #[test]

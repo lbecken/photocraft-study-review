@@ -201,9 +201,14 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    `queue: refused: <check>: <reason>`, nothing changed and no record written;
 3. builds main's xtask from `base_sha` (= `main`) in a private build tree
    `.git/kiln-queue/main-xtask/` (`src/` is a fresh export of `base_sha` through a private git
-   index — not a worktree, never a task's tree — and `target/` is used for nothing else; a binary
-   already built from the same sha is reused). If that build fails the queue stops with an
-   error and writes no record (main itself is broken: an incident);
+   index — not a worktree, never a task's tree — and `target/` is used for nothing else). Every
+   run rebuilds the xtask crate from that fresh export: before `cargo build` the queue removes
+   from the private `target/` every artifact of a workspace member of `base_sha`, all uplifted
+   binaries, `incremental/` data and unknown files, so a binary left by an earlier run (or
+   overwritten by task code during an earlier gate) is never trusted (D-026 R1). Compiled
+   registry dependencies are kept and may be reused — an accepted residual risk: task code that
+   rewrites a dependency's artifact in that directory is not detected. If the build fails the
+   queue stops with an error and writes no record (main itself is broken: an incident);
 4. rebases `task/T-NNN` onto `main` in `.worktrees/T-NNN` (generated-file conflicts: below;
    any other conflict: `git rebase --abort`, record `conflict`, `failed_step: "rebase"`);
 5. runs **main's gate**: main's xtask binary `ci --report <file>` with the rebased worktree as

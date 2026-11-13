@@ -257,6 +257,75 @@ pub fn seed_with(
     Ok(stats)
 }
 
+/// Remove from `target` everything except the `.fingerprint`, `build` and `deps` entries that
+/// are positively identified as units of non-member packages (`members`: normalised member
+/// names), so the next build compiles every workspace member from source (D-026 R1). Uplifted
+/// binaries, `incremental/`, unknown files and top-level files are removed too. Returns the
+/// number of entries removed.
+pub fn prune_to_non_members(target: &Path, members: &BTreeSet<String>) -> Result<u64> {
+    fn rm(p: &Path, n: &mut u64) -> Result<()> {
+        let meta = std::fs::symlink_metadata(p)?;
+        if meta.is_dir() {
+            std::fs::remove_dir_all(p)
+        } else {
+            std::fs::remove_file(p)
+        }
+        .with_context(|| format!("remove {}", p.display()))?;
+        *n += 1;
+        Ok(())
+    }
+    fn prune_profile(profile: &Path, members: &BTreeSet<String>, n: &mut u64) -> Result<()> {
+        for e in std::fs::read_dir(profile)? {
+            let e = e?;
+            let name = e.file_name().to_string_lossy().into_owned();
+            let is_dir = e.file_type()?.is_dir();
+            if !(is_dir && matches!(name.as_str(), ".fingerprint" | "build" | "deps")) {
+                rm(&e.path(), n)?;
+                continue;
+            }
+            for u in std::fs::read_dir(e.path())? {
+                let u = u?;
+                let un = u.file_name().to_string_lossy().into_owned();
+                let keep = unit_name(&un, name == "deps").is_some_and(|x| !members.contains(&x));
+                if !keep {
+                    rm(&u.path(), n)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut n = 0;
+    let Ok(rd) = std::fs::read_dir(target) else {
+        return Ok(0);
+    };
+    for e in rd {
+        let e = e?;
+        let p = e.path();
+        if !e.file_type()?.is_dir() {
+            rm(&p, &mut n)?;
+        } else if p.join(".fingerprint").is_dir() {
+            prune_profile(&p, members, &mut n)?;
+        } else {
+            // A target-triple directory holds profiles; anything else goes.
+            let mut kept = false;
+            for s in std::fs::read_dir(&p)? {
+                let s = s?;
+                let sp = s.path();
+                if s.file_type()?.is_dir() && sp.join(".fingerprint").is_dir() {
+                    prune_profile(&sp, members, &mut n)?;
+                    kept = true;
+                } else {
+                    rm(&sp, &mut n)?;
+                }
+            }
+            if !kept {
+                rm(&p, &mut n)?;
+            }
+        }
+    }
+    Ok(n)
+}
+
 /// Seed `dst_target` from `src_target`; members are those of both checkouts.
 pub fn seed(
     src_root: &Path,
@@ -331,6 +400,61 @@ mod tests {
     fn write(p: &Path, s: &str) {
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(p, s).unwrap();
+    }
+
+    #[test]
+    fn prune_keeps_only_non_member_units() {
+        let d = TempDir::new("prune");
+        let t = d.path().join("target");
+        for f in [
+            format!("debug/.fingerprint/helper-{H}/lib-helper"),
+            format!("debug/.fingerprint/xtask-{H}/bin-xtask"),
+            format!("debug/deps/libhelper-{H}.rlib"),
+            format!("debug/deps/xtask-{H}"),
+            format!("debug/deps/xtask-{H}.d"),
+            format!("debug/build/cc-{H}/output"),
+            format!("debug/build/xtask-{H}/output"),
+            format!("debug/incremental/helper-{H}/x"),
+            "debug/xtask".into(),
+            "debug/xtask.d".into(),
+            "debug/deps/notes.txt".into(),
+            "debug/examples/x".into(),
+            ".rustc_info.json".into(),
+            "tmp/x".into(),
+            format!("x86_64-unknown-linux-gnu/debug/.fingerprint/helper-{H}/x"),
+            format!("x86_64-unknown-linux-gnu/debug/deps/xtask-{H}"),
+            "x86_64-unknown-linux-gnu/stray".into(),
+        ] {
+            write(&t.join(&f), "bin");
+        }
+        let members: BTreeSet<String> = ["xtask".to_owned()].into();
+        assert!(prune_to_non_members(&t, &members).unwrap() > 0);
+        let mut got = Vec::new();
+        let mut stack = vec![t.clone()];
+        while let Some(p) = stack.pop() {
+            for e in std::fs::read_dir(&p).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else {
+                    got.push(crate::util::rel(&t, &p));
+                }
+            }
+        }
+        got.sort();
+        assert_eq!(
+            got,
+            [
+                format!("debug/.fingerprint/helper-{H}/lib-helper"),
+                format!("debug/build/cc-{H}/output"),
+                format!("debug/deps/libhelper-{H}.rlib"),
+                format!("x86_64-unknown-linux-gnu/debug/.fingerprint/helper-{H}/x"),
+            ]
+        );
+        assert_eq!(
+            prune_to_non_members(&d.path().join("none"), &members).unwrap(),
+            0
+        );
     }
 
     #[test]

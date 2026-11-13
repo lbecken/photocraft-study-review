@@ -180,7 +180,10 @@ mod tests {
             .split("#[cfg(test)]")
             .next()
             .unwrap();
-        assert!(!guard.contains(concat!("env::", "var")), "the guard reads no variable");
+        assert!(
+            !guard.contains(concat!("env::", "var")),
+            "the guard reads no variable"
+        );
     }
 
     #[test]
