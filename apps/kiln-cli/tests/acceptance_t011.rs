@@ -879,6 +879,61 @@ fn ac4_bad_manifests_are_refused_before_any_request() {
     assert!(!first_stderr_line(&out).starts_with("kiln-cli: bad --memory-seed"));
 }
 
+/// Ruling u2 (D-067): a manifest in which any JSON object repeats a key is malformed and is
+/// refused like every other bad manifest; in particular a repeated `files` must not seed an
+/// empty (or any) file system.
+#[test]
+fn ac4_repeated_json_keys_are_refused() {
+    let work = fresh("ac4u2");
+    std::fs::write(work.join("s.jsonl"), CHANGING_SCRIPT).unwrap();
+    let cases = [
+        (
+            "files twice",
+            r#"{"files":[{"path":"a.txt","text":"x"}],"files":[]}"#,
+        ),
+        (
+            "files twice, same value",
+            r#"{"files":[{"path":"a.txt","text":"x"}],"files":[{"path":"a.txt","text":"x"}]}"#,
+        ),
+        (
+            "text twice",
+            r#"{"files":[{"path":"a.txt","text":"x","text":"y"}]}"#,
+        ),
+        (
+            "hex twice",
+            r#"{"files":[{"path":"a.txt","hex":"78","hex":"79"}]}"#,
+        ),
+        (
+            "path twice",
+            r#"{"files":[{"path":"b.txt","path":"a.txt","text":"x"}]}"#,
+        ),
+        (
+            "in a later entry",
+            r#"{"files":[{"path":"b","text":""},{"text":"x","path":"a.txt","text":"x"}]}"#,
+        ),
+    ];
+    for (i, (why, manifest)) in cases.into_iter().enumerate() {
+        let name = format!("dup{i}.json");
+        std::fs::write(work.join(&name), manifest).unwrap();
+        let before = snapshot(&work);
+        for args in [
+            vec!["run", "s.jsonl", "--memory-seed", &name, "--log", "l.jsonl"],
+            vec!["exec", "doc.list", "{}", "--memory-seed", &name],
+        ] {
+            assert_bad_manifest(&kiln(&args, &work), &name, why);
+            assert_eq!(snapshot(&work), before, "{why}: nothing written (no log)");
+        }
+    }
+    // Positive control: one `files` key with the same entry runs the script (exit 0).
+    std::fs::write(
+        work.join("ok.json"),
+        r#"{"files":[{"path":"a.txt","text":"x"}]}"#,
+    )
+    .unwrap();
+    let out = kiln(&["run", "s.jsonl", "--memory-seed", "ok.json"], &work);
+    assert_eq!(code(&out), 0, "{}", first_stderr_line(&out));
+}
+
 /// Ruling u3 (D-067): for `exec`, params that are not JSON are reported (`invalid_json`, exit 2)
 /// before the manifest is read, as with `--root`; with valid params the manifest is checked.
 #[test]
