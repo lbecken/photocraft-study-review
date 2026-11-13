@@ -121,6 +121,500 @@
       }
     },
     {
+      "doc": "Return a document's selection (anchor and head, char offsets) and the head's line and column. Read-only.",
+      "examples": [
+        {
+          "description": "the selection follows an insert before it",
+          "files": [
+            [
+              "a.txt",
+              "abc\r\ndef"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "anchor": 3,
+            "col": 1,
+            "doc": 1,
+            "end": 8,
+            "head": 8,
+            "line": 1,
+            "start": 3
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "cursor.set",
+              {
+                "anchor": 1,
+                "doc": 1,
+                "head": 6
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "XY"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "cursor.get",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "GetParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
+        "properties": {
+          "anchor": {
+            "description": "Char offset of the selection's anchor (the end that stays put while extending).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "col": {
+            "description": "Zero-based column of the head, in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "doc": {
+            "description": "Id of the document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "description": "The larger of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "head": {
+            "description": "Char offset of the selection's head (the caret).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "description": "Zero-based line of the head.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "The smaller of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "anchor",
+          "head",
+          "start",
+          "end",
+          "line",
+          "col"
+        ],
+        "title": "CursorResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Move a document's selection head one step by char, word or line, computed from the head before the move. Without `extend` the selection collapses at the new head; with it only the head moves. Ends the document's typing group.",
+      "examples": [
+        {
+          "description": "a word forward",
+          "files": [
+            [
+              "a.rs",
+              "fn foo_bar(x: u8)"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "by": "word",
+            "doc": 1,
+            "forward": true
+          },
+          "result": {
+            "anchor": 10,
+            "col": 10,
+            "doc": 1,
+            "end": 10,
+            "head": 10,
+            "line": 0,
+            "start": 10
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ],
+            [
+              "cursor.set",
+              {
+                "anchor": 2,
+                "doc": 1
+              }
+            ]
+          ]
+        },
+        {
+          "description": "extend a line down (no goal column)",
+          "files": [
+            [
+              "a.txt",
+              "abcdef\nxy\nlonger"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "by": "line",
+            "doc": 1,
+            "extend": true,
+            "forward": true
+          },
+          "result": {
+            "anchor": 5,
+            "col": 2,
+            "doc": 1,
+            "end": 9,
+            "head": 9,
+            "line": 1,
+            "start": 5
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ],
+            [
+              "cursor.set",
+              {
+                "anchor": 5,
+                "doc": 1
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "cursor.move",
+      "params_schema": {
+        "$defs": {
+          "By": {
+            "description": "The unit of a `cursor.move` step.",
+            "oneOf": [
+              {
+                "const": "char",
+                "description": "One char; a CRLF is one step.",
+                "type": "string"
+              },
+              {
+                "const": "word",
+                "description": "Over non-word chars, then word chars (`_` or alphanumeric).",
+                "type": "string"
+              },
+              {
+                "const": "line",
+                "description": "The same column on the next or previous line, clamped to its length.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `cursor.move`.",
+        "properties": {
+          "by": {
+            "$ref": "#/$defs/By",
+            "description": "The unit of the step."
+          },
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "extend": {
+            "default": false,
+            "description": "True to move only the head (extend the selection); false (default) to collapse the\nselection at the moved head.",
+            "type": "boolean"
+          },
+          "forward": {
+            "description": "True to move towards the end of the text (down for `line`).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "doc",
+          "by",
+          "forward"
+        ],
+        "title": "MoveParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
+        "properties": {
+          "anchor": {
+            "description": "Char offset of the selection's anchor (the end that stays put while extending).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "col": {
+            "description": "Zero-based column of the head, in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "doc": {
+            "description": "Id of the document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "description": "The larger of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "head": {
+            "description": "Char offset of the selection's head (the caret).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "description": "Zero-based line of the head.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "The smaller of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "anchor",
+          "head",
+          "start",
+          "end",
+          "line",
+          "col"
+        ],
+        "title": "CursorResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Set a document's selection to `anchor`..`head` (char offsets; `head` defaults to `anchor`). Ends the document's typing group.",
+      "examples": [
+        {
+          "description": "select across a CRLF",
+          "files": [
+            [
+              "a.txt",
+              "abc\r\ndef"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "anchor": 1,
+            "doc": 1,
+            "head": 6
+          },
+          "result": {
+            "anchor": 1,
+            "col": 1,
+            "doc": 1,
+            "end": 6,
+            "head": 6,
+            "line": 1,
+            "start": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a caret (head defaults to anchor)",
+          "files": [
+            [
+              "a.txt",
+              "abc\r\ndef"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "anchor": 2,
+            "doc": 1
+          },
+          "result": {
+            "anchor": 2,
+            "col": 2,
+            "doc": 1,
+            "end": 2,
+            "head": 2,
+            "line": 0,
+            "start": 2
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "cursor.set",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `cursor.set`.",
+        "properties": {
+          "anchor": {
+            "description": "Char offset of the anchor (`0..=len_chars`, not between `\\r` and `\\n`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "head": {
+            "default": null,
+            "description": "Char offset of the head; defaults to `anchor` (a caret).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "doc",
+          "anchor"
+        ],
+        "title": "SetParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
+        "properties": {
+          "anchor": {
+            "description": "Char offset of the selection's anchor (the end that stays put while extending).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "col": {
+            "description": "Zero-based column of the head, in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "doc": {
+            "description": "Id of the document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "description": "The larger of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "head": {
+            "description": "Char offset of the selection's head (the caret).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "description": "Zero-based line of the head.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "The smaller of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "anchor",
+          "head",
+          "start",
+          "end",
+          "line",
+          "col"
+        ],
+        "title": "CursorResult",
+        "type": "object"
+      }
+    },
+    {
       "doc": "Close a document. A dirty document is refused unless `discard` is true. The id is never reused.",
       "examples": [
         {
@@ -1776,6 +2270,301 @@
           "dirty"
         ],
         "title": "UndoResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Count a document's line breaks per kind (`\\r\\n` first, then lone `\\r` and `\\n`). Read-only.",
+      "examples": [
+        {
+          "description": "a file with mixed line endings",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nb\nc\rd\r\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "cr": 1,
+            "crlf": 2,
+            "lf": 1,
+            "line_ending": "crlf",
+            "mixed_line_endings": true
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "eol.counts",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "CountsParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "LineEndingName": {
+            "description": "Dominant line ending of a document's current text.",
+            "oneOf": [
+              {
+                "const": "none",
+                "description": "The text has no line break.",
+                "type": "string"
+              },
+              {
+                "const": "lf",
+                "description": "`\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "crlf",
+                "description": "`\\r\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "cr",
+                "description": "A lone `\\r`.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `eol.counts`.",
+        "properties": {
+          "cr": {
+            "description": "Number of lone `\\r` line breaks.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "crlf": {
+            "description": "Number of `\\r\\n` line breaks (matched before lone `\\r` and `\\n`).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lf": {
+            "description": "Number of lone `\\n` line breaks.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line_ending": {
+            "$ref": "#/$defs/LineEndingName",
+            "description": "Dominant line ending of the current text (as in `doc.info`)."
+          },
+          "mixed_line_endings": {
+            "description": "True iff the current text has line breaks of more than one kind (as in `doc.info`).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lf",
+          "crlf",
+          "cr",
+          "line_ending",
+          "mixed_line_endings"
+        ],
+        "title": "CountsResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Rewrite every line break of a document that differs from `to` (default: the dominant line ending) as `to`, as one undo step. The selection maps through each rewritten break. If no break differs, nothing changes.",
+      "examples": [
+        {
+          "description": "normalise a mixed file to LF",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nb\nc\rd"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "to": "lf"
+          },
+          "result": {
+            "changed": 2,
+            "len_chars": 7,
+            "line_ending": "lf",
+            "mixed_line_endings": false
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "default target: the dominant line ending",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nb\r\nc\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "changed": 1,
+            "len_chars": 9,
+            "line_ending": "crlf",
+            "mixed_line_endings": false
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "eol.normalize",
+      "params_schema": {
+        "$defs": {
+          "Target": {
+            "description": "A target line ending.",
+            "oneOf": [
+              {
+                "const": "lf",
+                "description": "`\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "crlf",
+                "description": "`\\r\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "cr",
+                "description": "A lone `\\r`.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `eol.normalize`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Target"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The line ending every break is rewritten to; defaults to the document's dominant one\n(`doc.info.line_ending`)."
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "NormalizeParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "LineEndingName": {
+            "description": "Dominant line ending of a document's current text.",
+            "oneOf": [
+              {
+                "const": "none",
+                "description": "The text has no line break.",
+                "type": "string"
+              },
+              {
+                "const": "lf",
+                "description": "`\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "crlf",
+                "description": "`\\r\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "cr",
+                "description": "A lone `\\r`.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `eol.normalize`.",
+        "properties": {
+          "changed": {
+            "description": "Number of line breaks rewritten (those that differed from the target).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "len_chars": {
+            "description": "Length in chars afterwards.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line_ending": {
+            "$ref": "#/$defs/LineEndingName",
+            "description": "Dominant line ending afterwards (as in `doc.info`)."
+          },
+          "mixed_line_endings": {
+            "description": "True iff the text still has line breaks of more than one kind (as in `doc.info`).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed",
+          "len_chars",
+          "line_ending",
+          "mixed_line_endings"
+        ],
+        "title": "NormalizeResult",
         "type": "object"
       }
     }
