@@ -231,6 +231,25 @@ pub fn build_main_xtask(root: &Path, sha: &str) -> Result<PathBuf> {
     Ok(bin)
 }
 
+/// Puts a task worktree back on drop (D-026 R5): aborts a rebase in progress, resets the branch
+/// to `head` and removes untracked files (ignored files such as `target/` stay).
+struct Restore<'a> {
+    wt: &'a Path,
+    head: &'a str,
+    armed: bool,
+}
+
+impl Drop for Restore<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let _ = git_try(self.wt, &["rebase", "--abort"]);
+        let _ = git_try(self.wt, &["reset", "--quiet", "--hard", self.head]);
+        let _ = git_try(self.wt, &["clean", "--quiet", "-d", "--force"]);
+    }
+}
+
 /// Exclusive queue lock, released on drop.
 pub struct Lock(PathBuf);
 
@@ -580,9 +599,12 @@ pub fn run(
         gate_paths: checked.gate_paths.clone(),
     };
 
-    let restore = |wt: &Path| {
-        let _ = git_try(wt, &["reset", "--quiet", "--hard", &task_head]);
-        let _ = git_try(wt, &["clean", "--quiet", "-d", "--force"]);
+    // D-026 R5: on every outcome but `merged` (and on any error from here on) the task branch
+    // goes back to `task_head` and its worktree is left clean.
+    let mut restore = Restore {
+        wt: &wt,
+        head: &task_head,
+        armed: true,
     };
     let mut ready = false;
     match rebase(&wt, &checked.policy)? {
@@ -609,13 +631,11 @@ pub fn run(
                     ready = true;
                 }
                 Ok(Err(path)) => {
-                    restore(&wt);
                     record.result = "conflict".into();
                     record.failed_step = Some(format!("regenerate:{path}"));
                     record.regenerated = conflicted.into_iter().collect();
                 }
                 Err(e) => {
-                    restore(&wt);
                     return Err(e.context("regenerating generated files"));
                 }
             }
@@ -640,7 +660,6 @@ pub fn run(
             };
             let bumped = lock_version_changes(&main_lock, &new_lock)?;
             if !bumped.is_empty() {
-                restore(&wt);
                 return Err(Refusal {
                     check: "dependencies",
                     reason: format!(
@@ -672,6 +691,7 @@ pub fn run(
             let (ok, _, err) = git_try(root, &["merge", "--ff-only", "--quiet", &record.head_sha])?;
             if ok {
                 record.result = "merged".into();
+                restore.armed = false;
             } else {
                 eprintln!("queue: fast-forward failed: {}", err.trim());
                 record.result = "ff_failed".into();
@@ -679,6 +699,7 @@ pub fn run(
             }
         }
     }
+    drop(restore);
     record.ended_at = format_utc(now_secs(clock));
     append_jsonl(&metrics, &record)?;
     Ok(record)
@@ -846,12 +867,14 @@ mod tests {
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "broken", &[("feature.txt", "f")]);
         let before = rev(root, "main").unwrap();
+        let head0 = rev(&wt, "HEAD").unwrap();
         let r1 = run(root, "T-001", &clock(), &gate(false, true)).unwrap();
         assert_eq!(
             (r1.result.as_str(), r1.failed_step.as_deref(), r1.attempt),
             ("gate_failed", Some("test"), 1)
         );
         assert_eq!(rev(root, "main").unwrap(), before);
+        assert_eq!(rev(&wt, "HEAD").unwrap(), head0);
         let r2 = run(root, "T-001", &clock(), &gate(true, false)).unwrap();
         assert_eq!((r2.result.as_str(), r2.attempt), ("merged", 2));
     }
@@ -934,13 +957,13 @@ mod tests {
             ["build", "main"],
             "own gate not reached"
         );
-        g(&wt, &["reset", "-q", "--hard", &head0]);
+        assert_eq!(rev(&wt, "HEAD").unwrap(), head0, "branch put back (R5)");
         let fake = gate(true, false);
         let r = run(root, "T-001", &clock(), &fake).unwrap();
         assert_eq!(r.failed_step.as_deref(), Some("task:test"));
         assert_eq!(*fake.calls.borrow(), ["build", "main", "own"]);
         assert_eq!(rev(root, "main").unwrap(), before);
-        g(&wt, &["reset", "-q", "--hard", &head0]);
+        assert_eq!(rev(&wt, "HEAD").unwrap(), head0, "branch put back (R5)");
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(
             (r.result.as_str(), r.gate_xtask.as_str()),
@@ -1109,6 +1132,70 @@ mod tests {
         evidence(root, &wt);
         approve(root, "Approve T-001.");
         assert_refused(root, "dependencies", "serde 1.0.1 -> 1.0.2");
+    }
+
+    /// A gate that litters the worktree and, if `move_main`, lets main move meanwhile.
+    struct MessyGate {
+        root: PathBuf,
+        pass: bool,
+        move_main: bool,
+    }
+    impl GateRunner for MessyGate {
+        fn run(&self, wt: &Path, _: GateXtask<'_>) -> Result<GateOutcome> {
+            testrepo::write(wt, "litter.txt", "x");
+            testrepo::write(wt, "base.txt", "edited by the gate\n");
+            if self.move_main {
+                testrepo::commit(&self.root, "meanwhile", &[("STATE.md", "moved")]);
+            }
+            Ok(GateOutcome {
+                passed: self.pass,
+                failed_step: (!self.pass).then(|| "test".into()),
+            })
+        }
+        fn build_main_xtask(&self, _: &Path, _: &str) -> Result<PathBuf> {
+            Ok(PathBuf::from("/fake/main-xtask"))
+        }
+    }
+
+    #[test]
+    fn non_merged_outcomes_leave_the_branch_and_worktree_as_they_were() {
+        // D-026 R5: gate_failed and ff_failed put the branch back and clean the worktree, so the
+        // review and join evidence (ancestors of the old head) stay valid for a re-queue.
+        for (pass, move_main, result) in [(false, false, "gate_failed"), (true, true, "ff_failed")]
+        {
+            let repo = setup("q-restore");
+            let root = repo.path();
+            let wt = root.join(".worktrees/T-001");
+            testrepo::commit(&wt, "f", &[("feature.txt", "f")]);
+            testrepo::commit(root, "ledger", &[("STATE.md", "s")]); // forces a real rebase
+            let head0 = rev(&wt, "HEAD").unwrap();
+            let gate = MessyGate {
+                root: root.to_path_buf(),
+                pass,
+                move_main,
+            };
+            let r = run(root, "T-001", &clock(), &gate).unwrap();
+            assert_eq!(r.result, result, "{r:?}");
+            assert_ne!(r.head_sha, head0, "the gate ran on the rebased head");
+            assert_eq!(
+                rev(&wt, "HEAD").unwrap(),
+                head0,
+                "{result}: branch put back"
+            );
+            assert_eq!(
+                g(root, &["rev-parse", "task/T-001"]),
+                head0,
+                "{result}: the branch ref itself"
+            );
+            assert!(
+                dirty_paths(&wt, None).unwrap().is_empty(),
+                "{result}: worktree clean"
+            );
+            assert_eq!(
+                std::fs::read_to_string(wt.join("base.txt")).unwrap(),
+                "base\n"
+            );
+        }
     }
 
     #[test]

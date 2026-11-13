@@ -219,7 +219,12 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    override (D-3). Before the gate, the lock rule is applied once more to the rebased tree: if
    its `Cargo.lock` changes the version of a package of main's lock, the run is refused at
    `dependencies` and the branch is put back;
-6. fast-forwards `main` only if green (never pushes) and appends to `metrics/queue.jsonl`:
+6. fast-forwards `main` only if green (never pushes). On every other outcome — `gate_failed`,
+   `ff_failed`, `conflict`, a refusal after the rebase, or an error — `task/T-NNN` is put back
+   on the commit it pointed at before the run (`git rebase --abort`, `git reset --hard`,
+   `git clean -d --force`; ignored files such as `target/` stay) and its worktree is clean, so
+   the join and review evidence still names ancestors of the head and a re-queue needs no
+   re-join or re-review (D-026 R5). Then it appends to `metrics/queue.jsonl`:
 
 ```json
 {"task":"T-001","attempt":1,"started_at":"…Z","ended_at":"…Z","base_sha":"…","head_sha":"…",
