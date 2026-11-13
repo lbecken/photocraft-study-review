@@ -310,4 +310,19 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13 · R-031 · tests_joined (review r1) · did: reviewed 76051fb as a CLI user: hand slice
+  (open/insert/delete/replace/undo/redo/save) via `run --root --log`, `control`, `exec --root`;
+  cross-root determinism with 20 failing requests; log replay round-trip; 52 MB hostile script;
+  control flush/EOF/EPIPE; seeded panic → `internal`; doc worked example reproduced byte for
+  byte. 25 mutants: 23 killed (22 by acceptance), 1 equivalent, 1 survived (catch_unwind).
+  Verdict request-changes: D-1 doc says request paths cannot leave the root, but symlinks are
+  followed out of it for open and save; TG-1 `../`/absolute-path acceptance lines pass with the
+  `..` check removed (M06 wrote outside the root). Review: `reviews/T-004-r1.md`. · gate
+  attempts: 1 (last: green) · not run: Windows/macOS, non-root permission errors, revert check
+  (director did it) · missing context: none · next: implementer fixes D-1 (doc), test author
+  fixes TG-1; director rules on spec gaps.
+  QUESTION: SG-1 symlink confinement (deferred by T-002) is user-facing now — schedule before
+  the evaluator? SG-2 how to test the panic → `internal` path through the declared API?
+  SG-3 should `run` exit 1 when stdout cannot be written (as `control` does)? SG-4 `exec` cannot
+  persist edits; intended? SG-5 OS `strerror` text in responses.
 <!-- end reviewer log -->
