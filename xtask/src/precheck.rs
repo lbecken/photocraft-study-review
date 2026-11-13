@@ -487,12 +487,21 @@ fn approves(cell: &str, task: &str) -> bool {
 
 /// The ceiling `N` of a Decision cell that begins with `Extend <task> to N` (T-013 (2), D-4):
 /// `N` decimal digits followed by the cell's end or a character that is neither a digit nor an
-/// id character. `Extend <task>` without `to <digits>` is not an extension.
+/// id character. `Extend <task>` without `to <digits>` is not an extension. Ruling D-047 (j):
+/// a digit run directly followed by `,`, `.` or `_` and another digit (`1,200,000`, `5000.5`,
+/// `1_200_000`) is malformed, so the row is not an extension either.
 fn extension_of(cell: &str, task: &str) -> Option<u64> {
     let rest = cell.strip_prefix(&format!("Extend {task} to "))?;
     let n = rest.bytes().take_while(u8::is_ascii_digit).count();
     if n == 0
         || rest[n..].starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return None;
+    }
+    let after = rest.as_bytes()[n..].get(..2);
+    if let Some([sep, d]) = after
+        && matches!(sep, b',' | b'.' | b'_')
+        && d.is_ascii_digit()
     {
         return None;
     }
@@ -1312,6 +1321,31 @@ mod tests {
             reason: "a\n  b\n".into(),
         };
         assert_eq!(r.to_string(), "queue: refused: config: a; b");
+    }
+
+    #[test]
+    fn grouped_ceilings_are_not_extensions() {
+        // Ruling D-047 (j).
+        for bad in [
+            "Extend T-020 to 1,200,000",
+            "Extend T-020 to 5000.5",
+            "Extend T-020 to 1_200_000",
+            "Extend T-020 to 1,2",
+        ] {
+            assert_eq!(extension_of(bad, "T-020"), None, "{bad}");
+        }
+        for (ok, n) in [
+            ("Extend T-020 to 1200000", 1_200_000),
+            ("Extend T-020 to 600000.", 600_000),
+            ("Extend T-020 to 600000, see D-1", 600_000),
+            ("Extend T-020 to 600000 (2026)", 600_000),
+            ("Extend T-020 to 700000.x", 700_000),
+        ] {
+            assert_eq!(extension_of(ok, "T-020"), Some(n), "{ok}");
+        }
+        // The last row wins; a malformed later row is not an extension, so the earlier one counts.
+        let text = "| ID | Decision |\n|---|---|\n| D-1 | Extend T-020 to 600000 |\n| D-2 | Extend T-020 to 1,200,000 |\n";
+        assert_eq!(extension(text, "T-020"), Some(600_000));
     }
 
     #[test]

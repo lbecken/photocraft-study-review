@@ -29,11 +29,10 @@ pub const MUTANT_KEYS: &[&str] = &[
 
 /// The review arm of a task (METHODOLOGY §6, T-013 Interface (4)): `independent` for high and
 /// for medium with an even number, `implementer` for medium with an odd number, none for low.
+/// Ruling D-047 (o): a task id that does not end in an ASCII digit has no arm (never a panic).
 pub fn arm(task: &str, tier: &str) -> Option<&'static str> {
-    let odd = task
-        .strip_prefix("T-")
-        .and_then(|d| d.bytes().last())
-        .is_some_and(|b| (b - b'0') % 2 == 1);
+    let last = task.bytes().last().filter(u8::is_ascii_digit)?;
+    let odd = (last - b'0') % 2 == 1;
     match tier {
         "high" => Some("independent"),
         "medium" if odd => Some("implementer"),
@@ -366,8 +365,28 @@ fn check_session_paths(root: &Path) -> Result<(Vec<String>, usize, usize)> {
         let Ok(meta) = std::fs::symlink_metadata(&full) else {
             continue; // tracked but deleted in the working tree
         };
+        if meta.file_type().is_symlink() {
+            // Ruling D-047 (o): git stores a symlink as its target text; check that text.
+            let Ok(target) = std::fs::read_link(&full) else {
+                continue;
+            };
+            let Some(text) = target.to_str() else {
+                skipped += 1;
+                continue;
+            };
+            scanned += 1;
+            for (n, line) in text.lines().enumerate() {
+                if has_session_path(line) {
+                    problems.push(format!(
+                        "session-paths: {path}:{}: contains a session-specific scratch path",
+                        n + 1
+                    ));
+                }
+            }
+            continue;
+        }
         if !meta.is_file() {
-            continue; // symlink or submodule
+            continue; // submodule or other non-file entry
         }
         let bytes = std::fs::read(&full)?;
         let Ok(text) = String::from_utf8(bytes) else {
@@ -505,5 +524,31 @@ mod tests {
         assert_eq!(arm("T-020", "medium"), Some("independent"));
         assert_eq!(arm("T-021", "high"), Some("independent"));
         assert_eq!(arm("T-021", "low"), None);
+        // Ruling D-047 (o): no panic, no arm, when the id does not end in an ASCII digit.
+        for bad in ["T-021 ", "T-02!", "T-", "", "T-02\u{0663}", "T-021a"] {
+            for tier in ["high", "medium", "low"] {
+                assert_eq!(arm(bad, tier), None, "{bad:?} {tier}");
+            }
+        }
+    }
+
+    #[test]
+    fn session_paths_checks_a_tracked_symlinks_target() {
+        use crate::git::testrepo;
+        let repo = testrepo::init("hyg-link", &[("a.txt", "clean\n")]);
+        let root = repo.path();
+        std::os::unix::fs::symlink(session_path(), root.join("link")).unwrap();
+        std::os::unix::fs::symlink("a.txt", root.join("ok-link")).unwrap();
+        // Untracked: not checked.
+        let (problems, _, _) = check_session_paths(root).unwrap();
+        assert!(problems.is_empty(), "{problems:?}");
+        testrepo::g(root, &["add", "link", "ok-link"]);
+        let (problems, scanned, _) = check_session_paths(root).unwrap();
+        assert_eq!(
+            problems,
+            ["session-paths: link:1: contains a session-specific scratch path"]
+        );
+        assert_eq!(scanned, 3);
+        assert!(!problems[0].contains("/tmp/claude-"));
     }
 }

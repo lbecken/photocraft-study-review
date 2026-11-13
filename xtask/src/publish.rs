@@ -9,7 +9,8 @@
 //!    `docs/scorecard.md` is never written);
 //! 2. the task file on main (`publish: T-NNN ready`), transitions draft → specified → ready;
 //! 3. the worktree (`worktree new`), ready → in_progress, committed on main at once
-//!    (`publish: T-NNN in progress`, `metrics/` only) so every stop leaves main committed;
+//!    (`publish: T-NNN in progress`, the task file and `metrics/tasks.jsonl`) so every stop
+//!    leaves main committed;
 //! 4. the inputs and the regenerated `docs/scorecard.md` committed on `task/T-NNN`;
 //! 5. the gate in the worktree;
 //! 6. in_progress → self_verified → queued, `state: queued` on main (`publish: T-NNN queued`);
@@ -18,6 +19,11 @@
 //! 7. the inputs removed from the primary checkout (they come back with the fast-forward);
 //! 8. `cargo xtask queue T-NNN` (child process, exit code passed through); on exit 0
 //!    queued → merged, `state: merged` (`publish: T-NNN merged`) and `worktree rm T-NNN`.
+//!
+//! Steps 1–7 run under the queue's lock `<git-common-dir>/kiln-queue.lock`, released just before
+//! step 8 (ruling D-047 (m)). From step 3 on, main's task file `state:` is committed with every
+//! transition (D-047 (n)); a stop in steps 3, 4 or 7 without a pinned line prints
+//! `publish: stopped at step <n>: <error>; T-NNN is <state>`.
 //!
 //! Commits use the repository's own commit configuration (signing included, no `--no-verify`).
 //! The helper records no `run`.
@@ -28,7 +34,7 @@ use std::process::Command;
 use anyhow::{Context as _, Result, bail};
 
 use crate::git::{branch_exists, dirty_paths, git, git_try, rev};
-use crate::queue::{GateRunner, GateXtask, is_evidence_path};
+use crate::queue::{GateRunner, GateXtask, Lock, LockHeld, is_evidence_path};
 use crate::timefmt::{Clock, format_utc};
 use crate::util::{Exit, Refused, capture, tail, valid_task_id};
 use crate::worktree::Spec;
@@ -205,7 +211,11 @@ fn porcelain_path(l: &str) -> String {
 fn commit(dir: &Path, subject: &str, task: &str, paths: &[String]) -> Result<Result<(), String>> {
     let mut add = vec!["add", "--"];
     add.extend(paths.iter().map(String::as_str));
-    git(dir, &add)?;
+    // Ruling D-047 (l): a failing `git add` is a commit failure.
+    let (ok, _, err) = git_try(dir, &add)?;
+    if !ok {
+        return Ok(Err(one_line(&err)));
+    }
     let task_line = format!("Task: {task}");
     let mut args = vec![
         "commit",
@@ -220,11 +230,94 @@ fn commit(dir: &Path, subject: &str, task: &str, paths: &[String]) -> Result<Res
     ];
     args.extend(paths.iter().map(String::as_str));
     let (ok, _, err) = git_try(dir, &args)?;
-    Ok(if ok {
-        Ok(())
-    } else {
-        Err(err.trim().lines().collect::<Vec<_>>().join("; "))
+    Ok(if ok { Ok(()) } else { Err(one_line(&err)) })
+}
+
+/// `text`'s non-empty lines, trimmed, joined with `; `.
+fn one_line(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// The task's current state in the working tree's `metrics/tasks.jsonl` (the `to` of its last
+/// transition; `draft` if none).
+fn ledger_state(root: &Path, task: &str) -> String {
+    crate::util::read_jsonl(&root.join("metrics/tasks.jsonl"))
+        .map(|r| crate::metrics::current_state(&r, task).0)
+        .unwrap_or_else(|_| "unknown".into())
+}
+
+/// Ruling D-047 (n): a stop in step 3, 4 or 7 without a pinned line prints
+/// `publish: stopped at step <n>: <error>; T-NNN is <state>`; exit `code`.
+fn stopped(root: &Path, step: u8, task: &str, error: &anyhow::Error, code: u8) -> anyhow::Error {
+    eprintln!(
+        "publish: stopped at step {step}: {}; {task} is {}",
+        one_line(&format!("{error:#}")),
+        ledger_state(root, task)
+    );
+    Exit(code).into()
+}
+
+/// Ruling D-047 (m): the queue's lock; held by a live process → the publish refusal.
+fn take_lock(root: &Path, task: &str) -> Result<Lock> {
+    let path = crate::queue::common_dir(root)?.join("kiln-queue.lock");
+    Lock::acquire(&path, task).map_err(|e| match e.downcast_ref::<LockHeld>() {
+        Some(h) => refused(format_args!(
+            "another queue or publish run holds {}",
+            h.path.display()
+        )),
+        None => e,
     })
+}
+
+/// `state:` of main's task file in the primary checkout set to `state`.
+fn set_state(root: &Path, task_file: &str, state: &str) -> Result<()> {
+    let current = std::fs::read_to_string(root.join(task_file))?;
+    std::fs::write(root.join(task_file), with_state(&current, state))?;
+    Ok(())
+}
+
+/// Step 2 before its commit: the task file and the two transitions. On failure, ruling D-047
+/// (k): the task file is removed and `metrics/tasks.jsonl` restored to the bytes it had, so
+/// main is as it was found; the error is returned unchanged.
+fn write_ready(
+    root: &Path,
+    task: &str,
+    task_file: &str,
+    text: &str,
+    clock: &dyn Clock,
+) -> Result<()> {
+    let ledger = root.join("metrics/tasks.jsonl");
+    let (had_tasks, had_metrics) = (root.join("tasks").is_dir(), root.join("metrics").is_dir());
+    let before = match std::fs::read(&ledger) {
+        Ok(b) => Some(b),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e).with_context(|| format!("read {}", ledger.display())),
+    };
+    let result = (|| -> Result<()> {
+        std::fs::create_dir_all(root.join("tasks"))?;
+        std::fs::write(root.join(task_file), text)?;
+        transition(root, task, "specified", clock)?;
+        transition(root, task, "ready", clock)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(root.join(task_file));
+        let _ = match &before {
+            Some(b) => std::fs::write(&ledger, b),
+            None => std::fs::remove_file(&ledger),
+        };
+        if !had_tasks {
+            let _ = std::fs::remove_dir(root.join("tasks"));
+        }
+        if !had_metrics {
+            let _ = std::fs::remove_dir(root.join("metrics"));
+        }
+    }
+    result
 }
 
 /// Step 2/6/8 commit on main, or the exit-2 line with the hand command.
@@ -330,6 +423,15 @@ fn checks(
             "the title must be non-empty and contain no double quote, backslash or line break",
         ));
     }
+    // Ruling D-047 (p): the slug needs a letter or digit (the slug's own alphabet).
+    if !a
+        .title
+        .chars()
+        .flat_map(char::to_lowercase)
+        .any(|c| c.is_ascii_alphanumeric())
+    {
+        return Err(refused("the title has no letter or digit"));
+    }
     let prefix = format!("tasks/{task}-");
     let on_main = git(root, &["ls-tree", "--name-only", "main", "--", "tasks/"])?;
     if let Some(f) = on_main
@@ -354,6 +456,13 @@ fn checks(
     }
     if spec.path(root).exists() {
         return Err(refused(format_args!(".worktrees/{task} exists")));
+    }
+    // Ruling D-047 (k): a task number publish (or anything else) has used is not reused.
+    let records = crate::util::read_jsonl(&root.join("metrics/tasks.jsonl"))?;
+    if records.iter().any(|r| r["task"].as_str() == Some(task.as_str())) {
+        return Err(refused(format_args!(
+            "{task} already has records in metrics/tasks.jsonl"
+        )));
     }
     if a.inputs.is_empty() {
         return Err(refused("no input paths given"));
@@ -475,6 +584,9 @@ pub fn run_with(
     queue: &dyn Fn(&Path, &str) -> Result<i32>,
 ) -> Result<()> {
     let task = a.task.clone();
+    // Ruling D-047 (m): the queue's lock, from before step 1 touches the queue's private build
+    // tree until just before step 8 (dropped on every earlier stop).
+    let lock = take_lock(root, &task)?;
     // 1.
     let (xtask, argv, inputs) = checks(root, a, gate)?;
     let now = || format_utc(clock.now_millis().div_euclid(1000));
@@ -482,82 +594,37 @@ pub fn run_with(
     // 2.
     let task_file = format!("tasks/{task}-{}.md", slug(&a.title));
     let text = task_file_text(a, &inputs, "ready", &now());
-    std::fs::create_dir_all(root.join("tasks"))?;
-    std::fs::write(root.join(&task_file), &text)?;
-    transition(root, &task, "specified", clock)?;
-    transition(root, &task, "ready", clock)?;
+    write_ready(root, &task, &task_file, &text, clock)?;
     ledger_commit(root, &format!("publish: {task} ready"), &task, &task_file)?;
     println!("publish: {task_file} committed on main ({task} ready)");
 
-    // 3.
+    // 3. Ruling D-047 (n): from here on main's committed task file `state:` follows the ledger.
     let spec = Spec::parse(&task, false)?;
-    let info = crate::worktree::create(root, &spec, true)?;
-    println!(
-        "publish: worktree {} on {}",
-        info.path.display(),
-        info.branch
-    );
-    transition(root, &task, "in_progress", clock)?;
+    let info = (|| -> Result<crate::worktree::Info> {
+        let info = crate::worktree::create(root, &spec, true)?;
+        println!(
+            "publish: worktree {} on {}",
+            info.path.display(),
+            info.branch
+        );
+        transition(root, &task, "in_progress", clock)?;
+        set_state(root, &task_file, "in_progress")?;
+        Ok(info)
+    })()
+    .map_err(|e| stopped(root, 3, &task, &e, 1))?;
     // Ruling Q-b: main's ledger is committed wherever the command stops.
-    ledger_commit_paths(
+    ledger_commit(
         root,
         &format!("publish: {task} in progress"),
         &task,
-        &["metrics/tasks.jsonl".to_owned()],
+        &task_file,
     )?;
 
     // 4.
     let wt = info.path.clone();
-    for p in &inputs {
-        let dest = wt.join(p);
-        if let Some(d) = dest.parent() {
-            std::fs::create_dir_all(d)?;
-        }
-        std::fs::copy(root.join(p), &dest)?;
-    }
-    if let Err(e) = scorecard_in(&wt, &argv, &wt.join("target"))? {
-        eprintln!(
-            "publish: regenerating docs/scorecard.md in .worktrees/{task} failed: {e}; {task} stays in_progress"
-        );
-        return Err(Exit(1).into());
-    }
-    let mut content = inputs.clone();
-    content.push("docs/scorecard.md".into());
-    let stray: Vec<String> = dirty_paths(&wt, None)?
-        .iter()
-        .map(|l| porcelain_path(l))
-        .filter(|p| !content.contains(p))
-        .collect();
-    if !stray.is_empty() {
-        eprintln!(
-            "publish: the content commit would contain other paths ({}); {task} stays in_progress",
-            stray.join(", ")
-        );
-        return Err(Exit(1).into());
-    }
-    let subject = format!(
-        "{task}: publish {}; regenerate docs/scorecard.md",
-        inputs.join(" ")
-    );
-    if let Err(e) = commit(&wt, &subject, &task, &content)? {
-        eprintln!("publish: commit failed in .worktrees/{task}: {e}; {task} stays in_progress");
-        return Err(Exit(2).into());
-    }
-    let committed = git(&wt, &["show", "--name-only", "--format=", "HEAD"])?;
-    let mut got: Vec<&str> = committed.lines().filter(|l| !l.is_empty()).collect();
-    got.sort();
-    let mut want: Vec<&str> = content.iter().map(String::as_str).collect();
-    want.sort();
-    want.retain(|p| got.contains(p) || *p != "docs/scorecard.md");
-    if got != want {
-        eprintln!(
-            "publish: the content commit on {} contains {} instead of {}; {task} stays in_progress",
-            info.branch,
-            got.join(", "),
-            want.join(", ")
-        );
-        return Err(Exit(1).into());
-    }
+    content_commit(root, &wt, &task, &inputs, &argv, &info.branch).map_err(|(e, code)| {
+        stopped(root, 4, &task, &e, code)
+    })?;
 
     // 5.
     let outcome = gate.run(&wt, GateXtask::Binary(&xtask))?;
@@ -572,29 +639,14 @@ pub fn run_with(
     // 6.
     transition(root, &task, "self_verified", clock)?;
     transition(root, &task, "queued", clock)?;
-    let current = std::fs::read_to_string(root.join(&task_file))?;
-    std::fs::write(root.join(&task_file), with_state(&current, "queued"))?;
+    set_state(root, &task_file, "queued")?;
     ledger_commit(root, &format!("publish: {task} queued"), &task, &task_file)?;
 
-    // 7.
-    for p in &inputs {
-        let branch_copy = blob(root, &spec.branch(), p)?;
-        if branch_copy.as_deref() != Some(std::fs::read(root.join(p))?.as_slice()) {
-            eprintln!(
-                "publish: {p} in the primary checkout differs from {}; not removed; {task} stays queued",
-                spec.branch()
-            );
-            return Err(Exit(1).into());
-        }
-        if blob(root, "HEAD", p)?.is_some() {
-            git(root, &["checkout", "--quiet", "HEAD", "--", p])?;
-        } else {
-            std::fs::remove_file(root.join(p))?;
-        }
-        println!("publish: {p} moved to {}", spec.branch());
-    }
+    // 7. Every input is compared before any is removed.
+    hand_over(root, &inputs, &spec.branch()).map_err(|e| stopped(root, 7, &task, &e, 1))?;
 
-    // 8.
+    // 8. The queue takes the lock itself.
+    drop(lock);
     let code = queue(root, &task)?;
     if code != 0 {
         eprintln!(
@@ -605,11 +657,96 @@ pub fn run_with(
         return Err(Exit(u8::try_from(code).unwrap_or(1)).into());
     }
     transition(root, &task, "merged", clock)?;
-    let current = std::fs::read_to_string(root.join(&task_file))?;
-    std::fs::write(root.join(&task_file), with_state(&current, "merged"))?;
+    set_state(root, &task_file, "merged")?;
     ledger_commit(root, &format!("publish: {task} merged"), &task, &task_file)?;
     println!("{}", crate::worktree::remove(root, &spec, false)?);
     println!("publish: {task} merged");
+    Ok(())
+}
+
+/// Step 4: copy the inputs from the primary checkout `root` into the worktree `wt`, regenerate `docs/scorecard.md` there and
+/// commit exactly those paths on `branch`. `Err((error, exit code))`: 2 for a failed commit, else 1.
+fn content_commit(
+    root: &Path,
+    wt: &Path,
+    task: &str,
+    inputs: &[String],
+    argv: &[String],
+    branch: &str,
+) -> std::result::Result<(), (anyhow::Error, u8)> {
+    let one = |e: anyhow::Error| (e, 1);
+    for p in inputs {
+        let src = root.join(p);
+        let dest = wt.join(p);
+        if let Some(d) = dest.parent() {
+            std::fs::create_dir_all(d).map_err(|e| one(e.into()))?;
+        }
+        std::fs::copy(&src, &dest)
+            .with_context(|| format!("copy {p} into .worktrees/{task}"))
+            .map_err(one)?;
+    }
+    if let Err(e) = scorecard_in(wt, argv, &wt.join("target")).map_err(one)? {
+        return Err(one(anyhow::anyhow!(
+            "regenerating docs/scorecard.md in .worktrees/{task} failed: {e}"
+        )));
+    }
+    let mut content = inputs.to_vec();
+    content.push("docs/scorecard.md".into());
+    let stray: Vec<String> = dirty_paths(wt, None)
+        .map_err(one)?
+        .iter()
+        .map(|l| porcelain_path(l))
+        .filter(|p| !content.contains(p))
+        .collect();
+    if !stray.is_empty() {
+        return Err(one(anyhow::anyhow!(
+            "the content commit would contain other paths ({})",
+            stray.join(", ")
+        )));
+    }
+    let subject = format!(
+        "{task}: publish {}; regenerate docs/scorecard.md",
+        inputs.join(" ")
+    );
+    if let Err(e) = commit(wt, &subject, task, &content).map_err(one)? {
+        return Err((
+            anyhow::anyhow!("commit failed in .worktrees/{task}: {e}"),
+            2,
+        ));
+    }
+    let committed = git(wt, &["show", "--name-only", "--format=", "HEAD"]).map_err(one)?;
+    let mut got: Vec<&str> = committed.lines().filter(|l| !l.is_empty()).collect();
+    got.sort();
+    let mut want: Vec<&str> = content.iter().map(String::as_str).collect();
+    want.sort();
+    want.retain(|p| got.contains(p) || *p != "docs/scorecard.md");
+    if got != want {
+        return Err(one(anyhow::anyhow!(
+            "the content commit on {branch} contains {} instead of {}",
+            got.join(", "),
+            want.join(", ")
+        )));
+    }
+    Ok(())
+}
+
+/// Step 7: check every input's bytes against `branch`'s copy, then remove each from the primary
+/// checkout (untracked: deleted; tracked: restored to main's version).
+fn hand_over(root: &Path, inputs: &[String], branch: &str) -> Result<()> {
+    for p in inputs {
+        let branch_copy = blob(root, branch, p)?;
+        if branch_copy.as_deref() != Some(std::fs::read(root.join(p))?.as_slice()) {
+            bail!("{p} in the primary checkout differs from {branch}; not removed");
+        }
+    }
+    for p in inputs {
+        if blob(root, "HEAD", p)?.is_some() {
+            git(root, &["checkout", "--quiet", "HEAD", "--", p])?;
+        } else {
+            std::fs::remove_file(root.join(p))?;
+        }
+        println!("publish: {p} moved to {branch}");
+    }
     Ok(())
 }
 

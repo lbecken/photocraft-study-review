@@ -271,6 +271,29 @@ pub fn is_evidence_path(p: &str) -> bool {
 /// Exclusive queue lock, released on drop.
 pub struct Lock(PathBuf);
 
+/// [`Lock::acquire`]'s error when a live process holds the lock (publish names it in its own
+/// refusal, ruling D-047 (m)); its text is the queue's message.
+#[derive(Debug)]
+pub struct LockHeld {
+    /// The lock file.
+    pub path: PathBuf,
+    /// Its content (`<pid> <task>`), trimmed.
+    pub holder: String,
+}
+
+impl std::fmt::Display for LockHeld {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "another queue run holds {} ({}); one at a time",
+            self.path.display(),
+            self.holder
+        )
+    }
+}
+
+impl std::error::Error for LockHeld {}
+
 impl Lock {
     /// Take the lock at `path`, reclaiming it if the recorded process no longer exists.
     pub fn acquire(path: &Path, task: &str) -> Result<Self> {
@@ -289,11 +312,11 @@ impl Lock {
                     let pid = holder.split_whitespace().next().unwrap_or_default();
                     let alive = !pid.is_empty() && Path::new("/proc").join(pid).exists();
                     if alive || !Path::new("/proc").is_dir() {
-                        bail!(
-                            "another queue run holds {} ({}); one at a time",
-                            path.display(),
-                            holder.trim()
-                        );
+                        return Err(LockHeld {
+                            path: path.to_path_buf(),
+                            holder: holder.trim().to_owned(),
+                        }
+                        .into());
                     }
                     eprintln!(
                         "queue: reclaiming stale lock {} ({})",
