@@ -167,6 +167,7 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
 - D-3 (was Q-3, accepted as proposed): `kiln-cli control` (stdin/stdout) is in scope.
 - `Cargo.lock` is a generated file under T-005's policy; until T-005 lands the director
   regenerates it on a rebase conflict.
+- Director ruling (2026-11-13, decision D-023), part of the spec: `kiln-cli exec` and `kiln-cli run` must be able to act on real files. Both take `--root <dir>` (default: the current directory) and run commands against a disk workspace rooted there; an explicit `--memory` flag selects the empty in-memory file system for tests. Review of T-003 found that `exec` currently starts from an empty in-memory file system on every call, so no document can be opened from the CLI.
 
 ## Questions
 None open.
