@@ -132,8 +132,9 @@ are not stable (`docs/control-protocol.md`).
 ## Time
 
 No time bound exists for any `syntax.*` command: the size limit bounds the length of the text
-a command accepts, not the time a parse takes or the memory it needs. Parsing time depends on the text, not only on its length, and a call after an edit that
-leaves the tree with errors parses the text twice.
+a command accepts, not the time a parse takes or the memory it needs. Parsing time depends
+on the text, not only on its length, and a call after an edit that leaves the tree with
+errors parses the text twice.
 
 Measured with a release build of `kiln-cli` (`syntax.tree` after `doc.open`): a text of `#!`
 repeated took 1.10 s at 16,384 characters, 4.49 s at 32,768 and 17.00 s at 65,536. These are
@@ -143,8 +144,10 @@ a bound.
 
 ## Memory
 
-Memory grows with the length and content of the text; measured with a release build of
-`kiln-cli`, the largest peak at the limit was about 689 MiB (1,048,576 characters of `a;`
-repeated, after one edit: a `doc.replace` of one char, which keeps the length). This is one
-measurement on a release build: the maximum resident set size of the whole `kiln-cli run`
-process, for `doc.open`, `syntax.tree`, the edit, `syntax.tree` and `syntax.highlight`.
+Memory grows with the length and content of the text. Measured with a release build of
+`kiln-cli` at the limit (1,048,576 characters; `doc.open`, `syntax.tree`, a `doc.replace` of
+one char, `syntax.tree`, `syntax.highlight`): 689 MiB for `a;` repeated and 2,073 MiB for `1;`
+repeated. These are the maximum resident set size of the whole `kiln-cli run` process in two
+runs. They are not a bound: no bound on memory is promised, and other texts can need more.
+Without the `syntax.highlight` call, the same script on `1;` repeated peaked at 566 MiB; with
+it, the `syntax.highlight` reply held 1,048,575 spans.
