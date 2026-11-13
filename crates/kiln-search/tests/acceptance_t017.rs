@@ -1206,9 +1206,85 @@ fn invalid_patterns_are_errors() {
             assert_eq!(e.message.chars().count(), 200);
         }
     }
-    // The nest limit itself: 250 levels compile, deeper ones are errors.
-    assert_eq!(compile(&nested(250), false).group_count(), 250);
-    let _ = pattern_error(&nested(251), false);
+    // The nest limit itself: 250 levels compile, deeper ones are errors (non-capturing groups,
+    // so the group cap of ruling s1 does not interfere).
+    let nc = |d: usize| format!("{}a{}", "(?:".repeat(d), ")".repeat(d));
+    assert_eq!(compile(&nc(250), false).group_count(), 0);
+    let e = pattern_error(&nc(251), false);
+    assert_eq!(e.message, cut(&engine_message(&nc(251), false)));
+    // Ruling s1: 250 nested capture groups pass the crate, then hit the cap; 251 keep the
+    // crate's error.
+    assert_eq!(pattern_error(&nested(250), false).message, CAP_MESSAGE);
+    let e = pattern_error(&nested(251), false);
+    assert_eq!(e.message, cut(&engine_message(&nested(251), false)));
+}
+
+/// Ruling s1 (D-060): the exact message for more than 100 explicit capture groups.
+const CAP_MESSAGE: &str = "the pattern has more than 100 capture groups";
+
+/// Ruling s1: exactly 100 explicit capture groups (named ones included) compile and work;
+/// non-capturing groups do not count.
+#[test]
+fn hundred_capture_groups_are_accepted() {
+    for ci in [false, true] {
+        // 99 plain + 1 named = 100 explicit groups, plus 50 non-capturing groups.
+        let pattern = format!("{}(?P<n>b){}", "(a)".repeat(99), "(?:c)".repeat(50));
+        let re = compile(&pattern, ci);
+        assert_eq!(re.group_count(), 100, "ci={ci}");
+        let text = format!("é{}b{}😀", "a".repeat(99), "c".repeat(50));
+        let found = re.find_all(&text);
+        assert_eq!(found.len(), 1, "ci={ci}");
+        let mut expected = vec![Some(cm(1, 151))];
+        expected.extend((1..=100).map(|g| Some(cm(g, g + 1))));
+        assert_eq!(found[0].groups, expected, "ci={ci}");
+        assert_eq!(
+            re.expand(&found[0], &text, "${n}$100$1"),
+            Ok("bba".to_string())
+        );
+    }
+}
+
+/// Ruling s1: 101 explicit groups are refused with the exact message, whether the 101st is
+/// plain or named; non-capturing groups alongside do not change that.
+#[test]
+fn more_than_hundred_capture_groups_are_refused() {
+    for ci in [false, true] {
+        for pattern in [
+            "(a)".repeat(101),
+            format!("{}(?P<n>b)", "(a)".repeat(100)),
+            format!("{}(?:c){}", "(a)".repeat(50), "(a)".repeat(51)),
+            format!("({})", "(a)".repeat(100)),
+        ] {
+            let e = pattern_error(&pattern, ci);
+            assert_eq!(e.message, CAP_MESSAGE, "ci={ci}");
+            assert_eq!(e.to_string(), CAP_MESSAGE);
+        }
+    }
+}
+
+/// Ruling s1: the 34,000-group pattern (100 kB) is refused with the cap message within 5 s.
+#[test]
+fn huge_group_pattern_is_refused_within_five_seconds() {
+    let big = "(a)".repeat(34_000);
+    let e = within_five_seconds("(a) x 34,000", || pattern_error(&big, false));
+    assert_eq!(e.message, CAP_MESSAGE);
+}
+
+/// Ruling s1 precedence: a pattern the crate rejects keeps the crate's error even when it also
+/// has more than 100 groups.
+#[test]
+fn crate_error_takes_precedence_over_group_cap() {
+    for ci in [false, true] {
+        for pattern in [
+            format!("{}(", "(a)".repeat(101)),
+            format!("{}[a-", "(a)".repeat(150)),
+            format!("{}\\p{{Nope}}", "(a)".repeat(101)),
+        ] {
+            let e = pattern_error(&pattern, ci);
+            assert_ne!(e.message, CAP_MESSAGE);
+            assert_eq!(e.message, cut(&engine_message(&pattern, ci)), "ci={ci}");
+        }
+    }
 }
 
 /// AC-4 boundary: a message of exactly 200 chars is not cut, one of 201 is. The probes are

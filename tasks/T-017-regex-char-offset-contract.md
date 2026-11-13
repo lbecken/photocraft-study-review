@@ -377,6 +377,19 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `RegexBuilder` options; an implementation that prefixes inline flags to the pattern (e.g.
   `(?mR)`) gets a different engine message. My test compares with
   `RegexBuilder::new(p).multi_line(true).crlf(true).case_insensitive(ci)`. Please confirm.
+- 2026-11-13T12:45Z · R-111 · ready · did: tests for rulings s1/s2 (D-060):
+  `hundred_capture_groups_are_accepted` (99 plain + 1 `(?P<n>…)` + 50 `(?:…)` → 100 groups,
+  groups and expansion checked), `more_than_hundred_capture_groups_are_refused` (101 plain,
+  100 + named, mixed with `(?:…)`, nested; exact message), `huge_group_pattern_is_refused_within_five_seconds`,
+  `crate_error_takes_precedence_over_group_cap`. Named groups count and `(?:…)` does not,
+  derived from the Interface ("explicit groups"; `len = group_count() + 1`) and Pinned (g).
+  One existing assertion contradicted s1 and was changed: in `invalid_patterns_are_errors`,
+  250 nested capture groups compiled; now the nest-limit check uses `(?:…)` (250 ok, 251 crate
+  error) and 250/251 nested capture groups give the cap message / the crate's error. Base:
+  compile (E0432/E0433). Stub self-check: 18/18 pass; 7 cap mutants (limit 99, limit 101, check
+  before the crate, named not counted, `(?:…)` counted, no cap, wrong message), 7 killed.
+  Clippy with stub and fmt clean; stub removed. · gate attempts: 0 · not run: `cargo xtask ci`
+  · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
