@@ -321,6 +321,17 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   control-protocol worked example and a long session against base (the test author's AC-1 guard
   covers these); acceptance tests (not visible to me) · missing context: none · next: join with
   the test author's branch, then review.
+- 2026-11-13 · R-085 · review r1 request-changes, D-046 on `main` · did: D-046 point 3 only.
+  In `crates/kiln-commands/src/doc.rs` the unit test `describe_lists_doc_commands_with_mutating_flag`
+  now skips commands outside `doc.*`/`buffer.*`; for those, the read-only set is still exactly
+  `doc.text`, `doc.info`, `doc.list`, `buffer.text` and all others must be mutating. Nothing else
+  in the file changed. Proof: with a temporary read-only `cursor.zzdummy` registered in
+  `cursor.rs`, the old test failed (`assertion failed: cursor.zzdummy`) and the narrowed one
+  passed; flipping `doc.list` to mutating still fails the narrowed test; dummy and flip removed
+  (`git diff` = the 5-line narrowing). Note: this worktree's copy of the task file predates D-046
+  (its `touches` lacks `doc.rs`); I followed `main`'s spec. · gate attempts: 1 (last: green,
+  10 steps, 404 tests) · not run: nothing else · missing context: none · next: director re-join /
+  review.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T06:48Z · R-073 · in_progress · did: tests from the spec (AC-1 per D-043) on

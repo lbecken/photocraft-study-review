@@ -1327,6 +1327,11 @@ mod tests {
         assert_eq!(doc.len(), 11);
         for c in cmds {
             let name = c["name"].as_str().unwrap();
+            // Only the `doc.*` and `buffer.*` groups are this test's business (D-046 point 3):
+            // other groups may register read-only commands.
+            if !(name.starts_with("doc.") || name.starts_with("buffer.")) {
+                continue;
+            }
             let read_only = ["doc.text", "doc.info", "doc.list", "buffer.text"].contains(&name);
             assert_eq!(c["mutating"], !read_only, "{name}");
             for ex in c["examples"].as_array().unwrap() {
