@@ -15,11 +15,12 @@ repository; this note says where to look and what is in flight.
 ## In flight (builder agents on the owner-specified model; cap: three compiling at once)
 | Task | Role / run | State of the work |
 |---|---|---|
-| Merged in iteration 1 so far | T-006, T-012, T-014, T-013, T-015, T-016, T-032 | T-013 landed at 12:15Z: budgets are enforced by the queue, `metrics` stamps times from the clock and validates transitions (in_progress → self_verified → tests_joined → reviewed → queued → merged), `cargo xtask publish` exists, the gate has 11 steps. |
-| T-017 regex (high) | implementer R-104 done (gate green); test author R-105 running | Then `cargo xtask join T-017`, review round 1 (fresh reviewer; dependency change), approval row beginning `Approve T-017`, queue. |
-| T-010 line/position commands (medium, independent-test arm) | implementer R-107, test author R-108 running since 12:28Z | Then join, review, approve, queue. T-018 depends on it. |
-| Specs T-008, T-020, T-009 | planner R-109 editing in the primary checkout | T-008: apply spec check R-101 (`tasks/spec-checks/T-008.md`), then a short re-check and dispatch (not together with T-010, T-024, T-030). T-020: size limit per D-056. T-009: T-013 follow-ups (D-053) and the approval-refusal message (D-058); needs a spec check (gate paths). Commit the planner's files by path before any queue run. |
-| Next to make ready (medium, no spec check needed) | T-011 (odd: implementer writes the acceptance tests first), T-030 (even: independent test author), T-020 after the planner's edit | Pairs not to run together are listed below. |
+| Merged in iteration 1 so far | T-006, T-012, T-014, T-013, T-015, T-016, T-032, T-010 | Queue enforces budgets (`Extend T-NNN to <N>` rows); transitions go in_progress → self_verified → tests_joined → reviewed → queued → merged. |
+| T-017 regex (high) | reviewer R-117 running (round 1) | Joined green at `43fae90…` with the 100-capture-group cap (D-060). On approve: row beginning `Approve T-017` (dependency change), queue. |
+| T-011 manifest seeding (medium, implementer-writes-tests arm) | reviewer R-123 running (round 2, final) | Re-joined green at `d0f9416…` after rulings u1–u5 (D-067). Medium: no approval row; check the budget line before queuing. |
+| T-008 path confinement (high) | test author R-120 done (`a173c44…` on the tests branch); implementer R-122 running | Rulings v1, v2 (D-068). Then join, review (security boundary), approval row, queue. Adds a reason row: no other row-adding task in flight (T-020 waits). |
+| Ready, not dispatched | T-018 (medium, even: implementer + independent test author) | Dispatch when a compile slot frees. Then T-020 (after T-008 merges), T-030 (not with T-008), T-035 (low, CHARTER sentence), T-007 (high, needs spec check), T-019, T-027 (high, after T-008; need spec checks). |
+| Tooling specs | T-009, T-033, T-034 (high, gate paths, not in flight together, need spec checks); T-028 depends on T-013 only | Lower priority than the product track. |
 
 ## Plan for the rest of iteration 1 (all specs are in `tasks/`, state `draft` unless noted)
 - Tooling track: T-013 → T-009 (queue follow-ups, gate paths) → T-028 (fuzz and budgets runners) → T-029 (command fuzz target).
