@@ -32,3 +32,13 @@ them and one check), then T-037. T-038 after the four feature tasks. Deferred dr
   because of `--log` (D-096); T-036's file needs the planner to apply D-092's rulings.
 - A check-in is scheduled for 02:15Z on 2026-11-14 (the usage window began about 21:10Z).
 - Last run id used: R-165.
+
+## Addendum 2026-11-13 23:26Z (director) — supersedes the "In flight" table above
+- **Merged in iteration 2:** T-039, T-042, T-019 (at `3b1a95d865619dead945cbf1ed857afdfc8fe99e`; `ws.open-project` is implemented, to be confirmed by the evaluator).
+- **T-020** (syntax, medium, independent tests): joined green on its first join at `c0c12fc30d473ff1d0f5b71c8ce9d4a0b66e0c12`, state `tests_joined`; review round 1 (run R-179) is running in `.worktrees/T-020`. Then: book the run, rule on findings, rework if any, re-join, round 2, queue (medium tier: no approval row).
+- **T-021** (search, medium, implementer wrote the tests first): built (runs R-173, R-177), state `self_verified`; tests merged and scorecard tied on the branch at `46b93d64a018268b60528146cf16f55a36f10555`; `cargo xtask join T-021` is running. Then: `tests_joined`, a fresh reviewer for round 1 (tell it about the second tests commit `46bc135` made after code existed).
+- **Spec checks running:** T-023 (R-180; dispatch only after T-020 and T-021 merge) and T-036 (R-181; applies D-092's rulings; dispatch after T-020 and T-021 have left their worktrees, since disk is short; T-037 follows it).
+- **Waiting:** T-038 (after the feature tasks), tooling T-033, T-043, T-041 (in that order; T-041 last and the owner is told before it is queued). To file: one follow-up task for deterministic limits on parse work, search work and `.gitignore` cost (D-097, D-101, D-105).
+- **Join procedure used under v1.2 (until T-033):** in the task worktree, `git merge --no-ff task/T-NNN-tests` with the message "Join task/T-NNN-tests into task/T-NNN" and trailers `Task:` / `Role: director`; add the test names to the item files under `scorecard/items/`; `cargo xtask scorecard`; commit both (`Role: director`); then `cargo xtask join T-NNN` from the primary checkout. All three joins so far passed on the first attempt this way.
+- **Disk** stays the limit: a join needs about 4 GB in the tests worktree for the base build plus the gate's build. Delete `target/` of a worktree whose agent has finished, and of the tests worktree after each join. `cargo xtask publish` leaves 4 GB under `.git/kiln-publish/target`.
+- Last run id used: R-181. The 02:15Z check-in is still scheduled.
