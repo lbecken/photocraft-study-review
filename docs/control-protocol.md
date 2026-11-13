@@ -154,9 +154,9 @@ failed `doc.open` does not use up an id. A script names documents by these predi
 ## `kiln-cli`
 
 ```text
-kiln-cli run <script> [--root <dir> | --memory] [--log <file>]
+kiln-cli run <script> [--root <dir> | --memory | --memory-seed <manifest>] [--log <file>]
 kiln-cli control [--root <dir>]
-kiln-cli exec <name> <json-params> [--text <initial-text>] [--root <dir> | --memory]
+kiln-cli exec <name> <json-params> [--text <initial-text>] [--root <dir> | --memory | --memory-seed <manifest>]
 kiln-cli commands [--schema | --audit]
 kiln-cli --help | -h | <subcommand> --help
 ```
@@ -170,8 +170,12 @@ kiln-cli --help | -h | <subcommand> --help
   commands act on; paths in requests are relative to it (see Paths for what is and is not
   refused). A root that does not exist or is not a directory is a usage error whose message
   names the path.
-- `--memory` (for tests) uses an empty in-memory file system instead; it cannot be combined
-  with `--root`.
+- `--memory` (for tests) uses an empty in-memory file system instead.
+- `--memory-seed <manifest>` (`run` and `exec`) uses an in-memory file system holding exactly
+  the files of a JSON manifest, read once at start; nothing is written to disk. The manifest,
+  its refusals and the order of checks are in `docs/protocol/cli-memory-seed.md`.
+- `--root`, `--memory` and `--memory-seed` exclude each other: giving two of them is a usage
+  error. `control` takes neither `--memory` nor `--memory-seed`.
 - `<script>` and `--log <file>` are paths on the host, resolved against the current
   directory (not against `--root`). The log file is created (or truncated) before the first
   request runs and written after the last.
@@ -190,9 +194,9 @@ kiln-cli --help | -h | <subcommand> --help
 
 | Subcommand | 0 | 1 | 2 | 3 |
 |---|---|---|---|---|
-| `run` | every response `ok:true` | writing stdout failed | usage error, unreadable script, root not a directory, log file not writable (message on stderr, nothing on stdout) | at least one response `ok:false` |
+| `run` | every response `ok:true` | writing stdout failed | usage error, unreadable script, root not a directory, bad `--memory-seed` manifest, log file not writable (message on stderr, nothing on stdout) | at least one response `ok:false` |
 | `control` | end of input, whatever the responses | reading stdin or writing stdout failed | usage error, root not a directory | — |
-| `exec` | success | internal error, or writing stdout failed | usage error, bad root, invalid JSON, command error | — |
+| `exec` | success | internal error, or writing stdout failed | usage error, bad root, bad `--memory-seed` manifest, invalid JSON, command error | — |
 | `commands` | success | audit problems, or writing stdout failed | usage error | — |
 | `--help`, `-h` | usage printed | writing stdout failed | — | — |
 

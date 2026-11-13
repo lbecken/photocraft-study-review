@@ -50,6 +50,13 @@ Params: `{"doc": <id>, "at": <position>}` where `<position>` is exactly one of
 All numbers are integers ≥ 0. Result: every form of the same position,
 `{"char", "byte", "utf16", "line", "col"}`.
 
+`byte` counts the UTF-8 bytes of the document's text as Kiln decoded it, not the bytes of the
+file: a byte-order mark is not counted, and the text of a UTF-16 file is counted in UTF-8. For
+example, a UTF-8 file with a BOM holding `héx` (file bytes `EF BB BF 68 C3 A9 78`) gives
+`{"char": 2}` → `"byte": 3`, although the `x` is at offset 6 of the file; the same text in a
+UTF-16 LE file (file bytes `FF FE 68 00 E9 00 78 00`) also gives `"byte": 3` (file offset 6).
+A tool that reports offsets into the file must convert them.
+
 ```json
 {"command": "doc.position", "params": {"doc": 1, "at": {"char": 5}}}
 → {"char": 5, "byte": 6, "utf16": 5, "line": 1, "col": 2}

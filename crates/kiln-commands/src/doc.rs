@@ -514,7 +514,10 @@ pub(crate) struct Undo;
 
 impl Command for Undo {
     const NAME: &'static str = "doc.undo";
-    const DOC: &'static str = "Undo the most recent undo step of a document.";
+    const DOC: &'static str = "Undo the most recent undo step of a document. A successful undo \
+        ends the typing group. With nothing to undo (`undone: false`) nothing changes: not the \
+        text, the dirty flag, the selection or the redo history; no typing group is open then, \
+        because an open typing group is itself the most recent undo step.";
     const MUTATING: bool = true;
     type Params = DocParams;
     type Output = UndoResult;
@@ -570,7 +573,10 @@ pub(crate) struct Redo;
 
 impl Command for Redo {
     const NAME: &'static str = "doc.redo";
-    const DOC: &'static str = "Redo the most recently undone step of a document.";
+    const DOC: &'static str = "Redo the most recently undone step of a document. A successful \
+        redo ends the typing group. With nothing to redo (`redone: false`) nothing changes: not \
+        the text, the dirty flag, the selection, the undo history or an open typing group, so a \
+        one-char insert after it still joins the typing before it.";
     const MUTATING: bool = true;
     type Params = DocParams;
     type Output = RedoResult;
