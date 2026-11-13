@@ -460,8 +460,29 @@ fn main() -> ExitCode {
         pub fn assert_merged(&self, id: &str) -> Value {
             let rec = self.queue_record(id);
             assert_eq!(rec["result"], "merged", "record: {rec}");
-            assert_eq!(self.main_sha(), rec["head_sha"].as_str().unwrap());
+            // The queue may commit its own record on top of the merged head (D-030 R12).
+            self.assert_only_records_since(rec["head_sha"].as_str().unwrap(), "merged head");
             rec
+        }
+
+        /// `before` is main or an ancestor of it, and every commit after it touches only
+        /// `metrics/queue.jsonl` (the queue's own record commits, D-030 R12): no code moved main.
+        pub fn assert_only_records_since(&self, before: &str, what: &str) {
+            let o = run(Command::new("git")
+                .args(["merge-base", "--is-ancestor", before, "main"])
+                .current_dir(&self.root));
+            assert_eq!(o.code, 0, "{what} {before} is not on main");
+            let list = git(&self.root, &["rev-list", &format!("{before}..main")]);
+            for c in list.lines() {
+                let files = git(
+                    &self.root,
+                    &["show", "--name-only", "--format=", "--no-renames", c],
+                );
+                assert_eq!(
+                    files, "metrics/queue.jsonl",
+                    "main moved past the {what} by commit {c}, which is not a queue record commit"
+                );
+            }
         }
 
         /// Queue `id`; assert a refusal at `check` (exit 1, exactly one

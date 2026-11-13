@@ -96,7 +96,7 @@ fn merged(r: &Repo, id: &str, env: &[(&'static str, String)]) -> (Out, Value) {
         o.stdout,
         o.stderr
     );
-    assert_eq!(r.main_sha(), rec["head_sha"].as_str().unwrap_or_default());
+    r.assert_only_records_since(rec["head_sha"].as_str().unwrap_or_default(), "merged head");
     assert_eq!(o.code, 0, "merged but exit {}: {}", o.code, o.stderr);
     commit_ledger(r);
     (o, rec)
@@ -889,21 +889,9 @@ fn uncommitted_evidence_does_not_count() {
         git(&r.root, &["checkout", "-q", "--", policy]);
     }
 
-    // Legitimate: the same evidence, committed, is accepted; the queue's own uncommitted
-    // output log `metrics/queue.jsonl` (left as the queue wrote it) does not block.
-    let before = r.queue_lines().len();
-    let o = queue_env(&r, "T-001", &[]);
-    let lines = r.queue_lines();
-    assert_eq!(lines.len(), before + 1, "T-001: {}\n{}", o.stdout, o.stderr);
-    assert_eq!(
-        lines[before]["result"], "merged",
-        "record: {}\n{}",
-        lines[before], o.stderr
-    );
-    assert!(
-        !status_of(&r.root, "metrics/queue.jsonl").is_empty(),
-        "queue.jsonl should be uncommitted here"
-    );
+    // Legitimate: the same evidence, committed, is accepted. (The queue commits its own
+    // `metrics/queue.jsonl` record, D-030 R12, which replaced D-027's exemption.)
+    merged(&r, "T-001", &[]);
     r.main_commit(
         "director: approve",
         &[(
@@ -1166,7 +1154,7 @@ fn regeneration_that_changes_a_non_generated_path_is_not_merged() {
             .is_some_and(|f| f.starts_with("regenerate:")),
         "record: {rec}"
     );
-    assert_eq!(r.main_sha(), main_before, "main moved");
+    r.assert_only_records_since(&main_before, "main before the run");
     assert_eq!(show(&r.root, "main", "notes/shared.txt"), "shared\n");
     assert_eq!(read(&r.root, "notes/shared.txt"), "shared\n");
     assert!(!r.root.join("items/leak.toml").exists());

@@ -675,6 +675,36 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `Approve T-001 including its gate paths.` row. Assertions are unchanged (`gate_failed`,
   `main:red`, `main+task`). It still fails on base by assertion (base merges). No other older test
   has this shape. Clippy and fmt pass. · gate attempts: 0 · missing context: none.
+- 2026-11-13 · R-042 · round 4 · did: D-030 tests in new file `xtask/tests/acceptance_t005_r4.rs`.
+  All 6 fail on base by assertion; a throwaway lenient copy showed every setup runs on base.
+  R10: `lints_tables_and_build_keys_are_gate_paths` covers lints changed, removed or set to
+  `workspace = true`; build key changed or removed; the file the build key names edited; a new
+  manifest with a dotted `lints.workspace` or a `build` key. Each → `gate-path` naming the
+  manifest, for low and medium. An ordinary manifest/source change → merged `main`.
+  `lints_and_build_changes_on_a_high_task_need_a_gate_paths_approval` → `approval` until the row
+  says gate paths, then merged `main+task` with the path printed.
+  R11: `registry_version_change_needs_a_dependency_versions_approval` uses an offline directory
+  registry. A lock bump on low, medium, or high without the words (row lacks them, has them only
+  in Reasoning, or sits in a code block) → `dependencies`; "dependency versions" → merged.
+  R12: `queue_commits_its_own_record_and_hand_edits_are_refused` checks the record commit
+  subject, its parent, a clean main and the committed record after merged and `gate_failed`
+  runs; a refusal commits nothing; an uncommitted fake `merged` record → `ledger`, and is not
+  evidence (`main-history` still refuses).
+  R13a: `planted_future_dated_xtask_does_not_decide_the_gate` overwrites every ELF `*xtask*`
+  under the scratch dir with a fake green gate dated +1 day, twice. HOME, TMPDIR and
+  XDG_CACHE_HOME are redirected into the scratch dir. A RED task → `gate_failed` `main`; a
+  green one still merges.
+  R13b: `lock_rule_applies_to_the_rebased_tree` covers a requirement raised to "1.1" with an
+  unchanged lock: only the regeneration after a generated-only conflict bumps regdep, so it must be
+  refused at `dependencies` (refusal line, or a non-merged record whose `failed_step` names it).
+  The "1.0" variant merges.
+  Changed for R12 (setup only): `assert_merged` and the "main must not move" checks in AC-1 and
+  AC-15, plus r3 `merged()` and the leak test, now allow queue record commits on main (new fixture
+  `assert_only_records_since`). The r3 queue.jsonl-exemption check was removed.
+  Not testable: git packages under R11 (no offline git source); a queue cache outside the scratch
+  dir and the redirected homes. If no built binary survives a run there, R13a cannot plant one.
+  QUESTION: R13b result shape after a rebase (refusal vs record); I accept either.
+  · gate attempts: 0 · missing context: none.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-028 · tests_joined (main) · did: review round 1 of 055821a → `reviews/T-005-r1.md`,

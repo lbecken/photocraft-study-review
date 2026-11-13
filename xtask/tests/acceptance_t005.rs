@@ -65,7 +65,7 @@ fn self_weakened_gate_fails_under_mains_gate() {
         "record: {rec}"
     );
     assert_eq!(rec["gate_xtask_sha"], rec["base_sha"]);
-    assert_eq!(r.main_sha(), main_before, "main must not move");
+    r.assert_only_records_since(&main_before, "main before the run");
 
     r.commit_wt("T-002", "add RED only", &[("RED", Some("red\n"))]);
     let rec = r.queue_record("T-002");
@@ -78,7 +78,7 @@ fn self_weakened_gate_fails_under_mains_gate() {
         (Some("gate_failed"), Some("red"), Some("main")),
         "record: {rec}"
     );
-    assert_eq!(r.main_sha(), main_before, "main must not move");
+    r.assert_only_records_since(&main_before, "main before the run");
 }
 
 // ---- AC-2 ---------------------------------------------------------------------------------
@@ -974,7 +974,7 @@ fn mixed_or_failed_regeneration_conflict_is_rejected() {
         (Some("conflict"), Some("rebase")),
         "record: {rec}"
     );
-    assert_eq!(r.main_sha(), main_before, "main must not move");
+    r.assert_only_records_since(&main_before, "main before the run");
     assert_eq!(r.head("T-002"), head_before, "task branch must not move");
     assert_eq!(
         git(&r.wt("T-002"), &["rev-parse", "--abbrev-ref", "HEAD"]),
@@ -989,7 +989,7 @@ fn mixed_or_failed_regeneration_conflict_is_rejected() {
         (Some("conflict"), Some("regenerate:docs/scorecard.md")),
         "record: {rec}"
     );
-    assert_eq!(r.main_sha(), main_before, "main must not move");
+    r.assert_only_records_since(&main_before, "main before the run");
 }
 
 // ---- AC-16 --------------------------------------------------------------------------------
