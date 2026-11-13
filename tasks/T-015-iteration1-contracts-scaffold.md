@@ -2,7 +2,7 @@
 id: T-015
 title: "Scaffold iteration 1 before fan-out: one empty module per new command group, per-group session state, the external-tool trait with spawning off by default, glob re-exports in kiln-workspace, and the internal dependency edges"
 tier: high              # ADR-0002: dependency-table changes (workspace-internal edges + serde/serde_json in kiln-workspace); no gate path, no §3 contract
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # enabling task
 depends_on: []          # no touches held by T-013 (in flight) or any other in-flight task; dispatchable now
