@@ -5,7 +5,7 @@ tier: medium            # ADR-0002 default: in-memory behaviour in kiln-text plu
 state: draft
 owner_role: planner
 scorecard_items: [edit.selection, io.mixed-eol]
-depends_on: [T-015]     # module slots cursor.rs / eol.rs; T-010's PositionError::InsideLineBreak arrives transitively
+depends_on: [T-015, T-010]   # module slots cursor.rs / eol.rs; T-010's `not_a_boundary` reason and PositionError mapping
 touches:
   - crates/kiln-text/src/lib.rs              # new mods + re-exports
   - crates/kiln-text/src/buffer.rs           # selection, anchors, apply_edits, normalize_line_endings
@@ -129,8 +129,7 @@ succeed. `eol.normalize` without `to` uses the document's dominant line ending
 `changed: 0`. `line_ending` and `mixed_line_endings` mean what they mean in `doc.info`.
 
 Refusals: an offset beyond the text → `out_of_range`. A position between `\r` and `\n` →
-`not_a_boundary`, T-010's kind, available if T-010 Q-1 approved it, otherwise T-030 maps it to
-`other`. No new error kind. Offsets are chars.
+`not_a_boundary` (T-010's kind, approved R-060; T-010 maps `PositionError::InsideLineBreak` to it). No new error kind. Offsets are chars.
 
 `docs/protocol/cursor.md` and `docs/protocol/eol.md` describe the commands, the mapping rule
 and the movement rule in user terms, with the worked examples.
@@ -171,8 +170,7 @@ and the movement rule in user terms, with the worked examples.
 - AC-2 (`edit.selection`, control): every worked example in Pinned (g) gives exactly the stated
   values through `kiln-cli run`. Oracle: exact value.
 - AC-3 (`edit.selection`, refusals): `cursor.set` with `anchor` beyond the text →
-  `rejected`/`out_of_range`; between `\r` and `\n` → `rejected`/`not_a_boundary` (or `other`,
-  per T-010 Q-1); unknown doc → `no_such_document`. Afterwards `cursor.get` is unchanged.
+  `rejected`/`out_of_range`; between `\r` and `\n` → `rejected`/`not_a_boundary`; unknown doc → `no_such_document`. Afterwards `cursor.get` is unchanged.
   Oracle: exact value.
 - AC-4 (`io.mixed-eol`, CLI): for random mixed texts saved as files, `eol.counts` equals a
   naive count (CRLF first). After `eol.normalize {to}` for each of the three targets and
@@ -221,6 +219,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   T-021 (search) as the other large in-memory task. Every worked example was executed against
   a naive Python model. Pinned (b), (e) n/a. Unsure: `not_a_boundary` depends on T-010 Q-1. ·
   gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: `not_a_boundary` is approved and belongs to T-010 (R-060 answer 8): `depends_on` gains T-010, and the fallback to `other` is removed. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

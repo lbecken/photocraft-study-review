@@ -175,6 +175,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 - 2026-11-13T03:56Z · R-057 · draft · did: applied D-1 (documentation in new
   `docs/protocol/cli-memory-seed.md`; `docs/control-protocol.md` out of `touches`); dispatch
   note rewritten. · gate attempts: 0 · missing context: none · next: director review.
+- 2026-11-13 · R-060 · draft · did: checked against the contracts-first restructuring: T-011 adds no error kind and T-015 renders the kind list from a `kiln-control` binary, not from `kiln-cli`, so `depends_on` stays T-004 and T-011 can run before T-015. Still never in flight with T-007 or T-024 (both edit `apps/kiln-cli/src/main.rs`). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -45,10 +45,12 @@ Reading list: `tasks/T-016-*.md` (SyntaxTree, sexp form, corpus layout);
 | `syntax.match-bracket` | `{doc, offset}` | `{bracket: {open, close} \| null}` |
 
 All are `mutating: false`. They keep a cache in `SyntaxState` (per document id: the last text
-and tree). The cache is not session state. A command's result never depends on the cache except
-for `mode`, which says how the tree was obtained: `full` if no tree was cached for the document,
-`unchanged` if the text equals the cached text, `incremental`/`full` per `SyntaxTree::update`
-otherwise. If T-007's read-only audit counts this cache as state, stop and report.
+and tree). The cache is not session state (director, R-060). The read-only property concerns observable
+state: document text, dirty flag, undo history, ids, the command log and selections. A derived
+cache that no command result exposes is not state, and T-007's check compares observable state
+only. A command's result never depends on the cache except for `mode`, which says how the tree
+was obtained: `full` if no tree was cached for the document, `unchanged` if the text equals the
+cached text, `incremental`/`full` per `SyntaxTree::update` otherwise.
 
 ### `syntax.highlight` spans (exact)
 Spans are sorted, contiguous and non-overlapping. They cover `[start, end)` exactly (default
@@ -171,6 +173,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (e), (f) n/a. Unsure: the cache in a read-only command versus T-007's audit, recorded as a
   stop condition in Interface. · gate attempts: 0 · missing context: T-007's final state
   comparison · next: director.
+- 2026-11-13 · R-060 · draft · did: recorded the director's ruling on the cache (R-060 answer 2); the stop condition is removed. The same sentence is in T-007 (b). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

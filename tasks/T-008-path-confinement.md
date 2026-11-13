@@ -5,12 +5,14 @@ tier: high              # ADR-0002: persistence path (DiskFs read/write_atomic) 
 state: draft
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # director-authorized item (Decisions D-4)
-depends_on: [T-004]
+depends_on: [T-015]     # R-060: reasons + generated kind list come first
 touches:
-  - crates/kiln-workspace/src
+  - crates/kiln-workspace/src/vfs.rs           # R-060: narrowed from the directory (VfsError)
+  - crates/kiln-workspace/src/disk.rs          # R-060: narrowed (DiskFs confinement)
   - crates/kiln-workspace/tests/confinement.rs   # implementer's own integration tests
-  - crates/kiln-control/src/lib.rs               # kind mapping for the two new messages + the kinds list
-  - docs/control-protocol.md                     # D-6: error-kind lines only, plus the one false "Paths" bullet (Q-1)
+  - crates/kiln-commands/src/reason.rs           # R-060: RejectReason::OutsideRoot + its description + the VfsError mapping row
+  - docs/control-protocol.md                     # the one false "Paths" bullet only (D-037); no kind lines (R-060)
+  # docs/protocol/error-kinds.md also changes: a generated path (T-015), regenerated, exempt
   - docs/protocol/paths.md                       # NEW: the confinement rule in full (D-6)
 budget_tokens: 850000   # high (v1.1)
 iteration: 1
@@ -36,8 +38,9 @@ no longer claims the opposite.
 - `reviews/T-004-r1.md` D-1 and SG-1 (the exploit), `reviews/T-004-r2.md` R2-SG2 (FIFO hang).
 - `tasks/T-002-documents-file-io.md` Interface (`Vfs`, `VfsError`, `DiskFs`, `RelPath`,
   `Document::open/save`) and its out-of-scope note on symlinks.
-- `crates/kiln-workspace/src/{disk,vfs}.rs`; `crates/kiln-control/src/lib.rs` (`rejected_kind`,
-  `ERROR_KINDS`); `docs/control-protocol.md` "Paths" and "Error codes and kinds".
+- `crates/kiln-workspace/src/{disk,vfs}.rs`; `crates/kiln-commands/src/reason.rs` (T-015: reasons,
+  descriptions, the exhaustive `VfsError` mapping); `docs/control-protocol.md` "Paths";
+  `docs/protocol/error-kinds.md` (generated).
 - Existing tests that must stay green unchanged: `crates/kiln-workspace/tests/acceptance_t002*.rs`
   (in-root symlink saves, decoy symlinks at temp names), `apps/kiln-cli/tests/acceptance_t004*.rs`.
 
@@ -112,9 +115,12 @@ with that `kind` on stderr. No other exit code changes.
   request is checked again. List the residual limits: a hard link inside the root to a file
   outside cannot be detected; a path changed by another process *while* a request runs can
   slip through (accepted limitation, Decisions D-3).
-- `docs/control-protocol.md`, error-kind list: add the `(rejected, outside_root)` line; reword
-  the `not_a_file` "When" cell to "the path names a directory or another non-regular file".
-  Every other line is unchanged.
+- Error kinds (R-060, through T-015's mechanism): add `RejectReason::OutsideRoot` (kind
+  `outside_root`, description "the path resolves outside the root") in
+  `crates/kiln-commands/src/reason.rs`, map `VfsError::OutsideRoot` to it in the exhaustive
+  `VfsError` mapping there, and reword `NotAFile`'s description to "the path names a directory
+  or another non-regular file". Regenerate `docs/protocol/error-kinds.md`. No list is edited by
+  hand; `kiln-control` derives the kind from the reason and is not touched.
 - `docs/control-protocol.md`, "Paths": the one bullet beginning "**Symbolic links are followed,
   including links that point outside the root.**" is replaced by one bullet: "A path whose
   location is outside the root is refused (`outside_root`); see `docs/protocol/paths.md`."
@@ -142,11 +148,10 @@ with that `kind` on stderr. No other exit code changes.
   another process *during* one call; hard links to outside files; `MemoryFs` (no links). The
   reviewer probes adversarially (symlink chains, absolute links, dangling links, loops, links
   swapped between requests, long names, FIFOs, sockets, devices).
-- (f) Tests pinning a snapshot this changes: `kiln-control` unit tests of `rejected_kind` that
-  pin the old directory message (implementer's, change with disclosure); the documented-kinds
-  test `every_kind_is_documented` (kept green by the doc table); `acceptance_t002*.rs` and
+- (f) Tests pinning a snapshot this changes: T-015's currency test of
+  `docs/protocol/error-kinds.md` (kept green by regenerating it); `acceptance_t002*.rs` and
   `acceptance_t004*.rs` stay unchanged and green (in-root symlinks and decoy temp names). The
-  `not_a_file` "When" cell and the "Paths" text of `docs/control-protocol.md` change by design.
+  `not_a_file` description and the "Paths" bullet of `docs/control-protocol.md` change by design.
 - (g) Worked examples: on today's `main` the reviewer's exploit succeeds (evaluation iter-0
   "Hostile use": `out.txt -> ../outside/secret.txt` opened and a save replaced the outside file;
   FIFO `doc.open` hung until `timeout 10`), so AC-1…AC-3 and AC-6 fail on base by assertion or
@@ -218,9 +223,9 @@ type, link target, bytes. Oracle: exact value unless stated otherwise.
   `Display` of each `VfsError` returned in AC-1…AC-7 is exactly the string in the Interface and
   contains neither the absolute work path nor any link target.
 - AC-9 (contract document): `docs/control-protocol.md` no longer says symlinks are followed out
-  of the root and its other "Paths" bullets are unchanged; it lists `(rejected, outside_root)`
-  and the widened `not_a_file`; `docs/protocol/paths.md` exists with the rule; every pair the
-  host can produce is listed (the existing `kiln-control` documentation test stays green). The
+  of the root and its other "Paths" bullets are unchanged; the generated
+  `docs/protocol/error-kinds.md` lists `(rejected, outside_root)` and the widened `not_a_file`;
+  `docs/protocol/paths.md` exists with the rule; T-015's currency test stays green. The
   reviewer checks `docs/protocol/paths.md` against AC-1…AC-8.
 
 ## Scorecard items and intended test names
@@ -245,8 +250,8 @@ fifo_and_socket_do_not_hang_run, swap_between_requests_is_refused_through_contro
   single call; it would need `openat`-style system calls and a new dependency, which the
   director declined (Decisions D-3). It is documented as a limitation.
 - Hard links (undetectable by path); Windows (D-014 (5)); symlinks in `MemoryFs`.
-- Structured reasons in `CommandError` instead of message matching in `kiln-control`: T-030.
-  Here `kiln-control`'s existing message mapping only gains the two new message shapes.
+- Structured reasons and the generated kind list: T-015 (R-060). This task only adds the
+  `OutsideRoot` reason and its mapping row.
 - Project tree, find-in-files and any future directory walk. They must apply the same rule when
   they are built; that is for their tasks.
 - Any change to `Cargo.toml`, `Cargo.lock`, `xtask/`, `.cargo/`, `.github/`, lint tables or
@@ -255,9 +260,8 @@ fifo_and_socket_do_not_hang_run, swap_between_requests_is_refused_through_contro
 
 ## Implementer notes
 - Your tests: unit tests in `crates/kiln-workspace/src`, integration tests in
-  `crates/kiln-workspace/tests/confinement.rs`, `kiln-control` unit tests in its `lib.rs`.
-- Existing unit tests of `rejected_kind` that pin the old directory message change with it;
-  say so in your log (golden rule 4 disclosure). Acceptance and guard files of T-002/T-004 are
+  `crates/kiln-workspace/tests/confinement.rs`, unit tests of the mapping in `reason.rs`.
+- No `kiln-control` test changes: kinds come from reasons (T-015). Acceptance and guard files of T-002/T-004 are
   not edited.
 - Determinism: no host path or link target in any error text; no timing dependence except the
   tests' hang timeouts.
@@ -331,6 +335,7 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `docs/protocol/paths.md`; `docs/control-protocol.md` edits limited to the kind lines and the
   one false "Paths" bullet (Q-1); dispatch note rewritten. · gate attempts: 0 · missing
   context: none · next: director answers Q-1.
+- 2026-11-13 · R-060 · draft · did: applied the director's contracts-first restructuring: depends on T-015 (not T-004); `outside_root` is added as a `RejectReason` variant with its mapping row in `crates/kiln-commands/src/reason.rs` and the generated kind list is regenerated, so `crates/kiln-control/src/lib.rs` and the kind lines of `docs/control-protocol.md` left `touches`; `crates/kiln-workspace/src` narrowed to `vfs.rs` and `disk.rs` so T-015/T-019/T-022/T-024/T-027 files stay disjoint. Older text that mentions `rejected_kind`, `ERROR_KINDS` or message mapping is superseded by this entry. Shares `reason.rs` with T-010 and T-027: never in flight with them. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -5,13 +5,13 @@ tier: medium            # ADR-0002: new commands in one command group, in-memory
 state: draft
 owner_role: planner
 scorecard_items: [text.lines, text.positions]
-depends_on: [T-004]
+depends_on: [T-015]     # R-060: reasons + generated kind list first
 touches:
   - crates/kiln-commands/src/doc.rs           # doc.line, doc.position (doc command group)
   - crates/kiln-commands/tests/positions.rs   # implementer's own integration tests
-  - crates/kiln-control/src/lib.rs            # kinds of the two new message shapes; ERROR_KINDS
+  - crates/kiln-commands/src/reason.rs        # R-060: RejectReason::NotABoundary + description + the PositionError mapping
   - docs/protocol/doc-positions.md            # NEW: doc.line / doc.position reference (D-2)
-  - docs/control-protocol.md                  # D-2: error-kind lines only (new not_a_boundary, widened out_of_range)
+  # docs/protocol/error-kinds.md also changes: generated (T-015), regenerated, exempt; docs/control-protocol.md is not touched (R-060)
   # docs/commands.json also changes: a generated path (exempt from `touches`, regenerated on conflict)
 budget_tokens: 500000   # medium (v1.1, provisional)
 iteration: 1
@@ -39,8 +39,7 @@ Reading list: `evaluations/iter-0.md` (items `text.lines`, `text.positions`, "No
 `scorecard/items/text.lines.toml`, `text.positions.toml`; `crates/kiln-text/src/{buffer,position}.rs`
 (the functions above and `PositionError`'s `Display`); `crates/kiln-commands/src/doc.rs`
 (how a doc command is written, `no open document` refusals); `docs/development.md` "Adding a
-command"; `crates/kiln-control/src/lib.rs` `rejected_kind`, `ERROR_KINDS`;
-`docs/control-protocol.md` "Error codes and kinds".
+command"; `crates/kiln-commands/src/reason.rs` and `docs/protocol/error-kinds.md` (T-015).
 
 ## Interface
 
@@ -85,11 +84,14 @@ for `doc.line`, where `<PositionError Display>` is `kiln-text`'s text exactly:
 An unknown `doc` id is `no_such_document` as for every doc command. Params that do not match the
 schema (two keys in `at`, a negative number, an unknown key) are `invalid_params`/`schema`.
 
-### `kiln-control`
-`rejected_kind` maps messages beginning `invalid position: ` or `invalid line: ` to
-`out_of_range` when the rest is one of the three out-of-bounds shapes and to `not_a_boundary`
-for the other three; `ERROR_KINDS` gains `("rejected", "not_a_boundary")`. No other mapping
-changes. (T-030 later replaces message matching by structured reasons; it maps these rows.)
+### Reasons (R-060, through T-015's mechanism)
+In `crates/kiln-commands/src/reason.rs`: add `RejectReason::NotABoundary` (kind
+`not_a_boundary`, description "a position inside a character, a surrogate pair or a CRLF line
+break") and an exhaustive `PositionError` → reason mapping: `OutOfBounds`, `LineOutOfBounds`,
+`ColumnOutOfBounds` → `OutOfRange` (whose description widens to "an offset, line or column
+beyond the end"); `NotCharBoundary`, `InsideSurrogatePair`, `InsideLineBreak` → `NotABoundary`.
+Regenerate `docs/protocol/error-kinds.md`. `kiln-control` is not touched: kinds come from
+reasons.
 
 ## Pinned
 - (a) Errors, payloads, precedence: params schema (`invalid_params`) → document id
@@ -98,8 +100,8 @@ changes. (T-030 later replaces message matching by structured reasons; it maps t
 - (b) Files: none read or written by the commands (in-memory document); `docs/commands.json`
   gains the two commands (≥ 1 example each, one of them on the CRLF/astral text above);
   new `docs/protocol/doc-positions.md` documents both commands (params, results, the validity
-  rule, the refusal table); `docs/control-protocol.md` gains only the kind line and the widened
-  `out_of_range` cell. Acceptance tests in
+  rule, the refusal table); `docs/protocol/error-kinds.md` is regenerated (new kind, widened
+  `out_of_range` description); `docs/control-protocol.md` is not touched. Acceptance tests in
   `apps/kiln-cli/tests/acceptance_t010.rs` (CLI) and optionally
   `crates/kiln-commands/tests/acceptance_t010_api.rs` (distinct target names).
 - (c) Order of checks: as (a). Both commands are read-only: they never end a typing group or
@@ -107,9 +109,8 @@ changes. (T-030 later replaces message matching by structured reasons; it maps t
 - (d) Path base, platform, file types: n/a (no path parameter; text already decoded).
 - (e) Threat model: n/a (no gate, security or confinement path). Hostile input is huge integers:
   any `u64` value is accepted by the schema and answered with `out_of_range`, never a panic.
-- (f) Tests pinning a snapshot this changes: `kiln-control` unit test `every_error_has_a_stable_kind`
-  and `every_kind_is_documented` (kept green by `ERROR_KINDS` and the table; implementer's
-  disclosure); no test pins the command count or list (searched `crates`, `apps` for name lists:
+- (f) Tests pinning a snapshot this changes: T-015's currency test of the generated kind list
+  (kept green by regenerating it); no test pins the command count or list (searched `crates`, `apps` for name lists:
   only `contains` checks); `docs/commands.json` is regenerated.
 - (g) Worked examples, executed against a naive Python model in R-055 (`re.finditer(r"\r\n|\r|\n")`
   split; `len(t[:c].encode())`, `len(t[:c].encode('utf-16-le'))//2`) on `t = "a\r\nbé😀\rc\n"`
@@ -147,24 +148,22 @@ model in the test (split on `\r\n|\r|\n`; UTF-8 and UTF-16 lengths of prefixes) 
   `doc.line`/`doc.position` requests with `mutating: false`. Oracle: exact value.
 - AC-5 (schema): `kiln-cli commands --schema` lists both commands with params and result
   schemas and ≥ 1 example each, and `kiln-cli commands --audit` exits 0. Oracle: exact value.
-- AC-6 (documented kind): `docs/control-protocol.md` lists `(rejected, not_a_boundary)`, the
-  existing documented-kinds test stays green, `docs/protocol/doc-positions.md` exists, and no
-  other part of `docs/control-protocol.md` changed. Oracle: exact value.
+- AC-6 (documented kind): the generated `docs/protocol/error-kinds.md` lists
+  `(rejected, not_a_boundary)`, T-015's currency test stays green, `docs/protocol/doc-positions.md`
+  exists, and `docs/control-protocol.md` is unchanged. Oracle: exact value.
 
 ## Out of scope and implementer notes
 - Cursor and selection (`edit.selection`), goto-line (`nav.goto-line`), any change in
   `kiln-text` (if one is needed, stop and report), positions on the scratch buffer
   (`buffer.*`).
-- Structured reasons instead of message matching: T-030.
+- Structured reasons and the generated kind list: T-015 (R-060).
 - Your tests: unit tests in `doc.rs`, integration tests in `crates/kiln-commands/tests/positions.rs`.
   Determinism: pure functions of the document text.
 - Specified: names, params, results, refusals, kinds. Left to you: how params are typed, as long
   as the published schema accepts exactly the forms above.
-- Dispatch (R-057): `crates/kiln-commands/src/doc.rs` overlaps T-006, T-007 and T-030;
-  `crates/kiln-control/src/lib.rs` overlaps T-008 and T-030. The kind list in
-  `docs/control-protocol.md` is not counted as an overlap (D-2; a rebase conflict there with
-  T-008 is resolved by the director). It may run in parallel with T-009, T-011, T-013. Lands
-  before T-030 (T-030 depends on it).
+- Dispatch (R-060, replaces R-057): after T-015. `doc.rs` overlaps T-006, T-007, T-027;
+  `reason.rs` overlaps T-008, T-027. May run in parallel with T-009, T-011, T-013 and the
+  feature tasks that touch neither file.
 
 ## Decisions
 - D-1 (director R-057, was Q-1): the error kind `not_a_boundary` is approved.
@@ -198,6 +197,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   new `docs/protocol/doc-positions.md`; protocol-document edits limited to the kind lines;
   generated `docs/commands.json` out of `touches`); dispatch note rewritten. · gate attempts: 0
   · missing context: none · next: director review.
+- 2026-11-13 · R-060 · draft · did: contracts-first restructuring: depends on T-015 (was T-004); `not_a_boundary` and the `PositionError` mapping go into T-015's `reason.rs` and the generated kind list, so `crates/kiln-control/src/lib.rs` and `docs/control-protocol.md` left `touches`. Text elsewhere that names `rejected_kind` or `ERROR_KINDS` is superseded. Shares `reason.rs` with T-008 and T-027 and `doc.rs` with T-007 and T-027: never in flight with them. T-018 depends on this task (`not_a_boundary`). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

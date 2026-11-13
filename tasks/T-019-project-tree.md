@@ -5,7 +5,7 @@ tier: high              # ADR-0002: reads directories on disk (paths that reach 
 state: draft
 owner_role: planner
 scorecard_items: [ws.open-project]
-depends_on: [T-015]     # project.rs slots; T-008 confinement arrives transitively
+depends_on: [T-015, T-008]   # project.rs slots; T-008 confinement (both edit vfs.rs, disk.rs)
 touches:
   - crates/kiln-workspace/Cargo.toml         # + ignore (exact pin)
   - crates/kiln-workspace/src/vfs.rs         # Vfs::list_dir, DirEntry, EntryKind
@@ -183,6 +183,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   model. Unsure: `ignored` counts top-level ignored entries only; whether the UI wants ignored
   files greyed rather than hidden is an iteration-2 question. · gate attempts: 0 · missing
   context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: T-008 no longer precedes T-015 (contracts first), so it is now an explicit dependency: shared `vfs.rs`/`disk.rs` and `OutsideRoot`. The `ignore` crate stays in the crate manifest (R-060 answer 1). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

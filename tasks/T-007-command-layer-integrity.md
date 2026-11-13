@@ -5,9 +5,12 @@ tier: high              # ADR-0002: changes how the command log and the registry
 state: draft
 owner_role: planner
 scorecard_items: [cmd.log-replay]   # CLI criterion: `kiln-cli replay` (Decisions D-5)
-depends_on: [T-004, T-006]
+depends_on: [T-006, T-015]   # R-060: CommandError reasons (T-015) land first
 touches:
-  - crates/kiln-commands/src
+  - crates/kiln-commands/src/registry.rs     # R-060: narrowed from the directory
+  - crates/kiln-commands/src/doc.rs          # rich read-only examples
+  - crates/kiln-commands/src/buffer.rs       # rich read-only example
+  - crates/kiln-commands/src/lib.rs          # re-exports of Divergence, VerifyError
   - crates/kiln-commands/tests/integrity.rs   # implementer's own integration tests
   - apps/kiln-cli/src/main.rs                 # `run --results`, `replay` (Decisions D-5)
   - apps/kiln-cli/tests/replay.rs             # implementer's own CLI tests
@@ -29,7 +32,7 @@ original session;
 command registered now or later, checked in the gate;
 (c) a command that ran but produced a result that fails its own schema is still recorded, so
 the log never misses a state change.
-Structured refusal reasons and the T-004 follow-ups are task T-030 (Decisions D-1).
+Structured refusal reasons are T-015 (R-060, absorbed from T-030); the T-004 follow-ups stay in T-030.
 
 ## Reading list
 - `docs/decisions.md` D-020 (3) (no rollback in replay), D-023.
@@ -94,8 +97,11 @@ implementer: how state is compared for (b), and how results are stored.
 4. On success, return the results (equal to `results`); `ctx.log()` and `ctx.results()` have
    grown by exactly `log` and `results`.
 
-**(b) Read-only means unchanged.** A command with `MUTATING = false` must leave the context
-exactly as it found it. The log and the results are not part of this comparison (`execute`
+**(b) Read-only means unchanged.** A command with `MUTATING = false` must leave the context's
+**observable state** exactly as it found it (director, R-060): what some command result can
+expose — document text, dirty flag, undo history, ids, the command log, and selections once
+T-018 lands. A derived cache that no command result exposes (such as T-020's syntax-tree cache)
+is not state, and the check must not compare it. The log and the results are not part of this comparison (`execute`
 appends the command's own entry and result as for any command). "The context" means:
 - the scratch buffer: its text and its undo/redo history, including whether a typing group is
   open;
@@ -375,6 +381,7 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `docs/commands.json` left out of `touches`). Worked example of AC-12 is AC-3's values in the
   CLI's sorted-key form (not executed: `replay` does not exist yet). · gate attempts: 0 ·
   missing context: none · next: director review, ADR.
+- 2026-11-13 · R-060 · draft · did: contracts-first restructuring: depends on T-006 and T-015 (T-015 now carries structured reasons, so rule (c)'s `Internal` error is raised with `InternalReason::ResultSchema` from the start; there is no "T-007 before T-030" order any more). `touches` narrowed from `crates/kiln-commands/src` to `registry.rs`, `doc.rs`, `buffer.rs`, `lib.rs`, so the feature modules of T-015 stay disjoint. Added the director's observable-state sentence to (b). References to T-030 for reasons are superseded by T-015; T-030 still corrects the "not recorded" sentence of `docs/control-protocol.md`. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

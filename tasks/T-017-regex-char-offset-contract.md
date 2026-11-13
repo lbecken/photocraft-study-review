@@ -33,7 +33,7 @@ No gate path. Reading list: CHARTER §3 decision 5; ADR-0002; `crates/kiln-searc
 ## Interface
 `crates/kiln-search/Cargo.toml`: `regex = "=1.13.1"`. That is the version already in `Cargo.lock`
 through `jsonschema`, so no package changes version. It is declared in the crate manifest
-(iteration Question Q-1).
+(director, R-060 answer 1).
 
 ```rust
 pub mod regex;     // this task
@@ -146,6 +146,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `\r` is a terminator too) matches kiln-text's line model, so I made it the rule. The oracle is
   a naive backtracker over a pinned subset, written by the test author. Pinned (a)–(c), (f), (h)
   n/a. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: dependency placement confirmed (crate manifest). No other change. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

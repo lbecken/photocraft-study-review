@@ -127,8 +127,10 @@ break.
 
 ## Out of scope and implementer notes
 - Include/exclude globs; saving from the apply; streaming results; parallel search.
-- The scorecard item file says `tier = "high"` for `ws.replace-in-files`. Under ADR-0002 the
-  task is medium because nothing is written to disk (Question Q-6 of the iteration plan).
+- The item file says `tier = "high"` for `ws.replace-in-files`; the director ruled medium
+  (R-060 answer 5). The test author sets `tier = "medium"` in
+  `scorecard/items/ws.replace-in-files.toml` on `task/T-022-tests` (an allowed path for this
+  task's item) and regenerates `docs/scorecard.md`.
 - Your tests: `crates/kiln-workspace/tests/find.rs`, unit tests.
 
 ## Questions and rulings
@@ -147,6 +149,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   file and reuses T-019's reads, so no ADR-0002 high criterion applies, although the item file
   says high (Q-6). Arm even. The worked example was executed against a naive model. Pinned (e),
   (f) n/a beyond reuse. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: item tier ruled medium; the test author changes the item file on the tests branch. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
