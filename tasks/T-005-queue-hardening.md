@@ -738,4 +738,14 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   gate attempts: 1 (last: green) · not run: real-repo queue, registry `cargo update` · tokens:
   unknown · missing context: none · next: test author adds F12/F14 tests; director rules on
   F11, F13, F15.
+- 2026-11-13 · R-048 · tests_joined (main) · did: review round 3 of b2c0ffd..cf9e24c →
+  `reviews/T-005-r3.md`, verdict approve (no defect in the delta; spec gap 3, test gap 2, nit 3,
+  all follow-up candidates per D-030). Gate green (200 tests). Re-ran exploits: F11, F12, F13,
+  F14 resolved; F15 resolved as specified (an uncommitted fake line is refused, but a fake line
+  committed in a ledger commit still moves the main-history anchor → follow-up). R12 attacked:
+  the record commit holds only `queue.jsonl`; a failed record commit after a merge (gpgsign,
+  index lock) leaves main moved, the record staged and an error exit, recovered via `ledger`.
+  Mutations R10–R12: 10/14 killed (P06, P13 equivalent; P09 pathspec and P14 identity untested). ·
+  gate attempts: 1 (last: green) · not run: real-repo queue, real registry · tokens: unknown ·
+  missing context: none · next: director's final approval; follow-up task from the r3 list.
 <!-- end reviewer log -->
