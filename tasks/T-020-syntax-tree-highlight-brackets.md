@@ -640,6 +640,25 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   1,048,575-char document plus the insert; (c) drop "after one edit" and report the
   first-parse peak (525 MB for `;`). Each is a director's choice; I will measure and copy
   whichever is ruled.
+- 2026-11-13T22:16Z · R-172 · in_progress · ruling acknowledged before acting: D-103 (read in
+  the primary checkout's copy of this file under "Questions and rulings"; this worktree's copy
+  does not have it and I did not add it): option (a), sentence 7 with the largest
+  length-keeping-edit peak in MiB, text and edit named, one measurement on a release build;
+  sentence 6 states its conditions and is not a bound. Accept. · did: `docs/protocol/syntax.md`:
+  new "Memory" section with sentence 7: about 689 MiB, 1,048,576 chars of `a;` repeated, after
+  a `doc.replace` of one char. Figure from R-167's run, no rebuild and no re-measurement:
+  `/usr/bin/time -f '%e s %M KB' target/release/kiln-cli run <script> --root <dir>`, script
+  `doc.open {path:"asemi.rs"}`, `syntax.tree {doc:1}`,
+  `doc.replace {doc:1, start:0, end:1, text:" "}`, `syntax.tree {doc:1}`,
+  `syntax.highlight {doc:1}`, output `3.93 s 705656 KB`, exit 0, all five `ok`, tree 4
+  `incremental`. 705,656 / 1024 = 689.12 MiB (the `;` run: 675,488 / 1024 = 659.66 MiB, smaller).
+  Sentence 6: the pinned measured sentence is unchanged. After it I added that these are
+  elapsed times of one run each on a 4-core machine running other builds, that they grow
+  about fourfold per doubling (4.49 / 1.10 = 4.08, 17.00 / 4.49 = 3.79), and that they are not
+  a bound. · checks: `cargo fmt --all -- --check` clean; `cargo xtask hygiene` PASS. ·
+  gate attempts: 0 this run (full gate left to the join, as instructed; last full gate green in
+  R-167). · not run: `cargo xtask ci`; no new measurement. · missing context: the ruling was not
+  in this worktree's copy of the task file. · next: director; join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
