@@ -34,7 +34,20 @@ impl PartialEq for Buffer {
 
 impl Eq for Buffer {}
 
-/// Why an edit or read was rejected. The buffer is unchanged when an error is returned.
+/// Why an edit or read was rejected. The buffer is unchanged when an error is returned, and
+/// so is its history, including an open typing group.
+///
+/// Validation order for a char range `start..end` (`delete`, `replace`, `slice`), first match
+/// wins:
+/// 1. `start > end` → [`EditError::InvertedRange`]`{start, end}`, even when `start` or `end`
+///    is also beyond `len_chars()`;
+/// 2. `start > len_chars()` → [`EditError::OutOfBounds`]`{index: start, len_chars}`;
+/// 3. `end > len_chars()` → [`EditError::OutOfBounds`]`{index: end, len_chars}`.
+///
+/// On `"abc"`: `delete(9..5)` → `InvertedRange{start: 9, end: 5}`; `delete(4..9)` →
+/// `OutOfBounds{index: 4, len_chars: 3}`; `delete(1..9)` → `OutOfBounds{index: 9, len_chars: 3}`.
+/// `insert` validates its single index the same way. Indices are validated before the edit's
+/// emptiness is considered, so a would-be no-op edit at an out-of-range index is an error.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EditError {
     /// A char index lies beyond the end of the buffer.
@@ -228,6 +241,11 @@ impl Buffer {
     ///
     /// A successful insert of non-empty text is one undo step, or joins the open typing group
     /// (grouping rule in the crate docs). Inserting `""` changes nothing.
+    ///
+    /// Errors: `char_idx > len_chars()` → [`EditError::OutOfBounds`]`{index: char_idx,
+    /// len_chars}`. The index is checked before the text's emptiness, so `insert(9, "")` on a
+    /// 3-char buffer is that error, not a no-op `Ok`. On error nothing changes, and an open
+    /// typing group stays open.
     pub fn insert(&mut self, char_idx: usize, text: &str) -> Result<(), EditError> {
         self.check_index(char_idx)?;
         if text.is_empty() {
@@ -243,12 +261,25 @@ impl Buffer {
 
     /// Delete the chars in `range` and return the removed text. A non-empty delete is one
     /// undo step; deleting an empty range changes nothing.
+    ///
+    /// Errors, in this order (see [`EditError`]): `start > end` → `InvertedRange{start, end}`
+    /// even if a bound is also out of range; else the first of `start`, `end` beyond
+    /// `len_chars()` → `OutOfBounds{index, len_chars}`. The range is checked before its
+    /// emptiness, so `delete(9..9)` on a 3-char buffer is `OutOfBounds{index: 9, len_chars: 3}`,
+    /// not a no-op `Ok`. On error nothing changes, and an open typing group stays open.
     pub fn delete(&mut self, range: Range<usize>) -> Result<String, EditError> {
         self.replace(range, "")
     }
 
     /// Replace `range` with `text` as one undo step and return the removed text. Replacing an
     /// empty range with `""` changes nothing. A replace never joins a typing group.
+    ///
+    /// Errors, in this order (see [`EditError`]): `start > end` → `InvertedRange{start, end}`
+    /// even if a bound is also out of range; else the first of `start`, `end` beyond
+    /// `len_chars()` → `OutOfBounds{index, len_chars}`. The range is checked before the edit's
+    /// emptiness, so `replace(9..9, "")` on a 3-char buffer is `OutOfBounds{index: 9,
+    /// len_chars: 3}`, not a no-op `Ok`. On error nothing changes, and an open typing group
+    /// stays open (a rejected replace does not end it).
     pub fn replace(&mut self, range: Range<usize>, text: &str) -> Result<String, EditError> {
         self.check_range(&range)?;
         if range.is_empty() && text.is_empty() {
@@ -261,6 +292,9 @@ impl Buffer {
     }
 
     /// Undo the most recent step. Returns `false` (and changes nothing) if there is none.
+    ///
+    /// An open typing group is itself the most recent step, so `undo` never returns `false`
+    /// while a group is open; a successful `undo` ends the group.
     pub fn undo(&mut self) -> bool {
         let Some(op) = self.history.pop_undo() else {
             return false;
@@ -272,6 +306,10 @@ impl Buffer {
 
     /// Redo the most recently undone step. Returns `false` (and changes nothing) if there is
     /// none.
+    ///
+    /// "Changes nothing" includes the open typing group: after a `redo` that returns `false`,
+    /// the next qualifying single-char insert still joins the group. A successful `redo` ends
+    /// the group.
     pub fn redo(&mut self) -> bool {
         let Some(op) = self.history.pop_redo() else {
             return false;
