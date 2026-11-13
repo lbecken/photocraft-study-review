@@ -208,8 +208,9 @@ this task. The mapping of `ToolError` to refusal kinds is T-032's.
   `apps/kiln-cli/tests/guard_t015_cli.rs` runs fixed scripts through `kiln-cli run` on a
   temporary root, and runs `kiln-cli exec`. The scripts are the worked example of `docs/control-protocol.md` with
   its files, plus a ≥ 300-request fixed-seed session whose request paths come from
-  `[a-z0-9/._]` and never contain `: `. They also run `kiln-cli commands` and `commands
-  --schema`. The outputs equal constants embedded in the `.rs` file, recorded on base. Oracle:
+  `[a-z0-9/._]`, never contain `: ` and never name a directory, and whose ids are at most
+  64 characters. The outputs equal constants embedded in the `.rs` file, recorded on base.
+  `kiln-cli commands` output is not compared (AC-5 and the `schema` step cover it). Oracle:
   differential against base output.
 - AC-2 (no process by default, Rust API): `format!("{:?}", ctx.tools()) == "NoTools"` for
   `Context::new()`, `with_text`, `with_files`, `with_vfs`. After `set_tools(Box::new(R))`, `tools()`
@@ -252,6 +253,7 @@ None. Distinct target names: `crates/kiln-commands/tests/acceptance_t015.rs`
 ## Questions and rulings
 - D-041 (director, R-066): split from the R-060 version. Part (d) of former T-030 and every
   error-kind change move to T-032.
+- Director (2026-11-13, D-043), from spec check round 2: the AC-1 guard must not embed the output of `kiln-cli commands` or `commands --schema` — every later task that adds a command changes it and no later task may edit this guard — and its recorded session must avoid behaviour later tasks are specified to change (a path that names a directory, whose refusal T-008 rewords; request ids longer than 64 characters, whose cap T-030 changes). AC-1 above has been edited accordingly.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
