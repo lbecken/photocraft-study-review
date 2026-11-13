@@ -676,6 +676,99 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   measurement (none needed) · missing context: none · next: director: ready to dispatch.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T23:00Z · R-173 · ready · did: odd arm, tests first.
+  Rulings acknowledged before acting: c1 (exact `total`, `truncated = total > limit`) accept;
+  c2 (no bound on the number of matches, bytes per match measured) accept; c3 (1,000-char cap,
+  `invalid_pattern`, no time budget) accept; c5 (AC-8 kept) accept; c6 (medium) accept; c7
+  (amended by D-101 Q-1) accept; D-044 (bad template → `invalid_pattern`, checked before
+  matching) accept; D-101 Q-1 (no time bound, figures from my release build), Q-2 (`limit` +
+  `truncated` on replace), Q-3 (`reason.rs` untouched; known `when`-text gap) accept; D-102
+  (`from` checked only with `all: false`; `replaced` is the exact total, no `total` field)
+  accept. Pinned (i) S4 questioned (QUESTION below); not copied.
+  ACs in my words: find lists the first `limit` whole-match ranges with the exact total, for
+  literal (fold-compare) and regex (T-017 semantics) queries, optionally whole-word; replace
+  one (first start ≥ `from`) or all as one undo step through `apply_edits` with the selection
+  mapped; reply ranges capped by `limit`; streaming primitive `for_each_match`; memory O(one
+  match's slots + limit) for find and O(matches) without slots for replace-all; 1,000-char and
+  100-group caps refused as `invalid_pattern`.
+  Order (tests before code): `task/T-021-tests` f7a77b8 (22:26:15Z, both acceptance files)
+  before the first code commit 9044413 (22:28:39Z) on `task/T-021`; then 67c651e, d2be5f3,
+  43dd601, 8f91b4c, 38aad7c. A second tests commit 46bc135 (22:48:52Z, after code existed)
+  fixes three test-side bugs found on the throwaway join, no response expectation changed:
+  the regex generator could print the empty pattern (refused by the spec); AC-4's typing case
+  inserted "\n", which never joins a typing group (`crates/kiln-text/src/history.rs:75`), so
+  model and session diverged and the document grew until the hang detector fired; corpus-size
+  thresholds lowered to the model's own counts (ww literal 965 / regex 525, replace-one one 517
+  / none 1346 / far 771).
+  Base results (base 0aeba32 + tests): `cargo test -p kiln-cli --test acceptance_t021_cli` →
+  0 passed, 13 failed, each by assertion on an `unknown_command` response (`search.find` or
+  `search.replace`), at f7a77b8 and again at 46bc135; `cargo test -p kiln-search --test
+  acceptance_t021_search` → does not compile (E0432 unresolved `kiln_search::{CompiledQuery,
+  Found, MAX_PATTERN_CHARS, Query, QueryError}`; E0599 no method `for_each_match`).
+  Throwaway join (scratch branch off `task/T-021` + `task/T-021-tests`, deleted after; never
+  committed on `task/T-021`): CLI 13 passed / 0 failed (debug, 28 s); search API 3 passed;
+  `cargo clippy --workspace --all-targets --locked -- -D warnings` clean on the joined tree.
+  Tests per scorecard item: search.literal → `literal_find_matches_naive_scan` (AC-1),
+  `find_limit_counts_every_match` (AC-6); search.regex → `regex_find_matches_naive_backtracker`
+  (AC-2), `invalid_patterns_are_reported` (AC-2), `pattern_length_is_capped` (AC-9);
+  search.whole-word → `whole_word_filters_at_identifier_boundaries` (AC-3); search.replace →
+  `replace_all_matches_naive_model_and_undoes_in_one_step` (AC-4), `replace_one_from_offset`
+  (AC-4), `replace_all_is_linear` (AC-7a), `search_memory_is_bounded` (AC-8),
+  `replace_reply_is_limited` (AC-11); not tied: `worked_examples_hold` (AC-5),
+  `params_and_document_are_checked_first` (extra: schema, `null`, `limit` bounds,
+  `no_such_document` precedence), all `kiln_cli::acceptance_t021_cli::…`;
+  `kiln_search::acceptance_t021_search::replace_all_equals_per_match_expansion` (AC-7b),
+  `…::query_errors_in_order` (AC-7b compile order, extra), `…::for_each_match_equals_find_all`
+  (AC-10).
+  Built: `Regex::for_each_match` (find_all's loop with one reused `Captures`; `find_all`,
+  `new`, `group_count`, `expand` unchanged) plus private `for_each_match_bytes`, `Template`
+  (references resolved once; expansion copies group bytes, no text walk); `query.rs` with
+  `Query`, `QueryError`, `Found`, `CompiledQuery::{find, check_template, replacement_for,
+  replace_first, replace_all}`, `MAX_PATTERN_CHARS` (literal mode = the escaped pattern on
+  `Regex`); `search.find {doc, query, regex?, case_sensitive?, whole_word?, limit?}` →
+  `{matches, total, truncated}` and `search.replace {…, replacement, all?, from?, limit?}` →
+  `{replaced, len_chars, ranges, truncated}` (one `apply_edits`; none with no match); own tests
+  `crates/kiln-search/tests/query.rs` and unit tests; `docs/protocol/search.md`; `cursor.md`
+  :8–9 and :80; `docs/commands.json` regenerated (`cargo xtask schema --write`).
+  Measurements (release `cargo build --release -p kiln-cli`, own `target/`, inputs in
+  `target/t021-measure`, deleted after with `target/release`; this 4-core machine was running
+  other builds, load average 1.9–3.2; single-run figures, not bounds):
+  `<B>`: `/usr/bin/time -v timeout 600 target/release/kiln-cli run s.jsonl --root root` on `x`
+  ×400,000; doc.open only: Maximum resident set size 10,356 / 10,584 KiB (two runs); doc.open +
+  `search.replace {query:"()"×100, regex:true, replacement:"-", all:true}`: 92,264 / 92,336 KiB,
+  `replaced` 400,001, `len_chars` 800,001, exit 0 → (92,264 − 10,356) × 1024 / 400,001 = 209.7,
+  (92,336 − 10,584) × 1024 / 400,001 = 209.3 → about 210 bytes per match.
+  `<T1–T3>`: `/usr/bin/time -f '%e s' timeout 1800 target/release/kiln-cli run s.jsonl --root
+  root` on `ab`×500,000 (1,000,000 chars), `search.find {query, regex:true, limit:1}`; doc.open
+  only 0.01 s (three runs); `[ab]{5000}[^ab]` 41.65 s / 40.91 s, total 0 → T1 ≈ 42 / 41 s;
+  `[ab]{3000}` 12.49 / 12.28 s, total 333 → T2 ≈ 12 s; `([ab]*)`×100 5.83 / 5.63 s, total 1
+  (0..1000000) → T3 ≈ 5.8 / 5.6 s. All over 1 s: no "under 1 s" question.
+  Pinned (i): S1, S2 (B = about 210), S3, S5, S6, S7 copied word for word into `search.md`;
+  each case run on the release binary (script: `cursor.set 3..8` on `a1 b2\r\nxa`, replace-all
+  `(\w)(\d)`→`<$2$1>` limit 1 → `replaced 2`, 1 range, `truncated`; `cursor.get` 5..12 =
+  mapping rule; undo → original, `can_undo` false; redo → re-applied; insert, no-match replace,
+  insert, one undo removes both; `from` past the last match → no wrap; `all:true` with
+  `from: 99` ignored). The cursor.md sentence copied (rewrapped). S4 not copied (QUESTION).
+  Sentences I added beyond Pinned, with evidence: "a replacement that changes anything ends the
+  typing group and is never merged with typing" (release script: insert `q`, replace `x`→`X`,
+  insert `r`, one undo removes only `r`; `Buffer::apply_edits` doc, `buffer.rs:524–532`); the
+  refusal list's "nothing changes (text, selection, history, typing group)" (AC-2/AC-4/AC-9
+  `SameAs` checks of `doc.text`, `doc.info`, `cursor.get`, and the typing-group check in
+  `invalid_patterns_are_reported`). The Limits section restates Interface rules only.
+  · gate attempts: 2 (attempt 1 red clippy: `expect_used` in `tests/query.rs` without
+  `#![cfg(test)]`; attempt 2 green: 11 steps, 711 passed, 0 failed, 0 ignored in 87 suites;
+  fuzz, budgets EMPTY); this log commit came after the green gate · not run: the reviewer's
+  mutation spot-check; AC-8 and the acceptance suite on a release build (debug join only);
+  Windows (AC-8 is Unix-only); no measurement of `search.find` memory on release (S1 has no
+  figure) · missing context: the line-break exception of the typing-group rule was not in the
+  reading list (found in `kiln-text/src/history.rs:75`) · next: director: rule on the QUESTION,
+  join.
+  QUESTION: Pinned (i) S4 says "`([ab]*)` repeated 100 times (800 chars, one match)", but
+  `([ab]*)` is 7 chars, so 100 repetitions are 700 chars (`python3 -c
+  "print(len('([ab]*)'*100))"` → 700; the R-158 table also says 800). The sentence is untrue of
+  what it names, so I did not copy S4 and did not reword it. With 700 the rest holds on my
+  release build (T1 ≈ 42 s, T2 ≈ 12 s, T3 ≈ 5.8 s; `[ab]{5000}[^ab]` is 15 chars and
+  `[ab]{3000}` 10 chars with 333 matches, as stated). Which wording goes in?
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
