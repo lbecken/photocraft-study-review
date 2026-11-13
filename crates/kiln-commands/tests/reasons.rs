@@ -202,8 +202,10 @@ fn describe_publishes_every_reason_in_all_order() {
 }
 
 /// Every `rejected`/`internal` row of the table in `docs/control-protocol.md` is a published
-/// kind; the descriptions equal the table's "When" cells except `invalid_path` (whose cell
-/// says "see Paths" and whose description names the document).
+/// kind of `error_kinds` with a non-empty description, and the table keeps its 13 rows. The
+/// "When" cells are not compared with the descriptions: the document says `error_kinds`
+/// governs where they differ and later tasks do not edit table cells (T-008 ruling v3, D-069);
+/// the exact descriptions are pinned by the T-032 acceptance tests.
 #[test]
 fn table_rows_are_published_kinds_with_their_when_text() {
     let doc = std::fs::read_to_string(concat!(
@@ -224,18 +226,10 @@ fn table_rows_are_published_kinds_with_their_when_text() {
         }
         rows += 1;
         let kind = cells[2].trim_matches('`');
-        let when = cells[3];
         let listed = error_kinds(&d, code);
         let found = listed.iter().find(|(k, _)| k == kind);
         let (_, desc) = found.unwrap_or_else(|| panic!("{code}/{kind} not in error_kinds"));
-        if kind == "invalid_path" {
-            assert_eq!(
-                desc,
-                "the path is not a valid root-relative path (see Paths in `docs/control-protocol.md`)"
-            );
-        } else {
-            assert_eq!(desc, when, "{code}/{kind}");
-        }
+        assert!(!desc.trim().is_empty(), "{code}/{kind}: empty description");
     }
     assert_eq!(
         rows, 13,
