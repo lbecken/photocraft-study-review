@@ -1,6 +1,6 @@
 //! The queue's preconditions (T-005), checked before any rebase, in this order: `task-file`,
 //! `front-matter`, `state`, `config`, `touches`, `join`, `review`, `gate-path`, `dependencies`,
-//! `approval`, `main-history` (the queue checks `ledger` before all of them).
+//! `approval`, `budget`, `main-history` (the queue checks `ledger` before all of them).
 //!
 //! Every input is read from a committed tree (D-026 R6): **main's** (task file, policy files,
 //! `docs/decisions.md`, `metrics/`) or the task branch head's (its task-file copy,
@@ -65,6 +65,8 @@ pub struct Checked {
     pub gate_paths: Vec<String>,
     /// Whether main approves this task's changes to versions of main's lock (D-030 R11).
     pub versions_approved: bool,
+    /// Run records of the task with `tokens: null` (counted 0 by `budget`).
+    pub unknown_token_runs: usize,
 }
 
 /// File names that configure a tool the gate runs, wherever they are (clippy and rustfmt read
@@ -481,6 +483,29 @@ fn approves(cell: &str, task: &str) -> bool {
         .is_some_and(|rest| {
             !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
         })
+}
+
+/// The ceiling `N` of a Decision cell that begins with `Extend <task> to N` (T-013 (2), D-4):
+/// `N` decimal digits followed by the cell's end or a character that is neither a digit nor an
+/// id character. `Extend <task>` without `to <digits>` is not an extension.
+fn extension_of(cell: &str, task: &str) -> Option<u64> {
+    let rest = cell.strip_prefix(&format!("Extend {task} to "))?;
+    let n = rest.bytes().take_while(u8::is_ascii_digit).count();
+    if n == 0
+        || rest[n..].starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return None;
+    }
+    rest[..n].parse().ok()
+}
+
+/// The ceiling of the last (in table order) `Extend <task> to N` row of `text` (a
+/// `docs/decisions.md`); rows are recognised exactly as for `approval` (D-026 R7).
+pub fn extension(text: &str, task: &str) -> Option<u64> {
+    decision_cells(text)
+        .iter()
+        .filter_map(|c| extension_of(c, task))
+        .last()
 }
 
 /// Whether `text` (a `docs/decisions.md`) has a table row whose Decision cell begins with
@@ -925,6 +950,43 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
         }
     }
 
+    // budget (T-013 (2), METHODOLOGY §11): main's committed run records against the ceiling.
+    const BU: &str = "budget";
+    let recs = or_refuse(BU, committed_jsonl(root, "metrics/tasks.jsonl"))?;
+    let runs = recs
+        .iter()
+        .filter(|r| r["kind"] == "run" && r["task"].as_str() == Some(task));
+    let (mut spent, mut unknown_token_runs) = (0u64, 0usize);
+    for r in runs {
+        match r["tokens"].as_u64() {
+            Some(t) => spent = spent.saturating_add(t),
+            None => unknown_token_runs += 1,
+        }
+    }
+    let budget = fm
+        .get("budget_tokens")
+        .and_then(Value::as_str)
+        .and_then(|s| s.parse::<u64>().ok());
+    let Some(budget) = budget else {
+        return refuse(
+            BU,
+            format!("{task_file} on main has no numeric `budget_tokens`"),
+        );
+    };
+    let decisions = or_refuse(BU, show(root, "main", "docs/decisions.md"))?;
+    let (ceiling, source) = match decisions.as_deref().and_then(|t| extension(t, task)) {
+        Some(n) => (n, "Extend row"),
+        None => (budget, "budget_tokens"),
+    };
+    if spent > ceiling {
+        return refuse(
+            BU,
+            format!(
+                "{task} has {spent} recorded tokens, over its ceiling {ceiling} ({source}); a docs/decisions.md row \"Extend {task} to <N>\" with N ≥ {spent} is needed"
+            ),
+        );
+    }
+
     // main-history
     const MH: &str = "main-history";
     // D-030 R12: `merged` records only from main's committed tree.
@@ -975,6 +1037,7 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
         changed,
         gate_paths,
         versions_approved,
+        unknown_token_runs,
     })
 }
 

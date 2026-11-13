@@ -220,7 +220,7 @@ fn real_main() -> Result<bool> {
                 },
             };
             println!(
-                "queue {} attempt {}: {}{} (base {}, head {}, gate {:.1}s, gate xtask {} @ {}{}{})",
+                "queue {} attempt {}: {}{} (base {}, head {}, gate {:.1}s, gate xtask {} @ {}{}{}{})",
                 r.task,
                 r.attempt,
                 r.result,
@@ -242,6 +242,14 @@ fn real_main() -> Result<bool> {
                     String::new()
                 } else {
                     format!(", gate paths changed: {}", r.gate_paths.join(" "))
+                },
+                if r.unknown_token_runs == 0 {
+                    String::new()
+                } else {
+                    format!(
+                        ", budget: {} run(s) with unknown tokens counted 0",
+                        r.unknown_token_runs
+                    )
                 }
             );
             if r.result == "merged" {

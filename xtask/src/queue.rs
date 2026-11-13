@@ -6,7 +6,7 @@
 //!    `metrics/` excepted: the queue itself appends there), the task worktree is clean and on its
 //!    branch, and the branch is ahead of main;
 //! 3. the preconditions of `crate::precheck` (task file, front matter, state, config, touches,
-//!    join, review, approval, main history), all read from main or the metrics records; a
+//!    join, review, approval, budget, main history), all read from main or the metrics records; a
 //!    failure is a [`Refusal`] and writes nothing;
 //! 4. build main's xtask from `base_sha` in a private build tree (`<git-common-dir>/kiln-queue/`),
 //!    recompiling the xtask crate from a fresh export on every run (never a cached binary);
@@ -63,6 +63,9 @@ pub struct QueueRecord {
     /// The gate paths the task changes (D-026 R3); printed, not written to the record.
     #[serde(skip)]
     pub gate_paths: Vec<String>,
+    /// Run records with `tokens: null` that `budget` counted 0; printed, not written.
+    #[serde(skip)]
+    pub unknown_token_runs: usize,
 }
 
 /// What a gate run reports to the queue.
@@ -628,6 +631,7 @@ pub fn run(
         gate_xtask_sha: base_sha.clone(),
         regenerated: Vec::new(),
         gate_paths: checked.gate_paths.clone(),
+        unknown_token_runs: checked.unknown_token_runs,
     };
 
     // D-026 R5: on every outcome but `merged` (and on any error from here on) the task branch
@@ -834,7 +838,7 @@ mod tests {
 
     fn task_md(tier: &str, state: &str, touches: &[&str]) -> String {
         format!(
-            "---\nid: T-001\ntier: {tier}\nstate: {state}\nscorecard_items: []\ntouches: [{}]\n---\n# T-001\n\n## Log\n",
+            "---\nid: T-001\ntier: {tier}\nstate: {state}\nscorecard_items: []\ntouches: [{}]\nbudget_tokens: 1000\n---\n# T-001\n\n## Log\n",
             touches.join(", ")
         )
     }
@@ -901,6 +905,67 @@ mod tests {
 
     fn refusal(r: Result<QueueRecord>) -> Refusal {
         r.unwrap_err().downcast::<Refusal>().unwrap()
+    }
+
+    #[test]
+    fn budget_counts_mains_committed_runs_against_the_last_extend_row() {
+        let repo = setup("q-budget");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "feature", &[("feature.txt", "f")]);
+        let rec = |t: &str| {
+            format!(
+                "{{\"kind\":\"run\",\"task\":\"T-001\",\"role\":\"implementer\",\"tokens\":{t}}}\n"
+            )
+        };
+        let jsonl = format!(
+            "{}{}{}{{\"kind\":\"run\",\"task\":\"T-002\",\"tokens\":9999}}\n",
+            rec("700"),
+            rec("400"),
+            rec("null")
+        );
+        testrepo::commit(root, "runs", &[("metrics/tasks.jsonl", &jsonl)]);
+        assert_refused(
+            root,
+            "budget",
+            "T-001 has 1100 recorded tokens, over its ceiling 1000 (budget_tokens); a docs/decisions.md row \"Extend T-001 to <N>\" with N ≥ 1100 is needed",
+        );
+        let table = |rows: &str| format!("| ID | Decision |\n|---|---|\n{rows}");
+        // Not extensions: no ceiling, another id, a fenced line.
+        testrepo::commit(
+            root,
+            "no",
+            &[(
+                "docs/decisions.md",
+                &format!(
+                    "```\n| D-1 | Extend T-001 to 5000 |\n```\n\n{}",
+                    table(
+                        "| D-2 | Extend T-001 |\n| D-3 | Extend T-001-tests to 5000 |\n| D-4 | Extend T-001 to 5000x |\n"
+                    )
+                ),
+            )],
+        );
+        assert_refused(root, "budget", "over its ceiling 1000 (budget_tokens)");
+        // The last row wins.
+        testrepo::commit(
+            root,
+            "low",
+            &[(
+                "docs/decisions.md",
+                &table("| D-5 | Extend T-001 to 5000 tokens |\n| D-6 | Extend T-001 to 1050 |\n"),
+            )],
+        );
+        assert_refused(root, "budget", "over its ceiling 1050 (Extend row)");
+        testrepo::commit(
+            root,
+            "ok",
+            &[(
+                "docs/decisions.md",
+                &table("| D-6 | Extend T-001 to 1050 |\n| D-7 | Extend T-001 to 1100 |\n"),
+            )],
+        );
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!((r.result.as_str(), r.unknown_token_runs), ("merged", 1));
     }
 
     #[test]
