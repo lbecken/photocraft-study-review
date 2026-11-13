@@ -24,6 +24,8 @@ publish = false
 # Dependencies are high-tier changes (CHARTER §4): add them here, through review.
 [workspace.dependencies]
 kiln-text = { path = "crates/kiln-text" }
+kiln-syntax = { path = "crates/kiln-syntax" }
+kiln-search = { path = "crates/kiln-search" }
 kiln-workspace = { path = "crates/kiln-workspace" }
 kiln-commands = { path = "crates/kiln-commands" }
 kiln-control = { path = "crates/kiln-control" }

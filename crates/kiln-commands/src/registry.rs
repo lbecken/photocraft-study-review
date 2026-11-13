@@ -4,23 +4,32 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use kiln_text::Buffer;
-use kiln_workspace::{Document, MemoryFs, PathError, RelPath, Vfs};
+use kiln_workspace::{Document, MemoryFs, NoTools, PathError, RelPath, ToolRunner, Vfs};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::diag::DiagState;
+use crate::find::FindState;
+use crate::keymap::KeymapState;
+use crate::syntax::SyntaxState;
+
 /// The state commands act on: a VFS, the documents opened from it, a scratch buffer (for the
-/// `buffer.*` commands) and the log of successfully executed commands.
+/// `buffer.*` commands), the external-tool runner, per-group session state and the log of
+/// successfully executed commands.
 ///
 /// Only read access is public; mutation happens inside commands.
 #[derive(Debug)]
 pub struct Context {
     buffer: Buffer,
     vfs: Box<dyn Vfs>,
-    docs: BTreeMap<u64, Document>,
-    /// The id the next opened document gets (ids start at 1 and are never reused).
-    next_doc: u64,
+    docs: Docs,
+    tools: Box<dyn ToolRunner>,
+    syntax: SyntaxState,
+    find: FindState,
+    diag: DiagState,
+    keymap: KeymapState,
     log: Vec<LogEntry>,
 }
 
@@ -53,14 +62,44 @@ impl Context {
         Ok(Self::with_vfs(Box::new(fs)))
     }
 
-    /// A context over `vfs` (empty scratch buffer, no documents, empty log).
+    /// A context over `vfs` (empty scratch buffer, no documents, empty log, external tools
+    /// off: [`NoTools`]).
     pub fn with_vfs(vfs: Box<dyn Vfs>) -> Self {
         Self {
             buffer: Buffer::new(),
             vfs,
-            docs: BTreeMap::new(),
-            next_doc: 1,
+            docs: Docs::new(),
+            tools: Box::new(NoTools),
+            syntax: SyntaxState::default(),
+            find: FindState::default(),
+            diag: DiagState::default(),
+            keymap: KeymapState::default(),
             log: Vec::new(),
+        }
+    }
+
+    /// Replace the external-tool runner. Every constructor starts with [`NoTools`].
+    pub fn set_tools(&mut self, tools: Box<dyn ToolRunner>) {
+        self.tools = tools;
+    }
+
+    /// The current external-tool runner (read-only; `Debug` names its type, e.g. `NoTools`).
+    pub fn tools(&self) -> &dyn ToolRunner {
+        self.tools.as_ref()
+    }
+
+    /// Disjoint mutable borrows of every part of the context.
+    #[allow(dead_code)] // slot for T-018…T-031 (T-015)
+    pub(crate) fn parts(&mut self) -> Parts<'_> {
+        Parts {
+            buffer: &mut self.buffer,
+            vfs: self.vfs.as_mut(),
+            docs: &mut self.docs,
+            tools: self.tools.as_mut(),
+            syntax: &mut self.syntax,
+            find: &mut self.find,
+            diag: &mut self.diag,
+            keymap: &mut self.keymap,
         }
     }
 
@@ -85,17 +124,17 @@ impl Context {
 
     /// The open documents by id, in increasing id order.
     pub(crate) fn docs(&self) -> &BTreeMap<u64, Document> {
-        &self.docs
+        self.docs.map()
     }
 
     /// The open document `id`, or a `rejected` error.
     pub(crate) fn doc(&self, id: u64) -> Result<&Document, CommandError> {
-        self.docs.get(&id).ok_or_else(|| no_such_doc(id))
+        self.docs.get(id)
     }
 
     /// The open document `id` for editing, or a `rejected` error.
     pub(crate) fn doc_mut(&mut self, id: u64) -> Result<&mut Document, CommandError> {
-        self.docs.get_mut(&id).ok_or_else(|| no_such_doc(id))
+        self.docs.get_mut(id)
     }
 
     /// The open document `id` and the VFS, both mutable (for save).
@@ -103,21 +142,92 @@ impl Context {
         &mut self,
         id: u64,
     ) -> Result<(&mut Document, &mut dyn Vfs), CommandError> {
-        let doc = self.docs.get_mut(&id).ok_or_else(|| no_such_doc(id))?;
+        let doc = self.docs.get_mut(id)?;
         Ok((doc, self.vfs.as_mut()))
     }
 
     /// Add `doc` under the next id and return that id.
     pub(crate) fn add_doc(&mut self, doc: Document) -> u64 {
-        let id = self.next_doc;
-        self.next_doc += 1;
-        self.docs.insert(id, doc);
-        id
+        self.docs.add(doc)
     }
 
     /// Remove document `id`, or a `rejected` error.
     pub(crate) fn remove_doc(&mut self, id: u64) -> Result<Document, CommandError> {
-        self.docs.remove(&id).ok_or_else(|| no_such_doc(id))
+        self.docs.remove(id)
+    }
+}
+
+/// Disjoint mutable borrows of every part of a [`Context`] (see [`Context::parts`]), so a
+/// command can use, say, a document, the VFS and its group's state at the same time.
+#[allow(dead_code)] // slot for T-018…T-031 (T-015)
+pub(crate) struct Parts<'a> {
+    pub(crate) buffer: &'a mut Buffer,
+    pub(crate) vfs: &'a mut dyn Vfs,
+    pub(crate) docs: &'a mut Docs,
+    pub(crate) tools: &'a mut dyn ToolRunner,
+    pub(crate) syntax: &'a mut SyntaxState,
+    pub(crate) find: &'a mut FindState,
+    pub(crate) diag: &'a mut DiagState,
+    pub(crate) keymap: &'a mut KeymapState,
+}
+
+/// Owns the open documents and the id counter (ids 1, 2, 3, …, never reused).
+#[derive(Debug)]
+pub(crate) struct Docs {
+    map: BTreeMap<u64, Document>,
+    /// The id the next added document gets.
+    next: u64,
+}
+
+impl Docs {
+    fn new() -> Self {
+        Self {
+            map: BTreeMap::new(),
+            next: 1,
+        }
+    }
+
+    /// The open document `id`, or a `rejected` error.
+    pub(crate) fn get(&self, id: u64) -> Result<&Document, CommandError> {
+        self.map.get(&id).ok_or_else(|| no_such_doc(id))
+    }
+
+    /// The open document `id` for editing, or a `rejected` error.
+    pub(crate) fn get_mut(&mut self, id: u64) -> Result<&mut Document, CommandError> {
+        self.map.get_mut(&id).ok_or_else(|| no_such_doc(id))
+    }
+
+    /// Add `doc` under the next id and return that id.
+    pub(crate) fn add(&mut self, doc: Document) -> u64 {
+        let id = self.next;
+        self.next += 1;
+        self.map.insert(id, doc);
+        id
+    }
+
+    /// Remove document `id`, or a `rejected` error.
+    pub(crate) fn remove(&mut self, id: u64) -> Result<Document, CommandError> {
+        self.map.remove(&id).ok_or_else(|| no_such_doc(id))
+    }
+
+    /// The id of the open document whose path is `path`, if any.
+    #[allow(dead_code)] // slot for T-018…T-031 (T-015)
+    pub(crate) fn id_of(&self, path: &RelPath) -> Option<u64> {
+        self.map
+            .iter()
+            .find(|(_, doc)| doc.path() == path)
+            .map(|(id, _)| *id)
+    }
+
+    /// The open documents by id, in increasing id order.
+    pub(crate) fn map(&self) -> &BTreeMap<u64, Document> {
+        &self.map
+    }
+
+    /// The open documents, in increasing id order.
+    #[allow(dead_code)] // slot for T-018…T-031 (T-015)
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (u64, &Document)> {
+        self.map.iter().map(|(id, doc)| (*id, doc))
     }
 }
 

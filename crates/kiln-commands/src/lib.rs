@@ -13,8 +13,21 @@
 //! [`Example`], then run `cargo xtask schema --write` to refresh `docs/commands.json`.
 
 mod buffer;
+mod cursor;
+mod diag;
 mod doc;
+mod edit;
+mod eol;
+mod find;
+mod fmt;
+mod keymap;
+mod nav;
+mod palette;
+mod project;
 mod registry;
+mod search;
+mod syntax;
+mod tool;
 
 pub use registry::{
     Command, CommandError, Context, Example, LogEntry, Registry, RegistryError, ReplayError,
@@ -25,5 +38,18 @@ pub fn standard_registry() -> Result<Registry, RegistryError> {
     let mut registry = Registry::new();
     buffer::register(&mut registry)?;
     doc::register(&mut registry)?;
+    cursor::register(&mut registry)?;
+    eol::register(&mut registry)?;
+    project::register(&mut registry)?;
+    syntax::register(&mut registry)?;
+    search::register(&mut registry)?;
+    find::register(&mut registry)?;
+    nav::register(&mut registry)?;
+    tool::register(&mut registry)?;
+    diag::register(&mut registry)?;
+    edit::register(&mut registry)?;
+    fmt::register(&mut registry)?;
+    palette::register(&mut registry)?;
+    keymap::register(&mut registry)?;
     Ok(registry)
 }

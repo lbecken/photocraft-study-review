@@ -15,6 +15,8 @@
 //!   input is reported with a byte offset, never repaired.
 //! - [`Document`]: a `kiln_text::Buffer` opened from a VFS, content-based dirty tracking and
 //!   byte-exact save (line endings are kept verbatim).
+//! - [`ToolRunner`]: the external-tool contract; the default runner [`NoTools`] never starts
+//!   a process.
 
 mod disk;
 mod document;
@@ -23,9 +25,16 @@ mod memory;
 mod path;
 mod vfs;
 
+pub mod diagnostics;
+pub mod find;
+pub mod format;
+pub mod project;
+pub mod tools;
+
 pub use disk::DiskFs;
-pub use document::{Document, OpenError};
+pub use document::*;
 pub use encoding::{DecodeError, Encoding, decode, encode};
 pub use memory::MemoryFs;
 pub use path::{PathError, RelPath};
-pub use vfs::{Vfs, VfsError};
+pub use tools::{NoTools, Tool, ToolError, ToolOutput, ToolRequest, ToolRunner};
+pub use vfs::*;
