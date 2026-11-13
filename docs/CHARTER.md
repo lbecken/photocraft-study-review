@@ -92,19 +92,22 @@ Decisions:
   found_by, origin_task` (the last two only on defect/follow-up tasks).
   States: `draft → specified → ready → in_progress → self_verified → tests_joined → reviewed
   → queued → merged → evaluated` (or `blocked`, `abandoned`).
-- Risk tiers: **low** (docs, tests, internal refactor in one module), **medium** (feature in
-  one crate), **high** (contracts in §3, command schema, persistence/save path, CI and gate,
-  dependencies, anything in two or more layers).
+- Risk tiers (ADR-0002, by the boundary a change crosses; the highest that applies): **high**
+  (touches the file system's persistence path, spawns processes, changes a gate path, a security
+  or confinement boundary, adds or changes a dependency, or changes a §3 contract), **medium**
+  (the default for any other behaviour change; adding a command is not a contract change),
+  **low** (documentation, tests, or refactoring with no behaviour change).
 - Roles: director (orchestrator; owner-delegate; also acts as integrator by running the
   queue), planner, implementer, test author, reviewer, evaluator, retrospective analyst.
-  At most 3 builder agents run at once (4-core machine; recalibrate at retrospectives).
+  At most 3 builder agents compile at once; a short test-author fix round counts as one
+  (4-core machine; recalibrate at retrospectives).
 
 ## 5. Iterations
 
 | Iteration | Purpose | Exit criteria |
 |---|---|---|
 | 0 Foundations | workspace, gate, architecture checks, queue, CI, scorecard machinery, one vertical slice (open → edit → save, driven headlessly) | gate green on main; queue has merged ≥3 tasks; slice passes evaluator |
-| 1 Fan-out | parallel feature work across L0–L4 with independent test authors | ≥60% scorecard items verified; metrics complete for every task |
+| 1 Fan-out | parallel feature work across L0–L4; independent test authors on high-tier tasks and on one arm of the medium-tier experiment (ADR-0002, D-035) | ≥60% scorecard items verified; metrics complete for every task |
 | 2 Product | UI, end-to-end flows, budgets, hardening | every item verified; evaluator sign-off; budgets enforced |
 
 Each iteration ends with a retrospective (`retrospectives/`) that scores claims C1–C8 from

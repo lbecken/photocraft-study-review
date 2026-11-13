@@ -47,24 +47,42 @@ Records: `tasks/`, `reviews/`, `evaluations/`, `incidents/`, `retrospectives/`, 
    task branch. `cargo xtask queue` is run by the director.
 7. **Use the xtask commands as named.** If a `cargo xtask` subcommand you need does not exist or
    misbehaves, stop and report; do not substitute an ad-hoc script.
-8. **Provenance.** Every commit message carries `Task: T-NNN` and `Role: <role>` lines. Never
-   write model names or session identifiers into code comments or docs.
+8. **Provenance.** Every builder commit carries `Task: T-NNN` and `Role: <role>` lines
+   (`implementer`, `test-author`, `reviewer`). Never write model names or session identifiers
+   (including session-scoped scratch paths) into code, docs or records.
 
 ## Picking up a task
 - Builders (implementer, test author, reviewer) work in the worktree the director names:
   `.worktrees/T-NNN` on `task/T-NNN`, or `.worktrees/T-NNN-tests` on `task/T-NNN-tests`, each
-  with its own target directory (created by `cargo xtask worktree new`). Work only there.
+  with its own `target/` (created by `cargo xtask worktree new`). Work only there.
 - Planner, evaluator and retrospective analyst write their files where their brief says; the
   director commits them.
-- Read the task log first: earlier runs may have left questions, failures or a blocked report.
+- Read the task log first: earlier runs may have left questions, rulings or a blocked report.
 - Do not change the task's front matter; the director owns `state`.
+- Log every question (`QUESTION:` line) by the end of your first gate attempt, then go on with
+  the rest; the director answers all builders at once in the task file.
+
+## Working environment (each rule cost real work in iteration 0)
+- **Commit early**, at every working step: a restart and a usage-limit stop lost only
+  uncommitted work (D-022, D-024).
+- **Never `git stash`**: all worktrees share one stash ref, so a stash can reach another agent's tree (R-006).
+- **Never set or export `CARGO_TARGET_DIR`**, whatever a tool prints; if it is set, `unset` it.
+  Cargo then uses `<worktree>/target`. A shared target served a stale binary (D-019).
+- **Clean up** scratch builds and toy repositories you made outside your worktree before you
+  stop; 9 GB of them left 6 GB free disk (D-022).
+- Every process a test spawns has a timeout (D-028 (8)).
 
 ## Definition of done (gate: `cargo xtask ci`)
+Tiers (CHARTER §4, ADR-0002): **high** = persistence path, spawned processes, gate paths, a
+security or confinement boundary, a dependency change, or a CHARTER §3 contract; **medium** =
+the default for any other behaviour change; **low** = docs, tests or refactoring with no
+behaviour change.
+
 | Tier | Your run is done when |
 |---|---|
 | low | implementer: change and its tests committed; `cargo xtask ci` green in the worktree; log entry written |
-| medium | implementer: as low, never touching `acceptance_t*` or `scorecard/`. Test author: acceptance tests committed, each criterion has a test that fails on base, results recorded. Reviewer: review file with verdict committed |
-| high | as medium; the task also needs a director approval row in `docs/decisions.md` and, if a CHARTER §3 contract changes, an ADR — the director handles both |
+| medium | implementer: as low, never adding `acceptance_t*` files or editing `scorecard/` on `task/T-NNN`. Acceptance tests: by the test author (even task number) or by the implementer on `task/T-NNN-tests` (odd), each criterion with a test that fails on base, results recorded. Reviewer: full round 1 incl. a mutation spot-check, delta round 2 final, review file committed |
+| high | as medium, always with an independent test author; the reviewer also probes the boundary adversarially; the director writes the approval row and any ADR |
 
 The task is done only when the queue has merged it and, for scorecard items, the evaluator has
 confirmed them. Your run never declares that; it is computed (METHODOLOGY §3, §9).
@@ -73,11 +91,11 @@ confirmed them. Your run never declares that; it is computed (METHODOLOGY §3, �
 Stop and write a blocked report (a log entry starting `BLOCKED:` with your diagnosis) instead
 of pushing through when:
 - 3 consecutive `cargo xtask ci` attempts fail on the same failure;
-- you reach the token allotment the director gave you;
 - you need to change a path outside `touches`;
 - you need to change a CHARTER §3 contract;
-- the spec or an acceptance test looks wrong (a `QUESTION:` line in your log entry).
-A clear blocked report is a good outcome.
+- the spec, a ruling or an acceptance test looks wrong (a `QUESTION:` line in your log entry).
+A clear blocked report is a good outcome: both stops in iteration 0 exposed a director error
+(D-017, D-020).
 
 ## Before you stop, always
 1. Append one entry to **your role's section** of the task file's Log (format in the task file):
