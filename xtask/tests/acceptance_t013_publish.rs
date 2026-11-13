@@ -443,8 +443,20 @@ fn publish_refusals_change_nothing() {
     );
     let item = "scorecard/items/x.y.toml";
     let eval = "evaluations/iter-0.md";
+    // Each case starts from a clean primary checkout and dirties only what it tests, so the
+    // working-tree rule of Interface (5) step 1 never decides a case by accident.
+    let clean = || {
+        git(&r.root, &["checkout", "-q", "--", "."]);
+        git(&r.root, &["clean", "-fdq"]);
+        assert_eq!(status(&r.root), "", "clean primary checkout");
+    };
+    let both = || {
+        write(&r.root, item, NEW_ITEM);
+        write(&r.root, eval, EVAL_V2);
+    };
 
     // An input that changes no generated file (the toy scorecard ignores evaluations).
+    clean();
     write(&r.root, eval, EVAL_V2);
     let line = assert_publish_refused(&r, &[eval], "evaluation only");
     assert_eq!(
@@ -452,12 +464,13 @@ fn publish_refusals_change_nothing() {
         "publish: refused: the inputs change no generated file; commit them on main as a ledger commit"
     );
     // An input under docs/.
+    clean();
     write(&r.root, item, NEW_ITEM);
     write(&r.root, "docs/notes.md", "changed notes\n");
     let line = assert_publish_refused(&r, &[item, "docs/notes.md"], "input under docs/");
     assert!(line.contains("docs/notes.md"), "{line}");
-    git(&r.root, &["checkout", "--", "docs/notes.md"]);
     // An existing scorecard item is not new.
+    clean();
     write(
         &r.root,
         "scorecard/items/existing.toml",
@@ -465,17 +478,17 @@ fn publish_refusals_change_nothing() {
     );
     let line = assert_publish_refused(&r, &["scorecard/items/existing.toml"], "modified item");
     assert!(line.contains("scorecard/items/existing.toml"), "{line}");
-    git(
-        &r.root,
-        &["checkout", "--", "scorecard/items/existing.toml"],
-    );
     // An input equal to main's version.
-    git(&r.root, &["checkout", "--", eval]);
+    clean();
+    write(&r.root, item, NEW_ITEM);
     let line = assert_publish_refused(&r, &[item, eval], "unchanged input");
     assert!(line.contains(eval), "{line}");
-    write(&r.root, eval, EVAL_V2);
-    // No input; a malformed id.
+    // No input.
+    clean();
     assert_publish_refused(&r, &[], "no input");
+    // A malformed id.
+    clean();
+    write(&r.root, item, NEW_ITEM);
     let before = snap(&r, &[item]);
     let o = xt(
         &r.root,
@@ -492,6 +505,8 @@ fn publish_refusals_change_nothing() {
     assert_refusal(&o, "publish: refused: ", "malformed id");
     assert_eq!(snap(&r, &[item]), before);
     // Another uncommitted change in tasks/.
+    clean();
+    both();
     write(
         &r.root,
         "tasks/T-049-toy.md",
@@ -499,20 +514,22 @@ fn publish_refusals_change_nothing() {
     );
     let line = assert_publish_refused(&r, &[item, eval], "uncommitted change in tasks/");
     assert!(line.contains("tasks/T-049-toy.md"), "{line}");
-    git(&r.root, &["checkout", "--", "tasks/T-049-toy.md"]);
     // A malformed item: the scorecard's own error.
+    clean();
     write(&r.root, "scorecard/items/bad.toml", "malformed = [\n");
     let line = assert_publish_refused(&r, &["scorecard/items/bad.toml"], "malformed item");
     assert!(
         line.contains("toy scorecard: scorecard/items/bad.toml is malformed"),
         "the scorecard's own error: {line}"
     );
-    std::fs::remove_file(r.root.join("scorecard/items/bad.toml")).unwrap();
     // A branch task/T-050 already exists.
+    clean();
+    both();
     git(&r.root, &["branch", "task/T-050", "main"]);
     assert_publish_refused(&r, &[item, eval], "existing branch");
     git(&r.root, &["branch", "-D", "task/T-050"]);
     // An existing tasks/T-050-*.md on main (last: it moves main).
+    clean();
     r.main_commit(
         "director: T-050 by hand",
         &[(
@@ -520,6 +537,7 @@ fn publish_refusals_change_nothing() {
             Some(&task_md("T-050", "low", "draft", &["crates/a"], &[])),
         )],
     );
+    both();
     let line = assert_publish_refused(&r, &[item, eval], "existing task file");
     assert!(line.contains("T-050"), "{line}");
 }

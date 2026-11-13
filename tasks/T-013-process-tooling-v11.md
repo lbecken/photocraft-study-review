@@ -733,6 +733,14 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   by hand (pass, red, malformed). My stub had no `publish`, so it never built this toy: a
   self-check gap. · gate attempts: 0 this run (clippy clean) · missing context: none · next:
   re-join.
+- 2026-11-13T07:10Z · R-071 · in_progress · did: the implementer's Q-g is right. In
+  `publish_refusals_change_nothing` several cases left non-input files dirty from earlier cases:
+  the docs/ case left the evaluation modified; the modified-item and malformed-item cases left
+  the new item and the evaluation dirty. Interface (5) step 1 says that, apart from the inputs,
+  the primary checkout must pass the queue's working-tree check, so those cases hit that
+  refusal first. Now each case starts from a clean checkout (`checkout -- .`, `clean -fd`,
+  status asserted empty) and dirties only its own files. No assertion weakened. · gate
+  attempts: 0 (clippy clean; fails on base, exit 2) · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
