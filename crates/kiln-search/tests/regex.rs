@@ -302,7 +302,7 @@ fn pathological_patterns_answer_quickly() {
     assert!(t.elapsed() < limit);
     let t = Instant::now();
     let big = "(a)".repeat(34_000);
-    let _ = Regex::new(&big, SENSITIVE);
+    assert!(Regex::new(&big, SENSITIVE).is_err());
     assert!(t.elapsed() < limit);
 }
 

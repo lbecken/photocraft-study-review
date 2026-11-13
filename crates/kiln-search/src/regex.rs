@@ -27,8 +27,21 @@
 //! has no such entry or holds a range that does not fit `text`). A reference to a group the
 //! pattern does not have is a [`TemplateError`]; unlike `regex::Captures::expand`, which expands
 //! it to nothing.
+//!
+//! # Limits
+//! Besides the engine's own limits (default size limits, nesting deeper than 250), a pattern
+//! with more than 100 explicit capture groups is refused with
+//! [`PatternError`] (D-060 s1): capture slots times engine states made `find_all` on `(a)`
+//! repeated 34,000 times try to allocate about 55 GB. The check runs after the engine has
+//! accepted the pattern, so a pattern the engine rejects keeps the engine's message.
 
 use std::fmt;
+
+/// Most explicit capture groups a pattern may have (D-060 s1).
+const MAX_GROUPS: usize = 100;
+
+/// [`PatternError::message`] for a pattern with more than `MAX_GROUPS` groups.
+const TOO_MANY_GROUPS: &str = "the pattern has more than 100 capture groups";
 
 /// Longest [`PatternError::message`], in chars.
 const MAX_MESSAGE_CHARS: usize = 200;
@@ -66,7 +79,8 @@ pub struct Captures {
     pub groups: Vec<Option<CharMatch>>,
 }
 
-/// A pattern that does not compile (syntax, size limits, nesting deeper than 250).
+/// A pattern that does not compile (syntax, size limits, nesting deeper than 250) or has more
+/// than 100 capture groups.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatternError {
     /// The engine's message, cut to 199 chars plus `…` when longer than 200 chars. Not stable.
@@ -213,7 +227,10 @@ impl Regex {
     ///
     /// # Errors
     /// [`PatternError`] if the pattern does not compile, exceeds the engine's default size
-    /// limits or nests groups deeper than 250.
+    /// limits or nests groups deeper than 250, with the engine's message for `pattern` exactly
+    /// as given (the options are builder settings, not an inline-flag prefix). Then, for a
+    /// pattern the engine accepts with more than 100 explicit groups, `PatternError`
+    /// with message `the pattern has more than 100 capture groups`.
     pub fn new(pattern: &str, options: RegexOptions) -> Result<Regex, PatternError> {
         let engine = ::regex::RegexBuilder::new(pattern)
             .multi_line(true)
@@ -226,7 +243,12 @@ impl Regex {
         let names = engine
             .capture_names()
             .map(|n| n.map(str::to_owned))
-            .collect();
+            .collect::<Vec<_>>();
+        if names.len().saturating_sub(1) > MAX_GROUPS {
+            return Err(PatternError {
+                message: TOO_MANY_GROUPS.to_owned(),
+            });
+        }
         Ok(Regex { engine, names })
     }
 
@@ -342,6 +364,52 @@ mod tests {
                 (w.start, w.end)
             })
             .collect()
+    }
+
+    #[test]
+    fn group_cap_accepts_100_and_refuses_101() {
+        let hundred = "(a)".repeat(100);
+        let r = re(&hundred);
+        assert_eq!(r.group_count(), 100);
+        let caps = r.find_all(&"a".repeat(200));
+        assert_eq!(caps.len(), 2);
+        assert_eq!(caps[1].groups[100], m(199, 200));
+        let e = Regex::new(&"(a)".repeat(101), RegexOptions::default()).unwrap_err();
+        assert_eq!(e.message, "the pattern has more than 100 capture groups");
+        // Named and nested groups count too; non-capturing groups do not.
+        let named = format!("(?<x>a){}", "((a))".repeat(50));
+        assert!(Regex::new(&named, RegexOptions::default()).is_err());
+        assert_eq!(re(&"(?:a)".repeat(500)).group_count(), 0);
+    }
+
+    #[test]
+    fn group_cap_refuses_34000_groups_quickly() {
+        let t = std::time::Instant::now();
+        let e = Regex::new(&"(a)".repeat(34_000), RegexOptions::default()).unwrap_err();
+        assert_eq!(e.message, TOO_MANY_GROUPS);
+        assert!(t.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    #[test]
+    fn engine_rejection_keeps_the_engine_message() {
+        // Over the cap and invalid: the engine's error wins.
+        let p = format!("{}(", "(a)".repeat(101));
+        let e = Regex::new(&p, RegexOptions::default()).unwrap_err();
+        assert_ne!(e.message, TOO_MANY_GROUPS);
+        // A runtime string: an invalid literal would trip clippy's `invalid_regex`.
+        let bad = String::from("(?<1>a");
+        let engine = ::regex::RegexBuilder::new(&bad)
+            .multi_line(true)
+            .crlf(true)
+            .build()
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            Regex::new("(?<1>a", RegexOptions::default())
+                .unwrap_err()
+                .message,
+            engine
+        );
     }
 
     #[test]
