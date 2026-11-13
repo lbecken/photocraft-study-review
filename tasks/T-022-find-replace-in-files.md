@@ -50,7 +50,7 @@ Query params as in T-021 (`query`, `regex?`, `case_sensitive?`, `whole_word?`), 
 | Command | Mutating | Extra params | Result |
 |---|---|---|---|
 | `find.in-files` | no | — | `{files:[{path, matches:[Match]}], total, truncated, skipped:[{path, reason}]}` |
-| `find.replace-preview` | yes | `replacement` | `{preview, files:[{path, replacements:[Match + {new}]}], total}` |
+| `find.replace-preview` | yes | `replacement` | `{preview, files:[{path, replacements:[Match + {new}]}], total, truncated}` |
 | `find.replace-apply` | yes | `preview`; `paths?` list (default all files of the preview) | `{files:[{path, doc, replaced, opened}], replaced}` |
 
 `Match` = `{start, end, line, col, line_text}`. `line`/`col` are 0-based and give the
@@ -58,18 +58,35 @@ position of `start` (chars). `line_text` is the first 200 chars of that line wit
 break.
 
 - Files appear in project-tree order. A file without matches is not listed. `total` counts all
-  matches. Only the first `limit` matches are listed; once a file reaches the limit it is cut
-  there, and later files are dropped, with `truncated: true`. `skipped` lists every file
-  skipped, in tree order.
+  matches, exactly (T-021 choice 1). Only the first `limit` matches are listed; once a file
+  reaches the limit it is cut there, and later files are dropped, with `truncated: true`.
+  `skipped` lists every file skipped, in tree order.
+- Bounded search (D-070 s4; T-021 "Bounds"): every file is searched with T-021's
+  `CompiledQuery::find(text, n)`, where `n` is the number of matches still to be listed (0
+  once the limit is reached: the file is still counted for `total`), so `find.in-files` keeps
+  at most `limit` matches plus one match's group slots, whatever the project's match count.
+  `line`, `col` and `line_text` are computed for listed matches only. No command of this task
+  calls `find_all`. The pattern cap of T-021 (1,000 chars, choice 3) applies.
 - `find.replace-preview` stores, under a new id (1, 2, 3, … per session, never reused), for
-  each file with matches: its text at preview time and its replacement edits. The replacement
-  texts come from T-021's `CompiledQuery::replacements` per file (linear in the file's text
-  plus its matches; one `replacement_for` call per match would be O(text × matches)), which
-  returns `Result<Vec<String>, TemplateError>`. A template naming a group that does not exist
+  each file with matches: its text at preview time and its replacement edits, from T-021's
+  `CompiledQuery::replace_all` per file (memory O(matches + replacement text), no group slots
+  kept; time linear in the file plus its matches; `Result<Vec<(CharMatch, String)>,
+  TemplateError>`). A template naming a group that does not exist
   is refused before the walk, as T-021 refuses it before matching (D-044): `rejected`/
   `invalid_pattern`, message `invalid replacement: <TemplateError Display>`, nothing stored,
-  no id used. So the `Err` never arises per file. There is no limit on a preview: it holds
-  every match. Its result lists `new`, the replacement text of each match.
+  no id used (`check_template`). So the `Err` never arises per file. The stored preview holds
+  every match's edit (as `search.replace` with `all: true` does, T-021 choice 2). Its result
+  lists, like `find.in-files`, only the first `limit` replacements (`limit?` as above,
+  default 10000), each a `Match` plus `new`, with `total` (all replacements, exact) and
+  `truncated` (PROPOSED, choice below); apply always applies every stored edit of the
+  selected files.
+
+  *Choice for the director (PROPOSED).* (a) The preview result lists at most `limit`
+  replacements — the reply stays small (each listed one carries up to 200 chars of
+  `line_text`), but a client sees only part of what apply will do. (b) It lists every
+  replacement, as the draft said — complete, but the reply grows with the match count (about
+  200+ bytes per match; 400,000 matches ≈ 100 MB of JSON). Recommendation: (a), the same rule
+  as `find.in-files`.
 - `find.replace-apply` first checks, for every file selected by `paths`, that its current text
   equals the preview's snapshot. A path not in the preview → `rejected`/`invalid_path`. Any
   difference → `rejected`/`stale_preview`, and nothing changes. Then, in tree order, it opens
@@ -85,8 +102,9 @@ break.
 `docs/protocol/find.md` documents all of this.
 
 ## Pinned
-- (a) Precedence: schema → query (`invalid_pattern`: the pattern, then, for
-  `find.replace-preview`, the replacement template) → walk errors (T-019's) → (apply only)
+- (a) Precedence: schema → query (`invalid_pattern`: the pattern — empty, longer than 1,000
+  chars, not compiling or more than 100 groups — then, for `find.replace-preview`, the
+  replacement template) → walk errors (T-019's) → (apply only)
   preview exists → paths valid → staleness of every selected file → apply.
 - (b) Files: read only, through `Vfs::read`; nothing written. The preview is held in memory in
   `FindState`, never on disk.
@@ -94,7 +112,10 @@ break.
   nothing). Opening a file that the preview names but that was deleted since → `stale_preview`.
 - (d) Offsets are chars of each file's text; paths are RelPaths; tree order as T-019.
 - (e) Threat model: n/a beyond T-019's walk, which is reused unchanged; no new disk access path.
-  A replacement never reaches disk without an explicit `doc.save`.
+  A replacement never reaches disk without an explicit `doc.save`. Resources: memory as in
+  "Bounded search" (listing bounded by `limit`; a stored preview grows with its match count,
+  never with matches × groups); search time per file as T-021 (one pass, pattern ≤ 1,000
+  chars).
 - (f) Snapshots: none.
 - (g) Worked example (executed against a naive Python model): files `a.rs` = `let foo = foo_x;\n`,
   `b/c.rs` = `x\r\nfoo\r\n`, `bin.dat` = `foo\0`. `find.in-files {query:"foo", whole_word:true}`
@@ -130,11 +151,22 @@ break.
   `find.replace-preview` with regex `(\w)(\d)` and replacement `$3` → `rejected`/`invalid_pattern`
   with message `invalid replacement: no capture group "3"`, and the next successful preview
   still gets the next unused id (no id consumed by the refusal). Oracle: exact value.
+- AC-6 (bounded memory; cheap: under 1 MB of input): `kiln-cli run --root <dir>` started
+  through `sh -c 'ulimit -v 524288; exec …'` (512 MiB address-space cap; Unix, D-014) under a
+  30-second timeout, with two files `a.txt` and `b.txt` each holding `x` repeated 200,000
+  times, regex `()` repeated 100 times: `find.in-files {limit:10}` → only `a.txt` listed with
+  matches `0..0` … `9..9`, `total: 400002`, `truncated: true`;
+  `find.replace-preview {replacement:"-", limit:10}` → 10 replacements listed, `total: 400002`,
+  `truncated: true`; `find.replace-apply` → `replaced: 400002`, each document's `len_chars`
+  400,001. Every line `ok`. (Keeping every match's slots would need about 400,002 × 2.4 kB ≈
+  0.96 GB and abort under the cap.) Oracle: exact value.
+
+Every AC is an **acceptance** test (on base no `find.*` command exists).
 
 ## Scorecard items and intended test names
 | Item | Tests |
 |---|---|
-| ws.find-in-files | `kiln_cli::acceptance_t022::find_in_files_matches_naive_model`, `kiln_cli::acceptance_t022::open_documents_are_searched_as_edited` |
+| ws.find-in-files | `kiln_cli::acceptance_t022::find_in_files_matches_naive_model`, `kiln_cli::acceptance_t022::open_documents_are_searched_as_edited`, `kiln_cli::acceptance_t022::find_memory_is_bounded` |
 | ws.replace-in-files | `kiln_cli::acceptance_t022::replace_in_files_matches_naive_model_and_undoes_per_file`, `kiln_cli::acceptance_t022::stale_preview_changes_nothing`, `kiln_cli::acceptance_t022::preview_ids_and_worked_example` |
 
 ## Out of scope and implementer notes
@@ -169,6 +201,14 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   from T-021's new linear `replacements` (T-017 implementer's cost note); the s1 capture-group
   message is listed; kinds are T-032's, not T-015's. · gate attempts: 0 · not run: no cargo ·
   missing context: none · next: director.
+- 2026-11-13T13:57Z · R-127 · draft · did: bounded search per D-070 s4 on top of T-021's R-127
+  API: `find.in-files` uses `CompiledQuery::find` with the remaining limit, `total` exact
+  (T-021 choice 1), line/col only for listed matches; the preview uses `replace_all` (no group
+  slots kept) and `check_template`; its result is now limited like `find.in-files`
+  (`limit`, `truncated`; PROPOSED with options); the 1,000-char pattern cap is inherited.
+  New AC-6 under a 512 MiB `ulimit -v` cap (two 200 kB files, 100 empty groups). · gate
+  attempts: 0 · not run: no cargo; AC-6 figures are arithmetic · missing context: T-021's
+  choices · next: director; spec check after T-021's.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
