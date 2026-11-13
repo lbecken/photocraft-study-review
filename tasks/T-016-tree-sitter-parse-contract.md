@@ -423,4 +423,13 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   for M1–M18 was not recorded · next: join with `task/T-016`.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13T12:18Z · R-098 · tests_joined (head b2464f50e25537b55ba61c0437671e5f611b0a8b) · did: round 1
+  full review, `reviews/T-016-r1.md`, verdict approve. Checked the 7 added packages (MIT or MIT/Apache-2.0;
+  build scripts only compile vendored C with `cc`). Found one existing lock entry changed (serde_json,
+  build-only, N1). Re-ran rustc on all 45 corpus files: matches the record. `join --revert-check`:
+  `does_not_compile` (record left uncommitted in the primary checkout). Probes: independent oracle,
+  1,650 chained edits, boundary pairs, 100k-deep nesting, 50 MB Rust (3.1 GB peak). 50 MB of `(` needs
+  about 12 GB, not run to completion (spec gap S1). 21 mutants: 18 killed (13 by acceptance),
+  3 equivalent, 0 survived. · gate attempts: 1 (last: green) · not run: 50 MB `(` to completion,
+  release build, non-gcc compilers · missing context: none · next: director (S1 ruling, approval row).
 <!-- end reviewer log -->
