@@ -570,6 +570,7 @@ builder of the cap of three compiling at once (§5.4).
 - Q-2: (a). `search.replace` with `all: true` takes a `limit` like `search.find`'s (default 10,000) that caps the `ranges` list in the reply, and reports `truncated`; every match is still replaced and `total` is exact.
 - Q-3: (b). This task does not touch `reason.rs`. The published `when` text of `invalid_pattern` stays narrower than the binary (it does not mention a pattern over the cap or a bad replacement template) until T-038 merges; T-038's list of `when` texts gains this one. The gap is known and recorded here; the reviewer does not raise it as a finding against this task.
 - Two readings of the planner in R-170, confirmed (director, D-102): `from` is checked (`out_of_range` when beyond the text) only with `all: false`, and ignored with `all: true`; "`total` is exact" in Q-2 means the existing `replaced` field, and the reply gains no separate `total`.
+- Ruling on the implementer's question of R-173 (director, D-106; Pinned (i) S4). The implementer is right: `([ab]*)` is 7 chars, so 100 repetitions are 700 chars, not 800 as S4 and the spec check's table say. S4 is copied with "700 chars" and the implementer's own measured figures and conditions. The two sentences the implementer added beyond Pinned (a replacement that changes anything ends the typing group; a refusal changes nothing) stay, with the evidence in its log; the reviewer checks them against the binary like every other sentence.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
