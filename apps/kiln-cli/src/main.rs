@@ -283,28 +283,19 @@ fn parse_manifest(bytes: &[u8]) -> Result<Vec<(RelPath, Vec<u8>)>, String> {
 
 /// Bytes from an even number of hex digits (either case); on failure, what was wrong.
 fn decode_hex(hex: &str) -> Result<Vec<u8>, String> {
+    if let Some((i, c)) = hex.char_indices().find(|(_, c)| !c.is_ascii_hexdigit()) {
+        return Err(format!("has a non-hex character {c:?} at byte {i}"));
+    }
     let digits = hex.as_bytes();
     if digits.len() % 2 == 1 {
         return Err("has an odd number of digits".to_owned());
     }
-    let digit = |b: u8| match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    };
-    digits
+    // Every byte is an ASCII hex digit now, so `to_digit` cannot fail.
+    let digit = |b: u8| char::from(b).to_digit(16).map_or(0, |d| d as u8);
+    Ok(digits
         .chunks_exact(2)
-        .enumerate()
-        .map(|(i, pair)| match (digit(pair[0]), digit(pair[1])) {
-            (Some(hi), Some(lo)) => Ok(hi << 4 | lo),
-            _ => Err(format!(
-                "has a non-hex character in digits {}..{}",
-                2 * i,
-                2 * i + 2
-            )),
-        })
-        .collect()
+        .map(|pair| digit(pair[0]) << 4 | digit(pair[1]))
+        .collect())
 }
 
 /// The seeded files as [`Host::in_memory`] / [`Context::with_files`] take them.
@@ -719,6 +710,42 @@ mod tests {
         assert_eq!(err(&["--root"]), "option `--root` needs a value");
         assert_eq!(err(&["--text", "x"]), "unknown option `--text` for `run`");
         assert_eq!(err(&["--root=x"]), "unknown option `--root=x` for `run`");
+        // T-011: `--memory-seed <manifest>` excludes `--root` and `--memory`.
+        let all = ["--root", "--memory", "--memory-seed", "--log"];
+        let seed_err = |args: &[&str]| parse_opts("run", args, &all).err().unwrap();
+        for args in [
+            &["--memory-seed", "m", "--root", "d"][..],
+            &["--root", "d", "--memory-seed", "m"],
+        ] {
+            assert_eq!(
+                seed_err(args),
+                "options `--root` and `--memory-seed` cannot be combined"
+            );
+        }
+        for args in [
+            &["--memory-seed", "m", "--memory"][..],
+            &["--memory", "--memory-seed", "m"],
+        ] {
+            assert_eq!(
+                seed_err(args),
+                "options `--memory` and `--memory-seed` cannot be combined"
+            );
+        }
+        assert_eq!(
+            seed_err(&["--memory-seed", "m", "--memory-seed", "n"]),
+            "option `--memory-seed` given twice"
+        );
+        assert_eq!(
+            seed_err(&["--memory-seed"]),
+            "option `--memory-seed` needs a value"
+        );
+        let (_, o) = parse_opts("run", &["--memory-seed", "m.json", "--log", "l"], &all).unwrap();
+        assert_eq!(o.fs(), Fs::MemorySeed(PathBuf::from("m.json")));
+        let control_err = |args: &[&str]| parse_opts("control", args, &["--root"]).err().unwrap();
+        assert_eq!(
+            control_err(&["--memory-seed", "m"]),
+            "unknown option `--memory-seed` for `control`"
+        );
     }
 
     #[test]
@@ -1043,6 +1070,151 @@ mod tests {
             stderr_of(&strs(&["run", "s.jsonl", "--root", "/no/such/kiln"])),
             "kiln-cli: bad --root: root `/no/such/kiln`: not found\n"
         );
+    }
+
+    fn manifest_err(json: &str) -> String {
+        parse_manifest(json.as_bytes()).unwrap_err()
+    }
+
+    #[test]
+    fn manifest_parses_text_and_hex_in_order() {
+        let files = parse_manifest(
+            br#"{"files":[{"path":"src/main.rs","text":"fn main() {}\r\n"},
+                {"path":"bom.txt","hex":"efBBbf6869"},{"path":"e","hex":""},{"path":"d/x","text":""},
+                {"path":"dx","text":"\u00e9"}]}"#,
+        )
+        .unwrap();
+        let got: Vec<(&str, &[u8])> = as_file_refs(&files);
+        assert_eq!(
+            got,
+            [
+                ("src/main.rs", &b"fn main() {}\r\n"[..]),
+                ("bom.txt", b"\xef\xbb\xbfhi"),
+                ("e", b""),
+                ("d/x", b""),
+                ("dx", "é".as_bytes()),
+            ]
+        );
+        assert!(parse_manifest(br#"{"files":[]}"#).unwrap().is_empty());
+    }
+
+    #[test]
+    fn manifest_refusals_name_the_problem() {
+        for (json, want) in [
+            ("", "invalid JSON"),
+            ("[]", "not a JSON object"),
+            ("{}", "missing key `files`"),
+            (r#"{"files":[],"x":1}"#, "unknown key `x`"),
+            (r#"{"files":{}}"#, "`files` is not an array"),
+            (r#"{"files":[1]}"#, "files[0] is not an object"),
+            (
+                r#"{"files":[{"path":"a","text":"","mode":1}]}"#,
+                "files[0]: unknown key `mode`",
+            ),
+            (r#"{"files":[{"text":""}]}"#, "files[0]: missing `path`"),
+            (
+                r#"{"files":[{"path":1,"text":""}]}"#,
+                "files[0]: `path` is not a string",
+            ),
+            (
+                r#"{"files":[{"path":"a/../b","text":""}]}"#,
+                "files[0]: invalid relative path",
+            ),
+            (
+                r#"{"files":[{"path":"a"}]}"#,
+                "exactly one of `text` and `hex`",
+            ),
+            (
+                r#"{"files":[{"path":"a","text":"","hex":""}]}"#,
+                "exactly one of `text` and `hex`",
+            ),
+            (
+                r#"{"files":[{"path":"a","text":1}]}"#,
+                "`text` is not a string",
+            ),
+            (
+                r#"{"files":[{"path":"a","hex":1}]}"#,
+                "`hex` is not a string",
+            ),
+            (r#"{"files":[{"path":"a","hex":"abc"}]}"#, "odd number"),
+            (r#"{"files":[{"path":"a","hex":"0g"}]}"#, "non-hex"),
+            (r#"{"files":[{"path":"a","hex":"é1"}]}"#, "non-hex"),
+            (
+                r#"{"files":[{"path":"a","text":""},{"path":"a","hex":""}]}"#,
+                "files[1]: path `a` given twice",
+            ),
+            (
+                r#"{"files":[{"path":"d/e/f","text":""},{"path":"d","text":""}]}"#,
+                "path `d` is a file and a directory (`d/e/f`)",
+            ),
+        ] {
+            let got = manifest_err(json);
+            assert!(got.contains(want), "{json}: {got}");
+        }
+        // Keys are checked for every entry before any entry's path (Pinned (a)).
+        let got = manifest_err(r#"{"files":[{"path":"/x","text":""},{"path":"a","oops":1}]}"#);
+        assert!(got.starts_with("files[1]: unknown key"), "{got}");
+        // Prefix conflicts come after every entry is checked.
+        let got = manifest_err(
+            r#"{"files":[{"path":"d","text":""},{"path":"d/x","text":""},{"path":"q","hex":"1"}]}"#,
+        );
+        assert!(got.starts_with("files[2]: `hex`"), "{got}");
+        // Deep nesting is an error, not a stack overflow.
+        let deep = format!("{}{}", "[".repeat(200_000), "]".repeat(200_000));
+        assert!(manifest_err(&deep).starts_with("invalid JSON"));
+    }
+
+    #[test]
+    fn decode_hex_cases() {
+        assert_eq!(decode_hex("00ffFFa0").unwrap(), [0, 255, 255, 160]);
+        assert_eq!(decode_hex("").unwrap(), Vec::<u8>::new());
+        assert!(decode_hex("0").is_err() && decode_hex("+1").is_err() && decode_hex(" 1").is_err());
+    }
+
+    #[test]
+    fn memory_seed_through_run_and_exec() {
+        let dir = std::env::temp_dir().join(format!("kiln-cli-unit-seed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let m = dir.join("m.json");
+        std::fs::write(&m, r#"{"files":[{"path":"a.txt","text":"hi\n"}]}"#).unwrap();
+        let m = m.to_str().unwrap();
+        let out = call(&[
+            "exec",
+            "doc.open",
+            r#"{"path":"a.txt"}"#,
+            "--memory-seed",
+            m,
+        ]);
+        assert_eq!(out.code, 0, "{out:?}");
+        let out = call(&[
+            "exec",
+            "buffer.text",
+            "{}",
+            "--memory-seed",
+            m,
+            "--text",
+            "abc",
+        ]);
+        assert_eq!(
+            out,
+            Outcome::ok("{\"len_chars\":3,\"text\":\"abc\"}\n".into())
+        );
+        let missing = dir.join("missing.json");
+        let missing = missing.to_str().unwrap();
+        for args in [
+            vec!["exec", "doc.list", "{}", "--memory-seed", missing],
+            vec!["run", "/no/such/script", "--memory-seed", missing],
+        ] {
+            let out = call(&args);
+            assert_eq!((out.code, out.stdout.as_str()), (2, ""), "{args:?}");
+            let prefix = format!("kiln-cli: bad --memory-seed {missing}: cannot read: ");
+            assert!(out.stderr.starts_with(&prefix), "{out:?}");
+            assert!(!out.stderr.contains("usage:"));
+        }
+        // A manifest path that looks like `--help` is a value, not a help request.
+        assert!(!wants_help(&strs(&["run", "s", "--memory-seed", "--help"])));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
