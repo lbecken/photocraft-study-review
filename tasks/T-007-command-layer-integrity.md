@@ -4,13 +4,15 @@ title: "Make replay detect divergence, enforce that read-only commands change no
 tier: high              # ADR-0002: changes how the command log and the registry's audit work = CHARTER §3 contract (L3 "command log for replay"); ADR needed
 state: draft
 owner_role: planner
-scorecard_items: []     # was [cmd.log-replay]: no CLI/control criterion is possible without a new CLI surface (Q-6)
+scorecard_items: [cmd.log-replay]   # CLI criterion: `kiln-cli replay` (Decisions D-5)
 depends_on: [T-004, T-006]
 touches:
   - crates/kiln-commands/src
   - crates/kiln-commands/tests/integrity.rs   # implementer's own integration tests
-  - docs/commands.json                        # generated: new read-only examples
-  - docs/control-protocol.md                  # session-log paragraph only (rule (c))
+  - apps/kiln-cli/src/main.rs                 # `run --results`, `replay` (Decisions D-5)
+  - apps/kiln-cli/tests/replay.rs             # implementer's own CLI tests
+  - docs/protocol/replay.md                   # NEW: this task's protocol text (D-6); docs/control-protocol.md is not touched
+  # docs/commands.json changes too: a generated path (exempt from `touches`, regenerated on conflict)
 budget_tokens: 850000   # high (v1.1)
 iteration: 1
 found_by: reviewer
@@ -122,16 +124,47 @@ The command **is** appended to the log (name, params as given, `mutating`), and 
 gets the produced value (`null` if it did not serialize). Every other failure still appends
 nothing and leaves the context unchanged: unknown command, invalid params, `rejected`, or an
 error returned by `run`. The `LogEntry` and `Context::log` doc comments change from
-"successfully executed" to "ran to completion". In `docs/control-protocol.md`, the sentence
-saying a command that returns an error is not recorded gains this exception
-(`internal`/`result_schema` and the serialization case). Panics are not covered; see Out of scope.
+"successfully executed" to "ran to completion". `docs/protocol/replay.md` states this exception
+(`internal`/`result_schema` and the serialization case) and that it supersedes the sentence in
+`docs/control-protocol.md` "Error codes and kinds" saying a command that returns an error is not
+recorded; T-030 corrects that sentence in place (D-6: this task does not edit the shared file). Panics are not covered; see Out of scope.
+
+### (d) Verified replay through the CLI (Decisions D-5)
+```text
+kiln-cli run <script> [--root <dir> | --memory] --log <file> [--results <file>]
+kiln-cli replay <log-script> <results-file> [--root <dir> | --memory]
+```
+- `run --results <file>` (only together with `--log`; alone it is a usage error, exit 2) writes,
+  after the last request, one line per line of the `--log` script, in the same order:
+  `{"id":<n>,"result":<value>}` (sorted keys, `\n`-terminated), `<n>` the script line's `id`,
+  `<value>` the result the logged request produced (the response's `result`; `null` for a request
+  that rule (c) logs although its response is an error). Created or truncated before the first
+  request, like `--log`. Every other output of `run` is unchanged.
+- `replay` reads the log script (the `--log` format) and the results file, then replays the
+  script on a fresh session over the given file system with `replay_verified` semantics
+  (a): entries run in order; it stops at the first divergence; nothing is rolled back (files the
+  replayed entries saved stay saved). It writes exactly one line to stdout:
+  - all equal: `{"ok":true,"replayed":<n>}`, exit 0;
+  - divergence: `{"divergence":<d>,"id":<script id or null>,"index":<i>,"ok":false}`, exit 3,
+    where `<d>` is one of `{"actual":…,"expected":…,"kind":"result_mismatch"}`,
+    `{"error":<error object exactly as \`exec\` prints it>,"kind":"failed"}`,
+    `{"kind":"length_mismatch","log":<n>,"results":<m>}` (`id` null, nothing run).
+    (`mutating_mismatch` cannot occur: a script carries no flag; registered flags are used.)
+  - exit 2, nothing on stdout, a message on stderr: usage error, unreadable file, a script line
+    that is not a valid request, a results line that is not `{"id":…,"result":…}`, or ids of the
+    results file that differ from the script's ids in order; exit 1: writing stdout failed.
+- `docs/protocol/replay.md` documents (d), the results file and these exit codes; `kiln-cli
+  --help` lists the new forms.
+- No `kiln-control` change: if `kiln-cli` cannot build this from `kiln-commands`,
+  `kiln-workspace` and the existing `Host` API, stop and report.
 
 ## Pinned
 - (a) Errors, payloads, precedence: `Divergence` variants and `VerifyError{index, divergence}`
   as in the Interface; precedence inside one entry: unknown name → `MutatingMismatch` →
   execution error (`Failed`) → `ResultMismatch`; `LengthMismatch` before any entry runs. The
   audit problem line and the `Internal` message shapes are exact (Semantics (b), (c)).
-- (b) Files: `docs/commands.json` (regenerated: appended examples only); `docs/control-protocol.md`
+- (b) Files: `docs/commands.json` (regenerated: appended examples only); the results file and
+  the `replay` output of (d); new `docs/protocol/replay.md` (the rule (c) text and (d));
   one sentence (Semantics (c)); no file system access by the code beyond the existing VFS.
 - (c) Order of checks: Semantics (a) steps 1–4; `execute` keeps its order (lookup → params
   schema → run → result serialization → result schema), and the log push moves after the
@@ -149,8 +182,10 @@ saying a command that returns an error is not recorded gains this exception
   `{"len_chars":…,"text":…}` on today's `main` (planner R-055 ran `doc.text` through
   `kiln-cli run`: `{"len_chars":2,"text":"xa"}` for a two-char document). AC-4…AC-9 are rules,
   not computed values.
-- (h) Scorecard items: none claimed (see Q-6). The behaviour observable through the CLI is
-  AC-10.
+- (h) `cmd.log-replay`, evaluator's call: `kiln-cli run s.jsonl --root A --log l.jsonl
+  --results r.jsonl`, then `kiln-cli replay l.jsonl r.jsonl --root B` on a fresh copy of A
+  (`{"ok":true,…}`, exit 0) and on a copy with one file changed (the exact divergence line,
+  exit 3) — AC-11, AC-12.
 
 ## Acceptance criteria
 All through `kiln_commands` on `standard_registry()`. "Liar" commands are test-defined `Command`
@@ -221,12 +256,26 @@ public way. Those nested calls also append to the log, and tests must expect tha
   single-char `doc.insert`, one with a redo step and unsaved changes; for `buffer.text`, a setup
   ending in a single-char `buffer.insert`), and `kiln-cli commands --audit` exits 0. Fails on
   base (no such examples). Oracle: exact value over the parsed JSON.
+- AC-11 (`cmd.log-replay`, CLI round trip): for fixed-seed random sessions (≥ 300 requests,
+  failing ones included) over files on disk, `run --log l --results r` then `replay l r --root`
+  on a fresh copy of the initial directory → `{"ok":true,"replayed":<lines of l>}`, exit 0, and
+  the copy's files equal the original session's files byte for byte. The same with `--memory`
+  on scripts that open no file. Oracle: round trip.
+- AC-12 (`cmd.log-replay`, CLI divergence): AC-3's scenario through the CLI (`a.txt` = `one` when
+  recorded, `two` at replay) → exactly
+  `{"divergence":{"actual":{"len_chars":3,"text":"two"},"expected":{"len_chars":3,"text":"one"},"kind":"result_mismatch"},"id":2,"index":1,"ok":false}`,
+  exit 3; a target missing `a.txt` → `kind: "failed"` with the `rejected`/`not_found` error
+  object, `index` 0; a results file one line short → `length_mismatch`; `--results` without
+  `--log`, a results file with a wrong id → exit 2, empty stdout. Oracle: exact value.
 
 ## Scorecard items and intended test names
 Tests in `crates/kiln-commands/tests/acceptance_t007.rs` (`kiln_commands::acceptance_t007::<fn>`).
 
-No item (Q-6). Tests (no item): `verified_replay_round_trips`,
-`verified_replay_reports_first_divergence`, `results_are_recorded_for_every_logged_command`,
+| Item | Tests |
+|---|---|
+| cmd.log-replay | add `kiln_cli::acceptance_t007_cli::replay_round_trips_through_cli`, `kiln_cli::acceptance_t007_cli::replay_reports_first_divergence_through_cli` (AC-11, AC-12; existing tests stay), and `verified_replay_round_trips`, `verified_replay_reports_first_divergence` (Rust API, additional) |
+
+Also (no item): `results_are_recorded_for_every_logged_command`,
 `read_only_commands_change_nothing_but_the_log`, `audit_catches_read_only_liars`,
 `command_that_ran_is_logged_even_with_bad_result`, and in
 `apps/kiln-cli/tests/acceptance_t007_cli.rs` `read_only_commands_publish_rich_examples` (AC-10;
@@ -236,17 +285,17 @@ miscounts until T-009 (6) lands).
 ## Out of scope
 - Structured reasons in `CommandError`, kind derivation in `kiln-control`, and the D-032 cap
   follow-ups: T-030.
-- Verifying a log *script* (`kiln-cli run --log` output) against recorded results: that needs
-  results in the script, which is a protocol change; a later task if wanted.
 - Panics inside `run` (state possibly changed and not logged): a command fuzzer task.
 - Enforcing read-only in the type system (`&Context`): a CHARTER §3 contract change (ADR).
-- `kiln-control`, `kiln-workspace`, `kiln-text`, `apps/` (no change needed; if one is, stop and
-  report). `docs/development.md` "Adding a command" (docs follow-up).
+- `kiln-control`, `kiln-workspace`, `kiln-text`, `apps/kiln` and any `kiln-cli` subcommand other
+  than `run --results` and `replay` (if a change is needed, stop and report);
+  `docs/control-protocol.md` (D-6; T-030 corrects its stale sentence). `docs/development.md` "Adding a command" (docs follow-up).
 - Any change to `Cargo.toml`, `Cargo.lock`, `xtask/`, `.cargo/`, `.github/`, lint tables or
   build keys. This task touches **no gate path and no dependency**.
 
 ## Implementer notes
-- Your tests: unit tests in `crates/kiln-commands/src` and `crates/kiln-commands/tests/integrity.rs`.
+- Your tests: unit tests in `crates/kiln-commands/src` and `crates/kiln-commands/tests/integrity.rs`;
+  CLI tests in `apps/kiln-cli/tests/replay.rs`.
 - Determinism: results are stored as returned; no clock or randomness; messages unchanged.
 
 ## Decisions
@@ -265,23 +314,23 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
 - D-3 (was Q-2): accepted. `replay_verified` is added; `LogEntry` and `ReplayError` do not
   change (T-003's acceptance tests pin them).
 - D-4 (was Q-5): `outside_root` is approved; it now concerns T-030, not this task.
-- Dispatch note: T-007 shares `docs/control-protocol.md` with T-008, so the two may not be in
-  flight at the same time (METHODOLOGY §5.2). T-007 does not depend on T-008's code.
-- Dispatch note (R-055): `crates/kiln-commands/src` overlaps T-006, T-010 and T-030;
-  `docs/control-protocol.md` overlaps T-008, T-010, T-011 and T-030. T-007 can run in parallel
-  only with T-009 or T-013 (xtask) among the tasks of this file set.
+- Dispatch note (R-057, replaces the R-051/R-055 notes): T-007 no longer touches
+  `docs/control-protocol.md` (D-6). Its `touches` overlap T-006, T-010, T-030
+  (`crates/kiln-commands/src`) and T-011 (`apps/kiln-cli/src/main.rs`). It may run in parallel
+  with T-008, T-009, T-013.
 - Tier note (R-055): under ADR-0002 a change to how the command log or the registry's audit
   works is a CHARTER §3 contract change, so the director writes an ADR before `ready`
   (METHODOLOGY §4 table) and the task stays its own task (P1).
 
+- D-5 (director R-057, was Q-6): keep the `cmd.log-replay` claim by making verification
+  observable: a `kiln-cli` way to replay a recorded log against a root and report divergence,
+  planner's choice of form, output and exit codes pinned. Specified as (d), AC-11, AC-12.
+- D-6 (director R-057, all product tasks): a task documents its commands in its own new file
+  `docs/protocol/<group>.md` and touches `docs/control-protocol.md` only to add an error-kind
+  line. T-007 adds no kind, so it does not touch that file.
+
 ## Questions
-- Q-6 (planner, R-055): T-007 claimed `cmd.log-replay`, but none of its new behaviour is reachable
-  through the CLI or control protocol (verified replay needs recorded results in the log
-  script, which T-007 puts out of scope as a protocol change; liar commands exist only in Rust
-  tests). v1.1 requires a CLI/control criterion per claimed item, so the claim is dropped and the
-  item keeps its existing CLI tests. Alternative: add `kiln-cli run --verify <results-file>` (or
-  results in `--log` output) to this task, which adds `apps/kiln-cli/src/main.rs` to `touches`
-  and a protocol change. Which?
+None open.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -320,6 +369,12 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   first; pinned that new examples are appended (`guard_t003.rs` reads `examples[0]`); named the
   CLI test file `acceptance_t007_cli.rs`. Arm n/a (high: independent test author). · gate
   attempts: 0 · missing context: none · next: director answers Q-6, writes the ADR.
+- 2026-11-13T03:56Z · R-057 · draft · did: applied D-5 (`run --results`, `kiln-cli replay`,
+  exact output and exit codes, AC-11/AC-12, `cmd.log-replay` claimed again) and D-6 (protocol
+  text in `docs/protocol/replay.md`; `docs/control-protocol.md` and the generated
+  `docs/commands.json` left out of `touches`). Worked example of AC-12 is AC-3's values in the
+  CLI's sorted-key form (not executed: `replay` does not exist yet). · gate attempts: 0 ·
+  missing context: none · next: director review, ADR.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

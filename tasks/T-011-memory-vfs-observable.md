@@ -9,7 +9,7 @@ depends_on: [T-004]
 touches:
   - apps/kiln-cli/src/main.rs           # option parsing, manifest reading, usage text
   - apps/kiln-cli/tests/memory_seed.rs  # implementer's own integration tests
-  - docs/control-protocol.md            # `kiln-cli` section and exit-code table only
+  - docs/protocol/cli-memory-seed.md    # NEW: `--memory-seed` and the manifest (D-1); docs/control-protocol.md is not touched
 budget_tokens: 500000   # medium (v1.1, provisional)
 iteration: 1
 found_by: evaluator
@@ -78,9 +78,11 @@ No new command. The files a session leaves are observable through the protocol: 
 bytes of a decodable file uniquely (UTF-8 with or without BOM, UTF-16 LE/BE with BOM), so equal
 responses mean equal bytes.
 
-### `docs/control-protocol.md`
-The `kiln-cli` section documents `--memory-seed` and the manifest; the exit-code table's
-`run`/`exec` exit-2 cells add "bad --memory-seed manifest". Nothing else changes.
+### Documentation (Decisions D-1)
+New `docs/protocol/cli-memory-seed.md` documents `--memory-seed`, the manifest format, its
+refusals and the exit code 2 for a bad manifest. `docs/control-protocol.md` is not edited (no
+new error kind); its `kiln-cli` usage block and exit-code table do not mention the option until
+T-030 adds a pointer (see T-030). `kiln-cli --help` lists it.
 
 ## Pinned
 - (a) Errors and precedence: option parsing (usage errors, exit 2, usage text) → root/manifest
@@ -142,8 +144,13 @@ the same data.
 - Your tests: unit tests in `main.rs`, integration tests in `apps/kiln-cli/tests/memory_seed.rs`;
   your acceptance tests in `apps/kiln-cli/tests/acceptance_t011.rs` on the tests branch first.
   Determinism: generated data from fixed seeds; every spawned process has a timeout.
-- Dispatch: `docs/control-protocol.md` overlaps T-007, T-008, T-010, T-030; `apps/kiln-cli/src/main.rs`
-  overlaps no other task here. T-011 can run in parallel with T-006, T-009 or T-013.
+- Dispatch (R-057): only `apps/kiln-cli/src/main.rs` overlaps another task here (T-007). T-011
+  may run in parallel with T-006, T-008, T-009, T-010, T-013 and T-030.
+
+## Decisions
+- D-1 (director R-057, all product tasks): a task documents its behaviour in its own new file
+  under `docs/protocol/` and touches `docs/control-protocol.md` only to add an error-kind line.
+  T-011 adds no kind, so it does not touch that file.
 
 ## Questions and rulings
 None open.
@@ -165,6 +172,9 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   behaviour with no disk write, process, gate path, security boundary or dependency); budget
   500k; arm implementer (odd number). Pinned (e) n/a. · gate attempts: 0 · not run: new code ·
   missing context: none · next: director review.
+- 2026-11-13T03:56Z · R-057 · draft · did: applied D-1 (documentation in new
+  `docs/protocol/cli-memory-seed.md`; `docs/control-protocol.md` out of `touches`); dispatch
+  note rewritten. · gate attempts: 0 · missing context: none · next: director review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

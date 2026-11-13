@@ -2,13 +2,14 @@
 id: T-013
 title: "Make the v1.1 process rules mechanical: clock-stamped and validated metrics, budget refusal in the queue, ready-only worktrees, corrected metric report, one-command publish, review and session-path gate steps"
 tier: high              # ADR-0002 "any gate path": xtask/** (docs/development.md holds the list but is not itself one); approval row must contain `gate paths`
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: []     # tooling; no product scorecard item
-depends_on: [T-005, T-014]
+depends_on: [T-005, T-014]   # and ADR-0003 (hygiene gate step) `accepted` on main before `ready` (Decisions D-2)
 touches:
   - xtask/src                                  # GATE PATH: metrics, worktree, queue/precheck, join messages, gate steps, publish
-  - xtask/tests/acceptance_t005_support.rs     # GATE PATH: only if Q-1 is answered yes (test-support change, assertions unchanged)
+  - xtask/tests/acceptance_t005_support.rs     # GATE PATH: test author's fixture change only (Decisions D-1)
+  - docs/CHARTER.md                            # §4, the one line that lists the gate steps (Decisions D-2, ADR-0003)
   - docs/development.md                        # not a gate path (it documents the list); runbook text
   - reviews/T-003-r1.md                        # redaction of one session scratch path (line 39), nothing else
   - reviews/T-005-r1.md                        # redaction (line 15)
@@ -34,17 +35,19 @@ failure source"). After this task:
    cumulative tokens against its budget, and book planner, evaluator, retrospective-analyst and
    director runs to a pseudo-task `iter-N`.
 2. `cargo xtask queue T-NNN` refuses a task whose recorded tokens exceed `budget_tokens` unless
-   main's `docs/decisions.md` has a decision row beginning `Extend T-NNN` (METHODOLOGY §11, P7).
+   main's `docs/decisions.md` has a decision row `Extend T-NNN to <ceiling>` with a ceiling the
+   tokens do not exceed (METHODOLOGY §11, P7; Decisions D-4).
 3. `cargo xtask worktree new` refuses a task that is not `ready` on `main` (§5.1).
 4. `cargo xtask metrics report` computes the v1.1 metric definitions (§13): acceptance-caught
    defects over every join, with unclassified failing joins reported as an error; tokens per
    merged task with and without `iter-N` overhead; known defects merged by decision; and a new
-   `metrics join-defects` records the director's classification of a failing join.
+   `metrics join-defects` appends the director's classification of a failing join as a new
+   record (Decisions D-3).
 5. `cargo xtask publish T-NNN …` carries a ledger input that changes generated output (a new
    scorecard item, an evaluation file) to `main` as a low-tier publish task in one command
    (§8, D-034, D-036), so the director no longer writes and accepts such a spec by hand (T-012).
-6. The gate gains two steps: `reviews` (every review of a medium/high iteration-≥1 task has the
-   v1.1 `mutants` front matter) and `session-paths` (no tracked file contains a session-specific
+6. The gate gains one step `hygiene` with two checks (ADR-0003): every review of a medium/high
+   iteration-≥1 task has the v1.1 `mutants` front matter, and no tracked file contains a session-specific
    scratch path, §12).
 7. The v1.0 references listed in `methodology/CHANGELOG.md` v1.1 under "Known stale references,
    fixed by T-013" are corrected in `docs/development.md` and `xtask` messages.
@@ -130,13 +133,18 @@ Record fields stay the METHODOLOGY §13 names. Changes:
 - **Budget line.** After a successful `add` for `T-NNN`, stdout ends with exactly:
   `T-NNN: <sum> tokens of budget <budget_tokens>` where `<sum>` is the sum of known `tokens`
   over every `run` record of the task (the new one included), then, only if `<sum>` exceeds the
-  budget, a line `T-NNN: over budget by <sum - budget_tokens> tokens; the queue refuses it without a docs/decisions.md row beginning "Extend T-NNN"`,
+  ceiling (`budget_tokens`, or the ceiling of the task's last `Extend` row in `docs/decisions.md`
+  of the working tree), a line `T-NNN: over its ceiling <ceiling> by <sum - ceiling> tokens; the queue refuses it without a docs/decisions.md row "Extend T-NNN to <N>" with N ≥ <sum>`,
   then, only if some run has `tokens: null`, `T-NNN: <k> run(s) with unknown tokens not counted`.
   For `iter-N`: `iter-N: <sum> tokens of overhead`. Numbers are plain decimal integers.
-- **join-defects.** Sets `acc_defects` of the one `kind:"join"` record with that `task` and
-  `joined_sha`, from `null` to `N`. Refused: no such record, more than one, `acc_defects` already
-  set, `acc_fail_first_join` is 0, or `N > acc_fail_first_join`. Only that value on that line
-  changes; every other byte of the file is unchanged (see Q-3 for the alternative).
+- **join-defects** (Decisions D-3). Appends one record
+  `{"kind":"join_defects","task":"T-NNN","at":"<now>","joined_sha":"<sha>","acc_defects":N}`;
+  no existing record is ever edited. Refused: no `join` record of that task with that
+  `joined_sha`, more than one, its own `acc_defects` already set, an earlier `join_defects`
+  record for that join, `acc_fail_first_join` is 0, or `N > acc_fail_first_join`. A join's
+  **classification** is its own `acc_defects` if set, else the `join_defects` record for it.
+  The new kind is documented in `docs/development.md`; adding it to METHODOLOGY §13's record
+  list is for retrospective 1 (methodology changes only there).
 - Refusal lines begin `metrics: refused: ` and name the rule, for example
   `metrics: refused: T-007 is in_progress (since 2026-11-14T10:00:00Z); in_progress -> tests_joined is not allowed (METHODOLOGY §3)`.
 
@@ -145,9 +153,10 @@ A new precondition after `approval` and before `main-history` (order otherwise u
 
 | check | passes when |
 |---|---|
-| `budget` | the sum of known `tokens` over the `kind:"run"` records of the task in **main's committed** `metrics/tasks.jsonl` is at most main's task-file `budget_tokens`; or main's `docs/decisions.md` has a decision-table row whose Decision cell begins with `Extend T-NNN` followed by the cell's end or a character that cannot continue an id. Rows are recognised exactly as for `approval` (D-026 R7: real Markdown table rows only). A task file without `budget_tokens` fails |
+| `budget` | the sum `S` of known `tokens` over the `kind:"run"` records of the task in **main's committed** `metrics/tasks.jsonl` is at most the task's **ceiling**: the ceiling `N` of the last (in table order) decision-table row of main's `docs/decisions.md` whose Decision cell begins with `Extend T-NNN to N` (`N` decimal digits only, followed by the cell's end or a character that is neither a digit nor an id character), else main's task-file `budget_tokens`. Rows are recognised exactly as for `approval` (D-026 R7: real Markdown table rows only); a cell `Extend T-NNN` without `to <digits>` is not an extension. A task file without `budget_tokens` fails |
 
-Refusal: `queue: refused: budget: T-NNN has <sum> recorded tokens, over its budget_tokens <budget>; docs/decisions.md has no row beginning "Extend T-NNN"`.
+Refusal: `queue: refused: budget: T-NNN has <S> recorded tokens, over its ceiling <ceiling> (<source>); a docs/decisions.md row "Extend T-NNN to <N>" with N ≥ <S> is needed`,
+where `<source>` is `budget_tokens` or `Extend row`.
 Runs with `tokens: null` count 0; when any exist, the queue's summary says how many.
 
 ### (3) `worktree new`
@@ -163,10 +172,11 @@ state is checked. `worktree new` no longer prints an `export CARGO_TARGET_DIR=�
 Keeps today's sections and adds or changes these (METHODOLOGY §13 definitions):
 - **Arm** of a task: `independent` for high, and for medium with an even task number;
   `implementer` for medium with an odd number; none for low.
-- **Acceptance-caught defects**: Σ `acc_defects` over every `join` record with
+- **Acceptance-caught defects**: Σ of the classification ((1) join-defects) over every `join` record with
   `impl_tests_green: true` (not the first join only), total and by tier and arm.
 - **Unclassified joins**: every `join` record of a task whose task file has `iteration ≥ 1`
-  with `acc_fail_first_join > 0` and `acc_defects: null`, one line each
+  with `acc_fail_first_join > 0` and no classification (own `acc_defects` null and no
+  `join_defects` record for it), one line each
   (`unclassified join: T-NNN at <at> joined_sha <sha>: <k> failure(s), acc_defects missing`).
   If there is any, the report is still printed in full and the command exits 1.
 - **Tokens per merged task** (merged = has a `merged` record in `metrics/queue.jsonl`): Σ known
@@ -178,8 +188,8 @@ Keeps today's sections and adds or changes these (METHODOLOGY §13 definitions):
   `origin_task` that has a `merged` queue record, listed as `T-NNN (from T-MMM)` with a count,
   under that heading. This counts follow-up tasks filed from a review of a merged task; it does
   not separate defect from spec-gap follow-ups (see log, uncertainty).
-- **Budget overruns**: each task over `budget_tokens`, with `extend row: yes|no` read from
-  `docs/decisions.md` in the working tree.
+- **Budget overruns**: each task over `budget_tokens`, with `extend to: <N>|none` (its last
+  `Extend T-NNN to <N>` row in the working tree's `docs/decisions.md`) and `within ceiling: yes|no`.
 - `iter-N` runs appear in tokens by tier as tier `overhead`, never in a task's total.
 
 ### (5) `cargo xtask publish`
@@ -242,12 +252,14 @@ an evaluation or an item); book the session's own run to `iter-N`; act on any st
 (fix and re-run the gate, re-queue, or abandon); file the evaluator's defect tasks as separate
 ledger commits; record the session in `STATE.md` and the handoff.
 
-### (6) Gate steps `reviews` and `session-paths`
-Two steps, run by `cargo xtask ci` and alone as `cargo xtask reviews` / `cargo xtask
-session-paths`, placed after `ui-commands` and before `schema` (cheap first; see Q-2 on CHARTER
-§4's step list).
+### (6) Gate step `hygiene` (Decisions D-2, ADR-0003)
+One step, run by `cargo xtask ci` and alone as `cargo xtask hygiene`, placed after
+`ui-commands` and before `schema` (cheap first). It runs both checks below and fails if either
+finds a problem; its detail line names the check (`reviews:` or `session-paths:`) of each
+problem. The CHARTER §4 gate line gains `hygiene` in that position (this task edits that one
+line of `docs/CHARTER.md`, as ADR-0003 decides).
 
-- `reviews`: for every file `reviews/T-NNN-rN.md` (other names under `reviews/` are ignored)
+- Check `reviews`: for every file `reviews/T-NNN-rN.md` (other names under `reviews/` are ignored)
   whose task file `tasks/T-NNN-*.md` has tier `medium` or `high` and `iteration ≥ 1`, the front
   matter must parse and have: `task: T-NNN` and `round: N` matching the file name; `tier` equal
   to the task file's tier; `arm` equal to the task's arm ((4)); `mutants` with the five keys
@@ -255,8 +267,8 @@ session-paths`, placed after `ui-commands` and before `schema` (cheap first; see
   integer, with `equivalent + killed + survived = introduced` and
   `killed_by_acceptance ≤ killed`; and in round 1, `introduced ≥ 10`. A review without a task
   file fails. FAIL detail: one `reviews/<file>: <problem>` per problem. Iteration-0 reviews
-  (v1.0 template) are not checked. EMPTY when no file qualifies (as `fuzz` is today).
-- `session-paths`: no file listed by `git ls-files` in the checkout being gated contains a match
+  (v1.0 template) are not checked. (The step is never EMPTY: the second check always runs.)
+- Check `session-paths`: no file listed by `git ls-files` in the checkout being gated contains a match
   of the regular expression
   `/tmp/claude-[0-9]+/[^/[:space:]]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`.
   Files that are not valid UTF-8 are skipped. FAIL detail: `<path>:<line>` per match, never the
@@ -292,7 +304,7 @@ Each of these says what v1.1 says instead (the reviewer checks the text):
   preconditions keep their order. `worktree new`: state check before any git or file change.
   `publish`: steps 1–8 in order.
 - (b) **Files.** `metrics/tasks.jsonl`: one compact JSON object per line, appended (only
-  `join-defects` rewrites one value of one line); `run.tokens` may be `null`, `run.tier` is
+  nothing is rewritten; `join-defects` appends a `kind:"join_defects"` record); `run.tokens` may be `null`, `run.tier` is
   `null` for `iter-N`. `metrics/queue.jsonl`, `docs/decisions.md`, task files and reviews are
   read only, except the publish task file it writes. Publish writes `tasks/T-NNN-<slug>.md`, the
   worktree's copies of the inputs and `docs/scorecard.md`, and the queue's files as the queue
@@ -307,17 +319,20 @@ Each of these says what v1.1 says instead (the reviewer checks the text):
   not a malicious agent. Accepted: an `--at` (or omitted default) recorded while the clock is
   wrong; a director who writes a false `Extend` row; a run booked with invented tokens; a task
   directory deleted from main to skip the state check. Not accepted: any flag or environment
-  variable that turns a refusal off, or a clock override. The `reviews` step checks form and
+  variable that turns a refusal off, or a clock override. The `hygiene` step's reviews check verifies form and
   arithmetic, not that the mutants were really run.
 - (f) **Tests pinning behaviour this changes.** (1) `acceptance_t005_support.rs` `Repo::add_task`
   / `Repo::worktree` commit toy task files in states `reviewed` (29 calls), `self_verified` (39)
   and `draft` (2) and then call `worktree new` (87 `add_task`/`worktree` call sites; command:
   `grep -on 'add_task("T-[0-9]*", "[a-z]*", "[a-z_]*"' xtask/tests/acceptance_t005*.rs | awk -F'"' '{print $6}' | sort | uniq -c`).
-  Rule (3) refuses all of them, so those T-005 acceptance tests would fail: see Q-1. (2) The
+  Rule (3) refuses all of them. Ruling D-1: T-013's test author updates the shared fixture
+  `xtask/tests/acceptance_t005_support.rs` so toy tasks are `ready` before a worktree is made; no
+  assertion in any T-005 test changes. If a T-005 test then fails for another reason (for
+  example by counting main's commits), the test author stops with a `QUESTION:`. (2) The
   seeding guards (`guard_t005.rs` `seed_repo`, `acceptance_t005.rs` `build::repo`) have no
   `tasks/` directory: covered by the no-`tasks/` rule in (3). (3) `xtask/src/gate.rs`
-  `step_order_matches_charter` (implementer's unit test) changes with the new steps; say so in the
-  log. (4) `session-paths` fails on today's `main` on exactly four lines (command:
+  `step_order_matches_charter` (implementer's unit test) changes with the new step; say so in the
+  log. (4) the session-paths check fails on today's `main` on exactly four lines (command:
   `git grep -nE '<the regex of (6)>'` → `reviews/T-003-r1.md:39`, `reviews/T-005-r1.md:15`,
   `reviews/T-005-r2.md:18`, `reviews/T-005-r3.md:17`); these are redacted in this task (in
   `touches`). No allowlist (golden rule 4: no allowlist growth). (5) No existing test calls
@@ -329,8 +344,8 @@ Each of these says what v1.1 says instead (the reviewer checks the text):
   self_verified --at 09:59:59Z` → refused (earlier); `--to self_verified` at 10:05:00Z → appended
   with `at` 10:05:00Z. A medium task `T-020` with runs 300,000 + 250,000 tokens and budget 500,000:
   `add` prints `T-020: 550000 tokens of budget 500000` and the over-budget line `over budget by
-  50000 tokens`; the queue refuses `budget` until a row `| D-0xx | … | Extend T-020 to … | … |`
-  is on main. Join record `acc_fail_first_join: 2, acc_defects: null` on an iteration-1 task:
+  50000 tokens`; the queue refuses `budget` until a row `| D-0xx | … | Extend T-020 to 600000 … | … |`
+  is on main; a later row `Extend T-020 to 520000` makes it refuse again (last row wins). Join record `acc_fail_first_join: 2, acc_defects: null` on an iteration-1 task:
   report exits 1 with one `unclassified join` line; `join-defects … --acc-defects 3` refused
   (3 > 2); `--acc-defects 1` sets it, and the report's acceptance-caught total grows by 1.
   Session path: the line `see /tmp/claude-0/x/` + a UUID + `/scratchpad/m.py` matches; the regex
@@ -363,9 +378,10 @@ In throw-away git repositories built by the tests (as T-005's are), with `HOME` 
   refused.
 - AC-6 (queue budget): a reviewed, joined, approved high toy task whose committed run records
   exceed its `budget_tokens` → `queue: refused: budget: …` exactly as Interface (2), main and the
-  branch unchanged, no record. After a committed row whose Decision cell is `Extend T-NNN: …`, it
-  merges. A row `Extend T-NNN-tests` or an `Extend T-NNN` line inside a fenced code block does
-  not count. Uncommitted run records in the working copy are not read (the `ledger` refusal
+  branch unchanged, no record. After a committed row `Extend T-NNN to <N>` with `N` ≥ the
+  recorded sum, it merges; with `N` below the sum, it is refused naming that ceiling; a later row
+  with a lower `N` overrides an earlier higher one. Rows `Extend T-NNN` (no ceiling),
+  `Extend T-NNN-tests to …`, and an `Extend` line inside a fenced code block do not count. Uncommitted run records in the working copy are not read (the `ledger` refusal
   comes first, as today). A task within budget is unaffected.
 - AC-7 (worktree ready): a task committed on main as `specified` → `worktree new` refused with
   the exact line and no `.worktrees/T-NNN`, no branch; after main's file says `ready`, it is
@@ -379,7 +395,9 @@ In throw-away git repositories built by the tests (as T-005's are), with `HOME` 
   it, exit 0. Tokens per merged task without and with overhead equal hand-computed values for a
   fixture with two merged tasks (one medium odd, one high) and two `iter-1` runs. Known defects
   merged by decision lists exactly the `found_by: reviewer` tasks whose origin is merged.
-  `join-defects` refusals of Interface (1) each leave the file byte-identical.
+  `join-defects` appends exactly one `join_defects` record and changes no other byte of the
+  file (the old lines are a byte prefix of the new file); its refusals leave the file
+  byte-identical.
 - AC-9 (publish, success): a toy repository with a gate that runs `scorecard --check`, an
   untracked new `scorecard/items/x.y.toml` and a modified `evaluations/iter-0.md`: `publish
   T-050 --title "Publish x" --iteration 1 <both>` exits 0; main's first-parent log shows, in
@@ -396,24 +414,27 @@ In throw-away git repositories built by the tests (as T-005's are), with `HOME` 
   primary checkout's inputs still present. A commit that fails at step 2 (signing program that
   exits non-zero) → exit 2 and the step-2 line; the printed command, run after the test repairs
   signing, commits exactly those two paths.
-- AC-11 (reviews step): on a toy repository with an iteration-1 medium task T-021 (odd →
+- AC-11 (`hygiene`, reviews check): on a toy repository with an iteration-1 medium task T-021 (odd →
   `implementer`): a round-1 review with `mutants: {introduced: 12, equivalent: 1, killed: 10,
   killed_by_acceptance: 9, survived: 1}` and `arm: implementer` → PASS; each single fault → FAIL
   naming the file: no `mutants`; a missing key; `introduced: 9` in round 1 (accepted in round 2);
   sums that do not add up; `killed_by_acceptance > killed`; `arm: independent`; `tier: high`;
   `round: 2` in `T-021-r1.md`. An iteration-0 task's review without `mutants` → not checked; a
   low task's review → not checked. On this repository's `main` after redaction: PASS or EMPTY.
-- AC-12 (session-paths step): a tracked file containing a session-specific path (built at run
+- AC-12 (`hygiene`, session-paths check): a tracked file containing a session-specific path (built at run
   time by the test) → FAIL with `<path>:<line>` and without the matched text; the same text in an
   untracked file → PASS; a regex-like text such as the one in this task file → PASS; a non-UTF-8
-  tracked file → skipped. On this repository's tree after redaction → PASS.
+  tracked file → skipped. On this repository's tree after redaction → PASS. `cargo xtask ci`
+  lists `hygiene` between `ui-commands` and `schema`, and `docs/CHARTER.md` §4's gate line names
+  it in the same place.
 - AC-13 (stale references): `worktree new` output contains no `CARGO_TARGET_DIR`; a join with
   weak base evidence prints the Interface (7) line and no `revert-check`; `docs/development.md`
   contains none of `export CARGO_TARGET_DIR`, `O-2)`, `Command schema changes are`, `Timestamps
   are always passed in`, and its Join section does not require a revert check (reviewer reads
   the rest). Oracle: exact value and reading.
 - AC-14 (no regression): every T-005 acceptance and guard test passes (unmodified, or with only
-  the support change Q-1 allows); main's gate and the task's own gate are green.
+  the fixture change D-1 allows: no assertion in any T-005 test changes); main's gate and the
+  task's own gate are green.
 
 ## Out of scope and implementer notes
 - Join acceptance counts across crates: T-009 (6). Record-commit signing, merged-record binding,
@@ -424,7 +445,7 @@ In throw-away git repositories built by the tests (as T-005's are), with `HOME` 
   director check.
 - Editing `methodology/` (only at a retrospective): the "(T-013)" / *Interim* marks in
   METHODOLOGY become stale once this merges; the director notes that for retrospective 1.
-- Changing `docs/CHARTER.md` (see Q-2), `AGENTS.md`, any product crate, `Cargo.*`, `.github/`.
+- Changing `docs/CHARTER.md` beyond the gate-step line, `AGENTS.md`, any product crate, `Cargo.*`, `.github/`.
 - Your tests: unit tests in `xtask/src`; toy repositories via the existing helpers. Inject the
   clock into record builders for unit tests; the binary always uses the system clock. Tests that
   need a session-specific path must build the string at run time so no tracked file contains one.
@@ -447,29 +468,23 @@ queue's exit code through unchanged, so T-009's new exit code 3 needs no change 
 Both tracks are disjoint from every product task (no `xtask/` in their `touches`), so T-013 can
 run in parallel with any one product task.
 
+## Decisions
+Director's answers to the planner's questions of R-055 (run R-057).
+- D-1 (was Q-1): allowed — T-013's test author updates the shared fixture
+  `xtask/tests/acceptance_t005_support.rs` so toy tasks are `ready` before a worktree is made; no
+  assertion in any T-005 test changes. The file is in `touches`.
+- D-2 (was Q-2): one new gate step named `hygiene` carries both checks (review front matter of
+  medium/high tasks; no tracked file contains a session-specific scratch path). The gate's step
+  list is in CHARTER §4, so this needs an ADR: `docs/adr/0003-hygiene-gate-step.md` (drafted by
+  the planner, R-057). T-013 depends on it being accepted; its `touches` include
+  `docs/CHARTER.md` for the one line that lists the gate steps.
+- D-3 (was Q-3): `join-defects` appends a new record kind to `metrics/tasks.jsonl`; records are
+  never edited in place.
+- D-4 (was Q-4): an `Extend T-NNN` row must name the new token ceiling, e.g.
+  `Extend T-NNN to 1200000`; the queue compares against that number.
+
 ## Questions and rulings
-- Q-1 (planner, R-055): rule (3) makes 87 `worktree new` calls in T-005's acceptance tests fail
-  (toy tasks committed as `reviewed`, `self_verified`, `draft`; Pinned (f)). Proposed ruling:
-  allow T-013 to change only `xtask/tests/acceptance_t005_support.rs` `Repo::add_task` and
-  `Repo::worktree` so that they commit the task as `ready`, create the worktree, then commit the
-  requested state (what happens on a real `main`; the queue's `front-matter` check accepts it
-  because the branch copy equals the merge-base copy). No assertion changes. Uncertain: whether
-  some T-005 test counts main's commits and would see the extra ledger commits; the test author
-  and implementer must report it as a `QUESTION:` if so. Alternative: refuse only `draft`,
-  `specified`, `merged`, `evaluated`, `abandoned`, which breaks only the two `draft` toy cases but
-  is weaker than METHODOLOGY §5.1 ("Dispatch only `ready` tasks").
-- Q-2 (planner, R-055): CHARTER §4 lists the gate steps and changes only by ADR. Do the two new
-  steps (`reviews`, `session-paths`) need an ADR and a charter publish (a T-014-like task), or
-  should they be folded into existing steps (`scorecard --check` and `no-skip`, as retro-0 change
-  8/15 suggested) so the charter list stays true? Specified: two new steps; if you choose folding,
-  Interface (6) names change and nothing else.
-- Q-3 (planner, R-055): `join-defects` rewrites one `null` in an existing join record. The
-  append-only alternative is a new record kind (`kind:"join_classification"`), which adds a name
-  to METHODOLOGY §13's record contract (a methodology change outside a retrospective). Specified:
-  the in-place rewrite. Confirm.
-- Q-4 (planner, R-055): should an `Extend T-NNN` row have to name a new ceiling
-  (`Extend T-NNN to <N> tokens`) that the queue then enforces, so one extension cannot cover an
-  unbounded overrun? Specified: any `Extend T-NNN` row suffices (the wording of D-035 (5)).
+None open.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -493,6 +508,11 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   850k (T-005 took 1.67 M for a comparable xtask change; retro-0 `S tokens`), so splitting off
   (5) is an option. · gate attempts: 0 · not run: gate, any xtask command · missing context:
   none · next: director answers Q-1…Q-4.
+- 2026-11-13T03:56Z · R-057 · draft · did: applied D-1…D-4: fixture change in `touches` with
+  the director's wording; single `hygiene` step and the CHARTER §4 line in `touches`, dependency
+  on ADR-0003 (drafted as `docs/adr/0003-hygiene-gate-step.md`, status proposed); `join_defects`
+  append-only record; `Extend T-NNN to <N>` ceilings, last row wins. · gate attempts: 0 ·
+  missing context: none · next: director accepts ADR-0003.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

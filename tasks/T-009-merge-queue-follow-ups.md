@@ -1,6 +1,6 @@
 ---
 id: T-009
-title: "Close the merge queue's remaining gaps: bind merge records to their commits, keep signing and report a failed record commit exactly, treat lint escapes correctly, tolerate drafts, count acceptance tests per package"
+title: "Close the merge queue's remaining gaps: bind merge records to their commits, keep signing and report a failed record commit exactly, treat lint escapes correctly, tolerate drafts, count acceptance tests per package, regenerate the scorecard file at join"
 tier: high              # ADR-0002 "any gate path": xtask/src, xtask/ledger.toml; the approval row must contain `gate paths`
 state: draft
 owner_role: planner
@@ -31,12 +31,13 @@ added in non-test source is listed for the reviewer; one added in a test file is
 (4) the record-commit pathspec and the identity fallback have tests;
 (5) untracked drafts no longer block the queue unless they are the queued task's own evidence;
 (6) `join` counts acceptance tests correctly when two packages have a target of the same name,
-and joins tasks whose tests live in `xtask/tests`.
+and joins tasks whose tests live in `xtask/tests`;
+(7) `join` regenerates `docs/scorecard.md` on the task branch, never on `main`, so the director
+stops doing it by hand (Decisions D-5).
 
-The former item (7), regenerating `docs/scorecard.md` at join and after every queue rebase, is
-removed: D-036 withdrew queue-side regeneration (it would leave `main`'s scorecard stale between
-a ledger commit and the next queue run); ledger inputs that change generated output go through
-T-013's publish helper instead (Decisions D-4, Q-4).
+Regeneration by the queue (after every rebase) stays out: D-036 withdrew it (it would leave
+`main`'s scorecard stale between a ledger commit and the next queue run); ledger inputs that
+change generated output go through T-013's publish helper (Decisions D-4).
 
 **Gate paths.** `xtask/src` and `xtask/ledger.toml` are gate paths, so the task is tier high
 (ADR-0002). `docs/development.md` documents the list but is not itself a gate path. The
@@ -85,8 +86,9 @@ fast-forward succeeded and the record commit then fails, for any reason:
 - stderr gets exactly one line:
   `queue: merged T-NNN at <head_sha>, but the record commit failed: <git error>; commit it by hand: git commit -m "queue: record T-NNN merged" -m "Task: T-NNN" -m "Role: director" -- metrics/queue.jsonl`
   (that command produces a bound commit, see (1));
-- the queue stops with exit code **3**: merged but not recorded. Exit 0 stays merged and
-  recorded, 1 not merged, 2 an error.
+- the queue stops with exit code **3**: merged but the record not committed (Decisions D-6).
+  Exit 0 stays merged and recorded, 1 a refusal or a non-merged outcome, 2 a usage or tool
+  error.
 
 If the record commit fails after a non-merged outcome, the exit stays 1 and stderr gets the same
 line with that result (`queue: T-NNN <result>, but the record commit failed: …; commit it by hand: git commit -m "queue: record T-NNN <result>" …`).
@@ -140,12 +142,23 @@ are two targets. In the `join` record:
 The guard counts (`guard_total`, `guard_fail_base`, `guard_fail_join`) use the same identity.
 Record field names are unchanged (METHODOLOGY §13).
 
+### (7) Scorecard file regenerated at join (Decisions D-5)
+After the merge of `task/T-NNN-tests` into `task/T-NNN` (join step 3) and before the acceptance
+run, `join` runs the `scorecard` command of the xtask it was built from in `.worktrees/T-NNN`. If
+`docs/scorecard.md` changed, it commits only that file on `task/T-NNN`, subject
+`join: regenerate docs/scorecard.md`, body lines `Task: T-NNN` and `Role: director`, with the
+repository's commit configuration (signing kept). If nothing changed, no commit. It never
+touches `main` or the primary checkout. If the commit fails, `join` exits 2 with
+`join: regenerating docs/scorecard.md failed: <error>` and writes no `join` record. The record's
+`joined_sha` is the head after this commit. The `review` precondition already allows commits
+that change only generated paths after `reviewed_sha`, so a later re-join does not stale a review.
+
 ## Pinned
 - (a) **Errors and precedence.** Precondition order unchanged: `task-file`, `front-matter`,
   `state`, `config`, `touches`, `join`, `review`, `gate-path`, `dependencies`, `approval`,
   `budget` (T-013), `main-history`; (3a) is part of `gate-path`, (1) of `main-history`. Exit
-  codes: 0 merged and recorded, 1 refused or not merged, 2 error, 3 merged but not recorded
-  (new). The exact lines are in (1), (2), (3b).
+  codes: 0 merged and recorded, 1 refused or not merged, 2 usage or tool error, 3 merged but the
+  record not committed (new, D-6). The exact lines are in (1), (2), (3b).
 - (b) **Files.** Reads main's committed `metrics/queue.jsonl`, `xtask/ledger.toml` (new optional
   key `history_anchor`, a 40-hex lowercase sha; any other new key stays a `config` error),
   `docs/decisions.md`; appends one line to `metrics/queue.jsonl` and commits it; appends `join`
@@ -231,12 +244,18 @@ refusal line, record contents, `git log`/`git show` output) unless stated.
   With one same-named target not compiling on base: `acc_fail_base: 6`, `base_fail_kind`
   `"mixed"` as the existing rules give. In every case `acc_fail_base ≤ acc_total`. A task whose
   only acceptance tests are in `xtask/tests` joins with correct counts.
+- AC-11 (join regenerates the scorecard file): a join whose tests branch adds test names to an
+  item's `tests` (status `failing` on the tests branch, `implemented` after the merge) leaves
+  `task/T-NNN` with one `join: regenerate docs/scorecard.md` commit that changes only that file
+  and carries `Task:`/`Role: director`; the joined gate's `scorecard` step passes; `main` and the
+  primary checkout are unchanged (same sha, same status). A join that changes no status makes no
+  such commit. Oracle: exact value.
 - AC-10 (no regression): every T-005 and T-013 acceptance and guard test passes unmodified;
   main's gate and the task's own gate are both green. Oracle: regression.
 
 ## Out of scope and implementer notes
-- Regenerating `docs/scorecard.md` at join or in the queue outside generated-path conflicts
-  (withdrawn, D-036; publish helper in T-013; see Q-4). Regenerating `docs/commands.json` or
+- Regenerating `docs/scorecard.md` in the queue outside generated-path conflicts (withdrawn,
+  D-036; publish helper in T-013). Regenerating `docs/commands.json` or
   `Cargo.lock` outside conflicts.
 - Fixture projects under `tests/fixtures/**` escalated to tier high (r3 round-2 reading): a
   separate decision. Each failed queue attempt moving `main` by a record commit (r3 F25): as R12,
@@ -265,27 +284,21 @@ Director's answers to the planner's questions of R-051 (2026-11-13, recorded by 
 - D-1 (was Q-1): the record commit keeps whatever signing the repository is configured to
   require; there is no bypass flag. If the commit fails, the queue stops with an error that says
   exactly how to commit the record by hand, and the next run refuses at `ledger` until that is
-  done. (Specified in (2) as the one stderr line and exit 3 after a merge; see Q-5.)
+  done. (Specified in (2) as the one stderr line and exit 3 after a merge; confirmed by D-6.)
 - D-2 (was Q-2): `history_anchor` is the head recorded by the merged T-005 queue record,
   `a981f18210cbd59be20e5e7009b9ed8429850b64`.
 - D-3 (was Q-3): a lint `allow` attribute added in a test file is not a gate change. One added in
   non-test source is listed in the queue's output for the reviewer but does not refuse the run.
   (Specified in (3b), (3c); `expect` is treated like `allow`, since it suppresses the lint too.)
-- D-4: the former item (7), the queue regenerating `docs/scorecard.md` (at join time and after
-  every rebase), is removed; D-036 withdrew it.
+- D-4: queue-side regeneration of `docs/scorecard.md` (after every rebase) is removed; D-036
+  withdrew it.
+- D-5 (director R-057, was Q-4): `join` regenerates `docs/scorecard.md` on the task branch
+  (never on `main`) and commits it with `Role: director` lines. Specified as (7), AC-11.
+- D-6 (director R-057, was Q-5): "merged but record not committed" exits 3, distinct from usage
+  and tool errors (2) and refusals (1), with the exact recovery command in the message.
 
 ## Questions and rulings
-- Q-4 (planner, R-055): removing (7) also removes the **join-side** regeneration, which D-036's
-  reason does not cover: at a join, items whose tests start passing change status
-  (`failing`/`planned` → `implemented`) on `task/T-NNN`, so `docs/scorecard.md` is stale on the
-  task branch and its gate is red at `scorecard` until someone regenerates it there (retro-0
-  "Tooling and environment": 4 manual regenerations, T-001…T-004). `main` is never affected,
-  because the branch reaches `main` only through the queue. Should `join` regenerate and commit
-  `docs/scorecard.md` on `task/T-NNN` (subject `join: regenerate docs/scorecard.md`,
-  `Role: director`), or does the director keep doing it by hand? Specified: removed, as asked.
-- Q-5 (planner, R-055): D-1 says the queue "stops with an error". Specified as exit 3 (merged but
-  not recorded), kept distinct from exit 2 (error, nothing merged), so a caller can tell that
-  `main` moved. If you meant exit 2, only (2), Pinned (a) and AC-4 change.
+None open.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -326,6 +339,9 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   and set `depends_on` T-013 (shared files). Pinned (h) n/a: no scorecard item. Arm: n/a (high,
   independent test author). · gate attempts: 0 · not run: gate, the join miscount reproduction ·
   missing context: none · next: director answers Q-4, Q-5.
+- 2026-11-13T03:56Z · R-057 · draft · did: applied D-5 (join-side regeneration as (7) and
+  AC-11; queue-side stays withdrawn) and D-6 (exit 3 wording); Q-4/Q-5 closed. · gate
+  attempts: 0 · missing context: none · next: director review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -10,8 +10,9 @@ touches:
   - crates/kiln-commands/src/doc.rs           # doc.line, doc.position (doc command group)
   - crates/kiln-commands/tests/positions.rs   # implementer's own integration tests
   - crates/kiln-control/src/lib.rs            # kinds of the two new message shapes; ERROR_KINDS
-  - docs/commands.json                        # generated (schema --write)
-  - docs/control-protocol.md                  # error-kinds table: one new row, one widened "When"
+  - docs/protocol/doc-positions.md            # NEW: doc.line / doc.position reference (D-2)
+  - docs/control-protocol.md                  # D-2: error-kind lines only (new not_a_boundary, widened out_of_range)
+  # docs/commands.json also changes: a generated path (exempt from `touches`, regenerated on conflict)
 budget_tokens: 500000   # medium (v1.1, provisional)
 iteration: 1
 found_by: evaluator
@@ -80,8 +81,7 @@ for `doc.line`, where `<PositionError Display>` is `kiln-text`'s text exactly:
 | `InsideSurrogatePair` | `not_a_boundary` | `invalid position: UTF-16 offset 6 is inside a surrogate pair` |
 | `InsideLineBreak` | `not_a_boundary` | `invalid position: char index 2 is between the \r and \n of a CRLF` (literal backslashes) |
 
-`(rejected, not_a_boundary)` is a new pair in the specified kind set (needs the director's
-approval, Q-1); `out_of_range`'s "When" cell widens to "an offset, line or column beyond the end".
+`(rejected, not_a_boundary)` is a new pair in the specified kind set (approved, Decisions D-1); `out_of_range`'s "When" cell widens to "an offset, line or column beyond the end".
 An unknown `doc` id is `no_such_document` as for every doc command. Params that do not match the
 schema (two keys in `at`, a negative number, an unknown key) are `invalid_params`/`schema`.
 
@@ -96,8 +96,10 @@ changes. (T-030 later replaces message matching by structured reasons; it maps t
   (`no_such_document`) → position or line check (table above). Messages and kinds exact as in
   the table.
 - (b) Files: none read or written by the commands (in-memory document); `docs/commands.json`
-  gains the two commands (≥ 1 example each, one of them on the CRLF/astral text above); the
-  protocol document gains one row and one widened cell. Acceptance tests in
+  gains the two commands (≥ 1 example each, one of them on the CRLF/astral text above);
+  new `docs/protocol/doc-positions.md` documents both commands (params, results, the validity
+  rule, the refusal table); `docs/control-protocol.md` gains only the kind line and the widened
+  `out_of_range` cell. Acceptance tests in
   `apps/kiln-cli/tests/acceptance_t010.rs` (CLI) and optionally
   `crates/kiln-commands/tests/acceptance_t010_api.rs` (distinct target names).
 - (c) Order of checks: as (a). Both commands are read-only: they never end a typing group or
@@ -145,8 +147,9 @@ model in the test (split on `\r\n|\r|\n`; UTF-8 and UTF-16 lengths of prefixes) 
   `doc.line`/`doc.position` requests with `mutating: false`. Oracle: exact value.
 - AC-5 (schema): `kiln-cli commands --schema` lists both commands with params and result
   schemas and ≥ 1 example each, and `kiln-cli commands --audit` exits 0. Oracle: exact value.
-- AC-6 (documented kind): `docs/control-protocol.md` lists `(rejected, not_a_boundary)`, and the
-  existing documented-kinds test stays green. Oracle: exact value.
+- AC-6 (documented kind): `docs/control-protocol.md` lists `(rejected, not_a_boundary)`, the
+  existing documented-kinds test stays green, `docs/protocol/doc-positions.md` exists, and no
+  other part of `docs/control-protocol.md` changed. Oracle: exact value.
 
 ## Out of scope and implementer notes
 - Cursor and selection (`edit.selection`), goto-line (`nav.goto-line`), any change in
@@ -157,15 +160,21 @@ model in the test (split on `\r\n|\r|\n`; UTF-8 and UTF-16 lengths of prefixes) 
   Determinism: pure functions of the document text.
 - Specified: names, params, results, refusals, kinds. Left to you: how params are typed, as long
   as the published schema accepts exactly the forms above.
-- Dispatch: `crates/kiln-commands/src/doc.rs` overlaps T-006 and T-007 (and T-030's
-  `crates/kiln-commands/src`); `crates/kiln-control/src/lib.rs` overlaps T-008, T-030;
-  `docs/control-protocol.md` overlaps T-007, T-008, T-011, T-030. It can run in parallel with
-  T-009 or T-013. Lands before T-030 (T-030 depends on it).
+- Dispatch (R-057): `crates/kiln-commands/src/doc.rs` overlaps T-006, T-007 and T-030;
+  `crates/kiln-control/src/lib.rs` overlaps T-008 and T-030. The kind list in
+  `docs/control-protocol.md` is not counted as an overlap (D-2; a rebase conflict there with
+  T-008 is resolved by the director). It may run in parallel with T-009, T-011, T-013. Lands
+  before T-030 (T-030 depends on it).
+
+## Decisions
+- D-1 (director R-057, was Q-1): the error kind `not_a_boundary` is approved.
+- D-2 (director R-057, all product tasks): a task documents its commands in its own new file
+  under `docs/protocol/` (here `doc-positions.md`, a per-task file of the `doc` group so later
+  `doc.*` tasks do not share it) and touches `docs/control-protocol.md` only to add an
+  error-kind line.
 
 ## Questions and rulings
-- Q-1 (planner, R-055): approve the new kind `(rejected, not_a_boundary)` for positions that fall
-  inside a UTF-8 sequence, a surrogate pair or a CRLF? The alternative without a new kind is
-  `other`, which the evaluator's report asked to avoid ("structured error").
+None open.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -185,6 +194,10 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   Pinned (d), (e) n/a. Unsure: whether adding a kind to the protocol's specified set needs more
   than the director's approval (T-008 D-1 set the precedent). · gate attempts: 0 · not run: the
   commands (not built) · missing context: none · next: director answers Q-1.
+- 2026-11-13T03:56Z · R-057 · draft · did: applied D-1 (kind approved) and D-2 (reference text in
+  new `docs/protocol/doc-positions.md`; protocol-document edits limited to the kind lines;
+  generated `docs/commands.json` out of `touches`); dispatch note rewritten. · gate attempts: 0
+  · missing context: none · next: director review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -10,7 +10,8 @@ touches:
   - crates/kiln-workspace/src
   - crates/kiln-workspace/tests/confinement.rs   # implementer's own integration tests
   - crates/kiln-control/src/lib.rs               # kind mapping for the two new messages + the kinds list
-  - docs/control-protocol.md                     # "Paths" section and the error-kinds table
+  - docs/control-protocol.md                     # D-6: error-kind lines only, plus the one false "Paths" bullet (Q-1)
+  - docs/protocol/paths.md                       # NEW: the confinement rule in full (D-6)
 budget_tokens: 850000   # high (v1.1)
 iteration: 1
 found_by: reviewer
@@ -27,7 +28,8 @@ hangs the session forever (T-004 r2, R2-SG2). After this task a `DiskFs` never r
 replaces or deletes anything whose location is outside its root, at open or at save, whatever
 symlinks lie on the path or appear between open and save. Opening or saving anything that is
 not a regular file (directory, FIFO, socket, device) is refused at once with a structured
-error. `docs/control-protocol.md` states the guarantee, and it is true.
+error. `docs/protocol/paths.md` states the guarantee, and it is true; `docs/control-protocol.md`
+no longer claims the opposite.
 
 ## Reading list
 - `docs/decisions.md` D-014 (save rulings; Unix only), D-018, D-028 (1), D-031 (13), D-032.
@@ -102,17 +104,22 @@ approved, Decisions D-1). `not_a_file` keeps its name; its meaning widens to eve
 exits 3 when such a request is refused. `exec doc.open` exits 2 and prints the error object
 with that `kind` on stderr. No other exit code changes.
 
-### `docs/control-protocol.md`
-- "Paths": replace "Symbolic links are followed, including links that point outside the root …"
-  with the confinement rule in the user's terms: lexical refusals (unchanged); a path whose
+### Documentation (Decisions D-6)
+- New `docs/protocol/paths.md` states the confinement rule in the user's terms: lexical refusals (unchanged); a path whose
   location is outside the root is refused (`outside_root`) at open and at save; symlinks that
   stay inside are followed, and a save through one replaces its target and keeps the link;
   directories, FIFOs, sockets and devices are refused (`not_a_file`) without blocking; each
   request is checked again. List the residual limits: a hard link inside the root to a file
   outside cannot be detected; a path changed by another process *while* a request runs can
   slip through (accepted limitation, Decisions D-3).
-- Error table: add the `outside_root` row; reword the `not_a_file` "When" cell. Every other row
-  is unchanged.
+- `docs/control-protocol.md`, error-kind list: add the `(rejected, outside_root)` line; reword
+  the `not_a_file` "When" cell to "the path names a directory or another non-regular file".
+  Every other line is unchanged.
+- `docs/control-protocol.md`, "Paths": the one bullet beginning "**Symbolic links are followed,
+  including links that point outside the root.**" is replaced by one bullet: "A path whose
+  location is outside the root is refused (`outside_root`); see `docs/protocol/paths.md`."
+  Nothing else in "Paths" changes. This goes beyond D-6's "error-kind line only" (Q-1): left as
+  is, the shared document would state a false security property after this task merges.
 
 ## Pinned
 - (a) Errors, payloads, precedence: `VfsError::{OutsideRoot, NotAFile}` with exact `Display`;
@@ -211,9 +218,10 @@ type, link target, bytes. Oracle: exact value unless stated otherwise.
   `Display` of each `VfsError` returned in AC-1…AC-7 is exactly the string in the Interface and
   contains neither the absolute work path nor any link target.
 - AC-9 (contract document): `docs/control-protocol.md` no longer says symlinks are followed out
-  of the root; it lists `(rejected, outside_root)` and the widened `not_a_file`; every pair the
+  of the root and its other "Paths" bullets are unchanged; it lists `(rejected, outside_root)`
+  and the widened `not_a_file`; `docs/protocol/paths.md` exists with the rule; every pair the
   host can produce is listed (the existing `kiln-control` documentation test stays green). The
-  reviewer checks the "Paths" text against AC-1…AC-8.
+  reviewer checks `docs/protocol/paths.md` against AC-1…AC-8.
 
 ## Scorecard items and intended test names
 Item `ws.path-confinement`. The item file is **not** on `main` (R-051 wrote it in a checkout but
@@ -268,12 +276,20 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
   task claims it. Because the task now has a scorecard item, the evaluator must confirm it.
 - D-5 (was Q-5): no; the iteration-0 evaluator runs against today's `main`. This task is
   iteration 1.
-- Dispatch note (R-055): `crates/kiln-control/src/lib.rs` overlaps T-010 and T-030;
-  `docs/control-protocol.md` overlaps T-007, T-010, T-011 and T-030. T-008 can run in parallel
-  with T-006, T-009 or T-013.
+- D-6 (director R-057, all product tasks): a task documents its behaviour in its own new file
+  under `docs/protocol/` and touches `docs/control-protocol.md` only to add an error-kind line;
+  two tasks that add kinds before T-030 may conflict on rebase in that list, and the director
+  resolves it by hand (so that list is not counted as an overlap at dispatch).
+- Dispatch note (R-057, replaces R-055's): `crates/kiln-control/src/lib.rs` overlaps T-010 and
+  T-030, so T-008 is never in flight with them. It may run in parallel with T-006, T-007,
+  T-009, T-011, T-013.
+- Director (2026-11-13, D-037): T-008 may replace the symlink bullet in the "Paths" section of `docs/control-protocol.md`, which today states that symlinks are followed; that statement is this task's to correct. `docs/control-protocol.md` is in `touches` for that bullet and for error-kind lines only.
 
 ## Questions
-None open.
+- Q-1 (planner, R-057): D-6 limits edits of `docs/control-protocol.md` to error-kind lines, but
+  its "Paths" section has a bullet saying symlinks are followed out of the root, which becomes a
+  false security claim when T-008 merges. Specified: T-008 replaces exactly that bullet by a
+  one-line pointer to `docs/protocol/paths.md`. Allow, or should the bullet stay until T-030?
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -311,6 +327,10 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   its creation to the tests branch with a pinned title. AC-3 and AC-6 are the CLI criteria for
   the item. Arm n/a (high). · gate attempts: 0 · not run: the exploit on new code · missing
   context: none · next: director review.
+- 2026-11-13T03:56Z · R-057 · draft · did: applied D-6: the confinement text moves to new
+  `docs/protocol/paths.md`; `docs/control-protocol.md` edits limited to the kind lines and the
+  one false "Paths" bullet (Q-1); dispatch note rewritten. · gate attempts: 0 · missing
+  context: none · next: director answers Q-1.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
