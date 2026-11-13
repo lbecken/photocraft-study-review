@@ -570,6 +570,51 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   the same repository → refused; a different repository → allowed. Proposed wording: "refuses when
   the workspace it runs in is a different checkout of the same repository (same git common
   directory) than the one it was built from".
+- 2026-11-13 · R-033 · round 3 · did: D-026 tests, new file `xtask/tests/acceptance_t005_r3.rs`
+  (fresh test author; earlier files unchanged). Each test pairs attempted bypasses with the
+  legitimate case. All 11 fail on base by assertion (base merges, or lacks `gate_xtask`):
+  R1 `tampered_cached_gate_binary_does_not_decide_the_gate` (every built `xtask` ELF under the
+  scratch dir, incl. worktree targets, `.git`, TMPDIR, XDG_CACHE_HOME, overwritten by a fake green
+  gate after a first run; RED task → `gate_failed`/`red`/`main`, sha = base; green task still
+  merges; base is fooled and merges RED); R2 `review_sha_must_be_a_full_ancestor_and_only_evidence_may_follow`
+  (same-tree unrelated branch, 12/7-char ids, `HEAD`, branch name, non-ancestor, merge base, code
+  after/mixed into review, non-acceptance `tests/helper.rs` → `review`; review/log/generated/
+  acceptance/guard commits → merged); R3 `gate_paths_need_tier_high_and_are_named` (11 gate-path
+  edits incl. `.cargo` runner, `build.rs`, root lints/metadata/profile → `gate-path` naming the path,
+  low and medium; ordinary root `Cargo.toml` change → merged `main`),
+  `gate_paths_on_a_high_task_need_a_gate_paths_approval` (no row / no words / words only in
+  Reasoning → `approval`; with words → merged `main+task`, path printed); R4
+  `dependency_and_lock_changes_need_tier_high` (version req, dev/build/target deps,
+  `[workspace.dependencies]`, lock-only edit, medium → `dependencies`; non-dep manifest change and
+  approved high new package → merged); R5 `non_merged_outcomes_leave_the_task_branch_where_it_was`
+  (gate_failed, ff_failed via a gate that commits to main, regenerate-failure conflict, refusal:
+  branch ref unchanged, worktree clean, no rebase in progress); R6 `uncommitted_evidence_does_not_count`
+  (untracked join record, modified/untracked metrics → `ledger` with commit hint; working-copy
+  approval row, front matter, policy file → not merged, no effect; committed → merged); R7
+  `approval_rows_in_code_blocks_or_prose_do_not_count` (```/~~~/indented/unclosed fence, prose,
+  lone pipe line → `approval`; table after a closed fence → merged); R8 `run_in_variable_lets_nothing_through`
+  (5 values: RED still `gate_failed` under `main`, weakened gate → `gate-path`, outside path →
+  `touches`); R9 `lock_version_change_is_refused_with_or_without_a_conflict`,
+  `regeneration_that_changes_a_non_generated_path_is_not_merged`. Validated on base with a
+  throwaway lenient copy (all setups run; tamper fools base; race yields `ff_failed`).
+  · gate attempts: 1 (last: red test, stops at `acceptance_t005`; fmt/clippy/others pass; run
+  separately: r3 0/11, guards 4/4 pass) · not run: anything against the new queue · missing
+  context: none.
+  QUESTION: R6 vs the queue's own `metrics/queue.jsonl` append and the R-010/R-019 fixture
+  (`with_evidence`/`set_tasks_jsonl` leave join records uncommitted): read literally, the 2nd queue
+  run in a repo, and many earlier tests (AC-3, 6–9, 14…), now meet `ledger`. My tests commit metrics
+  after every run, so they hold either way. Director: exempt the queue's own record, or have it
+  committed, and rule on updating the earlier tests.
+  QUESTION: R2 "test files" read as acceptance/guard files only (`crates/a/tests/helper.rs` after
+  review refused); alternative: any file under a `tests/` dir.
+  QUESTION: R7 lone `|` line with no header/delimiter row is not a table row (refused); alternative:
+  any pipe line outside fences.
+  QUESTION: R9 result for regeneration touching a non-generated path is unspecified; I assert only
+  not merged and no effect. Proposed: `conflict`, `failed_step:"regenerate:<path>"`.
+  QUESTION: the R4 lock rule literally refuses a workspace member's version bump; untested. Propose
+  scoping it to non-member packages or saying so.
+  Not tested: R8 with a legitimate run plus a stray variable (refusing it would also be acceptable);
+  R1 caches outside the scratch dir (e.g. under $HOME) are not tampered; R3 case of `gate paths`.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-028 · tests_joined (main) · did: review round 1 of 055821a → `reviews/T-005-r1.md`,
