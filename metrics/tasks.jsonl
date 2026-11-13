@@ -312,3 +312,6 @@
 {"kind":"join","task":"T-008","at":"2026-11-13T14:00:26Z","acc_total":11,"acc_fail_base":11,"base_fail_kind":"fails","acc_fail_first_join":0,"acc_defects":null,"impl_tests_green":true,"gate_green":true,"tests_sha":"a173c44295aa1f69b28da6d1701903bdadf70ba4","joined_sha":"be31cb7cc6d8c31669f701daad1e4b5e7e295396","result":"joined","guard_total":1,"guard_fail_base":0,"guard_fail_join":0}
 {"kind":"transition","task":"T-008","iteration":1,"at":"2026-11-13T14:05:51Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-008","iteration":1,"at":"2026-11-13T14:05:51Z","from":"self_verified","to":"tests_joined"}
+{"kind":"join","task":"T-017","at":"2026-11-13T14:07:12Z","acc_total":19,"acc_fail_base":19,"base_fail_kind":"does_not_compile","acc_fail_first_join":0,"acc_defects":null,"impl_tests_green":true,"gate_green":true,"tests_sha":"e9b61c34bd79120bac02315c499017deadcd0681","joined_sha":"33c26108116b3b0af6ee0538f642eda76ae60ef1","result":"joined","guard_total":0,"guard_fail_base":0,"guard_fail_join":0}
+{"kind":"transition","task":"T-017","iteration":1,"at":"2026-11-13T14:12:53Z","from":"in_progress","to":"self_verified"}
+{"kind":"transition","task":"T-017","iteration":1,"at":"2026-11-13T14:12:53Z","from":"self_verified","to":"tests_joined"}

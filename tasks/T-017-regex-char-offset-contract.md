@@ -2,7 +2,7 @@
 id: T-017
 title: "Compile and run regular expressions in kiln-search with char-offset matches, line-aware anchors, pinned empty-match iteration and replacement expansion"
 tier: high              # ADR-0002: dependency-table change (kiln-search gains `regex`)
-state: in_progress
+state: tests_joined
 owner_role: planner
 scorecard_items: []     # library contract; search.* items are claimed by T-021 through commands
 depends_on: []
