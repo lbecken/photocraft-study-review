@@ -297,6 +297,32 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   scans the whole session log (cost proportional to the log, only on such errors); an echo that
   is a transformed or partial copy of an input (other than JSON/Rust escaping or a schema
   pointer's compact JSON) is caught only by the >200 non-white-space-run backstop.
+- 2026-11-13 · R-043 · in_progress (review r2 request-changes, D-031) · did: replaced the
+  echo matching (sources, session-log scan, forms, run backstop; the R-039 `clip_error` /
+  `clip_text` API is removed) by plain caps: `kiln_control::cap_error` cuts every string in
+  `message` and anywhere inside `details` to 200 chars (199 + `…`, on `char`s, so no
+  multi-byte split; operates on `Value`, so JSON stays valid), then replaces `details` by
+  `{"truncated":true}` if the compact line exceeds 4096 bytes; `cap_text` caps each stderr
+  text line to 200 chars. Applied in `Host::handle_line` (every error response) and in kiln-cli
+  `bound_stderr` (all stderr). New API committed as stubs first (48519c7), logic in fe0a570.
+  `exec` errors now come from `kiln_control::command_error_json` (same object as a protocol
+  error, with `kind`, no `id`; params-not-JSON gets `invalid_json`/`syntax`). Usage errors print
+  `kiln-cli: <what was wrong>` (unknown option, option twice, missing value, `--root` with
+  `--memory`, missing/unexpected argument, unknown/missing subcommand) before the usage text.
+  Doc: caps section, kinds table declared the specified set, `exec` error object, character
+  offsets (verified `a\r\né😀` → `len_chars` 5), `--help` exit 0 only when stdout is
+  writable (verified `>/dev/full` → 1), usage-error format. R2-D1 case by hand: `exec doc.list`
+  with 2000 short strings → 358 bytes on stderr (was 16 112). Unit tests: `cap_string` on
+  2/3/4-byte chars and a cut right after a multi-byte char; nested details; line-size
+  replacement (ASCII and 4-byte); `cap_text` per line; every Host error line capped (incl.
+  arrays/objects of short strings, 300 unknown keys, invalid JSON with é); `command_error_json`
+  kind; CLI: exec/run/control/text errors capped with values without/with spaces, escapes and
+  multi-byte; usage reasons for 11 cases. · gate attempts: 1 (last: green, 294 tests) · not
+  run: the reviewer's long-session timing (the per-error log scan is gone, so I expect it fixed
+  but did not measure); non-Linux · missing context: none · next: join and review. Note: a
+  valid `id` is echoed in full and not capped, so a multi-KB string id can still make an error
+  line exceed 4096 bytes (documented); keys inside `details` objects are not capped (none
+  occur today).
 <!-- end implementer log -->
 ### test author
 - 2026-11-13 · R-027 · in_progress · did: wrote `apps/kiln-cli/tests/acceptance_t004.rs` (13 tests,
