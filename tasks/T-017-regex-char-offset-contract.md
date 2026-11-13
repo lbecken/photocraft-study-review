@@ -304,6 +304,26 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   start (O(end) per reference), because the API passes char offsets and the whole text. T-021's
   replace-all over many matches is then O(text·matches); T-021 may want to pass the matched
   slice or a char index. Not a T-017 contract change.
+- 2026-11-13T12:53Z · R-110 · rework after join (D-060) · did: s1: `Regex::new` refuses a
+  pattern the engine accepted with more than 100 explicit groups with message `the pattern has
+  more than 100 capture groups`; an engine rejection keeps the engine's message; documented in
+  the module docs (`# Limits`) and on `new`/`PatternError`. Unit tests: 100 accepted and usable,
+  101 refused, nested/named groups counted, `(?:…)` not counted, 34,000 groups refused < 5 s,
+  invalid-and-over-cap keeps the engine error, engine message unchanged for a rejected pattern.
+  `tests/regex.rs` now expects the 34,000-group pattern to be an error. Commit
+  dedfb94f997914a4ec946b0c0d600326247f2dec. Memory probe (throwaway example, deleted; debug
+  build, `/usr/bin/time -v`, ~1 MB matching text): group-heavy `(?:(w…|…)|…)+` (100 groups over
+  a 2,000-word alternation, case-insensitive): peak RSS 43,176 kB, but `find_all` took 190 s;
+  state-heavy `\w{209}` case-insensitive (largest that fits the size limit): 41,060 kB, 15 s;
+  both together `(\w{2})`×100 case-insensitive: 238,740 kB, 27 s (compile 6.7 s). s2: messages
+  come from `RegexBuilder::new(pattern)` with the pattern exactly as given and the modes as
+  builder options; no prefix is added. · gate attempts: 1 (last: red test:
+  `acceptance_t017::invalid_patterns_are_errors` line 1210 expects `nested(250)` (250 groups)
+  to compile, which s1 now refuses; that file is the test author's, not edited by me) · not run:
+  release-build timings · missing context: none · next: the test author updates the 250-level
+  nest assertion for s1 (e.g. with `(?:` groups); then gate again.
+  NOTE: the group-heavy probe is under the memory limit but takes 190 s in debug on 1 MB. That
+  is outside the Pinned (e) list, but T-022 (find in files) may care.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T12:34Z · R-105 · ready · did: wrote `crates/kiln-search/tests/acceptance_t017.rs`
