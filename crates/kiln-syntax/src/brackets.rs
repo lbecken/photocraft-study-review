@@ -71,13 +71,13 @@ pub fn match_bracket(tree: &SyntaxTree, offset: usize) -> Option<BracketPair> {
                 let kind = n.kind();
                 if kind == open_kind {
                     stack.push(n.start_byte());
-                } else if kind == close_kind {
-                    if let Some(open) = stack.pop() {
-                        let close = n.start_byte();
-                        if open == byte || close == byte {
-                            found = Some((open, close));
-                            break;
-                        }
+                } else if kind == close_kind
+                    && let Some(open) = stack.pop()
+                {
+                    let close = n.start_byte();
+                    if open == byte || close == byte {
+                        found = Some((open, close));
+                        break;
                     }
                 }
             }
