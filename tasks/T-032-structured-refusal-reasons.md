@@ -292,6 +292,22 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   gate attempts: 0 · missing context: none · next: director (T-008:122, ADR-0004).
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T11:16Z · R-094 · ready · (start note) spec vs merged code (base
+  `21d95470546bf513610a2c4f11b18a0a5d0d44f5`, T-015 at `d90e542a3b7cb4b91913884a56912803ccdc60cf`): no contract mismatch.
+  Drifts that change nothing pinned: `no_such_doc` is now registry.rs:234–235 (spec :124–126,
+  now reached via `Docs::get/get_mut/remove`); `Internal` sites registry.rs:489–491, 545–550
+  (spec :379–381, 435–440); the host panic is kiln-control lib.rs:135–143 (spec 137–145).
+  doc.rs/buffer.rs refusal lines match the spec exactly. All four lower-layer enums have
+  exactly the variants the spec maps. No caller outside `touches` builds `Rejected`/`Internal`
+  by field (tests use `{ .. }` or `{ message, .. }`), so the change stays inside `touches`.
+  ACs in my words: (1) each listed refusal through `execute` carries exactly its reason and
+  `to_json()["reason"]` is its snake-case name; (2) the protocol kind is the reason's name for
+  every reason, whatever the message; (3) `commands --schema` has `error_kinds` = `ALL` with
+  descriptions, a superset of the doc table's rejected/internal rows, and `docs/commands.json`
+  equals it; (4) protocol bytes of the worked example and a long random session are unchanged;
+  (5) each lower-layer variant maps to its pinned reason, no catch-all arm; (6) a panic is
+  internal/panic with `` command `<name>` panicked ``; (7) the two doc sentences replaced
+  exactly.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
