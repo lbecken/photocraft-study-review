@@ -1077,8 +1077,7 @@ mod tests {
         let last = ledger
             .lines()
             .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-            .filter(|v| v["kind"] == "transition" && v["task"] == "T-050")
-            .last()
+            .rfind(|v| v["kind"] == "transition" && v["task"] == "T-050")
             .map(|v| v["to"].as_str().unwrap().to_owned())
             .unwrap();
         (fm["state"].as_str().unwrap().to_owned(), last)
