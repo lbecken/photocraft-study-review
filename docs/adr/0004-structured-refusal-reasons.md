@@ -1,7 +1,7 @@
 ---
 id: ADR-0004             # file docs/adr/0004-structured-refusal-reasons.md
 title: "Every command refusal carries a structured reason; protocol kinds come from reasons; the kind list is generated from code"
-status: proposed
+status: accepted
 date: 2026-11-13
 task: T-032
 charter_section: "§3 decision 2"
