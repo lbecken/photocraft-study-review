@@ -136,6 +136,12 @@ where
     T::deserialize(d).map(Some)
 }
 
+/// Drop the `"default": null` that `#[serde(default)]` adds to the schema: an absent `start`
+/// or `end` has its documented default, and `null` is not a value of the bare type.
+fn no_default(schema: &mut schemars::Schema) {
+    schema.remove("default");
+}
+
 /// The text and length of open document `id`, after the checks every `syntax.*` command makes
 /// first: `no_such_document`, then `too_large`.
 fn checked_doc(docs: &Docs, id: u64) -> Result<(String, usize), CommandError> {
@@ -298,12 +304,12 @@ pub(crate) struct HighlightParams {
     /// Char offset where the spans start (default 0). Omit it for the default; `null` is
     /// refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "usize")]
+    #[schemars(with = "usize", transform = no_default)]
     start: Option<usize>,
     /// Char offset where the spans end (default: the text's length in chars). Omit it for the
     /// default; `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "usize")]
+    #[schemars(with = "usize", transform = no_default)]
     end: Option<usize>,
 }
 
