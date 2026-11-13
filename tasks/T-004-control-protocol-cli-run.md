@@ -246,6 +246,54 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   the test author's branch.
 <!-- end implementer log -->
 ### test author
+- 2026-11-13 · R-027 · in_progress · did: wrote `apps/kiln-cli/tests/acceptance_t004.rs` (13 tests,
+  binary as subprocess on real temp dirs, compile on base, all fail by assertion: base exits 2
+  with usage), `crates/kiln-control/tests/acceptance_t004.rs` (6 tests on the declared `Host` API,
+  `compile` on base; uses only std + kiln_control with a small in-file JSON parser because the
+  crate's dependencies are not fixed by the spec), `apps/kiln-cli/tests/guard_t004.rs` (2
+  regression guards for `exec`/`commands`, pass on base by design); set `tests` of
+  control.session, control.protocol, control.errors, cli.run. Criterion → tests → base:
+  AC-1 → cli `open_edit_undo_redo_save_through_run` (exact line 5, bytes on disk) → fail assertion;
+  D-023 → cli `run_root_defaults_to_current_directory`, `run_memory_flag_uses_empty_in_memory_fs`,
+  `exec_opens_real_files_under_root` → fail assertion;
+  AC-2 → cli `run_one_response_per_request_with_ids_echoed`, control
+  `one_response_per_request_with_ids_echoed` → assertion / compile;
+  AC-3 → cli `same_script_gives_byte_identical_output` (two roots of different depth, 7 failing
+  requests incl. path errors) → assertion;
+  AC-4 → cli `log_script_replays_and_is_idempotent` (exact log text, replay files, log
+  idempotence, results equal), `log_of_all_failing_script_is_empty`; control
+  `log_script_lists_successful_requests_with_1_based_ids` → assertion / compile;
+  AC-5 → cli `run_exits_3_when_a_request_fails` (all 9 listed lines + 8 implied edge lines, each
+  followed by a request that must succeed with unchanged state), `run_survives_hostile_lines`;
+  control `malformed_requests_get_structured_errors_and_host_continues` → assertion / compile;
+  AC-6 → cli `control_mode_answers_each_line_before_next` (reader thread, waits ≤60 s per
+  response before writing the next; EOF → exit 0, file saved) → assertion;
+  AC-7 → cli `run_output_is_canonical_json` (+ checks inside AC-3 test), control
+  `responses_are_canonical_json` → assertion / compile;
+  AC-8 → cli `cli_usage_errors_exit_2` (12 error invocations, each exit 2, empty stdout, stderr
+  non-empty, plus positive controls that exit 0 so the test fails on base), guard
+  `exec_buffer_commands_behave_as_before`, `commands_subcommands_exit_codes_unchanged` → pass
+  (guards);
+  AC-9 → control `memory_and_disk_hosts_give_same_responses`, `host_constructors_reject_bad_roots`
+  → compile. Edge cases: blank / whitespace-only / lone-CR lines, string/negative/zero/2^53+1/
+  empty/escaped ids, duplicate ids, explicit `"id":null`/bool/array/object ids (→ invalid_request,
+  id null), `params: null`, non-string `command`, trailing garbage after JSON, invalid UTF-8 inside a
+  string, 100k-deep nesting, 1 MiB command name, NUL bytes, out-of-range offset (`rejected`),
+  `../` and absolute paths, missing file, CRLF file, non-ASCII and control characters in text.
+  The kiln-control file was compile-checked against a local stub of the declared API (not kept).
+  QUESTION: AC-9 says `Host::in_memory(&[("a.txt", b"x")])` with the AC-1 script, but AC-1's
+  insert at offset 5 is out of range for "x"; I test the literal wording (memory = disk, request 2
+  fails on both) and also the evident intent with "hello\n". Proposed wording: use
+  `b"hello\n"`. QUESTION: "unwritable `--log` … nothing on stdout" — the log is written after the
+  last request, so an implementation must check the log path before running (or buffer stdout); I
+  test the spec literally (exit 2, empty stdout, no log file). QUESTION: D-023 does not say how
+  `--root`/`--memory` combine with `exec --text` or with each other, or flag order for `exec`; I
+  only test `exec <name> <json> --root <dir>`, `--memory`, and the cwd default. Assumptions
+  tested: explicit `"id":null` is `invalid_request` (spec: id must be string/integer);
+  read-only successful requests are logged (T-003 log); `log_script` params keys sorted at every
+  level; params omitted are logged as `{}`. · gate attempts: 1 (last: red clippy, scorecard,
+  test — all only the kiln-control acceptance file not compiling, as expected for `compile`) ·
+  not run: nothing else · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
