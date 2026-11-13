@@ -1,7 +1,7 @@
 ---
 id: T-023
 title: "List a document's outline, go to a line and column clamped to the document, go to an outline symbol, and find symbols by name across the project's Rust files"
-tier: medium            # ADR-0002 default: in-memory, plus reads through T-019's walk and the unchanged `Vfs::read` (no new disk code, no dependency, no CHARTER §3 contract); director confirms (spec check R-180, note N-3)
+tier: medium            # ADR-0002 default: in-memory, plus reads through T-019's walk and the unchanged `Vfs::read` (no new disk code, no dependency, no CHARTER §3 contract); confirmed by the director (D-108, note N-3)
 state: draft
 owner_role: planner
 scorecard_items: [syntax.outline, nav.goto-line, nav.goto-symbol, nav.workspace-symbol]
@@ -36,15 +36,13 @@ After this task a script can:
 
 No gate path. No dependency change: `kiln-commands` already depends on `kiln-syntax` and
 `kiln-workspace`, and `apps/kiln-cli` already has `syn` and `proc-macro2` as dev-dependencies
-(T-016). No new error kind; `too_large` is T-020's (PENDING Q-1). No CLI option or exit code
+(T-016). No new error kind; `too_large` is T-020's (D-108 Q-1). No CLI option or exit code
 changes, so `docs/control-protocol.md` is not edited (D-091 change 18 does not apply).
 
-**Written against** main `49d9233` (T-019 merged at `3b1a95d`; main `d162413` differs only in a
-handoff file) **and two sibling branches not yet on main**, which must both merge before
-dispatch: T-020 at `task/T-020` `c0c12fc` (in review) and T-021 at `task/T-021` `46b93d6` (at the
-join). What this spec assumes of them is listed under "Spec check R-180", "Assumed of the
-siblings"; if either merges with a different name for those items, the director re-checks the
-named lines before dispatch.
+**Written against** main `49d9233` (T-019 merged at `3b1a95d`) **and two sibling branches not
+yet on main**, which must both merge before dispatch: T-020 (`task/T-020` at `c0c12fc`) and T-021
+(`task/T-021` at `46b93d6`). What this spec relies on from them is the list "To re-check at
+dispatch" under "Questions and rulings"; whoever dispatches confirms each line on main first.
 
 Acceptance-test protocol (medium tier, odd task number: METHODOLOGY §4, §6 "Experiment arm").
 There is no test author. The implementer, in one run:
@@ -99,7 +97,7 @@ Rules (exact):
 - The root node is where the walk starts, whatever its kind (with the pinned grammar a broken
   file's root can be `ERROR`; Pinned (g) example 2). An item node is listed iff every node
   strictly between it and the root is `source_file`, `declaration_list`, `mod_item`,
-  `impl_item`, `trait_item` **or `ERROR`** (PENDING Q-2). So nothing inside fn bodies, blocks,
+  `impl_item`, `trait_item` **or `ERROR`** (D-108 Q-2). So nothing inside fn bodies, blocks,
   `extern` blocks (`foreign_mod_item`), `const`/`static` initialisers or macro invocations
   (`token_tree`) is listed. `depth` = the number of listed items that enclose it.
 - `name`: the source text of the `name` field. For `impl` it is the source text of the `type`
@@ -125,7 +123,7 @@ params are `invalid_params` (`deny_unknown_fields`). Each command has at least o
 | `nav.outline` | no | `{doc}` | `{items:[Item]}` |
 | `nav.goto-line` | yes | `{doc, line, col?}` (integers ≥ 0; `col` default 0) | the `cursor.*` result (`CursorResult`, T-018) |
 | `nav.goto-symbol` | yes | `{doc, index}` (integer ≥ 0) | `{item: Item, cursor: CursorResult}` |
-| `nav.workspace-symbols` | no | `{query, limit?}` (`limit` 1..=10000, default 200) | `{items:[Symbol], truncated, skipped:[{path, reason}], walk_truncated, too_deep}` (PENDING Q-3, Q-4) |
+| `nav.workspace-symbols` | no | `{query, limit?}` (`limit` 1..=10000, default 200) | `{items:[Symbol], truncated, skipped:[{path, reason}], walk_truncated, too_deep}` (D-108 Q-3, Q-4) |
 
 `Item` = `{kind, name, start, end, name_start, name_end, depth}` (`kind` as `ItemKind::as_str`).
 `Symbol` = `{path, kind, name, start, end, name_start, name_end, line, col}`. The JSON types live
@@ -136,19 +134,19 @@ in `nav.rs` (as `project.rs` does for `project.tree`). `CursorResult` and `curso
   It neither reads nor changes T-020's `SyntaxState` (the tree cache of `syntax.*`), so it never
   changes the `mode` a later `syntax.tree` reports (AC-2). A document longer than 1,048,576
   chars (`crate::syntax::MAX_CHARS`, T-020) is refused with `rejected`/`too_large` before
-  anything is parsed (PENDING Q-1). The reply lists every item; there is no `limit`.
+  anything is parsed (D-108 Q-1). The reply lists every item; there is no `limit`.
 - `nav.goto-line`: with L = `len_lines` (`doc.info`), line′ = `min(line, L − 1)`; col′ =
   `min(col, length in chars of line′'s content, without its break)`. The selection becomes a
   caret (anchor = head) at the char offset of (line′, col′), so never inside a CRLF. `line` and
   `col` beyond the document are clamped, never refused. No parse and no size limit.
 - `nav.goto-symbol`: `index` into the items `nav.outline` gives for the current text. The
   selection becomes anchor = `name_start`, head = `name_end`. An `index` ≥ the number of items →
-  `rejected`/`out_of_range`. Size limit as `nav.outline` (PENDING Q-1).
+  `rejected`/`out_of_range`. Size limit as `nav.outline` (D-108 Q-1).
 - Both `nav.goto-*` commands, when they succeed, end the document's typing group, as
   `cursor.set` does (`docs/protocol/cursor.md`); a refused request changes nothing, the
   selection and the typing group included. They do not edit the text, so the undo history and
   the dirty flag are unchanged.
-- `nav.workspace-symbols` (PENDING Q-3, Q-4):
+- `nav.workspace-symbols` (D-108 Q-3, Q-4):
   - Files: `kiln_workspace::project::tree(vfs, None, 1_000_000)` — the walk of `project.tree {}`
     with that command's largest `limit` — and of its entries those of kind `file` whose name
     ends in `.rs` (case-sensitive), in the walk's order. `symlink` and `other` entries are not
@@ -191,8 +189,8 @@ list at :8–9 names commands that edit the text, and `nav.goto-*` do not.
 
 ## Pinned
 - (a) Errors and precedence. `nav.outline`: schema (`invalid_params`) → `no_such_document` →
-  `too_large` (PENDING Q-1). `nav.goto-line`: schema → `no_such_document`; nothing else.
-  `nav.goto-symbol`: schema → `no_such_document` → `too_large` (PENDING Q-1) → `out_of_range`.
+  `too_large` (D-108 Q-1). `nav.goto-line`: schema → `no_such_document`; nothing else.
+  `nav.goto-symbol`: schema → `no_such_document` → `too_large` (D-108 Q-1) → `out_of_range`.
   `nav.workspace-symbols`: schema (including `limit` 0 or 10001) → `invalid_pattern` (empty
   `query`) → a walk error (`project.tree`'s kinds and order, T-019). All kinds exist after
   T-020; no new kind, no `reason.rs` change. Refusal declarations per command are T-038's,
@@ -211,21 +209,21 @@ list at :8–9 names commands that edit the text, and `nav.goto-*` do not.
   cannot make the command read outside the root or follow a link (T-019 Pinned (e)). Bounds, each
   a behaviour, never a time (D-097, D-101):
   - files searched: the `.rs` `file` entries of a walk capped at 1,000,000 entries; beyond it
-    `walk_truncated` is true (PENDING Q-3);
+    `walk_truncated` is true (D-108 Q-3);
   - per file: a text over 1,048,576 chars is skipped `too_large` before it is parsed; but it has
     been read and decoded whole by then, because `Vfs` has no size query (N-5), so memory grows
     with the largest file in the project;
   - no bound on the total size of the files, on the number of items parsed, or on time: parse
     time is not bounded by the size limit (D-097: grows with the square of the length for some
-    inputs; T-020's release figure 17.00 s at 65,536 chars of `#!` repeated), and this command
-    parses every searched file, so one hostile file can hold it for hours. No test asserts a
+    inputs; `docs/protocol/syntax.md`, Time), and this command
+    parses every searched file, so one hostile file can hold it without bound. No test asserts a
     time; each timeout in a test is a hang detector and is labelled so. A deterministic work
     cap on parsing is the follow-up the director files (D-097 Q-3); this task does not attempt
     it;
   - reply: at most `limit` symbols plus one `skipped` row per skipped file (no cap on `skipped`).
   - concurrency: a change by another process while the command runs is accepted (T-008 D-3): a
     file that vanishes or changes kind between the listing and the read is skipped with its
-    kind (PENDING Q-4); a directory that does so fails the walk (T-019).
+    kind (D-108 Q-4); a directory that does so fails the walk (T-019).
 - (f) Snapshots: none. No test of this task pins a message text, a whole document, the command
   list, `error_kinds` or a `when` text (golden rule 9; D-091 change 6): the tests assert
   `code`/`kind`, results and selections, never `error.message`. Messages in this spec are the
@@ -239,8 +237,8 @@ list at :8–9 names commands that edit the text, and `nav.goto-*` do not.
      `48..54` `52..53` 0; `trait` `T` `55..79` `61..62` 0; `fn` `x` `65..77` `68..69` 1.
      `nav.goto-symbol {index:1}` → anchor 32, head 35. `{index:5}` → `out_of_range`.
   2. Text `fn a() {}\nfn b( {\nfn c() {}\nstruct D;\n` (the root is `ERROR@0..38`) → `fn` `a`
-     `0..9` `3..4` 0; `fn` `c` `18..27` `21..22` 0; `struct` `D` `28..37` `35..36` 0 (the same
-     under either answer to Q-2).
+     `0..9` `3..4` 0; `fn` `c` `18..27` `21..22` 0; `struct` `D` `28..37` `35..36` 0 (probe R-180:
+     the same whether or not `ERROR` counts as a container).
   3. Text `/// doc\n#[derive(Debug)]\npub struct S;\n#[cfg(test)]\nmod tests { fn t() {} }` →
      `struct` `S` `25..38` `36..37` 0; `mod` `tests` `52..75` `56..61` 0; `fn` `t` `64..73`
      `67..68` 1 (attributes and doc comments outside, `pub` inside).
@@ -269,8 +267,7 @@ list at :8–9 names commands that edit the text, and `nav.goto-*` do not.
   (`cargo build --release -p kiln-cli`, its own `target/`), each run under `timeout`, with the
   exact command and its output recorded in its log; a run that reaches its timeout is written
   "more than <timeout> s". No other sentence stating a guarantee or a limit is added; an
-  implementer who needs one records its evidence in its log (D-091 change 5). Sentences marked
-  PENDING change with the ruling named.
+  implementer who needs one records its evidence in its log (D-091 change 5).
   - N1. "`nav.outline` lists the `fn`, `struct`, `enum`, `trait`, `impl` and `mod` items of the
     document that are not inside a function body, a block, an `extern` block, a `const` or
     `static` value or a macro invocation, in the order of their start." Evidence: AC-1, AC-2.
@@ -280,8 +277,8 @@ list at :8–9 names commands that edit the text, and `nav.goto-*` do not.
     the `syn` parser finds." Evidence: AC-1.
   - N3. "In a document with syntax errors the outline lists the items the parser's error
     recovery leaves in place, by the same rules; which items those are is not specified."
-    Evidence: AC-2 example 2 (one case, not a guarantee); wording PENDING Q-2.
-  - N4 (PENDING Q-1). "`nav.outline` and `nav.goto-symbol` refuse a document longer than
+    Evidence: AC-2 example 2 (one case, not a guarantee); wording as ruled (D-108 Q-2).
+  - N4 (D-108 Q-1). "`nav.outline` and `nav.goto-symbol` refuse a document longer than
     1,048,576 chars with `rejected` / `too_large`, as the `syntax.*` commands do; a document of
     exactly 1,048,576 chars is accepted. `nav.goto-line` parses nothing and has no such limit."
     Evidence: AC-7.
@@ -299,14 +296,14 @@ list at :8–9 names commands that edit the text, and `nav.goto-*` do not.
     `project.tree` ignores or does not reach are not searched. For a file that is open as a
     document, the document's current text is searched, saved or not, and the file is not read."
     Evidence: AC-5.
-  - N9 (PENDING Q-4). "A file that cannot be read (`not_found`, `not_a_file`, `outside_root`,
+  - N9 (D-108 Q-4). "A file that cannot be read (`not_found`, `not_a_file`, `outside_root`,
     `io_error`, for example because it was removed after it was listed), that is not valid
     text (`decode_error`), or whose text is longer than 1,048,576 chars (`too_large`) is listed
     in `skipped` with that reason, and the search goes on. An error while listing a directory
     or reading a `.gitignore` fails the whole command, as for `project.tree`." Evidence: AC-5
     (`decode_error`), AC-7 (`too_large`), the implementer's unit test with a `Vfs` whose read
     fails (the other four; not observable through `kiln-cli` without a concurrent process).
-  - N10 (PENDING Q-3). "The search covers at most the first 1,000,000 entries of the walk, the
+  - N10 (D-108 Q-3). "The search covers at most the first 1,000,000 entries of the walk, the
     largest `limit` of `project.tree`; `walk_truncated` is true when the walk stopped there, and
     `too_deep` counts the directories not descended because of the depth bound." Evidence:
     AC-8 (`too_deep`), by construction (`walk_truncated`, not testable at 1,000,000 entries in
@@ -396,21 +393,21 @@ base by assertion**.
 - AC-6 (`syntax.outline`; deep nesting, T-020 ruling Q-5): a document of `mod m {` repeated
   20,000 times, then `fn f() {}`, then `}` repeated 20,000 times (160,009 chars) → `nav.outline`
   gives 20,001 items, the last a `fn` `f` at depth 20,000, and the process exits normally (no
-  stack overflow). Probe R-180 (debug, throwaway, recursive walk on a 1 GiB stack): parse 0.12
-  s, 20,001 items, last depth 20,000; the acceptance test runs on the default stack, which is
+  stack overflow). Probe R-180 (debug, throwaway, recursive walk on a 1 GiB stack) gave
+  20,001 items, last depth 20,000; the acceptance test runs on the default stack, which is
   what catches a recursive walk. No time is asserted. Oracle: exact value.
-- AC-7 (size limit; PENDING Q-1): a document of exactly 1,048,576 chars (`//` then `é` repeated,
+- AC-7 (size limit; D-108 Q-1): a document of exactly 1,048,576 chars (`//` then `é` repeated,
   one comment, as T-020's unit test builds it) → `nav.outline` `ok` with `items: []`; after a
   one-char `doc.insert` → `nav.outline` and `nav.goto-symbol {index:0}` → `too_large`, and
   `nav.goto-line {line:0, col:5}` → `ok`. In a project, a `.rs` file of 1,048,577 chars →
   listed in `skipped` with reason `too_large` by `nav.workspace-symbols`, while a file of
-  1,048,576 chars is searched. Oracle: exact value.
+  1,048,576 chars is not in `skipped` (it is parsed; the `//é…` text has no items). Oracle: exact value.
 - AC-8 (`nav.workspace-symbol`; limits and refusals): `query: ""` → `invalid_pattern`; `limit:
   0`, `limit: 10001`, `limit: null`, a missing `query` and an unknown param → `invalid_params`;
   a project with 250 files `f<i>.rs` each holding `fn hit() {}` gives, without `limit`, 200 items
   and `truncated: true`, and with `limit: 10000` all 250 in tree order (byte order of the names)
   and `truncated: false`; a chain of 130 nested directories `d/…/d` with `x.rs` holding
-  `fn deep() {}` at the bottom → `deep` not found, `too_deep: 1` (PENDING Q-3). Oracle: exact
+  `fn deep() {}` at the bottom → `deep` not found, `too_deep: 1` (D-108 Q-3). Oracle: exact
   value.
 - No criterion asserts a time (D-097, D-101).
 
@@ -443,16 +440,17 @@ not tied to `nav.workspace-symbol` separately. (The item file `nav.workspace-sym
 - Your own tests: `crates/kiln-syntax/tests/outline.rs`, unit tests in `outline.rs` and
   `nav.rs` (among them a `Vfs` whose `read` fails after `list_dir` listed the file, for N9).
   Acceptance tests: the protocol in Goal.
-- For planning only (probe R-180, debug, throwaway; not for any document): the outline of the
-  33 `valid` corpus files took 0.19 s in total; 20,000 nested `mod`s parsed in 0.12 s.
+- For planning only (probe R-180, debug, throwaway; not for any document): the corpus
+  differential and the 20,000-deep nesting case are cheap; neither needs a large timeout.
 
 ## Questions and rulings
 - Director (2026-11-13, D-044): when the parse contract returns `ParseError::NoTree`, the command fails with code `internal`, kind `other`, as proposed.
 
 ### Spec check R-180 (planner, 2026-11-13, against main `49d9233`; main `d162413` differs only in `handoffs/`)
-Verdict: **ready to dispatch once Q-1 to Q-4 are ruled and both T-020 and T-021 have merged**,
-with the edits above applied (the spec above is written for the recommendations, marked
-PENDING). The PROPOSED marker of R-079 is removed: D-044 ruled it.
+Verdict at R-180: ready to dispatch once Q-1 to Q-4 were ruled and both T-020 and T-021 have
+merged. Q-1 to Q-4 are ruled (D-108, below) and applied by R-182; the spec above reads as
+decided. It is dispatched once both siblings have merged and the list "To re-check at
+dispatch" holds on main. The PROPOSED marker of R-079 is removed: D-044 ruled it.
 
 **How checked.** Read against main and, for the siblings, against their branch heads with
 `git show task/T-020:<path>` / `git show task/T-021:<path>` from the primary checkout (read
@@ -522,7 +520,7 @@ written from the Rules above (with a switch for Q-2) and three throwaway tests i
    no AC named its file or its result on base (all fail on base by assertion: every `nav.*`
    request is `unknown_command` there).
 
-**Notes (not blockers).**
+**Notes (not blockers; answered by D-108, below).**
 - N-1. The draft's AC-1 holds for an implementation of the Rules on the merged tree (P2), so
   the oracle is usable; AC-1 is not a vacuous test (the throwaway's first version was compared
   item by item, and a recursion bug would show as a depth difference).
@@ -546,23 +544,9 @@ written from the Rules above (with a switch for Q-2) and three throwaway tests i
 - N-7. `nav.outline` has no `limit`: its reply is bounded by the size limit (Q-1) only. At
   1,048,576 chars of `mod m;` it would list about 175,000 items; T-021's check measured about
   1.3 kB per reply object on the way out (D-101 T2), so such a reply could take a few hundred
-  MB. Not a blocker; the director may ask for a `limit` under Q-1.
+  MB. Not a blocker; accepted without a `limit` (D-108).
 
-**Assumed of the siblings (to re-check if they merge differently).**
-- T-020 (`task/T-020` `c0c12fc`): `pub(crate) const MAX_CHARS: usize = 1_048_576` in
-  `crates/kiln-commands/src/syntax.rs`, refusing `len_chars > MAX_CHARS`; `RejectReason::TooLarge`
-  = `too_large` appended in `reason.rs`; `SyntaxState::tree` private, and `syntax.tree`'s `mode`
-  defined by "the document's last successful `syntax.*` call" (so `nav.*` must not touch the
-  cache); `crates/kiln-syntax/src/lib.rs` status sentence ending "[`outline`] is still empty";
-  `outline.rs` and `tree.rs`'s `root()`/`char_at_byte()` unchanged; `docs/protocol/syntax.md`
-  sections Size limit, Time and Memory as on the branch. Nothing of `highlight`/`brackets` is
-  used.
-- T-021 (`task/T-021` `46b93d6`): nothing of it is used; `invalid_pattern` is on main already
-  (T-032). It edits `docs/protocol/cursor.md` (:8–9, :80), which this task does not touch, and
-  `docs/commands.json` (generated).
-- Both: `docs/commands.json` is regenerated by the queue on conflict (D-097).
-
-**Questions for the director (the spec above follows each recommendation, marked PENDING).**
+**Questions put to the director (ruled by D-108 as recommended; kept as the record).**
 - Q-1 (size limit). Options: (a) **`nav.outline` and `nav.goto-symbol` refuse a document longer
   than 1,048,576 chars with `too_large`, and `nav.workspace-symbols` skips such a file with
   reason `too_large`**, reusing T-020's constant and kind; `nav.goto-line` (no parse) has no
@@ -608,7 +592,8 @@ written from the Rules above (with a switch for Q-2) and three throwaway tests i
   workspace command is a loop over the outline and adds about a third of this spec. ADR-0005
   needs all four items in stage 1 either way (41 of 64 counts them). Recommendation: keep one
   task if Q-1 to Q-4 are ruled before dispatch; if Q-3/Q-4 are still open then, split off
-  `nav.workspace-symbol` as its own task depending on this one.
+  `nav.workspace-symbol` as its own task depending on this one. (They were ruled, D-108: one
+  task.)
 - Parallel work. Disjoint `touches` with T-036 and T-037 (`disk.rs`, `vfs.rs`, `paths.md`,
   `doc.rs`), so they may be in flight together. Not with T-038 (it touches `cursor.rs` and must
   see `nav.*` registered, D-092). Not with T-020 or T-021 (they must merge first).
@@ -619,6 +604,29 @@ written from the Rules above (with a switch for Q-2) and three throwaway tests i
 - Q-4: (a). A file that cannot be searched is listed in `skipped` with the existing kind name (`not_found`, `not_a_file`, `outside_root`, `io_error`, `decode_error`, `too_large`) and the search goes on; there is no `binary` kind; an error on a directory or a `.gitignore` still fails the command.
 - Notes N-3 to N-7: the tier stays medium (every file is reached through T-019's walk and the unchanged `Vfs::read`; no new path to disk). The `crate` field of the `nav.workspace-symbol` item file is the director's and is looked at when the tests are tied at the join. N-5 (a file is read whole before its length is checked) stays as a stated limit. N-6 concerns T-031, a deferred draft, and is noted there when it is checked. N-7 is accepted.
 - No test asserts a time, and no figure enters a document except from the implementer's release-build measurement (as for T-020 and T-021).
+
+### To re-check at dispatch
+Read by R-180/R-182 on the branches, not on main: T-020 at `c0c12fc30d473ff1d0f5b71c8ce9d4a0b66e0c12`,
+T-021 at `46b93d64a018268b60528146cf16f55a36f10555`; their reviews may still change details. Once
+both have merged, confirm on main (and edit the named lines of this spec if one differs):
+1. `crates/kiln-commands/src/syntax.rs` has `pub(crate) const MAX_CHARS: usize = 1_048_576`, and
+   `syntax.*` refuse `len_chars > MAX_CHARS` (exactly 1,048,576 accepted). Used by Interface,
+   Pinned (a), N4, AC-7.
+2. `RejectReason::TooLarge` with kind `too_large` exists in `crates/kiln-commands/src/reason.rs`.
+3. T-020's tree cache (`SyntaxState`) is reachable from `nav.rs` only by editing `syntax.rs`
+   (its `tree` is private), and `syntax.tree`'s `mode` is defined by "the last successful
+   `syntax.*` call" (N7, AC-2). If either changed, N7 needs a look.
+4. `crates/kiln-syntax/src/lib.rs`'s status sentence still says "[`outline`] is still empty"
+   (`touches`: that sentence only), and `outline.rs` is still the empty slot.
+5. `crates/kiln-syntax/src/tree.rs` still has the crate-private `root()` and `char_at_byte()`,
+   and its module doc still says every walk is iterative.
+6. `docs/protocol/syntax.md` still has the sections "Size limit" and "Time" that Pinned (e)
+   and N12 cite.
+7. `crates/kiln-commands/src/cursor.rs` still has the private `fn cursor_result` and
+   `CursorResult` (the one visibility change in `touches`); T-021 does not touch it.
+8. T-021 changed nothing this spec uses: `invalid_pattern` (T-032, on main) still exists; its
+   edit of `docs/protocol/cursor.md` does not matter here (this task does not touch it).
+9. `docs/commands.json` is generated (regenerated by the queue on conflict, D-097).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -671,6 +679,22 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   root: recommend (a) a container), Q-3 (walk extent: recommend (a) 1,000,000 with
   `walk_truncated`, `too_deep`), Q-4 (unsearchable files: recommend (a) skip with the kind's name,
   no `binary`).
+- 2026-11-13 · R-182 · draft · did: finalised the spec on D-108 (Q-1 to Q-4 (a), tier medium,
+  notes N-3 to N-7 answered); rulings acknowledged and accepted. Every PENDING mark replaced by
+  its D-108 ruling; the R-180 verdict, question and note headings now read as the record. The
+  sibling assumptions moved to a new "To re-check at dispatch" list (nine facts, with the branch
+  heads read: T-020 `c0c12fc30d473ff1d0f5b71c8ce9d4a0b66e0c12`, T-021
+  `46b93d64a018268b60528146cf16f55a36f10555`). Builder read-through, top to bottom: no
+  contradiction found between Interface, Pinned, ACs and `touches`; AC-7's "a file of 1,048,576
+  chars is searched" made observable ("not in `skipped`"); (g) example 2's Q-2 remark restated.
+  Time and figure check: removed T-020's 17.00 s figure from Pinned (e) (now a pointer to
+  `syntax.md`, Time), the probe's 0.12 s from AC-6 and the debug times from Out of scope, and
+  "for hours" from Pinned (e) (no measurement behind it); the remaining figures are exact
+  behaviours, input sizes, probe counts given as evidence, or the implementer's release-build
+  slots `<M>` (N11) and `<T>` (N12). No AC reads `error.message`, a whole document, the command
+  list or `error_kinds` (Pinned (f); AC preamble). · gate attempts: 0 · not run: no git, no
+  cargo (none needed) · missing context: none · next: director: ready to dispatch once T-020 and
+  T-021 have merged and "To re-check at dispatch" holds on main.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
