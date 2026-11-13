@@ -440,6 +440,10 @@ confirms it again.
   the director prefer the T-008 tests themselves be made reliable, `acceptance_t008.rs` and
   `acceptance_t008_cli.rs` join `touches` for the test author only. Then the edit must only
   add serialisation or the reuse search, never loosen an assertion (golden rule 4).
+- Ruling on Q-1 (director, D-092): option (b). A root the session may search but not read is refused at construction as the spec states; every root that construction accepts is protected.
+- Ruling on Q-2 (director, D-092): the task edits the `--root` sentences and the exit-code table of `docs/control-protocol.md` so that they are complete for an unreadable root (D-091 change 18: a task that changes the CLI surface updates the CLI sections it changes). `docs/control-protocol.md` joins `touches`. T-039 edits the same sections and merges first.
+- Ruling on Q-3 (director, D-092): as proposed. T-008's four root-removal tests are left as they are; the reliable versions are new tests in their own binaries.
+- Order (director, D-092): after T-019 (shared `disk.rs`) and after T-039; before T-037. The planner brings the file to iteration 2 and to the v1.2 ceiling when it applies these rulings; a pre-dispatch check follows (D-091 change 7).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
