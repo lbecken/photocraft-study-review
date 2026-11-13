@@ -13,7 +13,7 @@ touches:
   - docs/protocol/find.md                    # new
   - docs/commands.json                       # generated
 budget_tokens: 500000   # medium (v1.1, provisional)
-iteration: 1
+iteration: 2
 found_by: planner
 origin_task: null
 ---

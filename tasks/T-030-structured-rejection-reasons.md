@@ -11,7 +11,7 @@ touches:
   - crates/kiln-control/tests/caps.rs         # implementer's own integration tests
   - docs/control-protocol.md                  # "Response" caps text; the integer-id sentence; stale sentences (see Interface)
 budget_tokens: 500000   # medium (v1.1, provisional)
-iteration: 1
+iteration: 2
 found_by: reviewer
 origin_task: T-004
 ---

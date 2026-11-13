@@ -14,7 +14,7 @@ touches:
   - xtask/tests/guard_t034.rs        # GATE PATH: test author (guards for behaviour main already has)
   - docs/development.md          # "Merge queue" lint rules; "Publishing a ledger input" exit codes and "After a stop" rows (not a gate path)
 budget_tokens: 850000
-iteration: 1
+iteration: 2
 found_by: reviewer
 origin_task: T-013        # items (2)–(6): T-013 r2 follow-ups (D-053); item (1): T-005 r3 (D-033)
 ---

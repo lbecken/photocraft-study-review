@@ -12,7 +12,7 @@ touches:
   - xtask/tests/acceptance_t033.rs   # GATE PATH: test author
   - docs/development.md          # "Join" section (not a gate path)
 budget_tokens: 850000
-iteration: 1
+iteration: 2
 found_by: reviewer
 origin_task: T-005        # D-033 (T-005 r3 follow-ups) and the T-004 join miscount (D-025)
 ---

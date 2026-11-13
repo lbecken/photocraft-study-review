@@ -20,7 +20,7 @@ touches:
   - docs/control-protocol.md                    # ONE line in the `kiln-cli` section: `--tools` (director, R-060 answer 4)
   - docs/commands.json                          # generated
 budget_tokens: 850000   # high (v1.1)
-iteration: 1
+iteration: 2
 found_by: planner
 origin_task: null
 ---

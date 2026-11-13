@@ -16,7 +16,7 @@ touches:
   - xtask/tests/guard_t009.rs        # GATE PATH: test author (guards for behaviour main already has)
   - docs/development.md          # "Merge queue", publish "After a stop" row (not a gate path)
 budget_tokens: 850000
-iteration: 1
+iteration: 2
 found_by: reviewer
 origin_task: T-005
 ---

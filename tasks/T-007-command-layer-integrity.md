@@ -17,7 +17,7 @@ touches:
   - docs/protocol/replay.md                   # NEW: this task's protocol text (D-6); docs/control-protocol.md is not touched
   # docs/commands.json changes too: a generated path (exempt from `touches`, regenerated on conflict)
 budget_tokens: 850000   # high (v1.1)
-iteration: 1
+iteration: 2
 found_by: reviewer
 origin_task: T-003
 ---

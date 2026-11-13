@@ -14,7 +14,7 @@ touches:
   - docs/protocol/doc.md                      # new: the save check and doc.disk-status
   - docs/commands.json                        # generated
 budget_tokens: 850000   # high (v1.1)
-iteration: 1
+iteration: 2
 found_by: planner
 origin_task: null
 ---

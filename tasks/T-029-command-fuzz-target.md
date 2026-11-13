@@ -11,7 +11,7 @@ touches:
   - crates/kiln-control/examples/fuzz_commands.rs # the fuzz program (not a gate path)
   - docs/development.md                           # one paragraph: the target, how to reproduce a failure
 budget_tokens: 850000   # high (v1.1)
-iteration: 1
+iteration: 2
 found_by: planner
 origin_task: null
 ---

@@ -19,7 +19,7 @@ touches:
   - scorecard/items/ws.path-confinement.toml                   # test author: append this task's test names
   # docs/scorecard.md also changes: a generated path, regenerated (`cargo xtask scorecard`), exempt
 budget_tokens: 850000   # high (v1.1)
-iteration: 1
+iteration: 2
 found_by: reviewer      # T-008 r2 (R-138): R2-D1's residual, TG-1, TG-3, TG-4, N-1
 origin_task: T-008
 ---

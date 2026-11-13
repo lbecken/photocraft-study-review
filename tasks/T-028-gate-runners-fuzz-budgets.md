@@ -14,7 +14,7 @@ touches:
   - apps/kiln-cli/examples/budget_roundtrip.rs # measuring program 2: drives the built kiln-cli binary
   - docs/development.md                     # gate table rows `fuzz`, `budgets`; "Other registries"
 budget_tokens: 850000   # high (v1.1)
-iteration: 1
+iteration: 2
 found_by: planner
 origin_task: null
 ---
