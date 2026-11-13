@@ -8,6 +8,7 @@
 mod frontmatter;
 mod gate;
 mod git;
+mod hygiene;
 mod join;
 mod layers;
 mod metrics;
@@ -38,7 +39,7 @@ usage: cargo xtask <command>
 
 gate
   ci [--keep-going] [--report <path>]   run every gate step (CHARTER §4 order)
-  fmt | clippy | layers | ui-commands | test | fuzz | budgets
+  fmt | clippy | layers | ui-commands | hygiene | test | fuzz | budgets
   no-skip [--today YYYY-MM-DD]          default today: HEAD's commit date
   schema [--write]                      check (or rewrite) docs/commands.json
   scorecard [--check]                   derive statuses; write (or check) docs/scorecard.md
@@ -116,7 +117,7 @@ fn real_main() -> Result<bool> {
                 report.as_deref().map(Path::new),
             )
         }
-        "fmt" | "clippy" | "layers" | "ui-commands" | "test" | "fuzz" | "budgets" => {
+        "fmt" | "clippy" | "layers" | "ui-commands" | "hygiene" | "test" | "fuzz" | "budgets" => {
             no_more(&args)?;
             let r = gate::run_step(&util::repo_root()?, &cmd)?;
             Ok(print_step(&cmd, &r))

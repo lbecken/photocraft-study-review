@@ -76,7 +76,7 @@ Decisions:
 ## 4. Operating interface (names every document and tool must use)
 
 - Gate: `cargo xtask ci` — identical locally and in GitHub Actions. Steps, cheap first: fmt,
-  clippy `-D warnings`, `layers`, `ui-commands`, `schema`, `scorecard --check`, tests,
+  clippy `-D warnings`, `layers`, `ui-commands`, `hygiene` (review front matter, no session-specific paths), `schema`, `scorecard --check`, tests,
   `no-skip` (an ignored or skipped test fails the gate unless listed with an expiry),
   command fuzz smoke, enforced budgets.
 - `cargo xtask worktree new T-NNN` — creates `.worktrees/T-NNN` on branch `task/T-NNN` with

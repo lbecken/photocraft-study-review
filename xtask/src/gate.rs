@@ -18,6 +18,7 @@ pub const STEPS: &[&str] = &[
     "clippy",
     "layers",
     "ui-commands",
+    "hygiene",
     "schema",
     "scorecard",
     "test",
@@ -132,6 +133,7 @@ pub fn run_step(root: &Path, name: &str) -> Result<StepResult> {
         "clippy" => clippy_step(root),
         "layers" => crate::layers::check(root),
         "ui-commands" => crate::uicmds::check(root),
+        "hygiene" => crate::hygiene::check(root),
         "schema" => crate::schema::run(root, false),
         "scorecard" => crate::scorecard::run(root, true),
         "test" => test_step(root),
@@ -299,6 +301,9 @@ mod tests {
         assert_eq!(STEPS.first(), Some(&"fmt"));
         let pos = |s: &str| STEPS.iter().position(|x| *x == s).unwrap();
         assert!(pos("clippy") < pos("layers") && pos("layers") < pos("ui-commands"));
+        // T-013 / ADR-0003: `hygiene` right after `ui-commands`, before `schema`.
+        assert_eq!(pos("hygiene"), pos("ui-commands") + 1);
+        assert_eq!(pos("schema"), pos("hygiene") + 1);
         assert!(pos("schema") < pos("scorecard") && pos("scorecard") < pos("test"));
         assert!(
             pos("test") < pos("no-skip")
