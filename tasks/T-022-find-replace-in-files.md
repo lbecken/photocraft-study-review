@@ -178,6 +178,10 @@ Every AC is an **acceptance** test (on base no `find.*` command exists).
 - Your tests: `crates/kiln-workspace/tests/find.rs`, unit tests.
 
 ## Questions and rulings
+Director rulings on the planner's choice (2026-11-13, decision D-071; planner run R-127), made after reading the Commands section and AC-6 above:
+- c4 (preview reply): option (a), `find.replace-preview` lists at most `limit` replacements, with `total` exact and `truncated`. Condition, because apply performs every stored replacement and not only the listed ones: `docs/protocol/find.md` says so in words, and an acceptance criterion asserts that after a truncated preview `find.replace-apply` reports `replaced` equal to the preview's `total` (AC-6 already has this shape: `limit: 10`, `total: 400002`, `replaced: 400002`).
+- The pattern cap and the bounded search are T-021's (rulings c1–c3, c5 there). AC-6's memory test is measured in the pre-dispatch spec check in the same way as T-021's AC-8; a pre-dispatch spec check is required for this task as well.
+Where a ruling differs from text above, the ruling governs; the planner removes the PROPOSED markers when it applies the spec check. `state` stays `draft` until that check returns `ready to dispatch`.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:

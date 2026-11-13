@@ -273,6 +273,13 @@ yields its first k.
   go on `task/T-021-tests`, committed and failing on base before you write the code.
 
 ## Questions and rulings
+Director rulings on the planner's choices (2026-11-13, decision D-071; planner run R-127), made after reading the choices section, AC-8, AC-9 and the `replace_all` signature above, and CHARTER §3 decision 4:
+- c1 (`total` when the limit is hit): option (a). `total` stays the exact number of all matches, counted in the same pass without keeping the matches; `truncated = total > limit`. No schema change.
+- c2 (replace-all with very many matches): option (a), no bound on the number of matches. The cost follows from the declared result type (one range and one replacement string per match, no group slots); the implementer measures the bytes per match on AC-8's input and states the figure in `docs/protocol/search.md`.
+- c3 (pattern size): option (a), at most 1,000 chars, refused as `invalid_pattern` with the message AC-9 pins. A time budget is rejected: CHARTER §3 decision 4 allows no wall-clock dependence in L0–L4 behaviour. The value 1,000 has no measurement behind it yet: the pre-dispatch spec check measures the worst-case search time of a 1,000-char pattern on a 1 MB matching text (debug build); above about 5 s it comes back to the director before dispatch.
+- c5 (AC-8, the memory test): kept, with its two halves measured in the spec check using a throwaway stub — that a correct implementation completes `search.find` and replace-all under the 512 MiB address-space cap, and that one keeping every match's slots does not. Known so far: the reviewer of T-017 measured about 2.4 kB per match at 100 groups (2.40 GB for 1,000,001 matches), so 400,001 matches is about 0.96 GB by arithmetic; and a director's probe ran an existing `kiln-cli` (`doc.open` and `doc.info` on a 400,000-char file) under `ulimit -v` 524288 and 131072 with exit 0, peak resident size 15,792 kB without a cap. That probe did not exercise any search or replace command.
+- c6 (tier and check): medium, as the planner argues (additive API in an L1 crate; no persistence, process, gate path, dependency or CHARTER §3 contract). A pre-dispatch spec check is required all the same, after T-017 has merged, because the task adds public API to that crate.
+Where a ruling differs from text above, the ruling governs; the planner removes the PROPOSED markers when it applies the spec check. `state` stays `draft` until that check returns `ready to dispatch`.
 - Director (2026-11-13, D-044): a replacement template that fails to expand is refused as `invalid_pattern`, checked before any matching is done, as proposed.
 
 ## Log
