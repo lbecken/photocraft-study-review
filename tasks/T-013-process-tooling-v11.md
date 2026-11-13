@@ -534,6 +534,35 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   missing context: none · next: director accepts ADR-0003.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T04:05Z · R-058 · in_progress (main) · did: restated the criteria before coding —
+  (1) metrics add/transition stamp `<now>`, refuse future, earlier-than-task-latest, illegal
+  §3 transitions, bad token options and role/`iter-N` mismatches, print the budget line(s);
+  `join-defects` appends a classification record; (2) queue refuses at `budget` between
+  `approval` and `main-history` from main's committed runs and Extend rows; (3) `worktree new`
+  needs `ready` in main's committed task file (no `tasks/` on main: no check), prints no
+  CARGO_TARGET_DIR; (4) report: arm, acceptance-caught over all green joins by tier/arm,
+  unclassified iteration-≥1 joins exit 1, tokens per merged task with/without `iter-N`,
+  known defects merged by decision, overruns with Extend; (5) `publish` in 8 steps; (6) gate
+  step `hygiene` (reviews + session-paths) after ui-commands, CHARTER §4 line, four
+  redactions; (7) stale texts. · gate attempts: 0 · next: implement.
+  QUESTION: (Q-a) my gate cannot be green before the join: rule (3) refuses the T-005 toy
+  tasks (`reviewed`/`self_verified`) and D-1 gives the fixture fix to the test author, while
+  the brief forbids me to edit `acceptance_t*` files. I will report the gate with the T-005
+  acceptance failures as the predicted D-1 failures and nothing else red.
+  QUESTION: (Q-b) publish step 5 red: the `ready → in_progress` transition (step 3) is
+  appended to main's working-copy `metrics/tasks.jsonl` but no step commits it before step 6;
+  I read AC-10's "T-050 in_progress on main" as the metrics state in the primary checkout
+  (uncommitted), and add no commit. Should step 3 or the failure path commit it?
+  QUESTION: (Q-c) slug: I cut the title part (after `publish-`) to 40 characters after the
+  trim, literally in the order written (so a cut can leave a trailing `-`); ASCII
+  alphanumerics only.
+  QUESTION: (Q-d) publish refusal texts not given by the spec: I use `publish: refused: ledger:
+  <the queue's ledger reason>` and `publish: refused: the main working tree is dirty: <paths>`
+  for step 1's working-tree rules.
+  QUESTION: (Q-e) not specified, chosen: `--tier` on `iter-N` is refused (tier must be null);
+  `join-defects` applies no time rule (its `at` is `<now>`); a task file without
+  `budget_tokens` prints `T-NNN: <sum> tokens of budget none` and no over line; the review
+  check accepts `mutants` as a flow map `{…}` (template form) or an indented block map.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
