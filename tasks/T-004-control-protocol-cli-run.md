@@ -403,4 +403,17 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   the evaluator? SG-2 how to test the panic → `internal` path through the declared API?
   SG-3 should `run` exit 1 when stdout cannot be written (as `control` does)? SG-4 `exec` cannot
   persist edits; intended? SG-5 OS `strerror` text in responses.
+- 2026-11-13 · R-040 · review r2 (delta 79da139..51f83e0) · did: re-read docs/control-protocol.md
+  end to end against the binary; produced 20 of 23 kinds through run/control (incl. disk changed
+  mid-session); attacked clipping (escapes, emoji, combining marks, arrays/objects, log echoes,
+  exec stderr); --help on every subcommand; >/dev/full for every subcommand; final
+  open-edit-undo-redo-save flow from the doc alone + log replay. Round-1: D-1, TG-1, SG-3, SG-4,
+  SG-5, N-2, N-3 resolved; SG-1 ruled (T-008); N-1, N-4 partly; SG-2 open. 20 delta mutants: 18
+  killed (8 by acceptance), survivors N08 (panic kind) and N19 (path anchoring). Verdict
+  request-changes: R2-D1 `False schema does not allow [..]` details echo arrays/objects of short
+  space-containing strings unclipped (16 KB via exec). Review: `reviews/T-004-r2.md`. · gate
+  attempts: 1 (last: green) · not run: permission-denied io_error (runs as root), release timing,
+  Windows/macOS · missing context: none · next: implementer fixes R2-D1 and R2-N1 doc row.
+  QUESTION: R2-SG1 freeze the 23-kind table in the spec so acceptance tests can pin it?
+  R2-SG2 add "refuse FIFOs/non-regular files" (doc.open hangs) to T-008? SG-2 panic path test?
 <!-- end reviewer log -->
