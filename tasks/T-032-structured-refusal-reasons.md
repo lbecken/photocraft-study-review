@@ -476,4 +476,12 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 
   · gate attempts: 1 (last: green, 10 steps, 434 tests) · not run: base byte comparison
   (r3) · missing context: none · next: director (high-tier approval row).
+- 2026-11-13T12:20Z · R-106 · r6 joined · did: addendum to round 2 at
+  `02db52db8b46e135f6170aaa8d7f1f4a308ee2af` (`reviews/T-032-r2.md`).
+  - The delta is tests only, as r6.
+  - `docs/control-protocol.md` differs from main only in the two pinned sentences.
+  - The re-seeded directory mutant (`NotAFile` → `NotFound`) is killed by acceptance.
+
+  Verdict approve. · gate attempts: 0 (join green) · not run: `cargo xtask hygiene` (no such
+  subcommand) · missing context: none · next: director.
 <!-- end reviewer log -->
