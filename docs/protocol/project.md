@@ -67,6 +67,8 @@ Example: a root holding `.gitignore` (`*.log` and `/target`), `B.txt`, `a.rs`, `
 
 ## Guarantees and limits
 
+`project.tree` never writes, creates or changes a file.
+
 On disk, the `path` is located as `docs/protocol/paths.md` describes: a `path` whose location
 is outside the root is refused with `outside_root`, and nothing outside the root is listed or
 read.
