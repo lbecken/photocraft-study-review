@@ -244,3 +244,7 @@
 {"kind":"run","task":"T-032","iteration":1,"run":"R-106","role":"reviewer","tier":"high","started_at":"2026-11-13T12:18:30Z","ended_at":"2026-11-13T12:22:39Z","wall_s":249,"tokens":14844,"tool_calls":8,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"round 2 addendum for ruling r6 on 02db52d: approve; test-only delta as ruled; T-032 changes control-protocol.md only in the two pinned sentences; 1 mutant re-seeded and killed; start time entered by the director from the dispatch"}
 {"kind":"transition","task":"T-032","iteration":1,"at":"2026-11-13T12:22:39Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-032","iteration":1,"at":"2026-11-13T12:22:39Z","from":"reviewed","to":"queued"}
+{"kind":"transition","task":"T-032","iteration":1,"at":"2026-11-13T12:27:03Z","from":"queued","to":"merged"}
+{"kind":"run","task":"T-017","iteration":1,"run":"R-104","role":"implementer","tier":"high","started_at":"2026-11-13T12:17:02Z","ended_at":"2026-11-13T12:23:58Z","wall_s":416,"tokens":115630,"tool_calls":25,"gate_attempts":1,"outcome":"completed","missing_context":"none","note":"regex API as pinned on regex =1.13.1; own match loop with the spec's empty-match rule; gate green first attempt (11 steps, 485 tests); no deviations"}
+{"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T12:27:14Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T12:27:14Z","from":"specified","to":"ready"}
