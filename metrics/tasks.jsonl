@@ -384,3 +384,5 @@
 {"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:18:40Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:18:40Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:18:42Z","from":"ready","to":"in_progress"}
+{"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:23:07Z","from":"in_progress","to":"self_verified"}
+{"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:23:07Z","from":"self_verified","to":"queued"}
