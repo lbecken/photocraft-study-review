@@ -276,6 +276,27 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   structured reason in kiln-commands would be the robust fix (new task). Residual clipping gap:
   a >200-char value containing white space that is echoed by a message of a later request and
   is neither in that request nor the open document's path is not clipped.
+- 2026-11-13 · R-039 · in_progress (join r2: 26/27, `huge_values_are_echoed_truncated_to_200_chars`
+  failed) · did: cause: clipping lived in the host's error builder and used only the current
+  request (and the open document's path), so `kiln-cli exec`, which builds its stderr error
+  without the host, echoed 100000 chars, and a long value with spaces echoed by a later request
+  was missed. Now two public functions in kiln-control, `clip_error(&mut error, sources)` and
+  `clip_text(text, sources)` (API committed with stub bodies first, 8436026, then logic), are
+  applied at the exits only: `Host::handle_line` clips every error response before it is
+  serialized, with sources = the line (parsed, or raw if not JSON) plus the params of every
+  entry of the session log; `kiln-cli`'s `finish` passes all stderr through `bound_stderr`
+  (JSON error lines → `clip_error`, other lines → `clip_text`, sources = argv as given and
+  parsed as JSON); `control` now returns its outcome to `finish` too. Producers no longer clip.
+  Text of ≤200 chars is returned untouched; the template around a clipped value is kept.
+  Unit tests: kiln-control (later-request echo of a 300+-char path with spaces via a failed
+  save; values without spaces, with spaces, with escaped quotes in message and details; template
+  kept); kiln-cli (exec message + details, run and control responses alike, CLI text errors for
+  script path and `--root` on run and exec), all checking the decoded strings. Doc paragraph on
+  clipping rewritten. · gate attempts: 1 (last: green, 292 tests) · not run: non-Linux ·
+  missing context: none · next: review. Note: on an error with a >200-char message, clipping
+  scans the whole session log (cost proportional to the log, only on such errors); an echo that
+  is a transformed or partial copy of an input (other than JSON/Rust escaping or a schema
+  pointer's compact JSON) is caught only by the >200 non-white-space-run backstop.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13 · R-027 · in_progress · did: wrote `apps/kiln-cli/tests/acceptance_t004.rs` (13 tests,
