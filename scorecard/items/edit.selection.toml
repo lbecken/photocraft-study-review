@@ -2,4 +2,8 @@ id = "edit.selection"
 title = "Cursor and selection move by char, word and line and survive edits elsewhere in the buffer"
 crate = "kiln-text"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t018::selection_follows_random_sessions",
+    "kiln_cli::acceptance_t018::cursor_worked_examples",
+    "kiln_cli::acceptance_t018::cursor_refusals",
+]

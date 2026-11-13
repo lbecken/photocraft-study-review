@@ -2,4 +2,7 @@ id = "io.mixed-eol"
 title = "Mixed line endings are reported and can be normalised by an explicit command"
 crate = "kiln-text"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t018::eol_counts_and_normalize_match_naive_model",
+    "kiln_cli::acceptance_t018::eol_normalize_is_one_undo_step",
+]
