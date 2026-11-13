@@ -5,7 +5,7 @@ tier: medium            # ADR-0002 default: in-memory; the regex dependency was 
 state: draft
 owner_role: planner
 scorecard_items: [search.literal, search.regex, search.whole-word, search.replace]
-depends_on: [T-015, T-017, T-018]   # module slot; Regex contract; Buffer::apply_edits
+depends_on: [T-015, T-017, T-018, T-032]   # module slot; Regex contract; apply_edits; invalid_pattern
 touches:
   - crates/kiln-search/src/lib.rs         # re-exports
   - crates/kiln-search/src/query.rs       # new: Query, literal/whole-word matching, replacement planning
@@ -161,6 +161,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   Tier medium (no ADR-0002 high criterion). Arm odd, paired against the even T-018 (both large
   in-memory, oracle-rich). Every worked example was executed (Python model; regex rows on regex
   1.13.1). Pinned (b), (e), (f) n/a. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: `invalid_pattern` is T-032's (D-041); `depends_on` gains T-032; `QueryError` is mapped in `search.rs` (finding 12). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

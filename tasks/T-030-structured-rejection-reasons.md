@@ -5,7 +5,7 @@ tier: medium            # ADR-0002 (R-060 re-tier): a behaviour change in kiln-c
 state: draft
 owner_role: planner
 scorecard_items: []
-depends_on: [T-015]     # T-015 rewrites kiln-control's kind derivation and the protocol document's kinds section first
+depends_on: [T-032]     # D-041: T-032 rewrites kiln-control's kind derivation and the error-kinds sentences first
 touches:
   - crates/kiln-control/src/lib.rs            # cap decision only
   - crates/kiln-control/tests/caps.rs         # implementer's own integration tests
@@ -29,7 +29,7 @@ D-032 approved T-004 with three follow-ups (`reviews/T-004-r3.md` R3-SG1, R3-N1,
    character-offset paragraph and belongs to the id rules of "Request".
 
 Restructured by the director (R-060): part (d) of the former T-030 (structured reasons, the
-generated kind list, the ADR) moved to T-015, which lands first. That leaves this task with
+generated kind list, the ADR) moved to T-032 (D-041), which lands first. That leaves this task with
 behaviour in `kiln-control`'s cap only, so it is medium by ADR-0002. Arm: **even** (independent
 test author). No gate path.
 
@@ -95,14 +95,14 @@ None. `crates/kiln-control/tests/acceptance_t030.rs`: `echoed_id_does_not_count_
 `other_responses_are_unchanged`.
 
 ## Out of scope and implementer notes
-- Structured reasons, the generated kind list, kind derivation: T-015. New kinds: the tasks
+- Structured reasons, the generated kind list, kind derivation: T-032. New kinds: the tasks
   that need them.
 - Your tests: `crates/kiln-control/tests/caps.rs`, unit tests in `lib.rs`.
 
 ## Decisions
 - D-1 (director, R-051): created by splitting T-007.
 - D-2 (director, R-057): kind list generated from code; stale sentences corrected here.
-- R-060 (director): contracts first. Part (d) moved to T-015; this task keeps part (e) and the
+- R-060 (director): contracts first. Part (d) moved to T-015, then to T-032 (D-041); this task keeps part (e) and the
   D-2 sentence fixes, re-tiered by ADR-0002.
 
 ## Questions
@@ -137,6 +137,7 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   other tasks may not edit assigned here; AC-10; dispatch note revised. · gate attempts: 0 ·
   missing context: none · next: director review, ADR.
 - 2026-11-13 · R-060 · draft · did: shrank to part (e) per the director's restructuring. Part (d) (reasons, generated kind list, ADR, the `xtask/generated.toml` entry) moved to T-015. Re-tiered medium by ADR-0002: no high criterion is left (no gate path, no §3 contract, no boundary); the number is even, so there is an independent test author. `depends_on` [T-015] (shared `crates/kiln-control/src/lib.rs` and `docs/control-protocol.md`). Kept D-2's stale-sentence fixes, since they are document-only and sit in the same file. The file name keeps its old slug (no renumbering). · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: D-041: T-032 (not T-015) rewrites `kiln-control`'s kind derivation and the protocol document's sentences, so `depends_on` is T-032. The stale-sentence item for the "This table is the specified set" sentence is done by T-032. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

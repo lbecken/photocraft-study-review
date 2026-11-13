@@ -5,7 +5,7 @@ tier: medium            # ADR-0002 default: in-memory behaviour, new command gro
 state: draft
 owner_role: planner
 scorecard_items: [syntax.parse, syntax.incremental, syntax.highlight, syntax.brackets]
-depends_on: [T-015, T-016]
+depends_on: [T-015, T-016, T-032]
 touches:
   - crates/kiln-syntax/src/highlight.rs       # slot from T-016
   - crates/kiln-syntax/src/brackets.rs        # slot from T-016
@@ -174,6 +174,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   stop condition in Interface. · gate attempts: 0 · missing context: T-007's final state
   comparison · next: director.
 - 2026-11-13 · R-060 · draft · did: recorded the director's ruling on the cache (R-060 answer 2); the stop condition is removed. The same sentence is in T-007 (b). · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: raises `out_of_range`/`inverted_range` with structured reasons, so `depends_on` gains T-032 (D-041). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

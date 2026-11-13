@@ -220,6 +220,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   a naive Python model. Pinned (b), (e) n/a. Unsure: `not_a_boundary` depends on T-010 Q-1. ·
   gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: `not_a_boundary` is approved and belongs to T-010 (R-060 answer 8): `depends_on` gains T-010, and the fallback to `other` is removed. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: needs T-032 only transitively (through T-010); `depends_on` unchanged. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -5,7 +5,7 @@ tier: high              # ADR-0002: introduces the spawn path; CLI opt-in flag o
 state: draft
 owner_role: planner
 scorecard_items: [diag.tool-fake, diag.cargo-check, diag.positions]
-depends_on: [T-015, T-018]   # tool contract + slots; Buffer anchors
+depends_on: [T-015, T-018, T-032]   # tool contract + slots; anchors; tool kinds
 touches:
   - crates/kiln-workspace/src/tools.rs          # ProcessRunner, RecordingRunner, ReplayRunner (contract from T-015 unchanged)
   - crates/kiln-workspace/src/diagnostics.rs    # cargo JSON parsing and position mapping (slot from T-015)
@@ -138,11 +138,11 @@ stale}`. `code` and `path` may be null; positions may be null (see rules).
 from the current text. If their document was closed, they report check-time positions with
 `doc: null, stale: true`. With `path`, only that path's are listed.
 
-No new error kind (T-015 added the tool kinds). `docs/protocol/tool.md` and `diag.md` document
+No new error kind (T-032 added the tool kinds). `docs/protocol/tool.md` and `diag.md` document
 all of the above, including the warning in (e).
 
 ## Pinned
-- (a) `ToolError` → reason: T-015's table. `diag.check` precedence: runner error →
+- (a) `ToolError` → reason: T-032's `From<&ToolError>`. `diag.check` precedence: runner error →
   `tool_failed` (rule 1) → parse (never fails; malformed lines are ignored).
 - (b) Files: the recording file (written only in `record:` mode, appended per call); the
   replay file (read once at start); project files (read, as T-022). Cargo itself writes
@@ -245,6 +245,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   under the R-056 ruling (later R-060: one line in the CLI section is allowed).
   Pinned: none n/a. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: applied answers 4, 7 and 9. Spawning is opt-in: the default is `--tools none` everywhere, and only `real`/`record:` run tools, with the pinned `tool_unavailable` result otherwise and AC-1 checking that nothing spawns. Added one line to `docs/control-protocol.md` with the build-script warning. Stays high: this task introduces the spawn path. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: tool kinds and the `ToolError` mapping are T-032's (D-041): `depends_on` gains T-032. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

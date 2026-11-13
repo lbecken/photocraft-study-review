@@ -184,6 +184,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   files greyed rather than hidden is an iteration-2 question. · gate attempts: 0 · missing
   context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: T-008 no longer precedes T-015 (contracts first), so it is now an explicit dependency: shared `vfs.rs`/`disk.rs` and `OutsideRoot`. The `ignore` crate stays in the crate manifest (R-060 answer 1). · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: needs T-032 transitively (through T-008); the `not_a_file` wording for `list_dir` of a file is in T-008 (finding 23). It can now export its types without touching `kiln-workspace/src/lib.rs` (T-015 glob re-exports, finding 6). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

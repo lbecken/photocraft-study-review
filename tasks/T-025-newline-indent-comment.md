@@ -150,6 +150,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   against a naive Python model. The round trip holds for comment-first toggles only, stated
   in (g). Pinned (b), (e), (f) n/a. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: added the item `edit.newline` (answer 6). The test author creates it on the tests branch; AC-1 now claims it, and `edit.indent` keeps the indentation part through a separate test. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: raises only `no_such_document` through T-015's existing helper; it needs T-032 only transitively, through T-018. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

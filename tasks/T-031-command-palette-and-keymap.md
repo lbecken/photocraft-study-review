@@ -110,7 +110,7 @@ A chord is `part(+part)*`, compared case-insensitively.
 - File errors: path refusals and `not_found`/`not_a_file`/`io_error`/`outside_root` (T-008) as
   for `doc.open`. Not UTF-8, not JSON, or the wrong shape → `invalid_keymap` (message names the
   JSON error). `keymap.resolve` with an invalid chord → `invalid_keymap` (message `invalid chord`).
-- No new error kind: `invalid_keymap` comes from T-015.
+- No new error kind: `invalid_keymap` comes from T-032.
 
 `docs/protocol/palette.md` and `keymap.md` document all of this, with the examples.
 
@@ -190,6 +190,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   many tasks as the even one (T-018, T-020, T-022, T-026). It depends on the tasks whose
   commands the defaults bind, so it is last. The palette example was executed against a naive
   model. Pinned (e), (f) n/a. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: `invalid_keymap` comes from T-032 (D-041); transitively a dependency through T-018 → T-010 → T-032. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

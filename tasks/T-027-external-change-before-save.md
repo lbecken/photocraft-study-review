@@ -5,12 +5,12 @@ tier: high              # ADR-0002: product code on the file system's persistenc
 state: draft
 owner_role: planner
 scorecard_items: [io.external-change]
-depends_on: [T-015, T-008]   # reason ChangedOnDisk + mapping file; T-008's OutsideRoot (AC-2)
+depends_on: [T-032, T-008]   # D-041: ChangedOnDisk + reason.rs mapping; T-008's OutsideRoot (T-015 transitively)
 touches:
   - crates/kiln-workspace/src/document.rs     # DiskState, SaveError, disk_state, save_checked
   - crates/kiln-workspace/tests/external.rs   # implementer's own integration tests
   - crates/kiln-commands/src/doc.rs           # doc.save `force`; new doc.disk-status
-  - crates/kiln-commands/src/reason.rs        # ONLY the SaveError → RejectReason mapping (T-015 rule: no catch-all)
+  - crates/kiln-commands/src/reason.rs        # ONLY the SaveError → RejectReason mapping (T-032 rule: no catch-all)
   - docs/protocol/doc.md                      # new: the save check and doc.disk-status
   - docs/commands.json                        # generated
 budget_tokens: 850000   # high (v1.1)
@@ -70,7 +70,7 @@ as is. Display of `ChangedOnDisk`: `{path}: changed on disk since it was read` o
 - `doc.disk-status {doc}` (read-only) → `{doc, status: "unchanged"|"changed"|"missing"}`;
   `VfsError`s → today's kinds (`outside_root`, `not_a_file`, `io_error`).
 - Mapping: `SaveError::Vfs(e)` → e's reason (T-015's `VfsError` mapping); `ChangedOnDisk` →
-  `RejectReason::ChangedOnDisk` (T-015). Exhaustive, in `reason.rs`.
+  `RejectReason::ChangedOnDisk` (T-032). An exhaustive `impl From<&SaveError> for RejectReason` in `reason.rs`.
 
 No new error kind. `docs/protocol/doc.md` documents both, the content-not-time rule and the race
 in (e).
@@ -150,6 +150,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   model. Unsure: whether the director wants `doc.open`/`doc.info` to show the disk state too
   (left out). · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: the mapping moves to T-015's `reason.rs`; `depends_on` gains T-008 (contracts first means T-008 no longer precedes T-015, and AC-2 needs `outside_root`). Shares `doc.rs` with T-007 and T-010, and `reason.rs` with T-008 and T-010: never in flight with them. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: reasons are T-032's (D-041): `depends_on` gains T-032. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -5,7 +5,7 @@ tier: medium            # ADR-0002 default: in-memory plus T-019's existing read
 state: draft
 owner_role: planner
 scorecard_items: [syntax.outline, nav.goto-line, nav.goto-symbol, nav.workspace-symbol]
-depends_on: [T-016, T-018, T-019]   # SyntaxTree + outline slot; selection; project walk
+depends_on: [T-016, T-018, T-019, T-032]
 touches:
   - crates/kiln-syntax/src/outline.rs        # slot from T-016
   - crates/kiln-syntax/tests/outline.rs      # implementer's own integration tests
@@ -159,6 +159,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   T-020. The outline example's leaves were checked in a tree-sitter spike; the goto-line
   example was executed against a naive model. Pinned (e), (f) n/a. · gate attempts: 0 · missing
   context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: `invalid_pattern` and the reason API are T-032's (D-041); `depends_on` gains T-032 explicitly. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

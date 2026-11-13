@@ -150,6 +150,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   says high (Q-6). Arm even. The worked example was executed against a naive model. Pinned (e),
   (f) n/a beyond reuse. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: item tier ruled medium; the test author changes the item file on the tests branch. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: `stale_preview`/`no_such_preview` are T-032's (D-041); T-032's description of `stale_preview` now covers a removed file (finding 25). Transitively after T-032 via T-021. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

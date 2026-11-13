@@ -5,7 +5,7 @@ tier: high              # ADR-0002: changes how the command log and the registry
 state: draft
 owner_role: planner
 scorecard_items: [cmd.log-replay]   # CLI criterion: `kiln-cli replay` (Decisions D-5)
-depends_on: [T-006, T-015]   # R-060: CommandError reasons (T-015) land first
+depends_on: [T-006, T-032]   # D-041: CommandError reasons first (T-015 transitively)
 touches:
   - crates/kiln-commands/src/registry.rs     # R-060: narrowed from the directory
   - crates/kiln-commands/src/doc.rs          # rich read-only examples
@@ -32,7 +32,7 @@ original session;
 command registered now or later, checked in the gate;
 (c) a command that ran but produced a result that fails its own schema is still recorded, so
 the log never misses a state change.
-Structured refusal reasons are T-015 (R-060, absorbed from T-030); the T-004 follow-ups stay in T-030.
+Structured refusal reasons are T-032 (D-041); the T-004 follow-ups stay in T-030.
 
 ## Reading list
 - `docs/decisions.md` D-020 (3) (no rollback in replay), D-023.
@@ -101,7 +101,9 @@ implementer: how state is compared for (b), and how results are stored.
 **observable state** exactly as it found it (director, R-060): what some command result can
 expose — document text, dirty flag, undo history, ids, the command log, and selections once
 T-018 lands. A derived cache that no command result exposes (such as T-020's syntax-tree cache)
-is not state, and the check must not compare it. The log and the results are not part of this comparison (`execute`
+is not state, and the check must not compare it. T-015's group state structs are compared only
+as their owning task specifies (T-022's previews, T-031's keymap are observable through
+commands); until then they are empty (spec check R-062, finding 24). The log and the results are not part of this comparison (`execute`
 appends the command's own entry and result as for any command). "The context" means:
 - the scratch buffer: its text and its undo/redo history, including whether a typing group is
   open;
@@ -126,7 +128,7 @@ Existing examples stay, in their positions (new ones are appended: `guard_t003.r
 but its result does not serialize or fails the result schema. Then `execute` returns
 `Err(CommandError::Internal{..})`, as today, with today's message shapes:
 `` result of `<name>` violates its schema: … `` or `` result of `<name>` does not serialize: … ``.
-The command **is** appended to the log (name, params as given, `mutating`), and `results()`
+The error carries `reason: InternalReason::ResultSchema` (schema) or `InternalReason::Other` (serialization), from T-032. The command **is** appended to the log (name, params as given, `mutating`), and `results()`
 gets the produced value (`null` if it did not serialize). Every other failure still appends
 nothing and leaves the context unchanged: unknown command, invalid params, `rejected`, or an
 error returned by `run`. The `LogEntry` and `Context::log` doc comments change from
@@ -382,6 +384,7 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   CLI's sorted-key form (not executed: `replay` does not exist yet). · gate attempts: 0 ·
   missing context: none · next: director review, ADR.
 - 2026-11-13 · R-060 · draft · did: contracts-first restructuring: depends on T-006 and T-015 (T-015 now carries structured reasons, so rule (c)'s `Internal` error is raised with `InternalReason::ResultSchema` from the start; there is no "T-007 before T-030" order any more). `touches` narrowed from `crates/kiln-commands/src` to `registry.rs`, `doc.rs`, `buffer.rs`, `lib.rs`, so the feature modules of T-015 stay disjoint. Added the director's observable-state sentence to (b). References to T-030 for reasons are superseded by T-015; T-030 still corrects the "not recorded" sentence of `docs/control-protocol.md`. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: `depends_on` T-006 (merged), T-032: rule (c) raises `Internal { reason: InternalReason::ResultSchema | Other }` from T-032, and `registry.rs` is serialised after T-015 and T-032. Added the group-state sentence to (b) (finding 24). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

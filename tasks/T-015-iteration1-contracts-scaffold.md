@@ -205,8 +205,8 @@ this task. The mapping of `ToolError` to refusal kinds is T-032's.
 
 ## Acceptance criteria
 - AC-1 (no observable change, CLI; a **guard**, meant to pass on base):
-  `apps/kiln-cli/tests/guard_t015_cli.rs` runs fixed scripts through `kiln-cli run --memory`
-  and `kiln-cli exec`. The scripts are the worked example of `docs/control-protocol.md` with
+  `apps/kiln-cli/tests/guard_t015_cli.rs` runs fixed scripts through `kiln-cli run` on a
+  temporary root, and runs `kiln-cli exec`. The scripts are the worked example of `docs/control-protocol.md` with
   its files, plus a ≥ 300-request fixed-seed session whose request paths come from
   `[a-z0-9/._]` and never contain `: `. They also run `kiln-cli commands` and `commands
   --schema`. The outputs equal constants embedded in the `.rs` file, recorded on base. Oracle:

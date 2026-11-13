@@ -38,7 +38,7 @@ Reading list: `tasks/T-024-*.md` (runners, `--tools`, recording format); `tasks/
 `fmt.document {doc}` (mutating) → `{doc, changed, len_chars}`.
 1. Request: `ToolRequest { tool: Rustfmt, args: ["--emit", "stdout", "--edition", "2024",
    "--config", "newline_style=Unix"], stdin: Some(<current text>) }`. A `ToolError` →
-   `rejected` with T-015's reason (`tool_unavailable`, `tool_not_found`, `tool_timeout`,
+   `rejected` with T-032's reason (`tool_unavailable`, `tool_not_found`, `tool_timeout`,
    `tool_failed`, `no_recording`).
 2. Exit status not 0 → `rejected`/`format_error`. The message is `rustfmt failed: ` followed by
    stderr with ANSI escapes removed, cut to 200 chars by the protocol cap. Nothing changes.
@@ -125,6 +125,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   director may judge "spawns processes" to cover callers too; then high). Arm even. Pinned (e),
   (f) n/a. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: tier medium confirmed (R-060 answer 7: callers through the runner trait are medium). Real tools only with the explicit `--tools real` (T-024's opt-in default `none`). · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-066 · draft · did: reasons are T-032's (D-041), transitively through T-024; `depends_on` unchanged. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
