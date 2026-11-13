@@ -239,6 +239,13 @@ fn scan(replacement: &str) -> Vec<Piece<'_>> {
     pieces
 }
 
+/// The byte range of each group of one match in the text (`None` if it did not take part),
+/// indexed as `Captures::groups`.
+pub(crate) type ByteGroups = [Option<(usize, usize)>];
+
+/// A visitor of [`Regex::for_each_match_bytes`].
+pub(crate) type MatchVisitor<'a> = dyn FnMut(&Captures, &ByteGroups) -> ControlFlow<()> + 'a;
+
 /// A replacement template with every reference resolved to a group index (T-021).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Template {
@@ -265,7 +272,7 @@ impl Template {
     /// The expansion for one match whose group byte ranges in `text` are `bytes` (as passed
     /// by [`Regex::for_each_match_bytes`]). Costs the length of the output, never a walk of
     /// `text`.
-    pub(crate) fn expand_bytes(&self, text: &str, bytes: &[Option<(usize, usize)>]) -> String {
+    pub(crate) fn expand_bytes(&self, text: &str, bytes: &ByteGroups) -> String {
         if let [Part::Literal(s)] = self.parts.as_slice() {
             return s.clone();
         }
@@ -425,11 +432,7 @@ impl Regex {
 
     /// [`Self::for_each_match`], also passing each group's byte range in `text` (`None` if it
     /// did not take part; index as in `Captures::groups`). Both values are reused.
-    pub(crate) fn for_each_match_bytes(
-        &self,
-        text: &str,
-        f: &mut dyn FnMut(&Captures, &[Option<(usize, usize)>]) -> ControlFlow<()>,
-    ) {
+    pub(crate) fn for_each_match_bytes(&self, text: &str, f: &mut MatchVisitor<'_>) {
         let mut cursor = CharCursor::new(text);
         let mut locs = self.engine.capture_locations();
         let mut caps = Captures {

@@ -29,7 +29,7 @@ use std::fmt;
 use std::ops::ControlFlow;
 
 use crate::regex::{
-    Captures, CharMatch, PatternError, Regex, RegexOptions, Template, TemplateError,
+    Captures, CharMatch, MatchVisitor, PatternError, Regex, RegexOptions, Template, TemplateError,
 };
 
 /// Longest pattern, in chars, in both modes (D-071 c3).
@@ -144,11 +144,7 @@ impl Query {
 impl CompiledQuery {
     /// Calls `f` for each match (whole-word filter applied), in order, with its captures and
     /// group byte ranges; stops after a call that returns `Break`.
-    fn each(
-        &self,
-        text: &str,
-        f: &mut dyn FnMut(&Captures, &[Option<(usize, usize)>]) -> ControlFlow<()>,
-    ) {
+    fn each(&self, text: &str, f: &mut MatchVisitor<'_>) {
         self.regex.for_each_match_bytes(text, &mut |caps, bytes| {
             if self.whole_word
                 && let Some(Some((s, e))) = bytes.first()
