@@ -1,5 +1,5 @@
 //! T-015 implementer tests: every `Context` starts with external tools off (`NoTools`), and
-//! `set_tools` replaces the runner; the scaffold adds no command.
+//! `set_tools` replaces the runner without changing what commands do.
 
 use kiln_commands::{Context, standard_registry};
 use kiln_workspace::{MemoryFs, Tool, ToolError, ToolOutput, ToolRequest, ToolRunner};
@@ -57,21 +57,4 @@ fn installing_a_runner_does_not_change_commands() {
     with_runner.set_tools(Box::new(Fixed));
     assert_eq!(run(&mut plain), run(&mut with_runner));
     assert_eq!(plain.log(), with_runner.log());
-}
-
-#[test]
-fn the_scaffold_registers_no_command_of_the_new_groups() {
-    let names = standard_registry().expect("registry").names();
-    let new_groups = [
-        "cursor.", "eol.", "project.", "syntax.", "search.", "find.", "nav.", "tool.", "diag.",
-        "edit.", "fmt.", "palette.", "keymap.",
-    ];
-    // Holds only until T-018…T-031 fill their modules; those tasks replace this test.
-    for name in &names {
-        assert!(
-            !new_groups.iter().any(|p| name.starts_with(p)),
-            "{name} registered by the scaffold"
-        );
-    }
-    assert!(names.contains(&"doc.open") && names.contains(&"buffer.insert"));
 }
