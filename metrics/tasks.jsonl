@@ -405,3 +405,5 @@
 {"kind":"transition","task":"T-019","iteration":2,"at":"2026-11-13T21:44:55Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-019","iteration":2,"at":"2026-11-13T21:44:58Z","from":"ready","to":"in_progress"}
 {"kind":"run","task":"iter-2","iteration":2,"run":"R-160","role":"planner","tier":null,"started_at":"2026-11-13T21:27:05Z","ended_at":"2026-11-13T21:46:39Z","wall_s":1174,"tokens":321250,"tool_calls":79,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"tooling specs for v1.2: T-033 rewritten (join), T-043 split from it (queue refusals recorded; dirty ledger files the queue does not read are ignored), T-041 (no CI run for ledger-only pushes), T-042 (AGENTS.md and CHARTER section 5); questions ruled in D-098"}
+{"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:48:24Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-042","iteration":2,"at":"2026-11-13T21:48:24Z","from":"specified","to":"ready"}
