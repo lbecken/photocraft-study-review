@@ -291,3 +291,4 @@
 {"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T13:22:16Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-008","iteration":1,"at":"2026-11-13T13:22:23Z","from":"ready","to":"in_progress"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:27:42Z","from":"tests_joined","to":"in_progress"}
+{"kind":"run","task":"T-011","iteration":1,"run":"R-119","role":"reviewer","tier":"medium","started_at":"2026-11-13T13:19:00Z","ended_at":"2026-11-13T13:28:04Z","wall_s":512,"tokens":140913,"tool_calls":27,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"round 1: request-changes; 0 defects, 1 test gap, 3 spec gaps, 2 nits; mutants 19 introduced / 1 equivalent / 17 killed (15 by acceptance) / 1 survived in spec-stated behaviour; test files unchanged after the tests-first commit; start entered by the director from the dispatch, wall from the harness"}
