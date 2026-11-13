@@ -611,6 +611,16 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `ready`, `in_progress` committed and only the input untracked). · gate attempts: 2 (last:
   red `test` only, the same 15 T-005 `worktree: refused` failures; all else PASS). · not run:
   acceptance tests; publish on the real repository. · missing context: none · next: join.
+- 2026-11-13T06:45Z · R-064 · in_progress · did: D-040 — removed the `reset --soft`; the
+  step-3 commit's subject is `publish: T-NNN in progress`; a success adds six first-parent
+  commits. `publish::run_with` takes the gate and the queue as parameters (the binary passes
+  `CargoGate` and the child `cargo xtask queue`), so unit tests run the whole publish
+  in-process on a toy repository: the six subjects in order, every reflog value of main since
+  the pre-publish tip an ancestor of the final head, clean checkout, worktree removed; and a
+  red gate leaves `ready` + `in progress` committed, the in_progress transition in main's
+  committed metrics, only the inputs dirty. development.md updated. · gate attempts: 3 (last:
+  red `test` only, the same 15 T-005 fixture failures; all else PASS). · not run: acceptance
+  tests. · missing context: none · next: join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
