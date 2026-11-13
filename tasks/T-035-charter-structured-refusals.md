@@ -2,7 +2,7 @@
 id: T-035
 title: "State in docs/CHARTER.md §3 that refusals carry structured reasons (ADR-0004)"
 tier: low               # ADR-0002: documentation only; the contract itself changed in T-032 (high) under the accepted ADR-0004
-state: in_progress
+state: queued
 owner_role: planner
 scorecard_items: []
 depends_on: [T-032]     # merged: the behaviour the sentence states is on main
