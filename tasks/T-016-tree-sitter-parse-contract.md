@@ -407,6 +407,20 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `cd` (build only into its existing target/, no git command, no file edited).
 <!-- end implementer log -->
 ### test author
+- 2026-11-13T11:17Z · R-093 · in_progress (tests at 2a8e462e229b2a0df8c386f1ada66bbe5a5fe9f3, R-083 cut off by a usage limit) · did: finished R-083's run.
+  Kept R-083's uncommitted edit to `acceptance_t016.rs`: `#![cfg(test)]` at the crate root (the
+  convention of the other acceptance files, so the `clippy.toml` in-test allowances cover helper
+  fns under the workspace's `unwrap_used`/`expect_used`/`panic` denials) plus `cargo fmt` output;
+  no assertion changed. Against R-083's throwaway reference implementation (never committed,
+  now deleted) all 9 tests passed. Mutation self-check: R-083 seeded 18 mutants, 18 killed; R-093
+  added M19 (`sexp` never descends into children) and M20 (`sexp` descends only two levels),
+  both killed by `sexp_form_is_exact` and `hostile_inputs_parse`. Total 20 introduced, 20
+  killed. On the bare branch the test target does not compile (`kiln_syntax::{ErrorKind, …}`
+  unresolved; `syn`, `proc-macro2`, `toml` dev-dependencies are the implementer's per Interface
+  "Dependencies"): result on base `compile` for every test, as Pinned/"Scorecard items" foresees. ·
+  gate attempts: 0 · not run: `cargo xtask ci`, clippy (target cannot compile on this branch;
+  not re-run with the stub before it was removed) · missing context: R-083's per-mutant kill list
+  for M1–M18 was not recorded · next: join with `task/T-016`.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
