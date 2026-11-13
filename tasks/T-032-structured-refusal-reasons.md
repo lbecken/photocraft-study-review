@@ -453,4 +453,14 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   · gate attempts: 1 (last: green, 10 steps) · not run: base `kiln-cli` byte comparison
   (disk), a real host panic · missing context: none · next: implementer (findings 1–2),
   director (finding 3).
+- 2026-11-13T12:12Z · R-102 · rework joined · did: round 2 (final) delta review of
+  `6828f54..2988e1b8e9436aa3159ab14dc8b85de04cdbf5f8` (`reviews/T-032-r2.md`). Verdict
+  approve.
+  - r1 findings 1 and 5 are resolved by the macro table and the ordered-subsequence check;
+    M11 can no longer be written.
+  - Finding 2 is resolved by the host panic test; M12 is killed.
+  - Mutants: 8 introduced, 8 killed (5 by acceptance), 0 survived.
+
+  · gate attempts: 1 (last: green, 10 steps, 434 tests) · not run: base byte comparison
+  (r3) · missing context: none · next: director (high-tier approval row).
 <!-- end reviewer log -->
