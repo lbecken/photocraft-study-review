@@ -1906,8 +1906,8 @@ fn replace_all_is_linear() {
 /// {limit:10}` → `0..0` … `9..9`, `total: 400001`, `truncated`; `search.replace {replacement:
 /// "-", all:true}` → `replaced: 400001`, `len_chars: 800001`, 10,000 `ranges`, `truncated`;
 /// `doc.undo` restores the text. Every line `ok`, exit 0. Keeping every match's slots needs
-/// about 0.96 GB and aborts under the cap.
-#[cfg(unix)]
+/// about 0.96 GB and aborts under the cap. Runs `sh` (Unix, Pinned (d), D-014) without a `cfg`
+/// attribute: the gate's no-skip rule refuses a cfg-disabled test.
 #[test]
 fn search_memory_is_bounded() {
     let text = "x".repeat(400_000);
