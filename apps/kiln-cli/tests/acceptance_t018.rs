@@ -1205,7 +1205,14 @@ fn cursor_refusals() {
     r.push("cursor.get", json!({"doc": 1}), unchanged());
 
     // Params schema first: even for an unknown document.
-    let bad: [(&str, Value); 8] = [
+    // Ruling x1: `null` is not a value of an optional parameter (omit it instead).
+    let bad: [(&str, Value); 11] = [
+        ("cursor.set", json!({"doc": 1, "anchor": 0, "head": null})),
+        ("eol.normalize", json!({"doc": 1, "to": null})),
+        (
+            "cursor.move",
+            json!({"doc": 1, "by": "char", "forward": true, "extend": null}),
+        ),
         ("cursor.set", json!({"doc": 9, "anchor": "1"})),
         ("cursor.set", json!({"doc": 1})),
         ("cursor.set", json!({"doc": 1, "anchor": -1})),
@@ -1652,6 +1659,40 @@ fn eol_normalize_is_one_undo_step() {
     r.push("doc.undo", json!({"doc": doc}), Expect::AnyOk);
     r.push("cursor.get", json!({"doc": doc}), cursor(doc, 3, 5, 2, 0));
 
+    // Ruling x3 (redo half of w1, order matters): "x\r\r\ny" to LF, undo, caret at 2 (between
+    // the lone CR and the CRLF), redo → 1: the CRLF edit is redone first and the caret snaps
+    // out of the intermediate "\r\n", then the lone CR's edit keeps it at 1.
+    std::fs::write(root.join("x3.txt"), "x\r\r\ny").expect("write file");
+    doc += 1;
+    r.push("doc.open", json!({"path": "x3.txt"}), Expect::AnyOk);
+    r.push(
+        "eol.normalize",
+        json!({"doc": doc, "to": "lf"}),
+        Expect::Result(json!({"changed": 2, "len_chars": 4, "line_ending": "lf",
+            "mixed_line_endings": false})),
+    );
+    r.push(
+        "doc.undo",
+        json!({"doc": doc}),
+        Expect::Result(json!({"undone": true, "len_chars": 5, "dirty": false})),
+    );
+    r.push(
+        "cursor.set",
+        json!({"doc": doc, "anchor": 2, "head": 2}),
+        cursor(doc, 2, 2, 1, 0),
+    );
+    r.push(
+        "doc.redo",
+        json!({"doc": doc}),
+        Expect::Result(json!({"redone": true, "len_chars": 4, "dirty": true})),
+    );
+    r.push("cursor.get", json!({"doc": doc}), cursor(doc, 1, 1, 0, 1));
+    r.push(
+        "doc.text",
+        json!({"doc": doc}),
+        Expect::Result(json!({"text": "x\n\ny", "len_chars": 4})),
+    );
+
     // Ruling w2: a normalize that rewrites nothing leaves an open typing group open ...
     std::fs::write(root.join("lf.txt"), "a\nb").expect("write file");
     doc += 1;
@@ -1716,6 +1757,38 @@ fn eol_normalize_is_one_undo_step() {
 
 // ---------------------------------------------------------------- generated docs
 
+/// Whether the JSON Schema `node` (inside the params schema `root`, whose `$defs` its `$ref`s
+/// name) accepts `null`: a `null` type, `nullable`, a `null` const or enum value, or a branch
+/// of `anyOf`/`oneOf` that does.
+fn allows_null(root: &Value, node: &Value, depth: usize) -> bool {
+    assert!(depth < 16, "schema nesting too deep: {node}");
+    if let Some(r) = node["$ref"].as_str() {
+        let name = r.rsplit('/').next().expect("ref name");
+        let def = &root["$defs"][name];
+        assert!(def.is_object(), "unresolved {r}");
+        if allows_null(root, def, depth + 1) {
+            return true;
+        }
+    }
+    let ty = &node["type"];
+    if ty == &json!("null") || ty.as_array().is_some_and(|a| a.contains(&json!("null"))) {
+        return true;
+    }
+    if node["nullable"] == json!(true)
+        || node.get("const").is_some_and(Value::is_null)
+        || node["enum"]
+            .as_array()
+            .is_some_and(|a| a.contains(&Value::Null))
+    {
+        return true;
+    }
+    ["anyOf", "oneOf"].iter().any(|k| {
+        node[*k]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|b| allows_null(root, b, depth + 1)))
+    })
+}
+
 /// The generated `docs/commands.json` lists the five new commands with the mutating flags of
 /// the spec's table, and the refusal kinds they use are published (no new kind is needed).
 #[test]
@@ -1734,6 +1807,29 @@ fn commands_json_lists_cursor_and_eol_commands() {
             .find(|c| c["name"] == json!(name))
             .unwrap_or_else(|| panic!("{name} missing from docs/commands.json"));
         assert_eq!(entry["mutating"], json!(mutating), "{name}");
+    }
+    // Ruling x1: the published schema of an optional parameter does not allow `null`.
+    for (name, param) in [
+        ("cursor.set", "head"),
+        ("cursor.move", "extend"),
+        ("eol.normalize", "to"),
+    ] {
+        let entry = commands
+            .iter()
+            .find(|c| c["name"] == json!(name))
+            .expect("checked above");
+        let schema = &entry["params_schema"];
+        let prop = &schema["properties"][param];
+        assert!(prop.is_object(), "{name}: `{param}` is published: {schema}");
+        assert!(
+            !allows_null(schema, prop, 0),
+            "{name}: `{param}` must not allow null: {prop}"
+        );
+        let required = schema["required"].as_array().cloned().unwrap_or_default();
+        assert!(
+            !required.contains(&json!(param)),
+            "{name}: `{param}` is optional"
+        );
     }
     let kinds = doc["error_kinds"].to_string();
     for kind in ["no_such_document", "out_of_range", "not_a_boundary"] {

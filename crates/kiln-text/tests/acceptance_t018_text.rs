@@ -808,6 +808,28 @@ fn batch_undo_normalize_and_typing_rulings() {
         assert_eq!(b.text(), want);
     }
 
+    // Ruling x3 (redo half of w1, order matters): "x\r\r\ny" to LF, undo, caret at 2, redo →
+    // 1 (the CRLF's edit is redone first; the CRLF snap applies after each edit).
+    let mut b = Buffer::from_text("x\r\r\ny");
+    assert_eq!(b.normalize_line_endings(LineEnding::Lf), 2);
+    assert!(b.undo());
+    assert_eq!(b.text(), "x\r\r\ny");
+    b.set_selection(Selection { anchor: 2, head: 2 })
+        .expect("valid");
+    assert!(b.redo());
+    assert_eq!(b.text(), "x\n\ny");
+    assert_eq!(b.selection(), Selection { anchor: 1, head: 1 });
+    let mut m = Model {
+        text: chars("x\r\r\ny"),
+        pos: vec![0, 0],
+        ..Model::default()
+    };
+    m.normalize("\n");
+    assert!(m.undo());
+    m.pos = vec![2, 2];
+    assert!(m.redo());
+    assert_eq!(m.pos, [1, 1], "the naive model agrees");
+
     // w3: selection and anchor calls, successful or refused, keep the typing group open.
     let mut b = Buffer::new();
     b.insert(0, "a").expect("insert");
