@@ -182,23 +182,19 @@ fn assert_reaches(work: &Work, link: &str, expected: &[u8]) {
     );
 }
 
-/// `text` names no host path and no link target.
+/// `text` names no host path and no link target (AC-8). The pinned phrase `resolves outside the
+/// root` itself contains `outside`, so it is removed before the check (see the test-author log).
 fn assert_clean(text: &str, work: &Work) {
     assert!(!text.contains(&work.text()), "names the work path: {text}");
+    let text = text.replace(OUTSIDE, "");
     assert!(!text.contains("outside"), "names `outside`: {text}");
     assert!(!text.contains("rootx"), "names `rootx`: {text}");
 }
 
 /// `r` is an error whose `Display` is exactly `<p>: <what>` and whose `path()` is `p`.
-fn assert_refused<T: std::fmt::Debug>(
-    op: &str,
-    r: Result<T, VfsError>,
-    p: &str,
-    what: &str,
-    work: &Work,
-) {
+fn assert_refused<T>(op: &str, r: Result<T, VfsError>, p: &str, what: &str, work: &Work) {
     match r {
-        Ok(v) => panic!("{op}({p}) succeeded ({v:?}); expected `{p}: {what}`"),
+        Ok(_) => panic!("{op}({p}) succeeded; expected `{p}: {what}`"),
         Err(e) => {
             assert_eq!(e.to_string(), format!("{p}: {what}"), "{op}({p})");
             assert_eq!(e.path().as_str(), p, "{op}({p}) path()");

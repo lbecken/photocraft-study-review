@@ -1,0 +1,19 @@
+id = "ws.path-confinement"
+title = "Disk paths are confined to the workspace root at open and save; non-regular files are refused without blocking"
+crate = "kiln-workspace"
+tier = "high"
+tests = [
+    # Acceptance (T-008 AC-1, AC-2, AC-4, AC-6, AC-7, AC-8), Rust API.
+    "kiln_workspace::acceptance_t008::open_through_escaping_symlinks_is_refused",
+    "kiln_workspace::acceptance_t008::save_through_escaping_symlinks_touches_nothing",
+    "kiln_workspace::acceptance_t008::link_swapped_in_after_open_is_refused_at_save",
+    "kiln_workspace::acceptance_t008::non_regular_files_are_refused_without_blocking",
+    "kiln_workspace::acceptance_t008::save_onto_non_regular_files_leaves_them_alone",
+    "kiln_workspace::acceptance_t008::outside_root_wins_over_not_found",
+    # Guard (T-008 AC-5): in-root symlinks keep working.
+    "kiln_workspace::guard_t008::symlinks_inside_root_still_work",
+    # Acceptance (T-008 AC-3, AC-6) through kiln-cli.
+    "kiln_cli::acceptance_t008_cli::reviewer_exploit_is_refused_end_to_end",
+    "kiln_cli::acceptance_t008_cli::fifo_and_socket_do_not_hang_run",
+    "kiln_cli::acceptance_t008_cli::fifo_does_not_hang_exec",
+]
