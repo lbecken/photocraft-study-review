@@ -518,4 +518,16 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   directory) than the one it was built from".
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13 · R-028 · tests_joined (main) · did: review round 1 of 055821a → `reviews/T-005-r1.md`,
+  verdict request-changes (defect 2, spec gap 4, test gap 2, nit 2). Gate green (81.8 s); toy-repo
+  queue experiments E1–E6; mutation spot-check 17/20 killed (survivors: KILN_XTASK_RUN_IN unset,
+  Cargo.lock version check off, regeneration stray check off). Defects: cached main xtask can be
+  overwritten by gated task code and is reused by stamp (a failing test merged); symbolic
+  `reviewed_sha` (e.g. `task/T-NNN`) makes the stale-review rule vacuous. SPEC GAPS for the
+  director: main's gate obeys the task's `.cargo/`, toolchain, clippy and xtask data files (both
+  gates pass a neutralised test runner); un-conflicted `Cargo.lock` changes bypass `touches` and the
+  version rule; gate_failed leaves the branch rebased so join/review evidence stops matching;
+  join/main-history evidence comes from uncommitted `metrics/` files. · gate attempts: 1 (last:
+  green) · not run: queue on the real repository, registry `cargo update` · tokens: unknown ·
+  missing context: none · next: director rules on F3, F4, F7, F8; implementer fixes F1, F2, F5, F6.
 <!-- end reviewer log -->
