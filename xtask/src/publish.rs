@@ -9,11 +9,12 @@
 //!    `docs/scorecard.md` is never written);
 //! 2. the task file on main (`publish: T-NNN ready`), transitions draft → specified → ready;
 //! 3. the worktree (`worktree new`), ready → in_progress, committed on main at once
-//!    (`publish: T-NNN in_progress`, `metrics/` only) so every stop leaves main committed;
+//!    (`publish: T-NNN in progress`, `metrics/` only) so every stop leaves main committed;
 //! 4. the inputs and the regenerated `docs/scorecard.md` committed on `task/T-NNN`;
 //! 5. the gate in the worktree;
-//! 6. in_progress → self_verified → queued, `state: queued` on main (`publish: T-NNN queued`;
-//!    the interim `in_progress` commit is folded into it, so a success leaves exactly five);
+//! 6. in_progress → self_verified → queued, `state: queued` on main (`publish: T-NNN queued`);
+//!    main's history is append-only (D-040): nothing is ever reset, amended or rewritten, so a
+//!    success adds six commits (ready, in progress, queued, content, queue record, merged);
 //! 7. the inputs removed from the primary checkout (they come back with the fast-forward);
 //! 8. `cargo xtask queue T-NNN` (child process, exit code passed through); on exit 0
 //!    queued → merged, `state: merged` (`publish: T-NNN merged`) and `worktree rm T-NNN`.
@@ -27,7 +28,7 @@ use std::process::Command;
 use anyhow::{Context as _, Result, bail};
 
 use crate::git::{branch_exists, dirty_paths, git, git_try, rev};
-use crate::queue::{GateRunner as _, GateXtask, is_evidence_path};
+use crate::queue::{GateRunner, GateXtask, is_evidence_path};
 use crate::timefmt::{Clock, format_utc};
 use crate::util::{Exit, Refused, capture, tail, valid_task_id};
 use crate::worktree::Spec;
@@ -308,7 +309,11 @@ fn scorecard_in(dir: &Path, argv: &[String], target: &Path) -> Result<Result<(),
 
 /// Step 1: the checks. Returns main's xtask binary, the scorecard command and the inputs in
 /// byte order.
-fn checks(root: &Path, a: &Args) -> Result<(PathBuf, Vec<String>, Vec<String>)> {
+fn checks(
+    root: &Path,
+    a: &Args,
+    gate: &dyn GateRunner,
+) -> Result<(PathBuf, Vec<String>, Vec<String>)> {
     let head = git(root, &["symbolic-ref", "--quiet", "HEAD"]).unwrap_or_default();
     if head != "refs/heads/main" {
         return Err(refused(format_args!(
@@ -411,7 +416,7 @@ fn checks(root: &Path, a: &Args) -> Result<(PathBuf, Vec<String>, Vec<String>)> 
     // The would-be docs/scorecard.md: main's generated.toml command (with main's xtask, as the
     // queue builds it) in a private export of main + inputs; the checkout is not written.
     let main_sha = rev(root, "main")?;
-    let xtask = crate::queue::build_main_xtask(root, &main_sha)?;
+    let xtask = gate.build_main_xtask(root, &main_sha)?;
     let argv = scorecard_command(root, &xtask)?;
     let base = crate::queue::common_dir(root)?.join("kiln-publish");
     let (tree, target) = (base.join("tree"), base.join("target"));
@@ -446,9 +451,32 @@ fn checks(root: &Path, a: &Args) -> Result<(PathBuf, Vec<String>, Vec<String>)> 
 
 /// Run the publish helper; `Ok(())` is exit 0, other exits are [`Exit`] or [`Refused`].
 pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
+    run_with(root, a, clock, &crate::queue::CargoGate, &queue_child)
+}
+
+/// Step 8's queue: `cargo xtask queue T-NNN` as a child (this binary), output passed through;
+/// its exit code.
+fn queue_child(root: &Path, task: &str) -> Result<i32> {
+    let exe = std::env::current_exe().context("locate the xtask binary")?;
+    let status = Command::new(exe)
+        .args(["queue", task])
+        .current_dir(root)
+        .status()
+        .context("start the queue")?;
+    Ok(status.code().unwrap_or(1))
+}
+
+/// [`run`] with the gate and the queue injected (unit tests use fakes).
+pub fn run_with(
+    root: &Path,
+    a: &Args,
+    clock: &dyn Clock,
+    gate: &dyn GateRunner,
+    queue: &dyn Fn(&Path, &str) -> Result<i32>,
+) -> Result<()> {
     let task = a.task.clone();
     // 1.
-    let (xtask, argv, inputs) = checks(root, a)?;
+    let (xtask, argv, inputs) = checks(root, a, gate)?;
     let now = || format_utc(clock.now_millis().div_euclid(1000));
 
     // 2.
@@ -471,14 +499,12 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
     );
     transition(root, &task, "in_progress", clock)?;
     // Ruling Q-b: main's ledger is committed wherever the command stops.
-    let ready_sha = rev(root, "main")?;
     ledger_commit_paths(
         root,
-        &format!("publish: {task} in_progress"),
+        &format!("publish: {task} in progress"),
         &task,
         &["metrics/tasks.jsonl".to_owned()],
     )?;
-    let in_progress_sha = rev(root, "main")?;
 
     // 4.
     let wt = info.path.clone();
@@ -534,7 +560,7 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
     }
 
     // 5.
-    let outcome = crate::queue::CargoGate.run(&wt, GateXtask::Binary(&xtask))?;
+    let outcome = gate.run(&wt, GateXtask::Binary(&xtask))?;
     if !outcome.passed {
         eprintln!(
             "publish: gate failed in .worktrees/{task} at {}; {task} stays in_progress (committed on main); fix the input and re-run the gate there, or abandon (metrics transition --to abandoned; worktree rm {task} --force)",
@@ -548,12 +574,6 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
     transition(root, &task, "queued", clock)?;
     let current = std::fs::read_to_string(root.join(&task_file))?;
     std::fs::write(root.join(&task_file), with_state(&current, "queued"))?;
-    // Ruling (4): after a success, main shows exactly ready, queued, content, record, merged.
-    // The interim `in_progress` commit (made only so a stop leaves main committed) is folded
-    // into the `queued` commit, and only while main is still exactly that commit.
-    if rev(root, "main")? == in_progress_sha {
-        git(root, &["reset", "--quiet", "--soft", &ready_sha])?;
-    }
     ledger_commit(root, &format!("publish: {task} queued"), &task, &task_file)?;
 
     // 7.
@@ -575,13 +595,7 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
     }
 
     // 8.
-    let exe = std::env::current_exe().context("locate the xtask binary")?;
-    let status = Command::new(exe)
-        .args(["queue", &task])
-        .current_dir(root)
-        .status()
-        .context("start the queue")?;
-    let code = status.code().unwrap_or(1);
+    let code = queue(root, &task)?;
     if code != 0 {
         eprintln!(
             "publish: queue did not merge {task} (exit {code}); the task stays queued; the inputs are on {} (git show {}:<path>)",
@@ -670,6 +684,169 @@ mod tests {
             .collect();
         let r = scorecard_in(d.path(), &argv, d.path()).unwrap();
         assert_eq!(r, Err("bad item".to_owned()));
+    }
+
+    /// A clock that moves one second per reading.
+    struct Tick(std::cell::Cell<i64>);
+    impl Clock for Tick {
+        fn now_millis(&self) -> i64 {
+            let t = self.0.get();
+            self.0.set(t + 1000);
+            t
+        }
+    }
+
+    /// The toy's gate passes iff `pass`; main's xtask is a fake path.
+    struct Gate {
+        pass: bool,
+    }
+    impl GateRunner for Gate {
+        fn run(&self, _: &Path, _: GateXtask<'_>) -> Result<crate::queue::GateOutcome> {
+            Ok(crate::queue::GateOutcome {
+                passed: self.pass,
+                failed_step: (!self.pass).then(|| "red".into()),
+            })
+        }
+        fn build_main_xtask(&self, _: &Path, _: &str) -> Result<PathBuf> {
+            Ok(PathBuf::from("/fake/main-xtask"))
+        }
+    }
+
+    fn toy() -> crate::util::testutil::TempDir {
+        use crate::git::testrepo;
+        let gen_toml = "[[generated]]\npath = \"docs/scorecard.md\"\ncommand = [\"sh\", \"-c\", \"cat scorecard/items/* evaluations/* > docs/scorecard.md\"]\n";
+        let led = ["tasks/", "metrics/", "evaluations/"]
+            .iter()
+            .map(|p| format!("[[ledger]]\npath = \"{p}\"\nmode = \"any\"\n\n"))
+            .collect::<String>()
+            + "[[ledger]]\npath = \"scorecard/items/\"\nmode = \"add-only\"\n";
+        let repo = testrepo::init(
+            "publish-e2e",
+            &[
+                (".gitignore", ".worktrees/\ntarget/\n"),
+                ("xtask/generated.toml", gen_toml),
+                ("xtask/ledger.toml", &led),
+                ("scorecard/items/a.b.toml", "a\n"),
+                ("evaluations/iter-0.md", "old\n"),
+                ("docs/scorecard.md", "a\nold\n"),
+                (
+                    "tasks/T-001-x.md",
+                    "---\nid: T-001\ntier: low\nstate: merged\n---\n",
+                ),
+            ],
+        );
+        testrepo::write(repo.path(), "scorecard/items/x.y.toml", "x\n");
+        testrepo::write(repo.path(), "evaluations/iter-0.md", "new\n");
+        repo
+    }
+
+    fn first_parent_subjects(root: &Path, since: &str) -> Vec<String> {
+        git(
+            root,
+            &[
+                "log",
+                "--reverse",
+                "--first-parent",
+                "--format=%s",
+                &format!("{since}..main"),
+            ],
+        )
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+    }
+
+    fn args() -> Args {
+        Args {
+            task: "T-050".into(),
+            title: "Publish x".into(),
+            iteration: 1,
+            inputs: vec![
+                "scorecard/items/x.y.toml".into(),
+                "evaluations/iter-0.md".into(),
+            ],
+        }
+    }
+
+    #[test]
+    fn success_appends_six_commits_and_never_rewrites_main() {
+        let repo = toy();
+        let root = repo.path();
+        let tip = rev(root, "main").unwrap();
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let queue_clock = Tick(std::cell::Cell::new(1_793_000_100_000));
+        let gate = Gate { pass: true };
+        let queue = |r: &Path, t: &str| -> Result<i32> {
+            let rec = crate::queue::run(r, t, &queue_clock, &Gate { pass: true })?;
+            Ok(if rec.result == "merged" { 0 } else { 1 })
+        };
+        run_with(root, &args(), &clock, &gate, &queue).unwrap();
+        assert_eq!(
+            first_parent_subjects(root, &tip),
+            [
+                "publish: T-050 ready",
+                "publish: T-050 in progress",
+                "publish: T-050 queued",
+                "T-050: publish evaluations/iter-0.md scorecard/items/x.y.toml; regenerate docs/scorecard.md",
+                "queue: record T-050 merged",
+                "publish: T-050 merged",
+            ]
+        );
+        // D-040: every value main took during the run (its reflog since the tip) is an
+        // ancestor of the final head, and so is the pre-publish tip.
+        let head = rev(root, "main").unwrap();
+        let reflog = git(root, &["reflog", "show", "--format=%H", "main"]).unwrap();
+        let mut seen = 0;
+        for c in reflog.lines() {
+            assert!(
+                crate::precheck::is_ancestor(root, c, &head).unwrap(),
+                "main once pointed at {c}, which is not an ancestor of {head}"
+            );
+            seen += 1;
+            if c == tip {
+                break;
+            }
+        }
+        assert!(seen >= 7, "reflog covers the run: {reflog}");
+        assert!(crate::precheck::is_ancestor(root, &tip, &head).unwrap());
+        assert!(git(root, &["status", "--porcelain"]).unwrap().is_empty());
+        assert!(!root.join(".worktrees/T-050").exists());
+        assert_eq!(
+            std::fs::read_to_string(root.join("docs/scorecard.md")).unwrap(),
+            "a\nx\nnew\n"
+        );
+    }
+
+    #[test]
+    fn red_gate_keeps_ready_and_in_progress_committed() {
+        let repo = toy();
+        let root = repo.path();
+        let tip = rev(root, "main").unwrap();
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let queue = |_: &Path, _: &str| -> Result<i32> { panic!("no queue after a red gate") };
+        let e = run_with(root, &args(), &clock, &Gate { pass: false }, &queue).unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(1)));
+        assert_eq!(
+            first_parent_subjects(root, &tip),
+            ["publish: T-050 ready", "publish: T-050 in progress"]
+        );
+        let committed = crate::precheck::show(root, "main", "metrics/tasks.jsonl")
+            .unwrap()
+            .unwrap();
+        assert!(
+            committed
+                .trim_end()
+                .ends_with("\"from\":\"ready\",\"to\":\"in_progress\"}"),
+            "{committed}"
+        );
+        // Only the inputs are left in the primary checkout.
+        let mut dirty = dirty_paths(root, None).unwrap();
+        dirty.sort();
+        assert_eq!(
+            dirty,
+            [" M evaluations/iter-0.md", "?? scorecard/items/x.y.toml"]
+        );
     }
 
     #[test]

@@ -460,16 +460,17 @@ out. Inputs: new `scorecard/items/<id>.toml` files (absent from main) and new or
    ready`, `Task:`/`Role: director`, the repository's commit configuration, signing included).
    A failed commit: exit 2 and a line with the command to commit by hand;
 3. creates the worktree as `worktree new` does; ready → in_progress, committed on main at once
-   (`publish: T-NNN in_progress`, `metrics/tasks.jsonl` only), so main's ledger is committed
+   (`publish: T-NNN in progress`, `metrics/tasks.jsonl` only), so main's ledger is committed
    wherever the command stops;
 4. copies the inputs into it, regenerates `docs/scorecard.md` there with that same command,
    and commits exactly those paths on `task/T-NNN` (anything else: stop, exit 1);
 5. runs the gate there; red: exit 1 and `publish: gate failed in .worktrees/T-NNN at <step>; …`
    (the task stays in_progress, the inputs stay in the primary checkout);
-6. in_progress → self_verified → queued, `state: queued`, commit `publish: T-NNN queued`; the
-   interim `in_progress` commit is folded into it (a soft reset, only while main still is that
-   commit), so a successful publish leaves exactly `ready`, `queued`, the content commit, the
-   queue's record commit and `merged` on main;
+6. in_progress → self_verified → queued, `state: queued`, commit `publish: T-NNN queued`.
+   Main's history is append-only (D-040): no tool resets, amends or rewrites a commit on it, so
+   a successful publish adds six first-parent commits — `ready`, `in progress`, `queued`, the
+   content commit, the queue's record commit and `merged`; after a red gate `ready` and
+   `in progress` stay;
 7. removes each input from the primary checkout once its bytes equal the branch copy (new files
    deleted, modified files restored), printing `publish: <path> moved to task/T-NNN`;
 8. runs `cargo xtask queue T-NNN` (output and exit code passed through). Merged: queued →
