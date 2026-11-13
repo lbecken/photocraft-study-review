@@ -640,6 +640,24 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   wrong (it should remove or pass the two files first) and have not changed the order of the
   checks. If instead uncommitted files of input kinds that are not inputs are to be
   tolerated, that is a spec change.
+- 2026-11-13T11:22Z · R-091 · in_progress (rework after review round 1) · did: checked R-089's
+  commits 9036e40e94c6bb90790ef8c48dd27db9c6191044 and fe3d5f08efe92b4b74b3cf66ad898918bb3151be
+  (it was cut off before its log entry) against main's D-047 j–q. Implemented with unit tests by
+  R-089: j (`precheck::extension_of`, shared by queue `budget` and `metrics report`), k (step-1
+  refusal; step-2 undo, unit test `a_failed_step_two_before_its_commit_leaves_main_as_found`),
+  l (`git add` in `commit`), m (`take_lock`/`LockHeld`), n (state committed with each transition,
+  stop line, docs table), o (symlink targets; `arm` none for non-digit ends), p (title refusal).
+  Fixed by me in 89bc87c9cdda9c861eeec0cde116b68875b3f42c: q — a failed content commit in step 4
+  exited 2; every step-3/4/7 stop now exits 1 (unit test with a pre-commit hook on `task/*`);
+  added unit tests for no input path, a dirty path outside the inputs (finding 6/8) and
+  `report_text` on malformed task ids (o); docs: exit text per q, a "3, commit failed" row, how
+  to recover inputs after step 7. b364099ab2ad7b03f4355c3a98e967f840634cac: clippy fix in
+  R-089's test helper. Through the binary in a toy: title and held-lock refusals, exit 1.
+  Reading of q: the ledger commits' pinned `publish: commit failed:` line (steps 2, 3's
+  in-progress commit, 6, 8) stays exit 2; only the content commit on `task/T-NNN` moved to 1.
+  · gate attempts: 1 (last: green; fmt, clippy, layers, ui-commands, hygiene, schema,
+  scorecard, test 427 passed, no-skip PASS; fuzz, budgets EMPTY) · not run: the independent
+  test author's D-047 tests; publish on the real repository · missing context: none · next: join.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T04:05Z · R-059 · ready (worktree copy; in_progress on main) · did: read spec,
