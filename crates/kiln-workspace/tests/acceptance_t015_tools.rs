@@ -108,13 +108,16 @@ const MARKER_ENV: &str = "KILN_T015_MARKER";
 /// running every request through `NoTools` leaves no marker.
 #[test]
 fn no_tools_never_runs() {
-    if std::env::var_os(CHILD_ENV).is_some() {
-        child_runs_no_tools();
-        return;
-    }
-    // Exact values in this process too.
+    // Exact values; in the child copy (see below) this is the whole test.
     child_runs_no_tools();
-    assert_eq!(NoTools, NoTools);
+    if std::env::var_os(CHILD_ENV).is_none() {
+        parent_checks();
+    }
+}
+
+/// The parent half of [`no_tools_never_runs`]: value semantics of `NoTools`, then the fake
+/// tools on `PATH` and the child copy of the test that runs `NoTools` with them.
+fn parent_checks() {
     fn made_by_default<T: Default>() -> T {
         T::default()
     }
@@ -124,6 +127,8 @@ fn no_tools_never_runs() {
     let _also = copy; // Copy
     assert_eq!(copy.clone(), NoTools);
 
+    #[cfg(not(unix))]
+    panic!("precondition: the fake `cargo`/`rustfmt` of this test are shell scripts and need Unix");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

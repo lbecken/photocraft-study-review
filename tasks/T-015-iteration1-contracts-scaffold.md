@@ -375,6 +375,12 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   "every base command is still registered" (guard). Proposed wording: "`Registry::names()` at
   the join equals base, checked by the `schema` gate step (`docs/commands.json` byte-identical);
   the committed guard requires only that every base command stays registered."
+- 2026-11-13 · R-076 · round 2 (join: all tests pass; gate red `no-skip`) · did:
+  `no_tools_never_runs` no longer returns early: the child copy asserts the `NoTools` values
+  and the parent then runs `parent_checks()`; off Unix it fails with a precondition message.
+  Also removed the early `return` from the `same` helper in `guard_t015_cli.rs`. Re-checked
+  against a stub: lint-clean, passes; B6 (NoTools spawns, then refuses) still killed. · gate
+  attempts: `cargo xtask no-skip` green · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

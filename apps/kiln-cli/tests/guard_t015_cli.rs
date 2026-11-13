@@ -120,25 +120,24 @@ fn write_files(root: &Path, files: &[(&str, &[u8])]) {
 /// Compare `actual` with the recorded base value; on a difference, save `actual` next to the
 /// test's scratch files and name the first differing line.
 fn same(what: &str, actual: &str, expected: &str) {
-    if actual == expected {
-        return;
+    if actual != expected {
+        let dump = Path::new(env!("CARGO_TARGET_TMPDIR"))
+            .join("guard_t015_cli")
+            .join(format!("{what}.actual"));
+        let _ = fs::write(&dump, actual);
+        let (a, e): (Vec<&str>, Vec<&str>) = (actual.lines().collect(), expected.lines().collect());
+        let i = (0..a.len().max(e.len()))
+            .find(|&i| a.get(i) != e.get(i))
+            .unwrap_or(0);
+        panic!(
+            "{what} differs from the base recording (actual saved to {}):\n\
+             first difference at line {}:\n  base:   {:?}\n  actual: {:?}",
+            dump.display(),
+            i + 1,
+            e.get(i),
+            a.get(i)
+        );
     }
-    let dump = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("guard_t015_cli")
-        .join(format!("{what}.actual"));
-    let _ = fs::write(&dump, actual);
-    let (a, e): (Vec<&str>, Vec<&str>) = (actual.lines().collect(), expected.lines().collect());
-    let i = (0..a.len().max(e.len()))
-        .find(|&i| a.get(i) != e.get(i))
-        .unwrap_or(0);
-    panic!(
-        "{what} differs from the base recording (actual saved to {}):\n\
-         first difference at line {}:\n  base:   {:?}\n  actual: {:?}",
-        dump.display(),
-        i + 1,
-        e.get(i),
-        a.get(i)
-    );
 }
 
 fn text(bytes: &[u8]) -> String {
