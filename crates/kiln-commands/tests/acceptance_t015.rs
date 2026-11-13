@@ -85,7 +85,7 @@ fn exercise(r: &Registry, ctx: &mut Context) {
     // Refused requests too.
     assert!(r.execute(ctx, "doc.text", json!({"doc": 99})).is_err());
     assert!(r.execute(ctx, "doc.open", json!({"path": "../x"})).is_err());
-    assert!(r.execute(ctx, "no.such", json!({})).is_err());
+    assert!(r.execute(ctx, "zz.no-such-command", json!({})).is_err());
 }
 
 /// AC-2: `format!("{:?}", ctx.tools()) == "NoTools"` for every constructor, and it stays so
@@ -127,6 +127,19 @@ fn contexts_start_without_tools() {
         // `Debug` is the observable (the task's oracle).
         let runner: &dyn ToolRunner = ctx.tools();
         assert_eq!(format!("{runner:?}"), format!("{NoTools:?}"), "{what}");
+        // D-046 (2) asks for a run through `ctx.tools()`, but `tools()` is `&dyn ToolRunner`
+        // and `run` takes `&mut self`, so no outside caller can run the default runner (see
+        // the test author log, R-084). What an outside caller can see beyond `Debug`: the
+        // runner has `NoTools`'s size and alignment, which a runner that carries anything
+        // (a root, a timeout, a recording) does not.
+        assert_eq!(
+            (std::mem::size_of_val(runner), std::mem::align_of_val(runner)),
+            (
+                std::mem::size_of::<NoTools>(),
+                std::mem::align_of::<NoTools>()
+            ),
+            "{what}: the default runner is not a plain `NoTools`"
+        );
         if ctx.vfs().read(&RelPath::new("a.txt").unwrap()).is_ok() {
             exercise(&r, &mut ctx);
             assert!(!ctx.log().is_empty(), "{what}: commands ran");

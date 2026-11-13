@@ -20,7 +20,7 @@ fn ok(r: &Registry, ctx: &mut Context, name: &str, params: Value) -> Value {
 
 fn refused(r: &Registry, ctx: &mut Context, name: &str, params: Value) -> String {
     match r.execute(ctx, name, params.clone()) {
-        Err(CommandError::Rejected { message }) => message,
+        Err(CommandError::Rejected { message, .. }) => message,
         other => panic!("{name} {params}: expected a refusal, got {other:?}"),
     }
 }

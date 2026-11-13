@@ -288,10 +288,10 @@ const EXEC_CASES: &[(&[&str], i32, &str, &str)] = &[
         "",
     ),
     (
-        &["exec", "no.such", "{}", "--memory"],
+        &["exec", "zz.no-such-command", "{}", "--memory"],
         2,
         "",
-        "{\"code\":\"unknown_command\",\"kind\":\"unknown_command\",\"message\":\"unknown command `no.such`\"}\n",
+        "{\"code\":\"unknown_command\",\"kind\":\"unknown_command\",\"message\":\"unknown command `zz.no-such-command`\"}\n",
     ),
     (
         &["exec", "doc.list", "{", "--memory"],
@@ -414,8 +414,8 @@ const MALFORMED: &[&str] = &[
     r#"{"id":"m"}"#,
     r#"{"id":"n","command":7}"#,
     r#"{"id":"p","command":"doc.list","params":[1]}"#,
-    r#"{"id":"u","command":"doc.nope","params":{}}"#,
-    r#"{"id":"v","command":"cursor.get","params":{"doc":1}}"#,
+    r#"{"id":"u","command":"zz.no-such-command","params":{}}"#,
+    r#"{"id":"v","command":"zz.no-such-command","params":{"doc":1}}"#,
     r#"{"id":"w","command":"doc.insert","params":{"doc":1,"offset":-1,"text":"x"}}"#,
     r#"{"id":"y","command":"doc.close","params":{"doc":1,"discard":"yes"}}"#,
     r#"{"id":"z","command":"doc.open","params":{"path":"a.txt","x":1}}"#,
@@ -713,7 +713,7 @@ const SESSION_STDOUT: &str = r#"{"error":{"code":"rejected","kind":"no_such_docu
 {"error":{"code":"rejected","kind":"invalid_path","message":"invalid relative path \"sub/../a.txt\": path has a '..' segment"},"id":101,"ok":false}
 {"error":{"code":"rejected","kind":"no_such_document","message":"no open document 5"},"id":102,"ok":false}
 {"error":{"code":"rejected","kind":"invalid_path","message":"invalid relative path \"sub/../a.txt\": path has a '..' segment"},"id":"r103","ok":false}
-{"error":{"code":"unknown_command","kind":"unknown_command","message":"unknown command `cursor.get`"},"id":"v","ok":false}
+{"error":{"code":"unknown_command","kind":"unknown_command","message":"unknown command `zz.no-such-command`"},"id":"v","ok":false}
 {"error":{"code":"rejected","kind":"no_such_document","message":"no open document 11"},"id":105,"ok":false}
 {"id":"r106","ok":true,"result":{"bytes_written":13,"dirty":false,"doc":7}}
 {"error":{"code":"rejected","kind":"out_of_range","message":"char index 12 is out of bounds (buffer has 0 chars)"},"id":107,"ok":false}

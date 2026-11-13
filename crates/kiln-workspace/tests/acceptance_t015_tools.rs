@@ -292,10 +292,10 @@ fn tool_error_texts_are_exact() {
     for (error, _) in &cases {
         let tool: Option<Tool> = match error {
             ToolError::Unavailable => None,
-            ToolError::NotFound { tool }
+            ToolError::NotFound { tool, .. }
             | ToolError::Timeout { tool, .. }
             | ToolError::Failed { tool, .. }
-            | ToolError::NoRecording { tool } => Some(*tool),
+            | ToolError::NoRecording { tool, .. } => Some(*tool),
         };
         if let Some(tool) = tool {
             assert!(error.to_string().contains(&format!("`{}`", tool.as_str())));
@@ -418,7 +418,7 @@ fn workspace_reexports_resolve() {
     assert_eq!(doc.buffer().text(), "hi\n");
     let missing = RelPath::new("nope.txt").unwrap();
     match Document::open(vfs, &missing) {
-        Err(OpenError::Vfs(VfsError::NotFound { path })) => assert_eq!(path, missing),
+        Err(OpenError::Vfs(VfsError::NotFound { path, .. })) => assert_eq!(path, missing),
         other => panic!("open of a missing file: {other:?}"),
     }
     assert_eq!(
