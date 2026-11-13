@@ -93,7 +93,7 @@ nullable variant to every result and still leave highlight and brackets without 
 Why 2^20 chars: the T-016 review measured 247 MB peak for 1 MB of `(` (about 245 bytes per
 char, the worst case it found; `reviews/T-016-r1.md` p6), so one cached tree stays near a
 quarter GB at worst, while the largest Rust file in this workspace is 85,052 bytes
-(`find . -name '*.rs' -not -path './target/*' -not -path './.worktrees/*' -printf '%s %p\n' | sort -n | tail -1`
+(`find . -name '*.rs' -not -path './target/*' -not -path './.worktrees/*' -not -path './.git/*' -printf '%s %p\n' | sort -n | tail -1`
 on main `e614fee`: `xtask/src/queue.rs`) and the largest corpus file 6,052 bytes.
 
 ### `syntax.highlight` spans (exact)

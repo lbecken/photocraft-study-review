@@ -14,8 +14,8 @@ touches:
   - crates/kiln-workspace/tests/guard_t008.rs        # test author (AC-5 guard, R-109)
   - apps/kiln-cli/tests/acceptance_t008_cli.rs       # test author
   - crates/kiln-commands/src/reason.rs           # R-060: RejectReason::OutsideRoot + its description + the VfsError mapping row
-  - crates/kiln-commands/tests/acceptance_t032.rs    # TEST AUTHOR ONLY: the one `not_a_file` description row (D-052, R-109)
-  - apps/kiln-cli/tests/acceptance_t032_cli.rs       # TEST AUTHOR ONLY: the one `not_a_file` description row (D-052, R-109)
+  - crates/kiln-commands/tests/acceptance_t032.rs    # IMPLEMENTER ONLY: the one `not_a_file` description row (D-061, R-112)
+  - apps/kiln-cli/tests/acceptance_t032_cli.rs       # IMPLEMENTER ONLY: the one `not_a_file` description row (D-061, R-112)
   - docs/control-protocol.md                     # the one false "Paths" bullet only (D-037); no kind lines (R-060)
   # docs/commands.json also changes (error_kinds): a generated path, regenerated, exempt
   - docs/protocol/paths.md                       # NEW: the confinement rule in full (D-6)
@@ -168,15 +168,15 @@ text "the path names a directory":
 - `apps/kiln-cli/tests/acceptance_t032_cli.rs::schema_dump_publishes_the_generated_kind_list`
   (the `("not_a_file", …)` row of its `REJECTED` table).
 
-**T-008's test author** (not the implementer) changes exactly the description string of those
-two rows to the new text above, on `task/T-008-tests`, and nothing else in either file; the
-change is disclosed in the test-author log as an exact text change under golden rule 4 (the
-assertion stays word for word). Both tests then fail on base and pass after the join. They are
-not T-008 acceptance tests (the join counts only `acceptance_t008*`), and they are not
-`guard_*` files. Consequence for the implementer: before the join, `cargo xtask ci` on
-`task/T-008` is expected to fail in exactly these two tests and nowhere else; the implementer
-records that in its log, does not edit them, and does not count those runs toward the
-three-red stop condition. The gate must be green after the join. The directory cases of
+**T-008's implementer** (D-061) changes exactly the description string of those two rows to
+the new text above, on `task/T-008`, in the same commit as the reworded `NotAFile` row, and
+nothing else in either file; the change is disclosed in the implementer log as an exact text
+change under golden rule 4 (the assertion stays word for word). The implementer's gate is
+green before the join, as for any task. The test author does not touch these two files; it
+asserts the new description independently in its own file (AC-9,
+`documents_state_the_confinement_rule`). Reason (D-061): an exception that makes a red gate
+"expected" erodes what the gate means, and the text is pinned by this spec, so who types it
+does not affect the tests' independence. The directory cases of
 `guard_t032.rs`, `acceptance_t032.rs` and `acceptance_t032_json.rs` no longer pin the
 directory message (ruling r6), and `guard_t032_cli.rs` no longer hashes
 `docs/control-protocol.md` (r6), so no other T-032 test changes.
@@ -207,7 +207,7 @@ directory message (ruling r6), and `guard_t032_cli.rs` no longer hashes
   loops, links swapped between requests, long names, FIFOs, sockets, devices).
 - (f) Tests pinning a snapshot this changes: the gate's `schema` step on `docs/commands.json`
   (regenerated); the two `not_a_file` description rows named in "Existing T-032 tests" (edited
-  by the test author). The directory cases of `guard_t032.rs`, `acceptance_t032.rs` and
+  by the implementer, D-061). The directory cases of `guard_t032.rs`, `acceptance_t032.rs` and
   `acceptance_t032_json.rs` assert reason and kind only (T-032 r6, VERIFIED on main: the
   `UNPINNED` constant at `guard_t032.rs`:47–49, `acceptance_t032.rs`:58–60,
   `acceptance_t032_json.rs`:50–52); `guard_t032_cli.rs` has no document hash (r6: no
@@ -373,8 +373,8 @@ documents_state_the_confinement_rule}`).
   `crates/kiln-workspace/tests/confinement.rs`, unit tests of the mapping in `reason.rs`.
   Variant matches (`VfsError::OutsideRoot { .. }`) go here, not in the acceptance file.
 - No `kiln-control` test changes: kinds come from reasons (T-032). Acceptance and guard files of
-  T-002/T-004/T-015/T-032 are not edited by you; the two T-032 description rows are the test
-  author's (see "Existing T-032 tests", including the expected red before the join).
+  T-002/T-004/T-015/T-032 are not edited by you, except the two T-032 description rows, which
+  are yours (see "Existing T-032 tests", D-061); your gate is green before the join.
 - Determinism: no host path or link target in any error text; no timing dependence except the
   tests' hang timeouts (no thread that times out a blocking read: CHARTER §3 decision 4).
 - Specified: the outcomes, errors, messages and precedence above, and that nothing outside is
@@ -404,8 +404,10 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
   and T-011.
 - Director (2026-11-13, D-037): T-008 may replace the symlink bullet in the "Paths" section of `docs/control-protocol.md`, which today states that symlinks are followed; that statement is this task's to correct. `docs/control-protocol.md` is in `touches` for that bullet and for error-kind lines only.
 - Director (2026-11-13, D-052): the `not_a_file` description stays pinned word for word in
-  T-032's two tests; T-008's spec names them and its test author updates them (Interface,
-  "Existing T-032 tests").
+  T-032's two tests; T-008's spec names them (Interface, "Existing T-032 tests").
+- Director (2026-11-13, D-061, reverses R-109's proposal): the implementer, not the test
+  author, updates the two rows and keeps its gate green before the join; no "expected red".
+  The test author asserts the new description in `acceptance_t008_cli.rs` (AC-9).
 
 ## Questions
 - Q-1 (planner, R-057): D-6 limits edits of `docs/control-protocol.md` to error-kind lines, but
@@ -421,7 +423,8 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
   `acceptance_t032.rs`:58–60, `acceptance_t032_json.rs`:50–52); Pinned (f) says so.
 - 2 (blocker, two T-032 tests pin the `not_a_file` description): resolved the other way per
   D-052; the two tests and files are named, in `touches`, the new text is exact, and the edit is
-  the test author's (Interface, "Existing T-032 tests"), with the implementer's expected red.
+  the implementer's (D-061, reversing R-109's assignment to the test author; Interface,
+  "Existing T-032 tests").
 - 3 (blocker, document hash guard): resolved on main by r6 / D-052; VERIFIED,
   `protocol_doc_is_unchanged_outside_the_kinds_paragraph` is gone from `guard_t032_cli.rs`.
 - 4 (note, no other collision): accepted; restated in Pinned (f) and the reading list.
@@ -509,6 +512,13 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   implementer's `cargo xtask ci` is red in those two tests until the join. Specified as an
   expected, logged red that does not count toward the three-red stop. Confirm, or let the
   implementer change the two rows instead.
+- 2026-11-13T12:47Z · R-112 · draft · did: applied D-061: the two T-032 `not_a_file` description rows are
+  the implementer's (touches comments, "Existing T-032 tests", Pinned (f), Implementer notes,
+  Decisions, resolution of finding 2); the "expected red" gate is removed and the test author
+  asserts the description only in AC-9. Reason: an expected-red exception erodes what the gate
+  means, and the spec pins the text, so who types it does not affect independence. R-109's
+  QUESTION is answered by D-061. · gate attempts: 0 · not run: no cargo · missing context:
+  none · next: director; ready for a re-check.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

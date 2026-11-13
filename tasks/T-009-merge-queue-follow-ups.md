@@ -394,7 +394,9 @@ records or kinds that another task changes (D-043, D-051, D-052).
   `publish: T-050 ready` commit with exactly the two paths.
 - AC-13 (stop line for a failing transition; acceptance): in the publish toy repository, the
   toy gate (step 5) appends to the primary checkout's `metrics/tasks.jsonl` a well-formed T-050
-  record stamped one day after now, so step 6's first transition is refused by the time rules
+  `run` record whose `ended_at` is one day after now (a `run`, so the last transition stays
+  `in_progress`), so step 6's first transition is refused by the time rules (a time earlier
+  than the task's latest record)
   → exit 1, stderr has exactly one line that starts with `publish: stopped at step 6: `, and
   that line ends with `; T-050 is in_progress` (the `<error>` text is not pinned); no stderr
   line starts with `xtask: `; and main's committed task file says
