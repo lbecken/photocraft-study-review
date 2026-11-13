@@ -504,8 +504,8 @@ fn extension_of(cell: &str, task: &str) -> Option<u64> {
 pub fn extension(text: &str, task: &str) -> Option<u64> {
     decision_cells(text)
         .iter()
-        .filter_map(|c| extension_of(c, task))
-        .last()
+        .rev()
+        .find_map(|c| extension_of(c, task))
 }
 
 /// Whether `text` (a `docs/decisions.md`) has a table row whose Decision cell begins with

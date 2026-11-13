@@ -45,19 +45,21 @@ gate
   scorecard [--check]                   derive statuses; write (or check) docs/scorecard.md
 
 tasks
-  worktree new T-NNN [--tests] [--no-seed]   also: worktree new T-NNN-tests
+  worktree new T-NNN [--tests] [--no-seed]   also: worktree new T-NNN-tests (needs ready on main)
   worktree rm T-NNN [--tests] [--force]
   worktree list
   queue T-NNN                           serial merge queue: rebase, gate, fast-forward main
   join T-NNN [--acc-defects N]          merge task/T-NNN-tests into task/T-NNN, record evidence
-  join --revert-check T-NNN [--revert <sha>]...
+  join --revert-check T-NNN [--revert <sha>]...   optional diagnostic
 
-metrics
-  metrics add --task T-NNN --run R-NNN --role <role> --tokens N --tool-calls N
-              --gate-attempts N --outcome <outcome> --started-at <ts> --ended-at <ts>
-              [--wall-s N] [--iteration N] [--tier T] [--missing-context S] [--note S]
-  metrics transition --task T-NNN --from <state> --to <state> --at <ts> [--iteration N]
-  metrics report";
+metrics (times default to now; refusals exit 1)
+  metrics add --task <T-NNN|iter-N> --run R-NNN --role <role> (--tokens N | --tokens-unknown)
+              --tool-calls N --gate-attempts N --outcome <outcome> --started-at <ts>
+              [--ended-at <ts>] [--wall-s N] [--iteration N] [--tier T]
+              [--missing-context S] [--note S]
+  metrics transition --task T-NNN --to <state> [--from <state>] [--at <ts>] [--iteration N]
+  metrics join-defects --task T-NNN --joined-sha <40-hex> --acc-defects N
+  metrics report                        exit 1 if a failing join is unclassified";
 
 fn print_step(name: &str, r: &StepResult) -> bool {
     let label = match r.status {
@@ -315,13 +317,23 @@ fn real_main() -> Result<bool> {
             };
             let root = primary()?;
             match sub.as_str() {
-                "add" => println!("{}", metrics::add(&root, &args)?),
-                "transition" => println!("{}", metrics::transition(&root, &args)?),
+                "add" => println!("{}", metrics::add(&root, &args, &timefmt::SystemClock)?),
+                "transition" => println!(
+                    "{}",
+                    metrics::transition(&root, &args, &timefmt::SystemClock)?
+                ),
+                "join-defects" => println!(
+                    "{}",
+                    metrics::join_defects(&root, &args, &timefmt::SystemClock)?
+                ),
                 "report" => {
                     no_more(&args)?;
-                    print!("{}", metrics::report(&root)?);
+                    let (text, complete) = metrics::report(&root)?;
+                    print!("{text}");
+                    // An unclassified failing join (iteration ≥ 1): printed in full, exit 1.
+                    return Ok(complete);
                 }
-                _ => bail!("usage: metrics add|transition|report"),
+                _ => bail!("usage: metrics add|transition|join-defects|report"),
             }
             Ok(true)
         }
