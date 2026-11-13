@@ -11,21 +11,22 @@
 //! `{"id":…,"ok":true,"result":…}` or
 //! `{"error":{"code":…,"kind":…,"message":…[,"details":[…]]},"id":…,"ok":false}`.
 //!
-//! `code` and `kind` are stable machine-readable values (`kind` refines `code`; the full list is in
-//! `docs/control-protocol.md`); `message` and `details` are for humans and may contain operating-system
-//! error text. Error lines are size-capped ([`cap_error`]): every string in `message` and
-//! `details` is at most 200 characters and the whole line at most 4096 bytes.
+//! `code` and `kind` are stable machine-readable values (`kind` refines `code`); `message` and
+//! `details` are for humans and may contain operating-system error text. Error lines are
+//! size-capped ([`cap_error`]): every string in `message` and `details` is at most 200
+//! characters and the whole line at most 4096 bytes.
 //!
-//! The `kind` of a `rejected` error is derived from the message the lower layers produce
-//! (`kiln-commands` reports `rejected` with a message only); `rejected_kind` holds that
-//! mapping and falls back to `other` for a message it does not recognise.
+//! The `kind` of a `rejected` or `internal` error is the structured reason `kiln-commands` sets
+//! where the error is raised (`reason.as_str()`, ADR-0004); no message text is consulted for
+//! any code or kind, and the reason itself is not part of the error object. The full list of
+//! kinds is `error_kinds` in `docs/commands.json` (generated from code; `kiln-cli commands
+//! --schema`) plus the request-level rows of the table in `docs/control-protocol.md`.
 
-use std::collections::BTreeMap;
 use std::fmt;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
-use kiln_commands::{CommandError, Context, LogEntry, Registry, standard_registry};
+use kiln_commands::{CommandError, Context, InternalReason, LogEntry, Registry, standard_registry};
 use kiln_workspace::{DiskFs, VfsError};
 use serde_json::{Map, Value, json};
 
@@ -41,7 +42,8 @@ impl fmt::Display for HostError {
 
 impl std::error::Error for HostError {}
 
-/// Every `(code, kind)` pair an error response can carry.
+/// Every `(code, kind)` pair of the table in `docs/control-protocol.md` (the request-level rows
+/// and the kinds of iteration 0; later kinds are in `error_kinds` of `docs/commands.json`).
 #[cfg(test)]
 const ERROR_KINDS: &[(&str, &str)] = &[
     ("invalid_json", "not_utf8"),
@@ -74,9 +76,6 @@ const ERROR_KINDS: &[(&str, &str)] = &[
 pub struct Host {
     registry: Registry,
     ctx: Context,
-    /// Path of each open document, from successful `doc.open` / `doc.close` responses (used
-    /// only to classify error messages that name a document's path).
-    doc_paths: BTreeMap<u64, String>,
 }
 
 /// The top-level keys a request may have.
@@ -98,11 +97,7 @@ impl Host {
 
     fn with_context(ctx: Context) -> Result<Host, HostError> {
         let registry = standard_registry().map_err(|e| HostError(e.to_string()))?;
-        Ok(Host {
-            registry,
-            ctx,
-            doc_paths: BTreeMap::new(),
-        })
+        Ok(Host { registry, ctx })
     }
 
     /// One request line in; `Some(response line without "\n")` out, `None` for a blank line
@@ -131,46 +126,18 @@ impl Host {
         } = request;
         let registry = &self.registry;
         let ctx = &mut self.ctx;
-        let run_params = params.clone();
         // A panicking command must not take the host down (the context may be left partly
         // changed; that is a bug in the command, reported as `internal`).
-        let outcome = catch_unwind(AssertUnwindSafe(|| {
-            registry.execute(ctx, &command, run_params)
-        }))
-        .unwrap_or_else(|_| {
-            Err(CommandError::Internal {
-                message: PANICKED.to_owned(),
-            })
-        });
+        let outcome = catch_unwind(AssertUnwindSafe(|| registry.execute(ctx, &command, params)))
+            .unwrap_or_else(|_| {
+                Err(CommandError::Internal {
+                    reason: InternalReason::Panic,
+                    message: PANICKED.to_owned(),
+                })
+            });
         match outcome {
-            Ok(result) => {
-                self.track_paths(&command, &result);
-                json!({"id": id, "ok": true, "result": result})
-            }
-            Err(e) => {
-                let doc_path = params
-                    .get("doc")
-                    .and_then(Value::as_u64)
-                    .and_then(|d| self.doc_paths.get(&d))
-                    .map(String::as_str);
-                let request_path = params.get("path").and_then(Value::as_str);
-                Failure::from_command(id, &command, &e, request_path.or(doc_path)).into_response()
-            }
-        }
-    }
-
-    fn track_paths(&mut self, command: &str, result: &Value) {
-        let doc = result.get("doc").and_then(Value::as_u64);
-        match (command, doc) {
-            ("doc.open", Some(doc)) => {
-                if let Some(path) = result.get("path").and_then(Value::as_str) {
-                    self.doc_paths.insert(doc, path.to_owned());
-                }
-            }
-            ("doc.close", Some(doc)) if result.get("closed") == Some(&Value::Bool(true)) => {
-                self.doc_paths.remove(&doc);
-            }
-            _ => {}
+            Ok(result) => json!({"id": id, "ok": true, "result": result}),
+            Err(e) => Failure::from_command(id, &command, &e).into_response(),
         }
     }
 
@@ -261,16 +228,17 @@ pub fn cap_text(text: &str) -> String {
 }
 
 /// The capped error object `{"code","kind","message"[,"details"]}` for `e`, raised by
-/// `command` with `params` (as the protocol reports it, without `id`).
-pub fn command_error_json(command: &str, params: &Value, e: &CommandError) -> Value {
-    let path = params.get("path").and_then(Value::as_str);
-    let mut response = Failure::from_command(Value::Null, command, e, path).into_response();
+/// `command` with `params` (as the protocol reports it, without `id`). The kind comes from
+/// `e` alone: `params` and the message are not consulted for it.
+pub fn command_error_json(command: &str, _params: &Value, e: &CommandError) -> Value {
+    let mut response = Failure::from_command(Value::Null, command, e).into_response();
     let mut error = response["error"].take();
     cap_error(&mut error);
     error
 }
 
-/// The message of the `internal` error a panicking command produces (marks kind `panic`).
+/// The message the host gives the `internal`/`panic` error of a panicking command (reported
+/// as `` command `<name>` panicked ``).
 const PANICKED: &str = "the command panicked";
 
 /// A request that passed protocol validation (not yet the registry's).
@@ -300,26 +268,23 @@ impl Failure {
         }
     }
 
-    fn from_command(id: Value, command: &str, e: &CommandError, path: Option<&str>) -> Self {
+    /// The failure for `e`: the kind is the reason's name; no message is read.
+    fn from_command(id: Value, command: &str, e: &CommandError) -> Self {
         let (kind, message, details) = match e {
             CommandError::UnknownCommand { message } => ("unknown_command", message.clone(), None),
             CommandError::InvalidParams { message, details } => {
                 ("schema", message.clone(), Some(details.clone()))
             }
-            CommandError::Rejected { message } => {
-                (rejected_kind(message, path), message.clone(), None)
-            }
-            CommandError::Internal { message } if message == PANICKED => {
-                ("panic", format!("command `{command}` panicked"), None)
-            }
-            CommandError::Internal { message } => {
-                let kind = if message.contains("violates its schema") {
-                    "result_schema"
-                } else {
-                    "other"
-                };
-                (kind, message.clone(), None)
-            }
+            CommandError::Rejected { reason, message } => (reason.as_str(), message.clone(), None),
+            CommandError::Internal {
+                reason: InternalReason::Panic,
+                ..
+            } => (
+                InternalReason::Panic.as_str(),
+                format!("command `{command}` panicked"),
+                None,
+            ),
+            CommandError::Internal { reason, message } => (reason.as_str(), message.clone(), None),
         };
         let code = e.to_json()["code"]
             .as_str()
@@ -346,61 +311,6 @@ impl Failure {
         }
         json!({"error": Value::Object(error), "id": self.id, "ok": false})
     }
-}
-
-/// The `kind` of a `rejected` error, from its message. `path` is the path the request names
-/// (`doc.open`) or the path of the document it names, when known.
-fn rejected_kind(message: &str, path: Option<&str>) -> &'static str {
-    if message.starts_with("invalid relative path ") {
-        return "invalid_path";
-    }
-    if message.starts_with("no open document ") {
-        return "no_such_document";
-    }
-    if message.starts_with("document ") && message.contains(" has unsaved changes") {
-        return "unsaved_changes";
-    }
-    if message.starts_with("char index ") && message.contains(" is out of bounds") {
-        return "out_of_range";
-    }
-    if message.starts_with("range start ") && message.contains(" is after range end ") {
-        return "inverted_range";
-    }
-    let file_op = ["cannot open ", "cannot save "]
-        .iter()
-        .find_map(|p| message.strip_prefix(p));
-    let Some(rest) = file_op else {
-        return "other";
-    };
-    // The reason after "<path>: ": exact when the path is known, else after the last
-    // recognisable separator.
-    let reason = match path.and_then(|p| rest.strip_prefix(p)) {
-        Some(after) => after.strip_prefix(": ").unwrap_or(after),
-        None => rest,
-    };
-    if reason == "not found" || reason.ends_with(": not found") {
-        "not_found"
-    } else if reason == "is a directory, not a file"
-        || reason.ends_with(": is a directory, not a file")
-    {
-        "not_a_file"
-    } else if reason.starts_with("I/O error: ") || reason.contains(": I/O error: ") {
-        "io_error"
-    } else if is_decode_reason(reason) {
-        "decode_error"
-    } else {
-        "other"
-    }
-}
-
-/// `invalid <encoding> at byte offset <n>` (possibly after a path).
-fn is_decode_reason(reason: &str) -> bool {
-    let Some((head, offset)) = reason.rsplit_once(" at byte offset ") else {
-        return false;
-    };
-    !offset.is_empty()
-        && offset.bytes().all(|b| b.is_ascii_digit())
-        && (head.starts_with("invalid ") || head.contains(": invalid "))
 }
 
 /// `s` cut to at most [`MAX_ERROR_STRING`] characters: the first 199 and `…`. Works on
@@ -567,6 +477,8 @@ fn write_canonical(value: &Value, out: &mut String) {
 
 #[cfg(test)]
 mod tests {
+    use kiln_commands::RejectReason;
+
     use super::*;
 
     fn host() -> Host {
@@ -898,37 +810,72 @@ mod tests {
         }
     }
 
+    /// Replaces the `rejected_kind` message-classification tests (golden rule 4, disclosed in
+    /// the T-032 log): the kind follows the reason, never the message, including messages
+    /// the old classification read differently.
     #[test]
-    fn rejected_kind_is_anchored_on_the_known_path() {
-        // A file name that itself looks like a reason does not fool the classification.
-        let path = "x: not found";
+    fn kind_follows_the_reason_not_the_message() {
+        let messages = [
+            "zz unrelated",
+            "no open document 1",
+            "cannot open x: not found",
+            "cannot open x: not found: is a directory, not a file",
+            "invalid relative path \"..\": `..` segment",
+            "",
+        ];
+        for r in RejectReason::ALL {
+            for m in messages {
+                let v = command_error_json(
+                    "doc.open",
+                    &json!({"path": "x"}),
+                    &CommandError::rejected(*r, m),
+                );
+                assert_eq!(v["code"], "rejected", "{r:?} {m:?}");
+                assert_eq!(v["kind"], r.as_str(), "{r:?} {m:?}");
+                assert_eq!(v["message"], m, "{r:?} {m:?}");
+                assert!(
+                    v.get("reason").is_none(),
+                    "the protocol object carries no reason"
+                );
+            }
+        }
+        for r in InternalReason::ALL {
+            for m in messages {
+                let e = CommandError::Internal {
+                    reason: *r,
+                    message: m.to_owned(),
+                };
+                let v = command_error_json("doc.text", &json!({}), &e);
+                assert_eq!(v["code"], "internal", "{r:?} {m:?}");
+                assert_eq!(v["kind"], r.as_str(), "{r:?} {m:?}");
+                let want = if *r == InternalReason::Panic {
+                    "command `doc.text` panicked".to_owned()
+                } else {
+                    m.to_owned()
+                };
+                assert_eq!(v["message"], want, "{r:?} {m:?}");
+            }
+        }
+        // The worked example of T-032: the message names no document, the reason governs.
+        let e = CommandError::rejected(RejectReason::NotFound, "no open document 1");
         assert_eq!(
-            rejected_kind(
-                &format!("cannot open {path}: is a directory, not a file"),
-                Some(path)
-            ),
-            "not_a_file"
+            command_error_json("doc.open", &json!({}), &e)["kind"],
+            "not_found"
         );
-        assert_eq!(
-            rejected_kind(
-                "cannot save a.txt: I/O error: No space left on device (os error 28)",
-                Some("a.txt")
-            ),
-            "io_error"
-        );
-        assert_eq!(
-            rejected_kind("cannot save a.txt: I/O error: boom", None),
-            "io_error"
-        );
-        assert_eq!(
-            rejected_kind("cannot open a.txt: invalid utf-8 at byte offset 3", None),
-            "decode_error"
-        );
-        assert_eq!(
-            rejected_kind("cannot open a.txt: something new", Some("a.txt")),
-            "other"
-        );
-        assert_eq!(rejected_kind("a brand new message", None), "other");
+    }
+
+    /// The table's `rejected`/`internal` rows are all reasons, and their kinds are in
+    /// `error_kinds` of the registry's description.
+    #[test]
+    fn table_kinds_are_reasons_and_in_the_description() {
+        let d = standard_registry().unwrap().describe();
+        for (code, kind) in ERROR_KINDS {
+            if *code != "rejected" && *code != "internal" {
+                continue;
+            }
+            let listed = d["error_kinds"][*code].as_array().unwrap();
+            assert!(listed.iter().any(|k| k["kind"] == *kind), "{code}/{kind}");
+        }
     }
 
     #[test]
@@ -1094,7 +1041,10 @@ mod tests {
 
     #[test]
     fn command_error_json_has_kind_and_caps() {
-        let e = CommandError::rejected(format!("cannot open {}: not found", "z".repeat(400)));
+        let e = CommandError::rejected(
+            RejectReason::NotFound,
+            format!("cannot open {}: not found", "z".repeat(400)),
+        );
         let v = command_error_json("doc.open", &json!({"path": "z".repeat(400)}), &e);
         assert_eq!(v["code"], "rejected");
         assert_eq!(v["kind"], "not_found");

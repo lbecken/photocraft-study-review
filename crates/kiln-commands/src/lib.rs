@@ -11,6 +11,11 @@
 //! Adding a command: implement [`Command`] in the module of its group (one module per group,
 //! CHARTER §3 decision 6), register it in that module's `register`, give it at least one
 //! [`Example`], then run `cargo xtask schema --write` to refresh `docs/commands.json`.
+//!
+//! Errors: a refusal is [`CommandError::rejected`] with a [`RejectReason`] set where it is
+//! raised, and an internal error carries an [`InternalReason`] (ADR-0004). Adding a kind is
+//! one variant with its description in `reason.rs`, then `cargo xtask schema --write`: the
+//! kinds are published as `error_kinds` in `docs/commands.json`.
 
 mod buffer;
 mod cursor;
@@ -24,11 +29,13 @@ mod keymap;
 mod nav;
 mod palette;
 mod project;
+mod reason;
 mod registry;
 mod search;
 mod syntax;
 mod tool;
 
+pub use reason::{InternalReason, RejectReason};
 pub use registry::{
     Command, CommandError, Context, Example, LogEntry, Registry, RegistryError, ReplayError,
 };

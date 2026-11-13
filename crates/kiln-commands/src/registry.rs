@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use crate::diag::DiagState;
 use crate::find::FindState;
 use crate::keymap::KeymapState;
+use crate::reason::{InternalReason, RejectReason};
 use crate::syntax::SyntaxState;
 
 /// The state commands act on: a VFS, the documents opened from it, a scratch buffer (for the
@@ -232,7 +233,10 @@ impl Docs {
 }
 
 fn no_such_doc(id: u64) -> CommandError {
-    CommandError::rejected(format!("no open document {id}"))
+    CommandError::rejected(
+        RejectReason::NoSuchDocument,
+        format!("no open document {id}"),
+    )
 }
 
 /// One successfully executed command, in execution order.
@@ -325,7 +329,8 @@ pub trait Command {
     fn run(ctx: &mut Context, params: Self::Params) -> Result<Self::Output, CommandError>;
 }
 
-/// Why a command invocation failed. Serialized as `{"code": …, "message": …, "details": […]}`.
+/// Why a command invocation failed. Serialized as `{"code": …, "message": …, "details": […]}`;
+/// `rejected` and `internal` also carry `"reason"` (a [`RejectReason`] or [`InternalReason`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum CommandError {
@@ -343,20 +348,25 @@ pub enum CommandError {
     },
     /// The command ran and refused the request (e.g. an offset out of bounds).
     Rejected {
+        /// Why, set where the refusal is raised (the protocol `kind`).
+        reason: RejectReason,
         /// Human-readable message.
         message: String,
     },
-    /// A bug: the command produced a result that does not match its own schema.
+    /// A bug in Kiln: a panic, or a result that violates its schema or does not serialize.
     Internal {
+        /// Why, set where the error is raised (the protocol `kind`).
+        reason: InternalReason,
         /// Human-readable message.
         message: String,
     },
 }
 
 impl CommandError {
-    /// A [`CommandError::Rejected`] with `message`.
-    pub fn rejected(message: impl Into<String>) -> Self {
+    /// A [`CommandError::Rejected`] with `reason` and `message`.
+    pub fn rejected(reason: RejectReason, message: impl Into<String>) -> Self {
         CommandError::Rejected {
+            reason,
             message: message.into(),
         }
     }
@@ -371,8 +381,8 @@ impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CommandError::UnknownCommand { message }
-            | CommandError::Rejected { message }
-            | CommandError::Internal { message } => f.write_str(message),
+            | CommandError::Rejected { message, .. }
+            | CommandError::Internal { message, .. } => f.write_str(message),
             CommandError::InvalidParams { message, details } => {
                 write!(f, "{message}: {}", details.join("; "))
             }
@@ -487,6 +497,7 @@ impl Registry {
                 })?;
             let output = C::run(ctx, typed)?;
             serde_json::to_value(output).map_err(|e| CommandError::Internal {
+                reason: InternalReason::Other,
                 message: format!("result of `{}` does not serialize: {e}", C::NAME),
             })
         });
@@ -543,6 +554,7 @@ impl Registry {
         let errors = validation_errors(&entry.result_validator, &result);
         if !errors.is_empty() {
             return Err(CommandError::Internal {
+                reason: InternalReason::ResultSchema,
                 message: format!(
                     "result of `{name}` violates its schema: {}",
                     errors.join("; ")
@@ -570,7 +582,10 @@ impl Registry {
             .collect()
     }
 
-    /// Machine-readable description of every command (the content of `docs/commands.json`).
+    /// Machine-readable description of every command and of every error kind a `rejected` or
+    /// `internal` error can carry (the content of `docs/commands.json`):
+    /// `{"commands": […], "error_kinds": {"rejected": [{"kind", "when"}, …], "internal": […]}}`,
+    /// each kind list in [`RejectReason::ALL`] / [`InternalReason::ALL`] order.
     pub fn describe(&self) -> Value {
         let commands: Vec<Value> = self
             .entries
@@ -586,7 +601,18 @@ impl Registry {
                 })
             })
             .collect();
-        json!({ "commands": commands })
+        let rejected: Vec<Value> = RejectReason::ALL
+            .iter()
+            .map(|r| json!({"kind": r.as_str(), "when": r.description()}))
+            .collect();
+        let internal: Vec<Value> = InternalReason::ALL
+            .iter()
+            .map(|r| json!({"kind": r.as_str(), "when": r.description()}))
+            .collect();
+        json!({
+            "commands": commands,
+            "error_kinds": {"rejected": rejected, "internal": internal},
+        })
     }
 
     /// Check every command's contract: each example's params validate, the example runs on a

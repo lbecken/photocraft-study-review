@@ -1362,5 +1362,107 @@
         "type": "object"
       }
     }
-  ]
+  ],
+  "error_kinds": {
+    "internal": [
+      {
+        "kind": "panic",
+        "when": "a command panicked (a bug in Kiln)"
+      },
+      {
+        "kind": "result_schema",
+        "when": "a command's result violates its own schema (a bug in Kiln)"
+      },
+      {
+        "kind": "other",
+        "when": "any other internal error"
+      }
+    ],
+    "rejected": [
+      {
+        "kind": "invalid_path",
+        "when": "the path is not a valid root-relative path (see Paths in `docs/control-protocol.md`)"
+      },
+      {
+        "kind": "no_such_document",
+        "when": "no open document has this id"
+      },
+      {
+        "kind": "unsaved_changes",
+        "when": "`doc.close` of a modified document without `discard`"
+      },
+      {
+        "kind": "not_found",
+        "when": "the file (or, for a save, its directory) does not exist"
+      },
+      {
+        "kind": "not_a_file",
+        "when": "the path names a directory"
+      },
+      {
+        "kind": "io_error",
+        "when": "any other file-system failure (permissions, name too long, …)"
+      },
+      {
+        "kind": "decode_error",
+        "when": "the file is not valid UTF-8 / UTF-16 text"
+      },
+      {
+        "kind": "out_of_range",
+        "when": "an offset beyond the end of the text"
+      },
+      {
+        "kind": "inverted_range",
+        "when": "a range whose start is after its end"
+      },
+      {
+        "kind": "other",
+        "when": "any other refusal"
+      },
+      {
+        "kind": "invalid_pattern",
+        "when": "the search pattern is empty or is not a valid regular expression"
+      },
+      {
+        "kind": "stale_preview",
+        "when": "a file of a replace preview changed or was removed since the preview"
+      },
+      {
+        "kind": "no_such_preview",
+        "when": "no stored replace preview has this id"
+      },
+      {
+        "kind": "tool_unavailable",
+        "when": "external tools are off for this session (the default)"
+      },
+      {
+        "kind": "tool_not_found",
+        "when": "the external tool's program was not found"
+      },
+      {
+        "kind": "tool_timeout",
+        "when": "the external tool ran longer than its limit and was stopped"
+      },
+      {
+        "kind": "tool_failed",
+        "when": "the external tool failed or gave no usable result"
+      },
+      {
+        "kind": "no_recording",
+        "when": "the replayed tool recording has no output for this request"
+      },
+      {
+        "kind": "format_error",
+        "when": "rustfmt could not format the text"
+      },
+      {
+        "kind": "changed_on_disk",
+        "when": "the file changed or was removed on disk since it was read"
+      },
+      {
+        "kind": "invalid_keymap",
+        "when": "the keymap file or chord is not valid"
+      }
+    ]
+  }
 }

@@ -24,6 +24,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::reason::RejectReason;
 use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
 
 /// Register the `doc.*` commands.
@@ -164,7 +165,8 @@ impl Command for Open {
     }
 
     fn run(ctx: &mut Context, p: OpenParams) -> Result<OpenResult, CommandError> {
-        let path = RelPath::new(&p.path).map_err(|e| CommandError::rejected(e.to_string()))?;
+        let path = RelPath::new(&p.path)
+            .map_err(|e| CommandError::rejected(RejectReason::InvalidPath, e.to_string()))?;
         let existing = ctx
             .docs()
             .iter()
@@ -174,7 +176,7 @@ impl Command for Open {
             Some(id) => (id, true),
             None => {
                 let doc = Document::open(ctx.vfs(), &path)
-                    .map_err(|e| CommandError::rejected(e.to_string()))?;
+                    .map_err(|e| CommandError::rejected((&e).into(), e.to_string()))?;
                 (ctx.add_doc(doc), false)
             }
         };
@@ -244,7 +246,7 @@ impl Command for Save {
         let (doc, vfs) = ctx.doc_and_vfs_mut(p.doc)?;
         let bytes_written = doc
             .save(vfs)
-            .map_err(|e| CommandError::rejected(format!("cannot save {e}")))?;
+            .map_err(|e| CommandError::rejected((&e).into(), format!("cannot save {e}")))?;
         doc.buffer_mut().break_undo_group();
         Ok(SaveResult {
             doc: p.doc,
@@ -313,10 +315,13 @@ impl Command for Close {
 
     fn run(ctx: &mut Context, p: CloseParams) -> Result<CloseResult, CommandError> {
         if ctx.doc(p.doc)?.is_dirty() && !p.discard {
-            return Err(CommandError::rejected(format!(
-                "document {} has unsaved changes; save it or close with discard",
-                p.doc
-            )));
+            return Err(CommandError::rejected(
+                RejectReason::UnsavedChanges,
+                format!(
+                    "document {} has unsaved changes; save it or close with discard",
+                    p.doc
+                ),
+            ));
         }
         ctx.remove_doc(p.doc)?;
         Ok(CloseResult {
@@ -375,7 +380,7 @@ impl Command for Insert {
         let doc = ctx.doc_mut(p.doc)?;
         doc.buffer_mut()
             .insert(p.offset, &p.text)
-            .map_err(|e| CommandError::rejected(e.to_string()))?;
+            .map_err(|e| CommandError::rejected((&e).into(), e.to_string()))?;
         Ok(InsertResult {
             len_chars: doc.buffer().len_chars(),
             dirty: doc.is_dirty(),
@@ -431,7 +436,7 @@ impl Command for Delete {
         let removed = doc
             .buffer_mut()
             .delete(p.start..p.end)
-            .map_err(|e| CommandError::rejected(e.to_string()))?;
+            .map_err(|e| CommandError::rejected((&e).into(), e.to_string()))?;
         Ok(RemovedResult {
             removed,
             len_chars: doc.buffer().len_chars(),
@@ -480,7 +485,7 @@ impl Command for Replace {
         let removed = doc
             .buffer_mut()
             .replace(p.start..p.end, &p.text)
-            .map_err(|e| CommandError::rejected(e.to_string()))?;
+            .map_err(|e| CommandError::rejected((&e).into(), e.to_string()))?;
         Ok(RemovedResult {
             removed,
             len_chars: doc.buffer().len_chars(),

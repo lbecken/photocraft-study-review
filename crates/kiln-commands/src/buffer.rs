@@ -65,7 +65,7 @@ impl Command for Insert {
         let buffer = ctx.buffer_mut();
         buffer
             .insert(p.offset, &p.text)
-            .map_err(|e| CommandError::rejected(e.to_string()))?;
+            .map_err(|e| CommandError::rejected((&e).into(), e.to_string()))?;
         Ok(InsertResult {
             len_chars: buffer.len_chars(),
         })
