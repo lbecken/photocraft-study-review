@@ -1614,6 +1614,33 @@ mod tests {
     }
 
     #[test]
+    fn report_does_not_panic_on_malformed_task_ids() {
+        // Ruling D-047 (o): such a task has arm `none`, reported under neither arm.
+        let mut tasks = Vec::new();
+        for t in [
+            "T-021 ",
+            "T-02!",
+            "T-",
+            "",
+            "T-02\u{0663}",
+            "T-021a",
+            "\u{e9}",
+        ] {
+            for tier in ["high", "medium"] {
+                tasks
+                    .push(json!({"kind":"run","task":t,"tier":tier,"tokens":10,"gate_attempts":1}));
+            }
+            tasks.push(json!({"kind":"join","task":t,"base_fail_kind":"fails","acc_fail_first_join":1,"acc_defects":1,"impl_tests_green":true,"joined_sha":"a","at":"2026-11-13T01:00:00Z"}));
+        }
+        let queue = vec![
+            json!({"task":"T-021 ","attempt":1,"result":"merged","ended_at":"2026-11-12T12:00:00Z"}),
+        ];
+        let (r, _) = report_text(&tasks, &queue, &BTreeMap::new(), "");
+        assert!(!r.contains("arm independent"), "{r}");
+        assert!(!r.contains("arm implementer"), "{r}");
+    }
+
+    #[test]
     fn report_measures() {
         let tasks = vec![
             json!({"kind":"transition","task":"T-001","iteration":0,"at":"2026-11-12T10:00:00Z","from":"specified","to":"ready"}),

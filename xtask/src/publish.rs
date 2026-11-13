@@ -251,13 +251,13 @@ fn ledger_state(root: &Path, task: &str) -> String {
 }
 
 /// Ruling D-047 (n): a stop in step 3, 4 or 7 without a pinned line prints
-/// `publish: stopped at step <n>: <error>; T-NNN is <state>`; exit `code`.
-fn stopped(root: &Path, step: u8, task: &str, error: &anyhow::Error, code: u8) -> anyhow::Error {
+/// `publish: stopped at step <n>: <error>; T-NNN is <state>`; exit 1 (ruling D-047 (q)).
+fn stopped(root: &Path, step: u8, task: &str, error: &anyhow::Error) -> anyhow::Error {
     eprintln!(
         "{}",
         stop_line(step, task, error, &ledger_state(root, task))
     );
-    Exit(code).into()
+    Exit(1).into()
 }
 
 fn stop_line(step: u8, task: &str, error: &anyhow::Error, state: &str) -> String {
@@ -465,7 +465,10 @@ fn checks(
     }
     // Ruling D-047 (k): a task number publish (or anything else) has used is not reused.
     let records = crate::util::read_jsonl(&root.join("metrics/tasks.jsonl"))?;
-    if records.iter().any(|r| r["task"].as_str() == Some(task.as_str())) {
+    if records
+        .iter()
+        .any(|r| r["task"].as_str() == Some(task.as_str()))
+    {
         return Err(refused(format_args!(
             "{task} already has records in metrics/tasks.jsonl"
         )));
@@ -617,7 +620,7 @@ pub fn run_with(
         set_state(root, &task_file, "in_progress")?;
         Ok(info)
     })()
-    .map_err(|e| stopped(root, 3, &task, &e, 1))?;
+    .map_err(|e| stopped(root, 3, &task, &e))?;
     // Ruling Q-b: main's ledger is committed wherever the command stops.
     ledger_commit(
         root,
@@ -628,9 +631,9 @@ pub fn run_with(
 
     // 4.
     let wt = info.path.clone();
-    content_commit(root, &wt, &task, &inputs, &argv, &info.branch).map_err(|(e, code)| {
-        stopped(root, 4, &task, &e, code)
-    })?;
+    // Ruling D-047 (q): every stop in step 4 exits 1, a failed content commit included.
+    content_commit(root, &wt, &task, &inputs, &argv, &info.branch)
+        .map_err(|e| stopped(root, 4, &task, &e))?;
 
     // 5.
     let outcome = gate.run(&wt, GateXtask::Binary(&xtask))?;
@@ -649,7 +652,7 @@ pub fn run_with(
     ledger_commit(root, &format!("publish: {task} queued"), &task, &task_file)?;
 
     // 7. Every input is compared before any is removed.
-    hand_over(root, &inputs, &spec.branch()).map_err(|e| stopped(root, 7, &task, &e, 1))?;
+    hand_over(root, &inputs, &spec.branch()).map_err(|e| stopped(root, 7, &task, &e))?;
 
     // 8. The queue takes the lock itself.
     drop(lock);
@@ -671,7 +674,7 @@ pub fn run_with(
 }
 
 /// Step 4: copy the inputs from the primary checkout `root` into the worktree `wt`, regenerate `docs/scorecard.md` there and
-/// commit exactly those paths on `branch`. `Err((error, exit code))`: 2 for a failed commit, else 1.
+/// commit exactly those paths on `branch`.
 fn content_commit(
     root: &Path,
     wt: &Path,
@@ -679,59 +682,50 @@ fn content_commit(
     inputs: &[String],
     argv: &[String],
     branch: &str,
-) -> std::result::Result<(), (anyhow::Error, u8)> {
-    let one = |e: anyhow::Error| (e, 1);
+) -> Result<()> {
     for p in inputs {
         let src = root.join(p);
         let dest = wt.join(p);
         if let Some(d) = dest.parent() {
-            std::fs::create_dir_all(d).map_err(|e| one(e.into()))?;
+            std::fs::create_dir_all(d)?;
         }
-        std::fs::copy(&src, &dest)
-            .with_context(|| format!("copy {p} into .worktrees/{task}"))
-            .map_err(one)?;
+        std::fs::copy(&src, &dest).with_context(|| format!("copy {p} into .worktrees/{task}"))?;
     }
-    if let Err(e) = scorecard_in(wt, argv, &wt.join("target")).map_err(one)? {
-        return Err(one(anyhow::anyhow!(
-            "regenerating docs/scorecard.md in .worktrees/{task} failed: {e}"
-        )));
+    if let Err(e) = scorecard_in(wt, argv, &wt.join("target"))? {
+        bail!("regenerating docs/scorecard.md in .worktrees/{task} failed: {e}");
     }
     let mut content = inputs.to_vec();
     content.push("docs/scorecard.md".into());
-    let stray: Vec<String> = dirty_paths(wt, None)
-        .map_err(one)?
+    let stray: Vec<String> = dirty_paths(wt, None)?
         .iter()
         .map(|l| porcelain_path(l))
         .filter(|p| !content.contains(p))
         .collect();
     if !stray.is_empty() {
-        return Err(one(anyhow::anyhow!(
+        bail!(
             "the content commit would contain other paths ({})",
             stray.join(", ")
-        )));
+        );
     }
     let subject = format!(
         "{task}: publish {}; regenerate docs/scorecard.md",
         inputs.join(" ")
     );
-    if let Err(e) = commit(wt, &subject, task, &content).map_err(one)? {
-        return Err((
-            anyhow::anyhow!("commit failed in .worktrees/{task}: {e}"),
-            2,
-        ));
+    if let Err(e) = commit(wt, &subject, task, &content)? {
+        bail!("commit failed in .worktrees/{task}: {e}");
     }
-    let committed = git(wt, &["show", "--name-only", "--format=", "HEAD"]).map_err(one)?;
+    let committed = git(wt, &["show", "--name-only", "--format=", "HEAD"])?;
     let mut got: Vec<&str> = committed.lines().filter(|l| !l.is_empty()).collect();
     got.sort();
     let mut want: Vec<&str> = content.iter().map(String::as_str).collect();
     want.sort();
     want.retain(|p| got.contains(p) || *p != "docs/scorecard.md");
     if got != want {
-        return Err(one(anyhow::anyhow!(
+        bail!(
             "the content commit on {branch} contains {} instead of {}",
             got.join(", "),
             want.join(", ")
-        )));
+        );
     }
     Ok(())
 }
@@ -1166,12 +1160,18 @@ mod tests {
         let seen = std::cell::Cell::new(false);
         let during = |_: &Path| {
             let held = std::fs::read_to_string(&lock).unwrap();
-            assert!(held.starts_with(&format!("{} T-050", std::process::id())), "{held}");
+            assert!(
+                held.starts_with(&format!("{} T-050", std::process::id())),
+                "{held}"
+            );
             seen.set(true);
         };
         let gate = hook_gate(&during);
         let queue = |r: &Path, _: &str| -> Result<i32> {
-            assert!(!r.join(".git/kiln-queue.lock").exists(), "released before step 8");
+            assert!(
+                !r.join(".git/kiln-queue.lock").exists(),
+                "released before step 8"
+            );
             Ok(3)
         };
         let e = run_with(&root, &args(), &clock, &gate, &queue).unwrap_err();
@@ -1201,11 +1201,12 @@ mod tests {
         assert!(refusal(&e).starts_with("metrics: refused: "), "{e:#}");
         assert_eq!(snapshot(root), before);
         assert!(!root.join("metrics").exists());
-        assert!(
-            std::fs::read_dir(root.join("tasks"))
-                .unwrap()
-                .all(|e| !e.unwrap().file_name().to_string_lossy().starts_with("T-050"))
-        );
+        assert!(std::fs::read_dir(root.join("tasks")).unwrap().all(|e| {
+            !e.unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("T-050")
+        }));
     }
 
     #[test]
@@ -1228,7 +1229,10 @@ mod tests {
         let e = run_with(&root, &args(), &clock, &hook_gate(&during), &no_queue).unwrap_err();
         assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(2)), "{e:#}");
         std::fs::remove_file(&index_lock).unwrap();
-        assert_eq!(committed_state(&root), ("in_progress".into(), "in_progress".into()));
+        assert_eq!(
+            committed_state(&root),
+            ("in_progress".into(), "in_progress".into())
+        );
     }
 
     #[test]
@@ -1249,11 +1253,23 @@ mod tests {
         let root = repo.path().to_path_buf();
         let gen_toml = "[[generated]]\npath = \"docs/scorecard.md\"\ncommand = [\"sh\", \"-c\", \"case \\\"$CARGO_TARGET_DIR\\\" in *.worktrees*) echo boom >&2; exit 1;; esac; cat scorecard/items/* evaluations/* > docs/scorecard.md\"]\n";
         crate::git::testrepo::write(&root, "xtask/generated.toml", gen_toml);
-        crate::git::testrepo::g(&root, &["commit", "-q", "-m", "gen", "--", "xtask/generated.toml"]);
-        let e = run_with(&root, &args(), &clock, &hook_gate(&|_| panic!("no gate")), &no_queue)
-            .unwrap_err();
+        crate::git::testrepo::g(
+            &root,
+            &["commit", "-q", "-m", "gen", "--", "xtask/generated.toml"],
+        );
+        let e = run_with(
+            &root,
+            &args(),
+            &clock,
+            &hook_gate(&|_| panic!("no gate")),
+            &no_queue,
+        )
+        .unwrap_err();
         assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(1)), "{e:#}");
-        assert_eq!(committed_state(&root), ("in_progress".into(), "in_progress".into()));
+        assert_eq!(
+            committed_state(&root),
+            ("in_progress".into(), "in_progress".into())
+        );
         let mut dirty = dirty_paths(&root, None).unwrap();
         dirty.sort();
         assert_eq!(
@@ -1278,6 +1294,69 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(root.join("scorecard/items/x.y.toml")).unwrap(),
             "edited\n"
+        );
+    }
+
+    #[test]
+    fn step_one_refuses_no_input_and_a_dirty_path_outside_the_inputs() {
+        // Ruling D-047 (p), findings 6 and 8.
+        let repo = toy();
+        let root = repo.path();
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let gate = hook_gate(&|_| {});
+        let before = snapshot(root);
+        let none = Args {
+            inputs: vec![],
+            ..args()
+        };
+        let e = run_with(root, &none, &clock, &gate, &no_queue).unwrap_err();
+        assert!(refusal(&e).starts_with("publish: refused: "), "{e:#}");
+        assert_eq!(snapshot(root), before);
+        crate::git::testrepo::write(root, "notes.txt", "draft\n");
+        let before = snapshot(root);
+        let e = run_with(root, &args(), &clock, &gate, &no_queue).unwrap_err();
+        let r = refusal(&e);
+        assert!(
+            r.starts_with("publish: refused: ") && r.contains("notes.txt"),
+            "{r}"
+        );
+        assert_eq!(snapshot(root), before);
+        assert_eq!(gate.builds.get(), 0);
+        assert!(!root.join(".git/kiln-queue.lock").exists());
+    }
+
+    #[test]
+    fn a_failed_content_commit_in_step_four_exits_one() {
+        // Ruling D-047 (q): a stop in step 4 exits 1, a failed commit on task/T-NNN included;
+        // exit 2 is the ledger commits' pinned line only.
+        let repo = toy();
+        let root = repo.path().to_path_buf();
+        let hook = root.join(".git/hooks/pre-commit");
+        std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+        std::fs::write(
+            &hook,
+            "#!/bin/sh\ncase \"$(git symbolic-ref --short HEAD)\" in task/*) echo hook says no >&2; exit 1;; esac\n",
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let e = run_with(
+            &root,
+            &args(),
+            &clock,
+            &hook_gate(&|_| panic!("no gate")),
+            &no_queue,
+        )
+        .unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(1)), "{e:#}");
+        assert_eq!(
+            committed_state(&root),
+            ("in_progress".into(), "in_progress".into())
+        );
+        assert!(
+            !root.join(".git/kiln-queue.lock").exists(),
+            "released on the stop"
         );
     }
 

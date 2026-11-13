@@ -491,7 +491,8 @@ just before step 8, where the queue takes it itself; a queue that starts in that
    `publish: queue did not merge T-NNN (exit c); …` and exit `c`.
 
 A stop in step 3, 4 or 7 that has no line of its own prints `publish: stopped at step <n>:
-<error>; T-NNN is <state>` (exit 1; 2 for a failed content commit in step 4).
+<error>; T-NNN is <state>` and exits 1, a failed content commit in step 4 included. Exit 2 is
+kept for usage errors and the ledger commits' `publish: commit failed: …` line.
 
 The helper records no `run`. The director still reserves the task number and title, has the
 input written by its author, books the session's own run to `iter-N`, acts on a stop message
@@ -511,6 +512,7 @@ on main; *set state X* means editing the task file's front-matter line to `state
 | 2, before the commit | nothing (task file removed, ledger restored) | fix the cause, re-run `publish` with the same number | — |
 | 2, commit failed | task file and two transitions (`ready`) uncommitted | repair (signing, index lock), ledger commit "publish: T-NNN ready"; then the row for 3 | `metrics transition --task T-NNN --to abandoned`, set state abandoned, ledger commit "publish: T-NNN abandoned" |
 | 3 | `ready` committed; maybe a worktree | `worktree new T-NNN` if missing; `metrics transition --task T-NNN --to in_progress`; set state in_progress; ledger commit "publish: T-NNN in progress"; then the row for 4 | as for 2, then `worktree rm T-NNN --force` if a worktree exists |
+| 3, commit failed | `ready` committed; worktree; `in_progress` uncommitted | repair, ledger commit "publish: T-NNN in progress"; then the row for 4 | as for 4 (after the ledger commit) |
 | 4 | `in_progress` committed; worktree | in `.worktrees/T-NNN`: copy the inputs, run main's `docs/scorecard.md` command (`cargo xtask scorecard`), commit exactly the inputs and `docs/scorecard.md` (`Task: T-NNN`, `Role: director`); then the row for 5 | `metrics transition --task T-NNN --to abandoned`, set state abandoned, ledger commit "publish: T-NNN abandoned", `worktree rm T-NNN --force` |
 | 5 (gate red) | `in_progress` committed; content commit on `task/T-NNN` | fix the input (in the worktree and the primary checkout alike), commit it on the branch, `cargo xtask ci` there; green: `metrics transition --task T-NNN --to self_verified`, then `--to queued`; set state queued; ledger commit "publish: T-NNN queued"; then the row for 7 | as for 4 |
 | 6, commit failed | `in_progress` committed; `queued` uncommitted | repair, ledger commit "publish: T-NNN queued"; then the row for 7 | as for 4 (after the ledger commit) |
@@ -519,6 +521,8 @@ on main; *set state X* means editing the task file's front-matter line to `state
 | 8, merged commit failed | merged by the queue; `merged` uncommitted | repair, ledger commit "publish: T-NNN merged", `worktree rm T-NNN` | — (merged is final) |
 
 After an abandon the inputs are still the director's: publish them again under a new task number.
+After step 7 they are no longer in the primary checkout; `worktree rm --force` keeps the unmerged
+branch, so `git show task/T-NNN:<path> > <path>` brings each back.
 
 ## Other registries
 
