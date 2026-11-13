@@ -2,7 +2,7 @@
 id: T-018
 title: "Give each document a selection and anchors that follow every edit, apply multi-range edits as one undo step, move the cursor by char, word and line, and normalise line endings on request"
 tier: medium            # ADR-0002 default: in-memory behaviour in kiln-text plus two command groups; no persistence, process, gate, security or dependency criterion
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: [edit.selection, io.mixed-eol]
 depends_on: [T-015, T-010]   # module slots cursor.rs / eol.rs; T-010's `not_a_boundary` reason and PositionError mapping
@@ -237,6 +237,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 - 2026-11-13 · R-066 · draft · did: needs T-032 only transitively (through T-010); `depends_on` unchanged. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T17:43Z · R-150 · in_progress · did (x7; entry recorded by the director from the implementer's report, since the task file is on main): rewrote the exception sentence in `docs/protocol/eol.md`. A position between a lone CR and a following `\r` ends just before the new LF of the first `\r` of the run of consecutive `\r` it lies in (the run may end in a CRLF's `\r`), at the end of the line before that run, so it can move up several lines. Added the example `x\r\r\r\ry`, caret 4 → 1. Checked through `kiln-cli run`: `x\r\r\r\ry` carets 2/3/4/5 → 1/1/1/5; `x\r\r\r\ny` 2/3 → 1/1; `x\r\n\r\ry` 4 → 2; `\r\r\r` 1/2/3 → 0/0/3; `x\r\r\ny` 2 → 1. All texts up to length 6 over `x`, `\r`, `\n`, target LF: 6,561 cases, 0 mismatches with the documented rules (547 exception, 142 cascading). No code or tests changed. Commit d0bab85f8c994098d1581b6fb8cf452f0a114987. · gate attempts: 0 (hygiene and fmt green) · not run: `cargo xtask ci`, join, queue · tokens 84,366 · missing context: none · next: director joins; round 3 confirms this fix only.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
