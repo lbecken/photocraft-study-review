@@ -255,25 +255,47 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
         );
     }
 
-    // main's first-parent history: exactly these five commits, in this order.
+    // main's first-parent history: exactly these six commits, in this order (D-040).
     let log = first_parent_subjects(&r, &start);
     let subjects: Vec<&str> = log.iter().map(|(_, s)| s.as_str()).collect();
     assert_eq!(
         subjects.len(),
-        5,
+        6,
         "first-parent log since the start: {subjects:#?}"
     );
     assert_eq!(subjects[0], "publish: T-050 ready");
-    assert_eq!(subjects[1], "publish: T-050 queued");
+    assert_eq!(subjects[1], "publish: T-050 in progress");
+    assert_eq!(subjects[2], "publish: T-050 queued");
     assert!(
-        subjects[2].starts_with("T-050: publish ")
-            && subjects[2].ends_with("; regenerate docs/scorecard.md")
-            && inputs.iter().all(|i| subjects[2].contains(i)),
+        subjects[3].starts_with("T-050: publish ")
+            && subjects[3].ends_with("; regenerate docs/scorecard.md")
+            && inputs.iter().all(|i| subjects[3].contains(i)),
         "content commit subject: {}",
-        subjects[2]
+        subjects[3]
     );
-    assert_eq!(subjects[3], "queue: record T-050 merged");
-    assert_eq!(subjects[4], "publish: T-050 merged");
+    assert_eq!(subjects[4], "queue: record T-050 merged");
+    assert_eq!(subjects[5], "publish: T-050 merged");
+    // main is append-only (D-040): the pre-publish tip and every value main took during the
+    // call (its reflog) are ancestors of the final head, so no commit was reset or folded.
+    let head = r.main_sha();
+    let mut tips = vec![start.clone()];
+    tips.extend(
+        git(&r.root, &["reflog", "--format=%H", "main"])
+            .lines()
+            .map(str::to_owned),
+    );
+    for t in &tips {
+        let o = run_to(
+            Command::new("git")
+                .args(["merge-base", "--is-ancestor", t, &head])
+                .current_dir(&r.root),
+            60,
+        );
+        assert_eq!(
+            o.code, 0,
+            "main was at {t}, which is not an ancestor of {head}"
+        );
+    }
     for (c, s) in &log {
         let body = git(&r.root, &["log", "-1", "--format=%B", c]);
         let lines: Vec<&str> = body.lines().map(str::trim).collect();
@@ -283,7 +305,7 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
         );
     }
     // The ledger commits touch exactly the task file and the metrics file.
-    for i in [0, 1, 4] {
+    for i in [0, 2, 5] {
         let mut files: Vec<String> = git(&r.root, &["show", "--name-only", "--format=", &log[i].0])
             .lines()
             .map(str::to_owned)
@@ -296,8 +318,17 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
             log[i].1
         );
     }
+    // The `in progress` commit records the transition and touches only ledger files of T-050.
+    let files = git(&r.root, &["show", "--name-only", "--format=", &log[1].0]);
+    assert!(
+        files.lines().any(|f| f == "metrics/tasks.jsonl")
+            && files
+                .lines()
+                .all(|f| f == "metrics/tasks.jsonl" || f == SLUG_FILE),
+        "files of `publish: T-050 in progress`: {files}"
+    );
     // The content commit: the inputs and docs/scorecard.md only, inputs byte-identical.
-    let mut files: Vec<String> = git(&r.root, &["show", "--name-only", "--format=", &log[2].0])
+    let mut files: Vec<String> = git(&r.root, &["show", "--name-only", "--format=", &log[3].0])
         .lines()
         .map(str::to_owned)
         .collect();
@@ -503,6 +534,7 @@ fn publish_stops_when_the_gate_fails_and_keeps_the_inputs() {
     let item = "scorecard/items/x.y.toml";
     let red = "id = \"x.y\"\nnote = \"red-gate\"\n";
     write(&r.root, item, red);
+    let start = r.main_sha();
     let o = publish(&r, &[item]);
     assert_eq!(o.code, 1, "gate failure exit:\n{}\n{}", o.stdout, o.stderr);
     let want = "publish: gate failed in .worktrees/T-050 at red; T-050 stays in_progress; fix the input and re-run the gate there, or abandon (metrics transition --to abandoned; worktree rm T-050 --force)";
@@ -544,11 +576,15 @@ fn publish_stops_when_the_gate_fails_and_keeps_the_inputs() {
         format!("?? {item}\n"),
         "primary checkout status"
     );
-    assert!(
-        !first_parent_subjects(&r, "main~1")
-            .iter()
-            .any(|(_, s)| s.contains("queued") || s.contains("merged")),
-        "publish went past the gate"
+    // D-040: the `ready` and `in progress` commits both remain, nothing after them.
+    let subjects: Vec<String> = first_parent_subjects(&r, &start)
+        .into_iter()
+        .map(|(_, s)| s)
+        .collect();
+    assert_eq!(
+        subjects,
+        ["publish: T-050 ready", "publish: T-050 in progress"],
+        "main's first-parent log after a red gate"
     );
     assert!(r.queue_lines().is_empty(), "the queue must not run");
 }

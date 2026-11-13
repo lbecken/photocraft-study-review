@@ -700,6 +700,13 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   red test, only in acceptance_t013_* targets; fmt, clippy, layers, ui-commands, schema,
   scorecard, no-skip PASS) · not run: gate after the last ruling edits (tests re-run directly:
   41 T-005 pass, 25 T-013 fail on base) · missing context: none · next: join.
+- 2026-11-13T06:10Z · R-065 · in_progress · did: applied D-040 (main append-only): AC-9 test
+  now requires exactly six first-parent commits (ready, in progress, queued, content, queue
+  record, merged) and that the pre-publish tip and every reflog value of main are ancestors of
+  the final head; the in-progress commit touches only T-050's ledger files; the red-gate test
+  requires main's first-parent log to be exactly ready, in progress. Fails on base (exit 2). ·
+  gate attempts: 0 this run (clippy clean, publish tests run directly) · missing context: none ·
+  next: join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
