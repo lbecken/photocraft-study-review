@@ -284,3 +284,8 @@
 {"kind":"join","task":"T-011","at":"2026-11-13T13:13:00Z","acc_total":9,"acc_fail_base":9,"base_fail_kind":"fails","acc_fail_first_join":0,"acc_defects":null,"impl_tests_green":true,"gate_green":true,"tests_sha":"76c7c83d720b60311d4ca2ad94c817f209ea29dd","joined_sha":"47a4c23151423ea70ec9df1faff78b6e7b50be22","result":"joined","guard_total":3,"guard_fail_base":0,"guard_fail_join":0}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:18:38Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:18:38Z","from":"self_verified","to":"tests_joined"}
+{"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T13:22:07Z","from":"queued","to":"merged"}
+{"kind":"transition","task":"T-008","iteration":1,"at":"2026-11-13T13:22:16Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-008","iteration":1,"at":"2026-11-13T13:22:16Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T13:22:16Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T13:22:16Z","from":"specified","to":"ready"}
