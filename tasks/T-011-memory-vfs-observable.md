@@ -223,4 +223,13 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### test author
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13T13:24Z · R-119 · tests_joined · did: round-1 review of
+  `47a4c23151423ea70ec9df1faff78b6e7b50be22` (`reviews/T-011-r1.md`): acceptance/guard files
+  unchanged since `76c7c83` (both branches); CLI probes incl. the doc's memory-vs-disk example;
+  19 mutants (1 equivalent, 17 killed, 15 by acceptance, 1 survived: string-prefix conflict
+  check, test gap). Verdict request-changes (1 test gap); 3 spec gaps for the director
+  (duplicate JSON keys, `exec` params-vs-manifest order, within-manifest order unobservable),
+  2 nits. · gate attempts: 0 (ran `kiln-cli` package tests per mutant and `cargo xtask
+  hygiene`) · not run: full gate, permission-denied manifest (uid 0), Windows · missing
+  context: none · next: implementer fixes finding 1; director rules on findings 2–4.
 <!-- end reviewer log -->
