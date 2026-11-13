@@ -137,3 +137,5 @@
 {"kind":"run","task":"T-014","iteration":1,"run":"R-053","role":"planner","tier":"low","started_at":"2026-11-13T03:01:56Z","ended_at":"2026-11-13T03:26:56Z","wall_s":1500,"tokens":261060,"tool_calls":58,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"methodology v1.1 authoring (runs R-053 and R-054; overhead run, to be booked to iter-1 once T-013 allows it)"}
 {"kind":"transition","task":"T-014","iteration":1,"at":"2026-11-13T03:27:07Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-014","iteration":1,"at":"2026-11-13T03:27:07Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-014","iteration":1,"at":"2026-11-13T03:28:15Z","from":"ready","to":"in_progress"}
+{"kind":"transition","task":"T-014","iteration":1,"at":"2026-11-13T03:28:15Z","from":"in_progress","to":"self_verified"}
