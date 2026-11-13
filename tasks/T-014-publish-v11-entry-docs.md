@@ -2,7 +2,7 @@
 id: T-014
 title: "Publish the v1.1 versions of AGENTS.md and the charter's tier and iteration lines"
 tier: low
-state: draft
+state: ready
 owner_role: director
 scorecard_items: []
 depends_on: []
