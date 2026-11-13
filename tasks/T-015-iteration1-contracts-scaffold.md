@@ -2,7 +2,7 @@
 id: T-015
 title: "Scaffold iteration 1 before fan-out: one empty module per new command group, per-group session state, the external-tool trait with spawning off by default, glob re-exports in kiln-workspace, and the internal dependency edges"
 tier: high              # ADR-0002: dependency-table changes (workspace-internal edges + serde/serde_json in kiln-workspace); no gate path, no §3 contract
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # enabling task
 depends_on: []          # no touches held by T-013 (in flight) or any other in-flight task; dispatchable now
@@ -35,6 +35,7 @@ touches:
   - crates/kiln-workspace/src/format.rs          # new, empty (T-026)
   - crates/kiln-workspace/tests/tools_contract.rs   # implementer's own integration tests
   # docs/commands.json is generated and must come out byte-identical
+  - crates/kiln-commands/src/doc.rs               # D-046: only the unit test that assumes every non-listed command is mutating
 budget_tokens: 850000   # high (v1.1)
 iteration: 1
 found_by: planner
@@ -255,6 +256,10 @@ None. Distinct target names: `crates/kiln-commands/tests/acceptance_t015.rs`
   error-kind change move to T-032.
 - Director (2026-11-13, D-043), from spec check round 2: the AC-1 guard must not embed the output of `kiln-cli commands` or `commands --schema` — every later task that adds a command changes it and no later task may edit this guard — and its recorded session must avoid behaviour later tasks are specified to change (a path that names a directory, whose refusal T-008 rewords; request ids longer than 64 characters, whose cap T-030 changes). AC-1 above has been edited accordingly.
 - Director (2026-11-13): AC-5's "`Registry::names()` is unchanged" is tested as "every command registered on base is still registered"; the exact list is the `schema` gate step's business (`docs/commands.json`). An exact-list test would break every later task that adds a command (the test author's question; same reasoning as D-043).
+- Director rulings after review r1 (2026-11-13, D-046) — part of the spec:
+  1. Guards must not stop later, already-specified tasks: `guard_t015.rs` matches `CommandError::Rejected { message, .. }` (T-032 adds a field); `guard_t015_cli.rs` uses a command name no planned task will ever register (`zz.no-such-command`) where it needs an unknown command, not `cursor.get` (T-018 adds it). Test author's change.
+  2. Test gap: a test must show that the **default** runner of every standard context constructor starts no process — run a request through `ctx.tools()` of `Context::new()`, `with_text`, `with_files` and `with_vfs` with marker-writing fake `cargo`/`rustfmt` first on `PATH`, and assert no marker; checking the runner's `Debug` text alone is not enough. Test author's change.
+  3. `touches` gains `crates/kiln-commands/src/doc.rs` for one change: the unit test at about lines 1319–1337, which requires every command outside a fixed list to be mutating, is narrowed to the `doc.*` and `buffer.*` commands it was written for, so that a later group may register a read-only command. Implementer's change; nothing else in that file.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
