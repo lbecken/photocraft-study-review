@@ -340,6 +340,31 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   clippy.toml): clean; a planted `.err().expect()` probe was caught, so the check reaches the
   file. · gate attempts: 0 · not run: full gate (base cannot compile the control file) · missing
   context: none · next: re-join.
+- 2026-11-13 · R-036 · review r1 (D-028) · did: escape cases now name real files outside the
+  root: `mixed_script` uses `../outside.txt` and `sub/../../outside.txt` with a real
+  `../outside.txt` seeded next to every root, and AC-3/AC-4/AC-7 tests assert both refusals and
+  unchanged outside bytes; new cli `run_refuses_paths_outside_root_and_writes_nothing_there`
+  (`..`, `sub/../..`, `./..`, absolute path to an existing file, each followed by insert + save;
+  outside bytes unchanged, no new files beside the root) → fail assertion on base; control
+  `responses_are_canonical_json` now uses a real `../up.txt` and a real absolute file. Every
+  spawned kiln-cli in my files now has a 120 s timeout (poll + kill). New
+  `apps/kiln-cli/tests/acceptance_t004_r2.rs` (all 6 fail on base by assertion):
+  `help_flags_print_usage_and_exit_0` (r2), `run_and_control_exit_1_when_stdout_cannot_be_written`
+  (r3, stdout = /dev/full, with a writable-stdout control), `exec_is_one_command_session_and_usage_says_so`
+  (r4), `error_responses_carry_a_stable_kind` (r5: every `ok:false` has `error.kind`, a lowercase
+  token, identical across two roots and two runs), `huge_values_are_echoed_truncated_to_200_chars`
+  (r6: 100k-char command name, path, path segment, param value, top-level key, param key,
+  truncated JSON; plus `exec`), `bad_root_error_names_the_path` (r7: file / missing root for run,
+  control, exec). New guard `crates/kiln-commands/tests/guard_t004.rs`
+  `lexical_dotdot_and_absolute_paths_are_refused_on_disk` (DiskFs + registry; passes on base by
+  design; symlinks not tested, T-008). Lint: clippy `--all-targets -D warnings` clean for kiln-cli
+  and kiln-commands, and for the kiln-control file on a throwaway stub package (not kept).
+  QUESTION: r4/r5 give no exact wording or `kind` values; I test only that the usage text
+  mentions saving and names run/control, and that `kind` is a stable lowercase token on every
+  error (including protocol errors) — proposed: list the `kind` values in
+  `docs/control-protocol.md`. Assumed: `--help` output goes to stdout. · gate attempts: 1 (last:
+  red clippy, scorecard, test — only the kiln-control acceptance file not compiling, as before) ·
+  not run: nothing else · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-031 · tests_joined (review r1) · did: reviewed 76051fb as a CLI user: hand slice
