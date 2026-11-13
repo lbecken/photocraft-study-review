@@ -6,4 +6,7 @@ tests = [
     "kiln_text::acceptance_t001::conversions_match_naive_model",
     "kiln_text::acceptance_t001::conversions_round_trip_on_valid_positions",
     "kiln_text::acceptance_t001::invalid_positions_give_exact_errors",
+    "kiln_cli::acceptance_t010::doc_position_round_trips_every_valid_position",
+    "kiln_cli::acceptance_t010::worked_example_positions_are_exact",
+    "kiln_cli::acceptance_t010::refusals_have_exact_kinds_and_messages_and_change_nothing",
 ]

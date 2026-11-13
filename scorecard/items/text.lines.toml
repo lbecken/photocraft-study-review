@@ -6,4 +6,6 @@ tests = [
     "kiln_text::acceptance_t001::lines_match_naive_split_for_lf_crlf_cr",
     "kiln_text::acceptance_t001::line_endings_style_exact_values",
     "kiln_text::acceptance_t001::dominant_line_ending_matches_naive_count",
+    "kiln_cli::acceptance_t010::doc_line_matches_naive_split_for_every_line",
+    "kiln_cli::acceptance_t010::worked_example_lines_are_exact",
 ]
