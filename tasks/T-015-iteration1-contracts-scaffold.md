@@ -410,6 +410,48 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   Also removed the early `return` from the `same` helper in `guard_t015_cli.rs`. Re-checked
   against a stub: lint-clean, passes; B6 (NoTools spawns, then refuses) still killed. · gate
   attempts: `cargo xtask no-skip` green · missing context: none · next: join.
+- 2026-11-13 · R-084 · round 2 after review r1, new test author (D-046 (1), (2)) · did:
+  - D-046 (1): `guard_t015.rs` matches `CommandError::Rejected { message, .. }`; in
+    `acceptance_t015_tools.rs` `VfsError::NotFound { path, .. }`, `ToolError::NotFound { tool,
+    .. }` and `NoRecording { tool, .. }`. Every unknown command in this task's tests is now
+    `zz.no-such-command`: `guard_t015_cli.rs` MALFORMED (`cursor.get` → T-018; `doc.nope`), the
+    `exec` case (`no.such`), and `acceptance_t015.rs` `exercise`. Only one embedded line changed
+    (SESSION_STDOUT line 103, id `"v"`; the `doc.nope` line is never drawn by the seed),
+    re-recorded on base from the guard's own `.actual` dump. Left as is: struct literals of
+    `ToolRequest`/`ToolOutput` and the exhaustive `ToolError` match (T-024 keeps the contract
+    "unchanged"; no later task adds a field or variant).
+  - Re-read of every guard against T-007, T-008, T-010, T-011, T-016…T-032: no other assertion
+    a specified later task changes. Checked: command list is presence-only (D-043 ruling);
+    refusal/schema messages are kept by T-032 (Pinned (a)) and the protocol object gets no
+    `reason` (T-032); exec bytes kept (T-032 (g)); paths never name a directory (T-008); ids ≤ 64
+    chars and the longest session response is 247 bytes (T-030's 4096-byte cap rule cannot
+    apply); every save in the session is of an unchanged file (T-027 baseline = bytes read or
+    last saved); results of existing commands unchanged (T-018, T-025, T-027); `--memory`
+    unchanged (T-011).
+  - D-046 (2): **not testable as written.** `Context::tools()` is `&dyn ToolRunner` (Interface)
+    and `ToolRunner::run` takes `&mut self`; `parts()` is `pub(crate)`, `set_tools` drops the old
+    runner, and no command uses a runner on T-015. So no integration test can run a request
+    through the default runner, and a runner whose `Debug` is `NoTools` but which spawns cannot
+    be told apart from outside unless it is not zero-sized. Added the observable part to
+    `contexts_start_without_tools`: the default runner has `NoTools`'s size and alignment.
+    Seeded on a scratch stub: a defaulted `Sneaky { root: PathBuf }` with `Debug` "NoTools" that
+    spawns → killed (`contexts_start_without_tools`, "not a plain `NoTools`"); the same as a unit
+    struct → survives (needs the test below).
+  QUESTION: D-046 (2) needs `&mut` access to the default runner, which the Interface gives only
+  crate-privately. Proposed testable wording: "The implementer's unit test in `registry.rs`
+  (already in `touches`) runs one request of each tool through `parts().tools` of
+  `Context::new()`, `with_text`, `with_files` and `with_vfs` with marker-writing fake
+  `cargo`/`rustfmt` first on `PATH` (shown to leave a marker when run directly) and asserts
+  `Err(ToolError::Unavailable)` and no marker." Alternative: a public `tools_mut()` (an Interface
+  change). Fake-PATH helpers to reuse: `acceptance_t015_tools.rs` `parent_checks`.
+  Self-check: scratch stub (tools.rs, glob and tools re-exports, `Context::tools`/`set_tools`)
+  in the worktree, reverted: all T-015 tests pass except `the_five_new_dependency_edges_exist`
+  (stub adds no edges); `cargo clippy --all-targets -- -D warnings` clean with it.
+  · gate attempts: on base `cargo xtask no-skip` PASS; guards `guard_t015`, `guard_t015_cli` pass;
+  `cargo clippy --all-targets -D warnings` red only in `acceptance_t015_tools.rs` (compile, as
+  expected), clean on every other target (`--workspace --exclude kiln-workspace --exclude
+  kiln-commands --all-targets`, plus each base-compilable target of those two) · not run: full
+  `cargo xtask ci` · missing context: none · next: director (QUESTION), then join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-082 · tests_joined · did: round-1 review, continuing R-078's started file
