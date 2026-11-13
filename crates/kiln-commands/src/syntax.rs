@@ -476,9 +476,12 @@ pub(crate) struct MatchBracket;
 impl Command for MatchBracket {
     const NAME: &'static str = "syntax.match-bracket";
     const DOC: &'static str = "If the char at `offset` is one of `( ) [ ] { }` outside strings, \
-        char literals and comments and has a partner under the same syntax node, return the \
-        offsets of the opening and closing bracket; otherwise `bracket` is `null`. Read-only; a \
-        document longer than 1048576 chars is refused with `too_large`.";
+        char literals and comments and has a partner, return the offsets of the opening and \
+        closing bracket; otherwise `bracket` is `null`. Partners are bracket leaves of the same \
+        kind that are direct children of the same syntax node, paired left to right by a \
+        stack; a bracket the parser inserted is never a partner (rules in \
+        `docs/protocol/syntax.md`). Read-only; a document longer than 1048576 chars is refused \
+        with `too_large`.";
     const MUTATING: bool = false;
     type Params = MatchBracketParams;
     type Output = MatchBracketResult;

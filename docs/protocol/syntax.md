@@ -99,8 +99,9 @@ The char at `offset` is matched if it is one of `( ) [ ] { }`, it is an anonymou
 tree (so not inside a string, char literal or comment), and it has a partner among the
 anonymous bracket leaves of the same kind that are direct children of the same parent node.
 Partners: those leaves are taken left to right, and each closing leaf pairs with the nearest
-unpaired opening leaf before it; a leaf left unpaired has no partner. `<` and `>` are not
-brackets. Brackets inside strings, character literals and comments are never matched; a
+unpaired opening leaf before it; a leaf left unpaired has no partner. A bracket the parser
+inserted to recover (a `MISSING` node, which holds no char) is never a partner: in
+`fn f() { g(1; }` the `(` at 10 gives `null`. `<` and `>` are not brackets. Brackets inside strings, character literals and comments are never matched; a
 bracket without a partner gives `null`. Any other char, and `offset` equal to the text's
 length, also give `null`.
 
@@ -130,8 +131,8 @@ are not stable (`docs/control-protocol.md`).
 
 ## Time
 
-No time bound exists for any `syntax.*` command: the size limit bounds memory, not time.
-Parsing time depends on the text, not only on its length, and a call after an edit that
+No time bound exists for any `syntax.*` command: the size limit bounds the length of the text
+a command accepts, not the time a parse takes or the memory it needs. Parsing time depends on the text, not only on its length, and a call after an edit that
 leaves the tree with errors parses the text twice.
 
 Measured with a release build of `kiln-cli` (`syntax.tree` after `doc.open`): a text of `#!`
