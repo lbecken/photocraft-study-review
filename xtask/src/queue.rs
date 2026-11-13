@@ -150,7 +150,8 @@ impl GateRunner for CargoGate {
     }
 }
 
-fn common_dir(root: &Path) -> Result<PathBuf> {
+/// The repository's common git directory (absolute).
+pub fn common_dir(root: &Path) -> Result<PathBuf> {
     let common = git(root, &["rev-parse", "--git-common-dir"])?;
     Ok(if Path::new(&common).is_absolute() {
         PathBuf::from(common)

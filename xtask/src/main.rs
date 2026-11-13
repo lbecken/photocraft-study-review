@@ -16,6 +16,7 @@ mod noskip;
 mod policy;
 mod precheck;
 mod provenance;
+mod publish;
 mod queue;
 mod registries;
 mod schema;
@@ -51,6 +52,8 @@ tasks
   queue T-NNN                           serial merge queue: rebase, gate, fast-forward main
   join T-NNN [--acc-defects N]          merge task/T-NNN-tests into task/T-NNN, record evidence
   join --revert-check T-NNN [--revert <sha>]...   optional diagnostic
+  publish T-NNN --title \"<title>\" --iteration N <path>...
+                                        carry a new item / an evaluation to main as a low task
 
 metrics (times default to now; refusals exit 1)
   metrics add --task <T-NNN|iter-N> --run R-NNN --role <role> (--tokens N | --tokens-unknown)
@@ -337,6 +340,11 @@ fn real_main() -> Result<bool> {
             }
             Ok(true)
         }
+        "publish" => {
+            let a = publish::Args::parse(&args)?;
+            publish::run(&primary()?, &a, &timefmt::SystemClock)?;
+            Ok(true)
+        }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");
             Ok(true)
@@ -354,6 +362,9 @@ fn main() -> ExitCode {
     match real_main() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
+        Err(e) if e.downcast_ref::<util::Exit>().is_some() => {
+            ExitCode::from(e.downcast_ref::<util::Exit>().map_or(2, |x| x.0))
+        }
         Err(e) => match e.downcast_ref::<util::Refused>() {
             // A refusal: one stderr line, exit 1 (T-013 Interface).
             Some(r) => {

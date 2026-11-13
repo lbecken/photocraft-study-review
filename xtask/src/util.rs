@@ -82,6 +82,18 @@ impl std::fmt::Display for Refused {
 
 impl std::error::Error for Refused {}
 
+/// Exit with this code; whatever the command had to say is already printed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Exit(pub u8);
+
+impl std::fmt::Display for Exit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "exit {}", self.0)
+    }
+}
+
+impl std::error::Error for Exit {}
+
 /// The workspace root: the nearest ancestor of the current directory whose `Cargo.toml`
 /// declares `[workspace]`.
 pub fn repo_root() -> Result<PathBuf> {
