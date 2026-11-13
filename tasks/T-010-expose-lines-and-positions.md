@@ -211,6 +211,34 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 - 2026-11-13 · R-066 · draft · did: retargeted to T-032 (D-041): `depends_on` T-032; the list is `error_kinds` in `docs/commands.json`; the mapping is a `From` impl (finding 12). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T12:29Z · R-107 · ready · BLOCKED: spec-vs-merged-code mismatch found in the pre-code
+  check; no code written. Criteria restated: two read-only `doc.*` commands over `kiln-text`'s
+  line/position functions with the exact result shapes and the six-row refusal table; one new
+  reason row `not_a_boundary` + `From<&PositionError>`; `out_of_range`'s description widened;
+  `docs/commands.json` regenerated; new `docs/protocol/doc-positions.md`; control-protocol.md
+  untouched. The widening of `out_of_range` ("an offset, line or column beyond the end",
+  Interface "Reasons" and the refusal-table note) cannot be made without breaking three existing
+  tests that pin the T-032 text "an offset beyond the end of the text" (base 7dccc49):
+  `crates/kiln-commands/tests/acceptance_t032.rs` (REJECTED row at :757-761, asserted in
+  `reasons_have_pinned_names_order_and_descriptions` :848, `reason.description() == when`);
+  `apps/kiln-cli/tests/acceptance_t032_cli.rs` (REJECTED :87, pair subsequence check in
+  `schema_dump_publishes_the_generated_kind_list` :207); `crates/kiln-commands/tests/reasons.rs`
+  `table_rows_are_published_kinds_with_their_when_text` (:209, requires the description to equal
+  the "When" cell of `docs/control-protocol.md`:98, a file the spec says is not touched and
+  whose own text says "later tasks do not edit table cells"). Pinned (f) says only the `schema`
+  step pins anything this changes; it does not list these. The new `NotABoundary` row alone
+  breaks none of them (all use ordered-subsequence checks; reasons.rs's 13-row count is about
+  the protocol table, which is not edited). Wording drifts noted, would proceed: (1)
+  `doc.rs` unit test `describe_lists_doc_commands_with_mutating_flag` pins `doc.len() == 11` and a
+  read-only name list (in `touches`; contradicts (f) "no test pins the command count"); I would
+  update it to include the two commands. (2) `doc: <integer ≥ 1>` while every doc command takes
+  `u64` (`DocParams`); I would keep `u64`, so doc 0 is `no_such_document`.
+  QUESTION: keep `out_of_range`'s description unchanged (drop the widening), or authorise edits
+  to the three tests and the control-protocol.md cell (outside `touches`, and two are
+  `acceptance_t*` files)?
+  QUESTION: `doc` minimum 1 in the schema (doc 0 → `invalid_params`) or `u64` like other doc
+  commands (doc 0 → `no_such_document`)? · gate attempts: 0 · not run: everything (no code) ·
+  missing context: none · next: director rules on the two questions.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
