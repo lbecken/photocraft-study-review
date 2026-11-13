@@ -2,7 +2,7 @@
 id: T-004
 title: "Drive a headless session with JSON-lines requests: `kiln-cli run <script>` and `kiln-cli control`, deterministically"
 tier: high              # two layers (L4 + app); Cargo.toml/Cargo.lock; public CLI/protocol contract
-state: tests_joined
+state: in_progress
 owner_role: director
 scorecard_items: [control.protocol, control.errors, control.session, cli.run]
 depends_on: [T-003]
@@ -169,6 +169,15 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   regenerates it on a rebase conflict.
 - Director ruling (2026-11-13, decision D-023), part of the spec: `kiln-cli exec` and `kiln-cli run` must be able to act on real files. Both take `--root <dir>` (default: the current directory) and run commands against a disk workspace rooted there; an explicit `--memory` flag selects the empty in-memory file system for tests. Review of T-003 found that `exec` currently starts from an empty in-memory file system on every call, so no document can be opened from the CLI.
 - Director rulings at the join (2026-11-13, decision D-025), part of the spec: the AC-9 example file contains `hello\n` (the original `x` made its own offset out of range); an unwritable `--log` path is detected before the script runs (empty stdout, non-zero exit); `exec --text` seeds the legacy single buffer and may be combined with `--root` or `--memory`; `<script>` and `--log` paths are relative to the current directory, not to `--root`; `control` has no `--memory`; a `control` I/O error exits 1; for duplicate JSON keys in a request the last one wins.
+- Director rulings after review r1 (2026-11-13, decision D-028) — part of the spec:
+  1. Symlinks: today request paths that pass through a symlink can leave the root. Confinement is a change to `kiln-workspace` and is out of this task's `touches`; it becomes task T-008. In this task, `docs/control-protocol.md` must say exactly what happens today (lexical `..` and absolute paths are refused; symlinks are followed, including out of the root; confinement is tracked as T-008) — the document may not claim a guarantee the code does not give.
+  2. `kiln-cli --help`, `-h`, and `<subcommand> --help` print usage and exit 0.
+  3. `run` exits 1 when it cannot write to stdout, the same as `control`.
+  4. `exec` is one command in a fresh session: it can read files but an edit made with it is never saved. The usage text and the protocol document say so and point to `run` / `control`.
+  5. Error responses carry a stable machine-readable `kind`; operating-system error text may appear only in the human-readable `message`.
+  6. A value echoed back in an error message is truncated to at most 200 characters.
+  7. The bad-root error names the path.
+  8. Tests that spawn `kiln-cli` have a timeout.
 
 ## Questions
 None open.
