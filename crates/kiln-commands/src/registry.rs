@@ -871,3 +871,107 @@ mod tests {
         assert!(!valid_name("buffer..insert"));
     }
 }
+
+#[cfg(test)]
+mod scaffold_tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use kiln_workspace::{Tool, ToolError, ToolOutput, ToolRequest};
+
+    use super::*;
+
+    /// A test runner that records every request and answers with a fixed output.
+    #[derive(Debug)]
+    struct Recorder(Rc<RefCell<Vec<ToolRequest>>>);
+
+    impl ToolRunner for Recorder {
+        fn run(&mut self, request: &ToolRequest) -> Result<ToolOutput, ToolError> {
+            self.0.borrow_mut().push(request.clone());
+            Ok(ToolOutput {
+                status: Some(0),
+                stdout: "ok".into(),
+                stderr: String::new(),
+            })
+        }
+    }
+
+    fn req(tool: Tool, args: &[&str], stdin: Option<&str>) -> ToolRequest {
+        ToolRequest {
+            tool,
+            args: args.iter().map(|a| a.to_string()).collect(),
+            stdin: stdin.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn parts_tools_defaults_to_no_tools() {
+        let mut ctx = Context::new();
+        let parts = ctx.parts();
+        assert_eq!(format!("{:?}", parts.tools), "NoTools");
+        assert_eq!(
+            parts.tools.run(&req(Tool::Cargo, &["check"], None)),
+            Err(ToolError::Unavailable)
+        );
+    }
+
+    #[test]
+    fn installed_runner_sees_the_exact_requests_sent_through_parts() {
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let mut ctx = Context::with_text("x");
+        ctx.set_tools(Box::new(Recorder(Rc::clone(&seen))));
+        let sent = vec![
+            req(Tool::Cargo, &["check", "--message-format=json"], None),
+            req(Tool::Rustfmt, &["--emit=stdout"], Some("fn main() {}\n")),
+            req(Tool::Cargo, &[], Some("")),
+        ];
+        for r in &sent {
+            let out = ctx.parts().tools.run(r).expect("recorder answers");
+            assert_eq!(out.stdout, "ok");
+        }
+        assert_eq!(*seen.borrow(), sent);
+        // Through `tools()`, the same runner (read-only).
+        assert!(format!("{:?}", ctx.tools()).starts_with("Recorder"));
+    }
+
+    #[test]
+    fn parts_borrows_are_disjoint_and_reach_the_context() {
+        let mut ctx = Context::with_files(&[("a.txt", b"hi")]).expect("ctx");
+        let path = RelPath::new("a.txt").expect("path");
+        {
+            let p = ctx.parts();
+            let doc = Document::open(&*p.vfs, &path).expect("open");
+            let id = p.docs.add(doc);
+            p.buffer.insert(0, "s").expect("insert");
+            // All parts at once.
+            let _ = (&mut *p.syntax, &mut *p.find, &mut *p.diag, &mut *p.keymap);
+            p.docs.get_mut(id).expect("doc").save(p.vfs).expect("save");
+        }
+        assert_eq!(ctx.buffer().text(), "s");
+        assert!(ctx.doc(1).is_ok());
+    }
+
+    #[test]
+    fn docs_ids_count_up_and_are_never_reused() {
+        let ctx0 = Context::with_files(&[("a", b"1"), ("b", b"2")]).expect("ctx");
+        let a = RelPath::new("a").expect("a");
+        let b = RelPath::new("b").expect("b");
+        let mut docs = Docs::new();
+        assert_eq!(docs.add(Document::open(ctx0.vfs(), &a).expect("a")), 1);
+        assert_eq!(docs.add(Document::open(ctx0.vfs(), &b).expect("b")), 2);
+        assert_eq!(docs.id_of(&a), Some(1));
+        assert_eq!(docs.id_of(&b), Some(2));
+        assert_eq!(docs.remove(1).expect("remove").path(), &a);
+        assert_eq!(docs.id_of(&a), None);
+        assert_eq!(
+            docs.get(1).expect_err("gone").to_string(),
+            no_such_doc(1).to_string()
+        );
+        assert!(docs.get_mut(1).is_err());
+        assert!(docs.remove(1).is_err());
+        assert_eq!(docs.add(Document::open(ctx0.vfs(), &a).expect("a")), 3);
+        let order: Vec<u64> = docs.iter().map(|(id, _)| id).collect();
+        assert_eq!(order, vec![2, 3]);
+        assert_eq!(docs.map().keys().copied().collect::<Vec<_>>(), order);
+    }
+}
