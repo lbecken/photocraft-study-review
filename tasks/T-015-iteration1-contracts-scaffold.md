@@ -288,6 +288,31 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13 · R-072 · ready · ACs restated: (1) CLI/protocol output, `commands`,
+  `commands --schema` and `docs/commands.json` unchanged from base (guard; D-043 narrows the guard
+  only); (2) every `Context` constructor installs `NoTools`, `set_tools` replaces it, `NoTools`
+  refuses both tools with `Unavailable`, `Host` gets no setter; (3) the five `ToolError` texts and
+  `Tool::as_str` exact, `ToolError: Error`; (4) the listed names resolve at the `kiln_workspace`
+  root and `tools::NoTools`; (5) `cargo xtask layers` passes with the five edges, `names()`
+  unchanged, the 13 modules registered in the pinned order after `doc`. · did: added the 13 empty
+  group modules and the 4 state structs, `Docs`, `Parts`, `parts()`, `set_tools`/`tools`; the
+  `ToolRunner` contract with `NoTools`; glob re-exports and 5 `pub mod`s in kiln-workspace; the
+  dependency edges. Checked base vs head by building kiln-cli at d995caa and at HEAD in this
+  worktree: `commands | sha256sum`, `commands --schema | sha256sum`, `exec doc.open
+  '{"path":"x"}' --memory` (stderr bytes, exit 2) identical. Readings chosen: (a) the group
+  modules carry no `///` doc on `register` (body exactly as pinned); state structs carry a one-line
+  `///` doc above the pinned derive; (b) `Docs` gets a private `fn new()` (the spec lists none;
+  not `Default`, so the counter start of 1 is explicit); (c) `#[allow(dead_code)] // slot for
+  T-018…T-031 (T-015)` sits on exactly 4 items: `parts()`, `Parts`, `Docs::id_of`,
+  `Docs::iter`. The other `Docs` methods are reached through the existing helpers, and the
+  Context state fields need none because `parts()` is allowed; I removed all four and confirmed
+  each one is needed; (d) `Docs::id_of` scans the map (first match by increasing id).
+  Unit tests in `registry.rs` (`scaffold_tests`), integration tests in `tests/scaffold.rs` and
+  `tests/tools_contract.rs`.
+  QUESTION: none blocking. For the record: the spec's `Docs` block shows no constructor, and the
+  "every Docs method … reached only through them" rule leaves it open whether `get`/`get_mut`/
+  `add`/`remove`/`map` need the attribute; I read "only through them" as "not otherwise
+  used", so they do not.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
