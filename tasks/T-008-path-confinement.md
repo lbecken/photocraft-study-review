@@ -539,6 +539,47 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   none · next: director; ready for a re-check.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T13:45Z · R-122 · ready · BLOCKED: one existing test outside `touches` fails, and the
+  spec forbids both ways to fix it myself. Base main `ba35ac03cf3e7bba99340628042fa75453083d9b`.
+  Criteria in my words: every `DiskFs` read/save/`is_file` walks the path physically from the
+  resolved root and refuses a final location outside it (`OutsideRoot`, touching nothing
+  outside); directories, FIFOs, sockets and devices are refused as `NotAFile` without being
+  opened; links that stay inside keep working; nothing is cached between calls; exact `Display`
+  texts and kinds; docs state it. · did: `vfs.rs` (`OutsideRoot`, new `Display` texts);
+  `disk.rs`: root canonicalized at `new` (same `Ok`/`Err`), a `locate` walk per call (each
+  symlink's target components replace it, `..` pops the physical directory, absolute targets
+  restart at `/`, 40 hops max, a failure once outside is `OutsideRoot`), inside test by
+  `Path::starts_with` on symlink-free paths; file type from `lstat` of the location, so
+  non-regular entries are never opened; read/rename then use the symlink-free location; the
+  race within one call is documented (D-3), no `O_NONBLOCK`. `reason.rs`: `OutsideRoot` row
+  appended last, mapping row, reworded `NotAFile` description, unit test. Golden rule 4
+  disclosure (D-061): in `crates/kiln-commands/tests/acceptance_t032.rs` (`REJECTED` row
+  `RejectReason::NotAFile`) and `apps/kiln-cli/tests/acceptance_t032_cli.rs` (row
+  `("not_a_file", …)`) I changed exactly the string "the path names a directory" to "the path
+  names a directory or another non-regular file where a file is needed, or a file where a
+  directory is needed"; nothing else in either file. `docs/commands.json` regenerated;
+  `docs/protocol/paths.md` new; the "Paths" bullet replaced. My tests:
+  `crates/kiln-workspace/tests/confinement.rs` (5 tests, FIFO calls under a 5 s timeout); a
+  string-prefix `inside` mutation fails them. Seen from outside through `kiln-cli`: `exec
+  doc.open` of a FIFO exits 2 with the pinned stderr at once; `run` refuses `dlink/secret.txt`
+  and `abs` (`outside_root`), `p` and `d` (`not_a_file`), exit 3; `control` refuses a save
+  after `a.txt` was swapped for an outside link, `dirty:true`, outside file unchanged. ·
+  gate attempts: 2 (1: red clippy, test helpers outside `#[cfg(test)]`, fixed; 2: red test,
+  `kiln-commands --test reasons`). `cargo test --workspace --no-fail-fast`: that is the only
+  failure. · not run: gate steps no-skip, fuzz, budgets (after the red step); macOS. ·
+  missing context: none · next: director ruling.
+  QUESTION: `crates/kiln-commands/tests/reasons.rs::table_rows_are_published_kinds_with_their_when_text`
+  (T-032 implementer test, :208–244) asserts that each `rejected`/`internal` cell of the
+  `docs/control-protocol.md` kinds table equals the `error_kinds` description (only
+  `invalid_path` excepted, :231–235). The `not_a_file` cell (control-protocol.md:95, "the path
+  names a directory") then fails against the new description the spec pins (Interface,
+  "Error kinds"). The spec forbids editing that cell ("No table cell of
+  `docs/control-protocol.md` is edited"), `reasons.rs` is not in `touches`, and R-101 finding 2
+  / Pinned (f) missed this test. Proposed: add `crates/kiln-commands/tests/reasons.rs` to
+  `touches` (implementer only), and add `not_a_file` to its exception at :231 with an exact
+  `assert_eq!` against the new pinned text (an exact text change, like `invalid_path`;
+  disclosed under golden rule 4). Alternative: allow editing the one table cell to the new
+  text.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
