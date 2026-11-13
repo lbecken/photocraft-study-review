@@ -2,7 +2,7 @@
 id: T-018
 title: "Give each document a selection and anchors that follow every edit, apply multi-range edits as one undo step, move the cursor by char, word and line, and normalise line endings on request"
 tier: medium            # ADR-0002 default: in-memory behaviour in kiln-text plus two command groups; no persistence, process, gate, security or dependency criterion
-state: self_verified
+state: tests_joined
 owner_role: planner
 scorecard_items: [edit.selection, io.mixed-eol]
 depends_on: [T-015, T-010]   # module slots cursor.rs / eol.rs; T-010's `not_a_boundary` reason and PositionError mapping
