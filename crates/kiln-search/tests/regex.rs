@@ -170,7 +170,13 @@ fn invalid_patterns_are_pattern_errors() {
         assert_eq!(e.to_string(), e.message);
     }
     let long = format!("({}", "a".repeat(300));
-    let full = ::regex::Regex::new(&long).unwrap_err().to_string();
+    // The engine's error with the same builder options as the code (ruling s2).
+    let full = ::regex::RegexBuilder::new(&long)
+        .multi_line(true)
+        .crlf(true)
+        .build()
+        .unwrap_err()
+        .to_string();
     assert!(full.chars().count() > 200);
     let e = Regex::new(&long, SENSITIVE).unwrap_err();
     let expected: String = full.chars().take(199).chain(std::iter::once('…')).collect();

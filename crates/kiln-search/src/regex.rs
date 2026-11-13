@@ -34,6 +34,17 @@
 //! [`PatternError`] (D-060 s1): capture slots times engine states made `find_all` on `(a)`
 //! repeated 34,000 times try to allocate about 55 GB. The check runs after the engine has
 //! accepted the pattern, so a pattern the engine rejects keeps the engine's message.
+//!
+//! The cap bounds the engine's working memory, not the result (D-070 s4): [`Regex::find_all`]
+//! returns every match with `group_count() + 1` slots, so its memory is proportional to
+//! matches × (groups + 1), about 2.4 kB per match at 100 groups; 100 empty groups on a 1 MB
+//! text peaked at 2.40 GB. A caller handling untrusted text or patterns must bound the search
+//! itself.
+//!
+//! Matching is linear in the text (the engine's guarantee). Pathological patterns (`(a*)*b` on
+//! 100,000 `a`s, `\p{L}{1000}`, deep nesting, a 100 kB pattern) answer or error within 5 s in a
+//! debug build, and searching a text the pattern does not match also stays within 5 s. On a
+//! text it does match, a 100 kB pattern takes longer, inside the engine (D-070 s5).
 
 use std::fmt;
 
@@ -258,6 +269,12 @@ impl Regex {
     }
 
     /// All matches, in the iteration order of the module documentation.
+    ///
+    /// Every match is returned with `group_count() + 1` slots, so memory is proportional to
+    /// matches × (groups + 1): about 2.4 kB per match at 100 groups, and 2.40 GB measured for
+    /// 100 empty groups on a 1 MB text. The 100-group cap bounds the engine's working memory,
+    /// not this result; a caller handling untrusted text or patterns must bound the search
+    /// itself (D-070 s4).
     pub fn find_all(&self, text: &str) -> Vec<Captures> {
         let mut out = Vec::new();
         let mut cursor = CharCursor::new(text);
