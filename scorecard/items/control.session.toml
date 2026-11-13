@@ -2,4 +2,7 @@ id = "control.session"
 title = "A headless session can open a file, edit it and save it through the control protocol"
 crate = "kiln-control"
 tier = "high"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t004::open_edit_undo_redo_save_through_run",
+    "kiln_control::acceptance_t004::memory_and_disk_hosts_give_same_responses",
+]

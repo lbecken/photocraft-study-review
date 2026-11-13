@@ -1,6 +1,7 @@
 //! T-004 AC-8 (compatibility): the existing `exec` and `commands` subcommands and their exit codes
 //! are unchanged by `run`/`control` and by D-023's `--root`. Regression guard: passes on the base
 //! by design.
+#![cfg(test)]
 
 use std::process::Command;
 

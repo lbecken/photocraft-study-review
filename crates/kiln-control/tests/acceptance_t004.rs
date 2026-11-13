@@ -6,6 +6,7 @@
 //! The crate's dependencies are not known in advance, so this file uses only `std`,
 //! `kiln_control` and `kiln_commands` (whose `LogEntry` is part of the declared API); JSON is
 //! checked with the small parser below.
+#![cfg(test)]
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

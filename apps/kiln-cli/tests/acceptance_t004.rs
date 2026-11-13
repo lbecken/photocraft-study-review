@@ -3,6 +3,7 @@
 //! by the test author. Every test drives the binary as a subprocess against real temporary
 //! directories, so the file compiles on the base and fails there by assertion (the base has no
 //! `run`/`control` subcommands and `exec` accepts no `--root`).
+#![cfg(test)]
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};

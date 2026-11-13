@@ -2,4 +2,8 @@ id = "control.errors"
 title = "Malformed or invalid requests get structured error responses; the host never exits on bad input"
 crate = "kiln-control"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_control::acceptance_t004::malformed_requests_get_structured_errors_and_host_continues",
+    "kiln_cli::acceptance_t004::run_exits_3_when_a_request_fails",
+    "kiln_cli::acceptance_t004::run_survives_hostile_lines",
+]

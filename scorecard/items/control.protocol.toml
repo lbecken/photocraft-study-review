@@ -2,4 +2,8 @@ id = "control.protocol"
 title = "JSON-lines control protocol: one request per line, one response per line, ids echoed"
 crate = "kiln-control"
 tier = "high"
-tests = []
+tests = [
+    "kiln_control::acceptance_t004::one_response_per_request_with_ids_echoed",
+    "kiln_cli::acceptance_t004::control_mode_answers_each_line_before_next",
+    "kiln_cli::acceptance_t004::run_one_response_per_request_with_ids_echoed",
+]
