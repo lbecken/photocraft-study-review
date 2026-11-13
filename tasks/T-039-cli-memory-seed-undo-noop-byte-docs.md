@@ -2,7 +2,7 @@
 id: T-039
 title: "Document `--memory-seed` in control-protocol.md, what a `doc.undo` or `doc.redo` with nothing to do leaves unchanged, and that `byte` counts the decoded text, with tests that pin each"
 tier: low               # ADR-0002: documentation and tests; two command descriptions (DOC strings) change, no behaviour
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # low tier carries no scorecard item (METHODOLOGY §4)
 depends_on: []          # T-011 merged (queue record df1eb20d05d9f12389c221bc8d65761d401dc61e); T-018 merged at 7a2678498df1cb80fa96f06947e919b3f396619d

@@ -392,3 +392,4 @@
 {"kind":"run","task":"iter-1","iteration":1,"run":"R-155","role":"director","tier":null,"started_at":"2026-11-13T18:27:56Z","ended_at":"2026-11-13T21:23:13Z","wall_s":10517,"tokens":271820,"tool_calls":55,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"methodology edited to v1.2 on D-091 (METHODOLOGY.md, CHANGELOG.md, five role briefs, three templates) and ADR-0005 written, by an agent on the director's behalf; stopped by the usage limit at 18:30:57Z and resumed at 21:12:30Z, so the wall time includes 2 h 42 min of no work"}
 {"kind":"transition","task":"T-039","iteration":2,"at":"2026-11-13T21:24:45Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-039","iteration":2,"at":"2026-11-13T21:24:45Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-039","iteration":2,"at":"2026-11-13T21:25:18Z","from":"ready","to":"in_progress"}
