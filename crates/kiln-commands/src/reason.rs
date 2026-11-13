@@ -15,7 +15,7 @@
 //! not compile until it is mapped. Errors raised by one command group only are mapped in that
 //! group's module; this file holds the shared mappings.
 
-use kiln_text::EditError;
+use kiln_text::{EditError, PositionError};
 use kiln_workspace::{OpenError, ToolError, VfsError};
 use serde::{Deserialize, Serialize};
 
@@ -111,6 +111,9 @@ reasons! {
             "the file changed or was removed on disk since it was read",
         /// The keymap file or chord is not valid.
         InvalidKeymap = "invalid_keymap" => "the keymap file or chord is not valid",
+        /// A position inside a character, a surrogate pair or a CRLF line break.
+        NotABoundary = "not_a_boundary" =>
+            "a position inside a character, a surrogate pair or a CRLF line break",
     }
 }
 
@@ -154,6 +157,19 @@ impl From<&EditError> for RejectReason {
         match e {
             EditError::OutOfBounds { .. } => RejectReason::OutOfRange,
             EditError::InvertedRange { .. } => RejectReason::InvertedRange,
+        }
+    }
+}
+
+impl From<&PositionError> for RejectReason {
+    fn from(e: &PositionError) -> Self {
+        match e {
+            PositionError::OutOfBounds { .. }
+            | PositionError::LineOutOfBounds { .. }
+            | PositionError::ColumnOutOfBounds { .. } => RejectReason::OutOfRange,
+            PositionError::NotCharBoundary { .. }
+            | PositionError::InsideSurrogatePair { .. }
+            | PositionError::InsideLineBreak { .. } => RejectReason::NotABoundary,
         }
     }
 }
@@ -324,5 +340,50 @@ mod tests {
         ] {
             assert_eq!(RejectReason::from(&e), want, "{e:?}");
         }
+    }
+
+    #[test]
+    fn position_errors_map_to_out_of_range_or_not_a_boundary() {
+        for (e, want) in [
+            (
+                PositionError::OutOfBounds { index: 9, len: 1 },
+                RejectReason::OutOfRange,
+            ),
+            (
+                PositionError::LineOutOfBounds {
+                    line: 4,
+                    len_lines: 4,
+                },
+                RejectReason::OutOfRange,
+            ),
+            (
+                PositionError::ColumnOutOfBounds {
+                    line: 1,
+                    col: 4,
+                    line_len: 3,
+                },
+                RejectReason::OutOfRange,
+            ),
+            (
+                PositionError::NotCharBoundary { byte: 5 },
+                RejectReason::NotABoundary,
+            ),
+            (
+                PositionError::InsideSurrogatePair { utf16: 6 },
+                RejectReason::NotABoundary,
+            ),
+            (
+                PositionError::InsideLineBreak { char_idx: 2 },
+                RejectReason::NotABoundary,
+            ),
+        ] {
+            assert_eq!(RejectReason::from(&e), want, "{e:?}");
+        }
+        assert_eq!(RejectReason::NotABoundary.as_str(), "not_a_boundary");
+        assert_eq!(
+            RejectReason::NotABoundary.description(),
+            "a position inside a character, a surrogate pair or a CRLF line break"
+        );
+        assert!(RejectReason::ALL.contains(&RejectReason::NotABoundary));
     }
 }

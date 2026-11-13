@@ -18,7 +18,7 @@
 //!   typing group. It does not clear redo: a step that could be redone before a save can
 //!   still be redone after it (the document is then dirty again).
 
-use kiln_text::{LineEnding, LineEndings};
+use kiln_text::{Buffer, LineCol, LineEnding, LineEndings, PositionError};
 use kiln_workspace::{Document, Encoding, RelPath};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,8 @@ pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
     registry.register::<Text>()?;
     registry.register::<Info>()?;
     registry.register::<List>()?;
+    registry.register::<Line>()?;
+    registry.register::<Position>()?;
     Ok(())
 }
 
@@ -774,6 +776,253 @@ impl Command for List {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// doc.line / doc.position (T-010)
+//
+// Read-only views of `kiln-text`'s line access and position conversions. A refusal maps the
+// `PositionError` to its reason (`From<&PositionError>` in `reason.rs`) and quotes its
+// `Display` text after `invalid line: ` or `invalid position: `. Order of checks: params
+// schema (registry), then the document id, then the line or position.
+
+/// A `u64` from the params as a `usize`; a value that does not fit saturates, which is beyond
+/// every buffer length and so is refused with `out_of_range`.
+fn index(n: u64) -> usize {
+    usize::try_from(n).unwrap_or(usize::MAX)
+}
+
+/// Params of `doc.line`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LineParams {
+    /// Id of an open document.
+    doc: u64,
+    /// Zero-based line index (`0..len_lines`).
+    line: u64,
+}
+
+/// The line break that ends a line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum LineBreakName {
+    /// No line break: the last line of the text.
+    None,
+    /// `\n`.
+    Lf,
+    /// `\r\n`.
+    Crlf,
+    /// A lone `\r`.
+    Cr,
+}
+
+/// Result of `doc.line`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct LineResult {
+    /// The requested line index.
+    line: usize,
+    /// The line's content without its line break.
+    text: String,
+    /// Char offset of the line's first char.
+    start: usize,
+    /// Char offset after the line's content (`start` + chars in `text`).
+    end: usize,
+    /// The line break after `text` (`none` for the last line).
+    ending: LineBreakName,
+}
+
+fn line_refusal(e: &PositionError) -> CommandError {
+    CommandError::rejected(e.into(), format!("invalid line: {e}"))
+}
+
+fn position_refusal(e: &PositionError) -> CommandError {
+    CommandError::rejected(e.into(), format!("invalid position: {e}"))
+}
+
+/// Line `line` of `buffer` as a [`LineResult`].
+fn line_of(buffer: &Buffer, line: usize) -> Result<LineResult, PositionError> {
+    let text = buffer.line(line)?;
+    let start = buffer.line_start(line)?;
+    let end = start + text.chars().count();
+    let ending = if line + 1 >= buffer.len_lines() {
+        LineBreakName::None
+    } else {
+        let next = buffer.line_start(line + 1)?;
+        // The rope's lines split on `\r\n`, `\n` and lone `\r` only, so the gap is the break.
+        match buffer.slice(end..next).as_deref() {
+            Ok("\r\n") => LineBreakName::Crlf,
+            Ok("\r") => LineBreakName::Cr,
+            _ => LineBreakName::Lf,
+        }
+    };
+    Ok(LineResult {
+        line,
+        text,
+        start,
+        end,
+        ending,
+    })
+}
+
+pub(crate) struct Line;
+
+impl Command for Line {
+    const NAME: &'static str = "doc.line";
+    const DOC: &'static str = "Return the text (without its line break), start and end char \
+        offsets and line break of one line of a document. Lines split on `\\r\\n`, `\\r` and \
+        `\\n`; a text with k breaks has k + 1 lines. Read-only.";
+    const MUTATING: bool = false;
+    type Params = LineParams;
+    type Output = LineResult;
+
+    fn examples() -> Vec<Example> {
+        vec![
+            Example {
+                description: "a line ended by a lone CR, with an astral char",
+                initial_text: "",
+                files: vec![("a.txt", "a\r\nbé😀\rc\n")],
+                setup: vec![("doc.open", json!({"path": "a.txt"}))],
+                params: json!({"doc": 1, "line": 1}),
+                result: json!({"line": 1, "text": "bé😀", "start": 3, "end": 6,
+                    "ending": "cr"}),
+            },
+            Example {
+                description: "the empty last line after a final LF",
+                initial_text: "",
+                files: vec![("a.txt", "a\r\nbé😀\rc\n")],
+                setup: vec![("doc.open", json!({"path": "a.txt"}))],
+                params: json!({"doc": 1, "line": 3}),
+                result: json!({"line": 3, "text": "", "start": 9, "end": 9,
+                    "ending": "none"}),
+            },
+        ]
+    }
+
+    fn run(ctx: &mut Context, p: LineParams) -> Result<LineResult, CommandError> {
+        let buffer = ctx.doc(p.doc)?.buffer();
+        line_of(buffer, index(p.line)).map_err(|e| line_refusal(&e))
+    }
+}
+
+/// A line and a column (in chars) of `doc.position`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LineColParams {
+    /// Zero-based line index.
+    line: u64,
+    /// Zero-based column, in chars from the start of the line.
+    col: u64,
+}
+
+/// A position in exactly one unit.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum At {
+    /// A char offset (`0..=len_chars`).
+    Char(u64),
+    /// A UTF-8 byte offset on a char boundary.
+    Byte(u64),
+    /// A UTF-16 code-unit offset, not inside a surrogate pair.
+    Utf16(u64),
+    /// A line and a column within the line's content.
+    LineCol(LineColParams),
+}
+
+/// Params of `doc.position`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PositionParams {
+    /// Id of an open document.
+    doc: u64,
+    /// The position, given in exactly one unit.
+    at: At,
+}
+
+/// Result of `doc.position`: every form of the same position.
+#[derive(Debug, PartialEq, Eq, Serialize, JsonSchema)]
+pub(crate) struct PositionResult {
+    /// Char offset.
+    char: usize,
+    /// UTF-8 byte offset.
+    byte: usize,
+    /// UTF-16 code-unit offset.
+    utf16: usize,
+    /// Zero-based line.
+    line: usize,
+    /// Zero-based column, in chars.
+    col: usize,
+}
+
+/// Every form of the position `at` of `buffer`, or why it is not a valid position.
+fn position_of(buffer: &Buffer, at: &At) -> Result<PositionResult, PositionError> {
+    let char_idx = match at {
+        At::Char(c) => {
+            let c = index(*c);
+            buffer.char_to_byte(c)?;
+            c
+        }
+        At::Byte(b) => buffer.byte_to_char(index(*b))?,
+        At::Utf16(u) => buffer.utf16_to_char(index(*u))?,
+        At::LineCol(lc) => buffer.line_col_to_char(LineCol {
+            line: index(lc.line),
+            col: index(lc.col),
+        })?,
+    };
+    // Refuses a char offset between the `\r` and `\n` of a CRLF, in whatever unit it came.
+    let LineCol { line, col } = buffer.char_to_line_col(char_idx)?;
+    Ok(PositionResult {
+        char: char_idx,
+        byte: buffer.char_to_byte(char_idx)?,
+        utf16: buffer.char_to_utf16(char_idx)?,
+        line,
+        col,
+    })
+}
+
+pub(crate) struct Position;
+
+impl Command for Position {
+    const NAME: &'static str = "doc.position";
+    const DOC: &'static str = "Convert a position of a document given as exactly one of a \
+        char offset, a byte offset, a UTF-16 offset or a line/column (column in chars) into \
+        all of these forms. Read-only.";
+    const MUTATING: bool = false;
+    type Params = PositionParams;
+    type Output = PositionResult;
+
+    fn examples() -> Vec<Example> {
+        vec![
+            Example {
+                description: "a char offset after a two-byte char",
+                initial_text: "",
+                files: vec![("a.txt", "a\r\nbé😀\rc\n")],
+                setup: vec![("doc.open", json!({"path": "a.txt"}))],
+                params: json!({"doc": 1, "at": {"char": 5}}),
+                result: json!({"char": 5, "byte": 6, "utf16": 5, "line": 1, "col": 2}),
+            },
+            Example {
+                description: "a UTF-16 offset after a surrogate pair",
+                initial_text: "",
+                files: vec![("a.txt", "a\r\nbé😀\rc\n")],
+                setup: vec![("doc.open", json!({"path": "a.txt"}))],
+                params: json!({"doc": 1, "at": {"utf16": 7}}),
+                result: json!({"char": 6, "byte": 10, "utf16": 7, "line": 1, "col": 3}),
+            },
+            Example {
+                description: "a line and column",
+                initial_text: "",
+                files: vec![("a.txt", "a\r\nbé😀\rc\n")],
+                setup: vec![("doc.open", json!({"path": "a.txt"}))],
+                params: json!({"doc": 1, "at": {"line_col": {"line": 2, "col": 1}}}),
+                result: json!({"char": 8, "byte": 12, "utf16": 9, "line": 2, "col": 1}),
+            },
+        ]
+    }
+
+    fn run(ctx: &mut Context, p: PositionParams) -> Result<PositionResult, CommandError> {
+        let buffer = ctx.doc(p.doc)?.buffer();
+        position_of(buffer, &p.at).map_err(|e| position_refusal(&e))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{CommandError, Context, LogEntry, Registry, standard_registry};
@@ -1329,7 +1578,25 @@ mod tests {
             .iter()
             .filter(|c| c["name"].as_str().unwrap().starts_with("doc."))
             .collect();
-        assert_eq!(doc.len(), 11);
+        // Names present, not a count: later tasks add `doc.*` commands (ruling q5, D-059).
+        let names: Vec<&str> = doc.iter().map(|c| c["name"].as_str().unwrap()).collect();
+        for want in [
+            "doc.open",
+            "doc.save",
+            "doc.close",
+            "doc.insert",
+            "doc.delete",
+            "doc.replace",
+            "doc.undo",
+            "doc.redo",
+            "doc.text",
+            "doc.info",
+            "doc.list",
+            "doc.line",
+            "doc.position",
+        ] {
+            assert!(names.contains(&want), "{want} missing from {names:?}");
+        }
         for c in cmds {
             let name = c["name"].as_str().unwrap();
             // Only the `doc.*` and `buffer.*` groups are this test's business (D-046 point 3):
@@ -1337,7 +1604,15 @@ mod tests {
             if !(name.starts_with("doc.") || name.starts_with("buffer.")) {
                 continue;
             }
-            let read_only = ["doc.text", "doc.info", "doc.list", "buffer.text"].contains(&name);
+            let read_only = [
+                "doc.text",
+                "doc.info",
+                "doc.list",
+                "doc.line",
+                "doc.position",
+                "buffer.text",
+            ]
+            .contains(&name);
             assert_eq!(c["mutating"], !read_only, "{name}");
             for ex in c["examples"].as_array().unwrap() {
                 assert!(ex["files"].is_array() && ex["setup"].is_array(), "{name}");

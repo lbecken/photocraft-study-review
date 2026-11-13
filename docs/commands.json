@@ -596,6 +596,164 @@
       }
     },
     {
+      "doc": "Return the text (without its line break), start and end char offsets and line break of one line of a document. Lines split on `\\r\\n`, `\\r` and `\\n`; a text with k breaks has k + 1 lines. Read-only.",
+      "examples": [
+        {
+          "description": "a line ended by a lone CR, with an astral char",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nbé😀\rc\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "line": 1
+          },
+          "result": {
+            "end": 6,
+            "ending": "cr",
+            "line": 1,
+            "start": 3,
+            "text": "bé😀"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "the empty last line after a final LF",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nbé😀\rc\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "line": 3
+          },
+          "result": {
+            "end": 9,
+            "ending": "none",
+            "line": 3,
+            "start": 9,
+            "text": ""
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "doc.line",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.line`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "description": "Zero-based line index (`0..len_lines`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "line"
+        ],
+        "title": "LineParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "LineBreakName": {
+            "description": "The line break that ends a line.",
+            "oneOf": [
+              {
+                "const": "none",
+                "description": "No line break: the last line of the text.",
+                "type": "string"
+              },
+              {
+                "const": "lf",
+                "description": "`\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "crlf",
+                "description": "`\\r\\n`.",
+                "type": "string"
+              },
+              {
+                "const": "cr",
+                "description": "A lone `\\r`.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.line`.",
+        "properties": {
+          "end": {
+            "description": "Char offset after the line's content (`start` + chars in `text`).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ending": {
+            "$ref": "#/$defs/LineBreakName",
+            "description": "The line break after `text` (`none` for the last line)."
+          },
+          "line": {
+            "description": "The requested line index.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Char offset of the line's first char.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "description": "The line's content without its line break.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line",
+          "text",
+          "start",
+          "end",
+          "ending"
+        ],
+        "title": "LineResult",
+        "type": "object"
+      }
+    },
+    {
       "doc": "List the open documents, sorted by id.",
       "examples": [
         {
@@ -887,6 +1045,265 @@
           "len_chars"
         ],
         "title": "OpenResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Convert a position of a document given as exactly one of a char offset, a byte offset, a UTF-16 offset or a line/column (column in chars) into all of these forms. Read-only.",
+      "examples": [
+        {
+          "description": "a char offset after a two-byte char",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nbé😀\rc\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "at": {
+              "char": 5
+            },
+            "doc": 1
+          },
+          "result": {
+            "byte": 6,
+            "char": 5,
+            "col": 2,
+            "line": 1,
+            "utf16": 5
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a UTF-16 offset after a surrogate pair",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nbé😀\rc\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "at": {
+              "utf16": 7
+            },
+            "doc": 1
+          },
+          "result": {
+            "byte": 10,
+            "char": 6,
+            "col": 3,
+            "line": 1,
+            "utf16": 7
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a line and column",
+          "files": [
+            [
+              "a.txt",
+              "a\r\nbé😀\rc\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "at": {
+              "line_col": {
+                "col": 1,
+                "line": 2
+              }
+            },
+            "doc": 1
+          },
+          "result": {
+            "byte": 12,
+            "char": 8,
+            "col": 1,
+            "line": 2,
+            "utf16": 9
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "doc.position",
+      "params_schema": {
+        "$defs": {
+          "At": {
+            "description": "A position in exactly one unit.",
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "description": "A char offset (`0..=len_chars`).",
+                "properties": {
+                  "char": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "char"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "A UTF-8 byte offset on a char boundary.",
+                "properties": {
+                  "byte": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "byte"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "A UTF-16 code-unit offset, not inside a surrogate pair.",
+                "properties": {
+                  "utf16": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "utf16"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "A line and a column within the line's content.",
+                "properties": {
+                  "line_col": {
+                    "$ref": "#/$defs/LineColParams"
+                  }
+                },
+                "required": [
+                  "line_col"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "LineColParams": {
+            "additionalProperties": false,
+            "description": "A line and a column (in chars) of `doc.position`.",
+            "properties": {
+              "col": {
+                "description": "Zero-based column, in chars from the start of the line.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "line": {
+                "description": "Zero-based line index.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "line",
+              "col"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `doc.position`.",
+        "properties": {
+          "at": {
+            "$ref": "#/$defs/At",
+            "description": "The position, given in exactly one unit."
+          },
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "at"
+        ],
+        "title": "PositionParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `doc.position`: every form of the same position.",
+        "properties": {
+          "byte": {
+            "description": "UTF-8 byte offset.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "char": {
+            "description": "Char offset.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "col": {
+            "description": "Zero-based column, in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "description": "Zero-based line.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "utf16": {
+            "description": "UTF-16 code-unit offset.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "char",
+          "byte",
+          "utf16",
+          "line",
+          "col"
+        ],
+        "title": "PositionResult",
         "type": "object"
       }
     },
@@ -1462,6 +1879,10 @@
       {
         "kind": "invalid_keymap",
         "when": "the keymap file or chord is not valid"
+      },
+      {
+        "kind": "not_a_boundary",
+        "when": "a position inside a character, a surrogate pair or a CRLF line break"
       }
     ]
   }
