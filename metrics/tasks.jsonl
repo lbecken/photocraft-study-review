@@ -379,3 +379,4 @@
 {"kind":"run","task":"T-018","iteration":1,"run":"R-151","role":"reviewer","tier":"medium","started_at":"2026-11-13T17:50:44Z","ended_at":"2026-11-13T17:51:43Z","wall_s":59,"tokens":7890,"tool_calls":4,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"review round 3: confirms the x7 fix only; approve; exhaustive check rerun on the binary at d0bab85 (19,683 cases, 547 in the exception, 0 outside the document); no mutants or revert check since no code changed; tokens = agent total 220,286 minus 212,396 at the end of round 2"}
 {"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T17:52:08Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T17:52:08Z","from":"reviewed","to":"queued"}
+{"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T17:57:00Z","from":"queued","to":"merged"}
