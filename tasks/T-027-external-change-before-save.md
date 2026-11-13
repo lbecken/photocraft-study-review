@@ -69,7 +69,7 @@ as is. Display of `ChangedOnDisk`: `{path}: changed on disk since it was read` o
   valid. Add one example with `force`.
 - `doc.disk-status {doc}` (read-only) → `{doc, status: "unchanged"|"changed"|"missing"}`;
   `VfsError`s → today's kinds (`outside_root`, `not_a_file`, `io_error`).
-- Mapping: `SaveError::Vfs(e)` → e's reason (T-015's `VfsError` mapping); `ChangedOnDisk` →
+- Mapping: `SaveError::Vfs(e)` → e's reason (T-032's `VfsError` mapping); `ChangedOnDisk` →
   `RejectReason::ChangedOnDisk` (T-032). An exhaustive `impl From<&SaveError> for RejectReason` in `reason.rs`.
 
 No new error kind. `docs/protocol/doc.md` documents both, the content-not-time rule and the race

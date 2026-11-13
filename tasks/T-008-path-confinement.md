@@ -119,8 +119,10 @@ with that `kind` on stderr. No other exit code changes.
   `outside_root`, description "the path resolves outside the root") in
   `crates/kiln-commands/src/reason.rs`, map `VfsError::OutsideRoot` to it in the exhaustive
   `VfsError` mapping there, and reword `NotAFile`'s description to "the path names a directory
-  or another non-regular file where a file is needed, or a file where a directory is needed" (spec check R-062, finding 23; T-019 uses it for `list_dir` of a file). Regenerate `docs/commands.json` (`cargo xtask schema --write`). Also reword the `not_a_file` "When" cell of the kept table in `docs/control-protocol.md` the same way (this task already touches that file). No list is edited by
-  hand; `kiln-control` derives the kind from the reason and is not touched.
+  or another non-regular file where a file is needed, or a file where a directory is needed" (spec check R-062, finding 23; T-019 uses it for `list_dir` of a file). Regenerate `docs/commands.json` (`cargo xtask schema --write`). No table cell of
+  `docs/control-protocol.md` is edited (T-032 rules that later tasks do not edit that
+  document's table cells; the error kind is added through T-032's mechanism only). No list is
+  edited by hand; `kiln-control` derives the kind from the reason and is not touched.
 - `docs/control-protocol.md`, "Paths": the one bullet beginning "**Symbolic links are followed,
   including links that point outside the root.**" is replaced by one bullet: "A path whose
   location is outside the root is refused (`outside_root`); see `docs/protocol/paths.md`."
