@@ -2,7 +2,7 @@
 id: T-013
 title: "Make the v1.1 process rules mechanical: clock-stamped and validated metrics, budget refusal in the queue, ready-only worktrees, corrected metric report, one-command publish, review and session-path gate steps"
 tier: high              # ADR-0002 "any gate path": xtask/** (docs/development.md holds the list but is not itself one); approval row must contain `gate paths`
-state: tests_joined
+state: queued
 owner_role: planner
 scorecard_items: []     # tooling; no product scorecard item
 depends_on: [T-005, T-014]   # and ADR-0003 (hygiene gate step) `accepted` on main before `ready` (Decisions D-2)
