@@ -14,19 +14,16 @@ impl ToolRunner for Fixed {
     }
 }
 
-fn every_constructor() -> Vec<Context> {
-    vec![
+#[test]
+fn every_constructor_starts_with_no_tools() {
+    let contexts = vec![
         Context::new(),
         Context::default(),
         Context::with_text("abc"),
         Context::with_files(&[("a.rs", b"fn a() {}\n")]).expect("files"),
         Context::with_vfs(Box::new(MemoryFs::new())),
-    ]
-}
-
-#[test]
-fn every_constructor_starts_with_no_tools() {
-    for ctx in every_constructor() {
+    ];
+    for ctx in contexts {
         assert_eq!(format!("{:?}", ctx.tools()), "NoTools");
     }
 }
