@@ -20,7 +20,7 @@ touches:
   # scorecard/ and docs/scorecard.md: the director's, at the join (METHODOLOGY §6); see "Scorecard items and intended test names"
 budget_tokens: 1100000  # high (v1.2, METHODOLOGY §11)
 iteration: 2
-found_by: reviewer      # T-008 r2 (R-138): R2-D1's residual, TG-1, TG-3, TG-4 (N-1 split off, see "Split-off item 5")
+found_by: reviewer      # T-008 r2 (R-138): R2-D1's residual, TG-1, TG-3, TG-4 (N-1 moved to T-044, D-111)
 origin_task: T-008
 ---
 
@@ -39,7 +39,7 @@ the replacement). It is documented at `docs/protocol/paths.md`:98–102.
 After this task:
 1. **Item 1.** `DiskFs::new` refuses a root it cannot hold open, so no session starts on it, and
    every root that construction accepts keeps its identity between requests (D-092 Q-1,
-   option (b); scope PENDING Q-4). `docs/protocol/paths.md` drops the residual limit, and
+   option (b), and D-111 on Q-4: every root that cannot be opened for reading). `docs/protocol/paths.md` drops the residual limit, and
    `docs/control-protocol.md` says how such a `--root` is refused (D-092 Q-2).
 2. **Item 2 (TG-1).** Root-removal detection is tested reliably as the gate runs the tests, in
    two new test binaries. T-008's four tests stay as they are (D-092 Q-3).
@@ -48,8 +48,7 @@ After this task:
 4. **Item 4 (TG-4).** The refusal while the root path leads nowhere is pinned and tested.
 
 Items 2–4 also cover `project.tree` / `Vfs::list_dir`, which T-019 added inside the boundary.
-T-008 ruling v12 item (5), N-1 (a link target ending in `/.`), is split off by this check
-(D-091; see "Split-off item 5"). TG-2 is recorded as accepted (Out of scope).
+T-008 ruling v12 item (5), N-1 (a link target ending in `/.`), moved to T-044 (D-111). TG-2 is recorded as accepted (Out of scope).
 
 No gate path and no dependency in `touches`. If std alone cannot meet a criterion, stop and
 report; do not add a crate.
@@ -71,21 +70,19 @@ and "Exit codes" (as T-039 left them); `apps/kiln-cli/src/main.rs` (`bad_root` :
 `apps/kiln-cli/tests/acceptance_t008_cli.rs` (fixtures, snapshots, the `control` driver with
 per-response timeouts, the root-removal tests :753–842 and :669–754); `xtask/src/noskip.rs`:1–11.
 
-## Item 1 as ruled (D-092 Q-1: option (b))
+## Item 1 as ruled (D-092 Q-1: option (b); D-111 on Q-4: option (A))
 Construction refuses a root it cannot hold open, with the pinned error below; every root it
-accepts is held open for the life of the session and so keeps its identity. The draft's
-alternatives (keep and protect such a root, accept it and refuse every request, keep the
-documented gap) are not specified further. Which roots fall under the refusal is Q-4 (PENDING;
-this file is written for the recommended answer (A): every root that cannot be opened for
-reading). The delta for (B) is stated under Q-4.
+accepts is held open for the life of the session and so keeps its identity. The roots refused
+are every root that cannot be opened for reading, a mode-0000 root included (D-111). The
+draft's alternatives (keep and protect such a root, accept it and refuse every request, keep
+the documented gap) are not specified further.
 
 ## Definitions
 - **Root, location, inside, regular file**: as T-008 Definitions and `docs/protocol/paths.md`.
-- **A root Kiln cannot hold** (PENDING Q-4 (A)): at construction, the root (resolved as T-008
+- **A root Kiln cannot hold** (D-111): at construction, the root (resolved as T-008
   says) is a directory that the calling process cannot open for reading. With mode bits, this is
   a directory on which the process's identity has no read permission, whatever its search
-  permission: for its owner, modes 0311, 0300, 0100 and 0000 among others. Under (B) it is only
-  a directory the identity may search but not read (0311, 0300, 0100).
+  permission: for its owner, modes 0311, 0300, 0100 and 0000 among others.
 - **The root path leads nowhere**: resolving the root path as given fails, because the root or
   a directory above it was renamed or removed and nothing was put in its place.
 - **Unprivileged identity U** (tests only): if the test process's effective uid is 0, U is uid
@@ -112,11 +109,9 @@ arm for other `VfsError`s (`crates/kiln-control/src/lib.rs`:163–176,
      path: (root), kind: PermissionDenied, message })` when the open fails for lack of
      permission, and the open's own error kind otherwise (for example when the process is out of
      file descriptors). `message` is not pinned. It names no host path. Nothing is created or
-     changed anywhere. (PENDING Q-4 (A); under (B) only a directory the identity may search but
-     not read is refused.)
+     changed anywhere.
    - **Every `DiskFs` that `new` returns holds its root directory open** for as long as it
      lives, and takes the root's identity (device, inode) from the directory it holds.
-     (PENDING Q-4 (A).)
    - A dangling root link and a link to a regular file keep T-008's errors. Every root not named
      above gets the same `Ok`/`Err` as on base. D-092 Q-1 lifts T-008's Interface pin ("returns
      the same `Ok`/`Err` values as today for every root") for the roots Kiln cannot hold.
@@ -127,10 +122,11 @@ arm for other `VfsError`s (`crates/kiln-control/src/lib.rs`:163–176,
      - stderr is the existing `bad --root` message naming the root as given. Its form is
        documented (Pinned (i) C1), but no test pins its text.
    - **A root held at start whose mode changes later** keeps its identity and its protection
-     (Interface 2). Its requests are then subject to the new permissions, like those of any
-     directory. For example, after `chmod 0311` a `doc.open` of a readable file still works and
-     `project.tree` of the root is `io_error` naming `(root)` (INFERRED: the same `read_dir`
-     failure probe P1 shows for a 0311 root).
+     (Interface 2; tested by AC-2 (iii)). Nothing else is pinned about the requests of such a
+     session, and no document states what they answer. An implementer who wants to write such
+     a sentence first runs the case (for example `chmod 0311` after start, then `doc.open` of a
+     readable file and `project.tree {}`) and records the command and output in its log
+     (METHODOLOGY §6).
 2. **Root removed and replaced (item 2; T-008 v9 behaviour, unchanged).** This holds for every
    session that construction accepts. Suppose the root directory is removed between two
    requests and its path is replaced by a link to another directory, or by a new directory.
@@ -218,9 +214,10 @@ same as the documents: the root is always held open, and a root that cannot be h
     (:72–74) is untrue on base for an unreadable root that is removed and replaced (probe P2:
     `project.tree` listed the replacement). It becomes true with this task without an edit. Its
     sentence that a directory "that cannot be read … makes the whole command fail with
-    `io_error`" (:110–111) stays true for subdirectories and for a root made unreadable after
-    start. The case it covered for a root unreadable at start can no longer arise. No sentence
-    of `project.md` becomes untrue.
+    `io_error`" (:110–111) stays true for subdirectories (VERIFIED, `reviews/T-019-r1.md`:154–159).
+    For a root made unreadable after start it is INFERRED, not probed (the same `read_dir`
+    failure as P1's 0311 root); the reviewer runs that case. The case it covered for a root
+    unreadable at start can no longer arise. This task changes no sentence of `project.md`.
 - (g) **Worked examples and measurements**, run by this planner (R-181) on the debug `kiln-cli`
   built from main `d162413` in a private clone. Scripts are in the planner's scratch directory;
   fixtures are under it or under one fixed `/tmp/t036-r181/` directory, which was removed
@@ -246,14 +243,8 @@ same as the documents: the root is always held open, and a root that cannot be h
     - 0311 (link and dir): the number was reused at once. `doc.open secret.txt` ok, `doc.save`
       ok (`f.txt` written into the replacement), `project.tree` listed the replacement.
     - 0000 (link and dir): reused. `doc.open secret.txt` ok and `project.tree` ok, both in the
-      replacement. The 0000 case is the reason for Q-4.
-  - **P3, kernel `/.` probes** (for the split-off item 5). `cat` through a link to
-    `real/t.txt/.`, `real/t.txt/./`, `real/t.txt/./.` and `fl/.` (with `fl -> real/t.txt`) →
-    `Not a directory`. Through `real/new.txt/.` and `missing/.` → `No such file or directory`.
-    Writing through `dot` or `fldot` → `Not a directory`; through `dn -> real/new.txt/.` → `No
-    such file or directory`, and `real/` still holds only `t.txt`. Base Kiln: `exec doc.open` of
-    `dot`, `dotdot` and `fldot` → ok (the file is read); `project.tree {"path":"dot"}` →
-    `not_a_file`; `dots` and `dn` → `not_found`; `dd -> real/.` lists `dd/t.txt`.
+      replacement. The 0000 case is the reason for Q-4 (ruled (A), D-111).
+  - P3 (kernel and Kiln behaviour of `/.` link targets) moved to T-044 with item 5.
   - **P4, inode reuse under `/tmp`** (`inode_reuse.py`, fixture as T-008's, root removed with
     `rmtree`, then directories made one at a time in its parent):
     - Not held, quiet: the first new directory got the number in 500 of 500 trials (machine load
@@ -271,7 +262,7 @@ same as the documents: the root is always held open, and a root that cannot be h
     `nope`: not found`, with no usage text. `control --root filelink` gave `…: not a directory`.
     The current `--root` sentence calls this a "usage error", which by the document's own
     definition prints the usage text (`docs/control-protocol.md`:166–168, `main.rs`:86–89).
-  - Not executed: anything on new code. Under (A) the refusal of 0000 roots, the
+  - Not executed: anything on new code. The refusal of 0000 roots, the
     held-handle identity and the `bad --root` text for `PermissionDenied` are INFERRED from
     `root_error` (`main.rs`:357–369) and `VfsError`'s `Display` (`vfs.rs`:54), which would give
     ``root `<r>`: I/O error: Permission denied (os error 13)`` if the message is the OS error's
@@ -279,14 +270,14 @@ same as the documents: the root is always held open, and a root that cannot be h
 - (h) **Scorecard item `ws.path-confinement`, the evaluator's calls.**
   - As an unprivileged user, or as uid 0 under `capsh --drop=cap_dac_override,cap_dac_read_search`
     on a root-owned directory (the iteration-1 evaluator's method), run `kiln-cli exec doc.open
-    '{"path":"f.txt"}' --root <dir>` with `<dir>` of mode 0311, and again of mode 0000 (Q-4
-    (A)). Each gives exit 2, empty stdout, and stderr naming `<dir>`. With the directory at mode
-    0711 it succeeds.
+    '{"path":"f.txt"}' --root <dir>` with `<dir>` of mode 0311, and again of mode 0000
+    (D-111). Each gives exit 2, empty stdout, and stderr naming `<dir>`. With the directory at
+    mode 0711 it succeeds.
   - Then run a `kiln-cli control --root rootlink` session, retarget `rootlink` after
     `doc.insert`, and get `outside_root` at open, at save and for `project.tree`, with the work
     tree unchanged.
 - (i) **Sentences this task adds to, changes in or removes from `docs/`**, worded for the
-  implementer to copy (PENDING Q-4 (A); under (B) see Q-4).
+  implementer to copy.
 
   `docs/protocol/paths.md`, "The root":
   - **S1 (added after :13, ending the first paragraph):** "A root that Kiln cannot open for
@@ -363,8 +354,8 @@ renames or replaces the root or a directory above it between two requests.
     replacement by a link or a new directory, a retargeted root link, an ancestor swap (T-008),
     and a vanished root. In all of these nothing is read, listed or written outside the root
     directory.
-  - A root Kiln cannot hold is refused before any request runs. Under (A) the refusal rests on
-    the open itself, so it also covers roots made unreadable by an ACL or an LSM policy (not
+  - A root Kiln cannot hold is refused before any request runs. The refusal rests on the open
+    itself, so it also covers roots made unreadable by an ACL or an LSM policy (not
     tested).
   - A root that was held at start stays protected if its mode changes later.
 - **Not covered (accepted, documented).**
@@ -437,7 +428,7 @@ passes on base and must keep passing.
       '{"path":"locked.txt"}' --root work/open` fails (exit 2, empty stdout). This shows that U
       cannot override permission checks.
   - *Cases.* `work/root` holds `f.txt` (0644, readable by U) and is owned by U, with mode (a)
-    0311 and (b) 0000 (case (b) PENDING Q-4 (A)). For each mode, as U:
+    0311 and (b) 0000 (D-111). For each mode, as U:
     - `kiln-cli exec doc.open '{"path":"f.txt"}' --root work/root` exits 2, stdout is empty, and
       stderr names `work/root` and is not a JSON object. A refused request would print a JSON
       error object.
@@ -567,7 +558,7 @@ passes on base and must keep passing.
     `root/f.txt`.
   - It kills mutant M5 (a failed re-resolution taken as success, now at `disk.rs`:203) at
     acceptance level.
-- **AC-5**: moved to the split-off task (see "Split-off item 5").
+- **AC-5**: moved to T-044 with item 5 (D-111).
 - **AC-6 (documents; acceptance, fails on base;
   `acceptance_t036_cli.rs::documents_drop_the_unreadable_root_limit`).** Each check is made on
   the text with whitespace squashed.
@@ -595,7 +586,7 @@ evaluator confirms it again.
   without privileges and tools it does not have. T-008 r2 mutant M3 (inode-only comparison)
   therefore survives. It is recorded here as accepted, with low practical risk per the reviewer.
   The implementer must not weaken the comparison.
-- **T-008 ruling v12 (5), N-1 (`/.` link targets)**: split off; see "Split-off item 5". The walk
+- **T-008 ruling v12 (5), N-1 (`/.` link targets)**: moved to T-044 (D-111). The walk
   (`locate_steps`) is not changed by this task.
 - Races during one call (D-3); hard links; Windows; `MemoryFs`.
 - **A root with read but no search permission** (mode 0644 directory). It can be opened, so it
@@ -613,69 +604,8 @@ evaluator confirms it again.
   rules (a child run as U). Determinism: no clock or thread timing in `DiskFs`, and no new
   dependency.
 
-## Split-off item 5 (D-091; for the director to file as its own task)
-D-091 requires a high-tier spec that bundles independent items to be split before dispatch.
-
-**Why split.** Items 1–4 are one subject: the root's identity between requests. They share
-`DiskFs::new` / `current_root`, the "The root" paragraph of `paths.md` and one fixture style.
-Items 2–4 are the evidence for item 1's "every accepted root is protected", and AC-2 (iii) tests
-item 1 directly. Item 5 (N-1) is independent: it changes the walk (`locate_steps`, `disk.rs`:218–323),
-not the root. It affects one sentence of `paths.md` (:78–80) and no test of items 1–4.
-
-**Cost of each choice.**
-- **Split.** One more full high-tier cycle: spec, check, test author, implementer, review,
-  approval row and queue run. The new task shares `disk.rs`, `paths.md` and `confinement.rs`
-  with T-036 and T-037, so it cannot be in flight with either (§5.2) and runs after them.
-- **One task.** This breaks the D-091 rule. A defect in the walk change would also hold back
-  the merge of the confinement fix, and the review would cover two unrelated mechanisms. T-013
-  bundled seven items and cost 2.11× its ceiling (retro-1).
-
-**The split-off spec, as corrected by this check**, for the director to move into a task file
-(tier high, ADR-0002: the persistence path decides which saves create a file; `origin_task:
-T-008`; `found_by: reviewer`).
-- *Behaviour.* A `.` component in a link target requires the entry reached before it to be an
-  existing directory, as a trailing `/` already does (`disk.rs`:277–280). Otherwise the walk
-  fails there: `NotFound` inside the root and `OutsideRoot` once outside (T-008 precedence).
-  This covers a `.` after a regular file (`real/t.txt/.`, `real/t.txt/./`, `real/t.txt/./.`),
-  after a link that leads to a file (`fl/.`), and after a missing entry (`real/new.txt/.`,
-  `missing/.`). `write_atomic` through such a link creates nothing (probe P3: the kernel
-  refuses).
-  - On base, `real/new.txt/.` is `Missing`, so a save through it creates `real/new.txt`
-    (INFERRED by reading `disk.rs`:281–314: `Path::components` drops the trailing `.`).
-  - A `.` after a directory changes nothing: `real/./t.txt` reads `real/t.txt`, and `real/.` is
-    the directory `real`, hence `NotAFile` for `read`, while `project.tree {"path":"dd"}` lists
-    it.
-  - `project.tree {"path":"dot"}` changes from `not_a_file` to `not_found` (probe P3).
-    `docs/protocol/project.md`'s order (`not_found` before `not_a_file`) already allows this.
-- *Document.* `paths.md`:78–80. Removed: "A link whose target ends in `/` must lead to a
-  directory, as the kernel requires; a file reached that way is `not_found`." Replaced by: "A
-  link whose target ends in `/` or `/.`, or has a `.` component after something that is not a
-  directory, must lead to a directory there, as the kernel requires; a file, or nothing, reached
-  that way is `not_found`, and a save through such a link creates nothing." Evidence: probe P3
-  and the task's acceptance test.
-- *Acceptance.*
-  - Fixture: `real/t.txt` = `b"target\n"`, with the links `dot -> real/t.txt/.`, `dots ->
-    real/t.txt/./`, `dotdot -> real/t.txt/./.`, `fl -> real/t.txt`, `fldot -> fl/.`, `dn ->
-    real/new.txt/.`, `dd -> real/.`, `mid -> real/./t.txt` and `od -> ../outside/secret.txt/.`.
-  - Rust API:
-    - `read`, `write_atomic` and `is_file` of `dot`, `dotdot`, `fldot` and `dn` → `NotFound` /
-      false;
-    - `dd` → `NotAFile`; `mid` → `b"target\n"`; `od` → `OutsideRoot`;
-    - afterwards `real/` holds only `t.txt` (still `b"target\n"`), and there is no
-      `.kiln-tmp-*`.
-  - CLI: `exec doc.open '{"path":"dot"}'` → exit 2, `kind` `not_found`; `exec project.tree
-    '{"path":"dot"}'` → `kind` `not_found`.
-  - It fails on base (`dot` is read; `dn` is created; `project.tree` gives `not_a_file`). Kinds
-    only, no message pins.
-  - Stems unique across crates, for example `acceptance_tNNN_workspace.rs` and
-    `acceptance_tNNN_cli.rs`.
-- *touches*: `crates/kiln-workspace/src/disk.rs` (the walk and its module-doc bullet :62),
-  `crates/kiln-workspace/tests/confinement.rs`, `docs/protocol/paths.md` (:78–80 only), and the
-  two acceptance files.
-
-If the director keeps item 5 in this task instead, this section becomes Interface 5 and AC-5.
-`touches` gains nothing new (`disk.rs` and `paths.md` are already in it), and the test files gain
-the AC-5 tests.
+## Item 5
+Item 5 (link targets ending in `/.`, T-008 r2 N-1) moved to `tasks/T-044-dot-in-link-targets.md` (D-111).
 
 ## Conflicts and dispatch
 - **T-019** (merged `3b1a95d`) and **T-039** (merged `c538ef8`) come first by D-092. This file is
@@ -696,7 +626,7 @@ the AC-5 tests.
 - **T-027** (draft) shares no file in `touches`. Its unforced-save check returns `OutsideRoot`
   unchanged, and AC-3 and AC-4 keep the on-disk bytes equal to those read, so neither order of
   merge breaks the other.
-- **The split-off item-5 task** shares `disk.rs`, `paths.md` and `confinement.rs`. It runs after
+- **T-044** (item 5, draft) shares `disk.rs`, `paths.md` and `confinement.rs`. It runs after
   this task, in either order with T-037, never in flight with either.
 - `vfs.rs` and `reason.rs` are not touched.
 - T-033 (draft) changes how the join keys test targets. The six stems here are unique either
@@ -782,11 +712,11 @@ The check is recorded here, as the director asked, rather than in `tasks/spec-ch
    edit (Pinned (f)).
 10. Interface 1 said a root readable at start "keeps working" after its mode changes. That is
     wider than the binary: `project.tree` of a root later made 0311 is `io_error` (INFERRED from
-    P1). Reworded.
+    P1). R-186: no longer stated; Interface 1 asks for a recorded probe before any document says it.
 11. Item 5 missed the `.`-after-a-missing-entry case: a save through `real/new.txt/.` creates
     `real/new.txt` on base, where the kernel refuses (P3, code reading). It also missed that
     `project.tree {"path":"dot"}` changes from `not_a_file` to `not_found`. Fixed in the
-    split-off text.
+    split-off text, now T-044.
 12. Five items bundled in one high-tier spec, against D-091. Item 5 is split off (see that
     section).
 
@@ -805,12 +735,11 @@ The check is recorded here, as the director asked, rather than in `tasks/spec-ch
 - The check found no other drafted task whose tests read the `kiln-cli` section or the exit-code
   table of `docs/control-protocol.md` beyond the synopsis block.
 
-**Split: yes, two tasks** (items 1–4 here; item 5 split off). The reasons and the cost of each
-choice are under "Split-off item 5".
+**Split: yes, two tasks** (items 1–4 here; item 5 split off), ruled in D-111; item 5 is now
+T-044, which carries the reasons and the cost of each choice.
 
-**Verdict:** ready to dispatch once Q-4 is ruled and the director files the split-off task (or
-rules to keep item 5 here, in which case that section becomes Interface 5 / AC-5). There are no
-other open points.
+**Verdict (R-181):** ready to dispatch once Q-4 is ruled and the split filed. Both were done in
+D-111 and applied in R-186.
 
 - Q-4 (planner, R-181): which roots does construction refuse?
   - *Why it is open.* D-092 Q-1 says "a root the session may search but not read is refused at
@@ -838,7 +767,7 @@ other open points.
     - AC-1 drops case (b), and AC-6 keeps the bullet's new title out of its absence checks.
   - **Recommendation: (A).** It is the only reading under which both halves of D-092 Q-1 are
     true. It is no harder to build (the refusal is the failed open) and no harder to test (one
-    more mode in AC-1). The spec above is written for (A), marked PENDING.
+    more mode in AC-1). Ruled (A) in D-111 and applied in R-186.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -909,6 +838,22 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
     split-off item-5 task, then dispatch.
   QUESTION: Q-4 (which roots construction refuses; recommended (A), every root that cannot be
   opened for reading) — see "Questions and rulings".
+- 2026-11-13T23:58Z · R-186 · draft · did: applied D-111. Acknowledged and accepted Q-4 (A) and
+  the split.
+  - PENDING marks and the (B) deltas removed; the spec reads as decided for (A).
+  - Item 5 removed from Goal, Interface, Pinned (P3), ACs and Out of scope, leaving one line per
+    place that points to T-044. Filed `tasks/T-044-dot-in-link-targets.md` from the former
+    "Split-off item 5" section; `touches` and the test-name table here had no item-5 entries
+    left.
+  - Blocker 10: Interface 1 no longer states what a root made unreadable after start answers.
+    Only its protection is pinned (tested by AC-2 (iii)). Any document sentence about the rest
+    needs a probe recorded in the implementer's log first. Pinned (f) now marks the `project.md`
+    case for such a root as INFERRED, for the reviewer to run.
+  - Re-read the whole spec as a builder: no contradiction found between sections; the title and
+    front matter cover items 1–4 only.
+  - · gate attempts: 0 · not run: cargo, git · missing context: D-111 is not yet in
+  `docs/decisions.md` (the rulings are read from this file) · next: director moves the task to
+  `specified`/`ready`.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
