@@ -20,7 +20,7 @@ origin_task: null
 
 ## Goal
 Iteration 0 could not test the panic path: no test can make a real command panic, and AC-6 of
-T-030 accepts "untested" for it. After this task the gate's `fuzz` step runs a program on every
+T-015 AC-8 leaves it to reading. After this task the gate's `fuzz` step runs a program on every
 change. It feeds every command registered in `standard_registry()`, found at run time, with
 generated params, in random short sessions over a fixed set of awkward files. It checks two
 things:
@@ -153,6 +153,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   against two broken commands, a coverage floor, and a reproducer. Tier high: gate path
   `xtask/fuzz.toml`. A real panic found while landing it is a stop condition, not a fix. ·
   gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: the panic-path reference now points to T-015 (it absorbed T-030's reasons). No other change; the fuzz program also proves T-015's `InternalReason::Panic` mapping end to end. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -5,7 +5,7 @@ tier: high              # ADR-0002: changes CommandError, a CHARTER §3 contract
 state: draft
 owner_role: planner
 scorecard_items: []     # enabling task; T-007, T-008, T-010, T-030 and every feature task depend on it
-depends_on: []          # dispatch after T-006 merges: both touch doc.rs and registry.rs
+depends_on: []          # T-006 (shared doc.rs/registry.rs) is merged; ready to dispatch
 touches:
   - Cargo.toml                                   # [workspace.dependencies]: kiln-syntax, kiln-search path entries only
   - Cargo.lock                                   # generated
