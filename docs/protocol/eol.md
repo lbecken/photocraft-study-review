@@ -50,10 +50,14 @@ applies the normalisation again.
   after one ends just after its new text. The text as a whole is not replaced.
 - **One exception, when normalising to LF.** Because the snap looks at each intermediate
   text, it can act on a `\r\n` that exists only there. This happens to a position directly
-  between a lone CR and a following `\r` (another lone CR, or the `\r` of a CRLF): it ends
-  just before the lone CR's new LF, at the end of the line before, not after it. In `x\r\r\ny`
-  normalised to LF, a caret at 2 (the start of the empty line between the lone CR and the
-  CRLF) ends at 1 in `x\n\ny`, the end of the first line. The result is always a valid
+  between a lone CR and a following `\r` (another lone CR, or the `\r` of a CRLF). Such a
+  position lies inside a run of consecutive `\r` (the last of which may be the `\r` of a
+  CRLF), and it ends just before the new LF of the first `\r` of that run, at the end of the
+  line before the run, not after the lone CR. With several lone CRs in a row it can therefore
+  move up several lines. In `x\r\r\ny` normalised to LF, a caret at 2 (the start of the empty
+  line between the lone CR and the CRLF) ends at 1 in `x\n\ny`, the end of the first line. In
+  `x\r\r\r\ry` normalised to LF, a caret at 4 (the start of the fourth line) also ends at 1 in
+  `x\n\n\n\ny`, the end of the first line. The result is always a valid
   position. Undo and redo map the selection through the edits they apply in the same way
   (from the highest position to the lowest), so they do not necessarily put a selection back
   where it was.
