@@ -743,5 +743,5 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   attempts: 0 (clippy clean; fails on base, exit 2) · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
-- 2026-11-13T07:50Z · R-081 · tests_joined · did: round-1 review (`reviews/T-013-r1.md`), replacing R-075 (cut off, D-045): AC check, adversarial toys (publish, metrics, report, worktree, hygiene), 26 mutants (23 killed, 21 by acceptance, 3 survived); verdict request-changes: 5 defects, 3 test gaps, 4 spec gaps, 1 nit · gate attempts: 0 (`cargo test -p xtask` green; `cargo xtask hygiene` PASS) · not run: full `cargo xtask ci` (disk), a timed queue/publish race · missing context: none · next: director rules on spec gaps 9–12; implementer fixes findings 1–8.
+- 2026-11-13T08:00Z · R-081 · tests_joined · did: round-1 review (`reviews/T-013-r1.md`), replacing R-075 (cut off, D-045): AC check, adversarial toys (publish, metrics, report, worktree, hygiene), 26 mutants (23 killed, 21 by acceptance, 3 survived); verdict request-changes: 5 defects, 3 test gaps, 4 spec gaps, 1 nit · gate attempts: 0 (`cargo test -p xtask` green; `cargo xtask hygiene` PASS) · not run: full `cargo xtask ci` (disk), a timed queue/publish race · missing context: none · next: director rules on spec gaps 9–12; implementer fixes findings 1–8.
 <!-- end reviewer log -->
