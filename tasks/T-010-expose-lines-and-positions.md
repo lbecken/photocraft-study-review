@@ -239,6 +239,33 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: `doc` minimum 1 in the schema (doc 0 → `invalid_params`) or `u64` like other doc
   commands (doc 0 → `no_such_document`)? · gate attempts: 0 · not run: everything (no code) ·
   missing context: none · next: director rules on the two questions.
+- 2026-11-13T12:39Z · R-107 (continued after rulings q1–q5, D-059, read from main's task file)
+  · ready · did: `reason.rs`: one row `NotABoundary` ("not_a_boundary", spec description)
+  appended after `InvalidKeymap`; `out_of_range` row untouched (q2); exhaustive
+  `impl From<&PositionError> for RejectReason` (3 → OutOfRange, 3 → NotABoundary) + unit test.
+  `doc.rs`: `doc.line` (`LineParams {doc: u64, line: u64}`, result line/text/start/end/ending,
+  ending from the gap to the next line start) and `doc.position` (externally tagged `At` enum
+  char|byte|utf16|line_col, schema `oneOf` with `additionalProperties: false`; every form is
+  converted to a char index, then `char_to_line_col` refuses a CRLF interior in any unit, e.g.
+  `{"byte":2}`), both `MUTATING = false`, 2 + 3 examples on `"a\r\nbé😀\rc\n"`; messages
+  `invalid line: ` / `invalid position: ` + `PositionError` Display; `doc` typed `u64` as in
+  `doc.info` (q4: doc 0 → `no_such_document`); u64 params saturate to `usize`. Golden rule 4 /
+  q5: unit test `describe_lists_doc_commands_with_mutating_flag` — hard-coded `doc.len() == 11`
+  replaced by a check that the 13 expected `doc.*` names are present; read-only list gains
+  `doc.line`, `doc.position`. New `tests/positions.rs` (7 tests: worked example in all four
+  units, 64 fixed-seed texts vs naive split/prefix model with round trips, the refusal table +
+  extra cases with exact messages and unchanged info/text/log, u64::MAX → out_of_range,
+  precedence invalid_params → no_such_document (incl. doc 0, closed doc) → position, read-only +
+  `Context::log()` `mutating: false` + typing group kept, describe/new kind/audit). New
+  `docs/protocol/doc-positions.md` (states line/column beyond the end → `out_of_range`, q2).
+  `docs/commands.json` regenerated (`cargo xtask schema --write`); `docs/control-protocol.md`
+  and `kiln-control` untouched (q1, q3). Checked from outside with `kiln-cli run --root --log`
+  on the worked-example file (line 1, `{"char":2}` → not_a_boundary, two keys → invalid_params,
+  doc 0 → no_such_document, byte u64::MAX → out_of_range, `--log` lists the successful
+  requests) and `kiln-cli commands --audit` (exit 0). · gate attempts: 3 (1 red fmt, 2 red
+  clippy `double_ended_iterator_last` in my test, 3 green: 11 steps, fuzz/budgets EMPTY) ·
+  not run: 32-bit build (saturation would change the quoted index there); T-007 read-only
+  property (not merged) · missing context: none · next: join with test author.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
