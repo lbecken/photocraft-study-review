@@ -102,9 +102,8 @@ Failure:
 | `internal` | `result_schema` | a command's result violates its own schema (a bug in Kiln) | echoed |
 | `internal` | `other` | any other internal error | echoed |
 
-The `kind` of a `rejected` error is currently derived by `kiln-control` from the message the
-lower layers produce; a refusal it does not recognise is reported as `other`, never dropped.
-This table is the specified set of `(code, kind)` pairs; no other pair is produced.
+The `kind` of a `rejected` or `internal` error comes from a structured reason set where the error is raised; no message text is consulted.
+The request-level rows of this table (codes `invalid_json`, `invalid_request`, `unknown_command`, `invalid_params`) and the `rejected`/`internal` kinds in `error_kinds` of `docs/commands.json` (`kiln-cli commands --schema`, generated from code) are the specified set; no other pair is produced. The `rejected` and `internal` rows above are the kinds of iteration 0; kinds added since are listed only in `error_kinds`. Where a row's 'When' text differs from `error_kinds`, `error_kinds` governs; later tasks do not edit table cells.
 
 A request that fails validation, or a command that returns an error, is not recorded in the
 session log; commands are written so that a refused request leaves the session unchanged.
