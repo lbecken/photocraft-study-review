@@ -254,7 +254,7 @@ they were built for (approval wording, abbreviated sha, booking order, transitio
 nothing else. The director's largest error class, wrong rulings, was caught by the agents who had
 to act on them, at the price of a stop, a question or a review round. The v1.1 rule meant to
 catch them first, a ruling "checked for implementability by a planner or reviewer run", was not
-followed in that form: the director checked rulings himself (D-047, D-051, D-070 say so), and 0
+followed in that form: the director alone checked rulings (D-047, D-051, D-070 say so), and 0
 of 31 decision rows that mention a ruling cite the commit that wrote it (5 cite a reviewed or
 merged head, none the ruling commit; VERIFIED `S decisions`, read row by row). Iteration 0 had 14
 director errors with 0 caught mechanically; iteration 1 has 40 with 5 caught mechanically, over
