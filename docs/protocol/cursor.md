@@ -6,8 +6,8 @@ newly opened document's selection is `anchor = head = 0`. The selection is not s
 part of `doc.info`, and is dropped when the document is closed.
 
 The selection follows every edit of the document by itself: `doc.insert`, `doc.delete`,
-`doc.replace`, `doc.undo`, `doc.redo` and `eol.normalize` all move it by the mapping rule
-below, without being told about it. The machine-readable schemas and examples are in
+`doc.replace`, `doc.undo`, `doc.redo`, `eol.normalize` and `search.replace` all move it by the
+mapping rule below, without being told about it. The machine-readable schemas and examples are in
 `docs/commands.json` (`kiln-cli commands --schema`).
 
 Offsets are chars (Unicode scalar values). A **valid position** is an offset `0..=len_chars`
@@ -77,7 +77,8 @@ each primitive edit, to the text as it is after that edit; in a step of several 
 can hold a `\r\n` the final text does not (see the exception in `eol.md`).
 
 `doc.undo` and `doc.redo` move the selection through the edits they apply, in the order they
-apply them. A step made of several edits (`eol.normalize`) is applied from its last edit (the
+apply them. A step made of several edits (`eol.normalize`,
+`search.replace`) is applied from its last edit (the
 highest position) to its first, and so is its undo. An undo therefore maps the selection like
 any edit; it does not necessarily restore the selection of before the step. Rejected requests and no-op edits (inserting
 `""`, deleting an empty range) move nothing.
