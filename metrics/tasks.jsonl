@@ -133,3 +133,4 @@
 {"kind":"transition","task":"T-012","iteration":0,"at":"2026-11-13T02:55:20Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-012","iteration":0,"at":"2026-11-13T02:56:16Z","from":"self_verified","to":"queued"}
 {"kind":"transition","task":"T-012","iteration":0,"at":"2026-11-13T02:56:16Z","from":"queued","to":"merged"}
+{"kind":"run","task":"T-012","iteration":0,"run":"R-052","role":"retrospective-analyst","tier":"low","started_at":"2026-11-13T02:57:45Z","ended_at":"2026-11-13T03:11:05Z","wall_s":800,"tokens":237517,"tool_calls":49,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"iteration-0 retrospective (booked to T-012 for lack of an iteration-level record; see retrospective change 14b)"}

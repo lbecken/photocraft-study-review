@@ -107,6 +107,8 @@ def completeness():
         last = by[task][-1]["to"] if by.get(task) else "(none)"
         if last != m.get("state") and not (last == "(none)" and m.get("state") == "draft"):
             print("  front-matter state", task, m.get("state"), "vs last transition", last)
+    skip = [f'{t["task"]}@{t["at"]}' for t in trans if t["from"] == "in_progress" and t["to"] == "tests_joined"]
+    print("rework transitions in_progress->tests_joined (skip self_verified):", len(skip), skip)
     print("tasks with no transition records:", [t for t in meta if t not in by])
     # missing ready transition for merged: merged tasks
     for r in reviews:
@@ -261,6 +263,34 @@ def concurrency():
 
 
 SECTIONS["concurrency"] = concurrency
+
+
+def rework():
+    section("tokens after each task's round-1 review run ended (post-r1 rework)")
+    r1 = {k.split("-r")[0]: fm["run"] for k, fm in reviews.items() if k.endswith("-r1")}
+    total = 0
+    for t, rid in sorted(r1.items()):
+        end = [r for r in runs if r["run"] == rid][0]["ended_at"]
+        after = defaultdict(int)
+        for r in runs:
+            if r["task"] == t and r["ended_at"] > end:
+                after[r["role"]] += r["tokens"]
+        total += sum(after.values())
+        print(t, "after r1:", sum(after.values()), dict(after))
+    print("total post-r1 rework:", total)
+
+
+def missing():
+    section("missing_context items per task and role (semicolon-separated)")
+    for t in FEATURE:
+        for r in runs:
+            if r["task"] == t and r["missing_context"] != "none":
+                n = len([x for x in r["missing_context"].split(";") if x.strip()])
+                print(t, r["run"], r["role"], n)
+
+
+SECTIONS["rework"] = rework
+SECTIONS["missing"] = missing
 
 if __name__ == "__main__":
     want = sys.argv[1:] or ["all"]
