@@ -2,7 +2,7 @@
 id: T-005
 title: "Merge queue gates with main's xtask, refuses tasks without their lifecycle evidence, resolves generated-file conflicts, tolerates only ledger commits on main, and seeds worktrees without copying the whole target"
 tier: high              # xtask/ (CI and gate)
-state: tests_joined
+state: in_progress
 owner_role: director
 scorecard_items: []
 depends_on: []
@@ -279,6 +279,12 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   R8 (F9). `KILN_XTASK_RUN_IN` must either be what makes the queue's main-gate run possible, with a test that fails if it is ignored, or be removed. No dead bypass variable.
   R9 (F5, F6). End-to-end tests are required for the lock version rule and for "regeneration changed a non-generated path".
   Clarifications (2026-11-13, D-027): R6 — `ledger` applies to uncommitted changes in evidence files (`metrics/tasks.jsonl`, `docs/decisions.md`, `tasks/`, `reviews/`, the policy files); `metrics/queue.jsonl` is the queue's own output log and is exempt. R2 — after `reviewed_sha` the only test files that may change are the task's own `acceptance_tNNN*.rs`, `guard_tNNN*.rs` and `acceptance_tNNN_support.rs`. R7 — a table row is a `|`-delimited line under a header separator line, outside code. R9 — a leaky regeneration has the same result kind as a failed regeneration. R4 — the lock rule compares registry and git packages only.
+- Director rulings after review r2 (2026-11-13, decision D-030) — part of the spec; this is the last round of rulings for T-005 (anything further becomes a follow-up task):
+  R10 (review F11). Gate paths also include: any `Cargo.toml` in which a `[lints]` table (or a `lints.workspace` setting) or a package `build` key is added, removed or changed relative to main; and any file a package's `build` key names. R3 (a)–(c) apply to them.
+  R11 (F13). An existing registry or git package's version may change in `Cargo.lock` only when the task is tier high and its approval row (as in R3/R7) contains the words `dependency versions`; otherwise refusal `dependencies`. With that approval the change merges.
+  R12 (F15, F8). The queue commits its own record: after every run that appends to `metrics/queue.jsonl` it makes a commit on main touching only that file (subject `queue: record T-NNN <result>`). The `ledger` refusal then covers all of `metrics/` with no exemption (this replaces the exemption in D-027), and the main-history check reads `merged` records from main's committed tree only. A refusal still writes nothing.
+  R13 (F12, F14). Tests are required that fail when (a) the fresh-rebuild/wipe step of R1 is removed — including against a fake `xtask` binary with a modification time in the future — and (b) the lock version rule is not applied to the rebased tree.
+  Accepted residual risks, to be listed in `docs/development.md`: cached dependency build artifacts can be tampered with; gated code runs with the director's privileges; acceptance tests edited after a review are not re-reviewed; an approval row is not tied to a commit.
 
 ## Questions
 None open.
