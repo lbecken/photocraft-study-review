@@ -482,6 +482,16 @@ Director's answers to the planner's questions of R-055 (run R-057).
   never edited in place.
 - D-4 (was Q-4): an `Extend T-NNN` row must name the new token ceiling, e.g.
   `Extend T-NNN to 1200000`; the queue compares against that number.
+- Director answers before the join (2026-11-13, decision D-039), given to both builders at once — part of the spec:
+  a. `publish` leaves main's ledger committed wherever it stops: the `ready → in_progress` transition is committed before the gate runs; after a red gate the task is `in_progress` in main's committed tree and the working tree is clean.
+  b. Publish slug: trailing `-` trimmed after the 40-character cut. Publish refusals: exit 1, exactly one stderr line starting `publish: refused: ` naming the offending path, nothing changed.
+  c. `--tier` on an `iter-N` record is refused; `join-defects` has no time rule; a task file without `budget_tokens` prints `T-NNN: <sum> tokens of budget none`; the review front-matter check accepts `mutants` as a flow map or a block map.
+  d. `worktree new` refuses a task with no task file on main as well as one that is not `ready`; the T-005 negative case that needs such a worktree is set up in the fixture with plain `git worktree add` (setup only).
+  e. The over-budget line is the Interface (1) text; the wording in Pinned (g) is struck.
+  f. `metrics report` formats: a line starting `acceptance-caught defects: <total>`; per-tier and per-arm integers on lines naming the tier or arm; the with-overhead figure on a line containing `overhead`; `T-NNN (from T-MMM)` lines; `extend to: <N>|none` and `within ceiling: yes|no` on a line naming the task.
+  g. `publish` regenerates `docs/scorecard.md` with the command main's `xtask/generated.toml` lists for that path, run in the task worktree.
+  h. After a successful publish main's first-parent history after the pre-publish tip is exactly the five commits of AC-9, in order.
+  i. `hygiene` is never EMPTY.
 
 ## Questions and rulings
 None open.
