@@ -467,7 +467,10 @@ impl Vfs for DiskFs {
     fn list_dir(&self, dir: Option<&RelPath>) -> Result<DirListing, VfsError> {
         let placeholder = RelPath::root_placeholder();
         let (label, location) = match dir {
-            None => (&placeholder, self.locate_steps(&placeholder, std::iter::empty())?),
+            None => (
+                &placeholder,
+                self.locate_steps(&placeholder, std::iter::empty())?,
+            ),
             Some(dir) => (dir, self.locate(dir)?),
         };
         match location.found {

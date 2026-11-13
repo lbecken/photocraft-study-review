@@ -2556,6 +2556,226 @@
         "title": "NormalizeResult",
         "type": "object"
       }
+    },
+    {
+      "doc": "List the project (or the directory `path`) as a tree, in preorder with each directory's entries in byte order of their names. Honours the project's `.gitignore` files, skips the root's `target` directory and every `.git`, lists symlinks and special files without following or opening them, and does not descend below 128 path segments. Rules: docs/protocol/project.md.",
+      "examples": [
+        {
+          "description": "list a project with a .gitignore and a target directory",
+          "files": [
+            [
+              ".gitignore",
+              "*.log\n/target\n"
+            ],
+            [
+              "B.txt",
+              ""
+            ],
+            [
+              "a.rs",
+              ""
+            ],
+            [
+              "a/b.rs",
+              ""
+            ],
+            [
+              "x.log",
+              ""
+            ],
+            [
+              "target/debug/k",
+              ""
+            ],
+            [
+              "src/lib.rs",
+              ""
+            ]
+          ],
+          "initial_text": "",
+          "params": {},
+          "result": {
+            "entries": [
+              {
+                "kind": "file",
+                "path": ".gitignore"
+              },
+              {
+                "kind": "file",
+                "path": "B.txt"
+              },
+              {
+                "kind": "dir",
+                "path": "a"
+              },
+              {
+                "kind": "file",
+                "path": "a/b.rs"
+              },
+              {
+                "kind": "file",
+                "path": "a.rs"
+              },
+              {
+                "kind": "dir",
+                "path": "src"
+              },
+              {
+                "kind": "file",
+                "path": "src/lib.rs"
+              }
+            ],
+            "ignored": 2,
+            "skipped": 0,
+            "too_deep": 0,
+            "truncated": false
+          },
+          "setup": []
+        },
+        {
+          "description": "list one directory, at most one entry",
+          "files": [
+            [
+              "src/a.rs",
+              ""
+            ],
+            [
+              "src/b.rs",
+              ""
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "limit": 1,
+            "path": "src"
+          },
+          "result": {
+            "entries": [
+              {
+                "kind": "file",
+                "path": "src/a.rs"
+              }
+            ],
+            "ignored": 0,
+            "skipped": 0,
+            "too_deep": 0,
+            "truncated": true
+          },
+          "setup": []
+        }
+      ],
+      "mutating": false,
+      "name": "project.tree",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `project.tree`.",
+        "properties": {
+          "limit": {
+            "default": 50000,
+            "description": "The most entries to list (1 to 1,000,000; default 50,000). Ignored entries do not count.",
+            "format": "uint64",
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Root-relative path of the directory to list (`/`-separated; no `.`, `..` or empty\nsegments). Omit it for the root; `null` is refused.",
+            "type": "string"
+          }
+        },
+        "title": "TreeParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "KindName": {
+            "description": "Kind of a listed entry (its own kind: a symlink is never followed).",
+            "oneOf": [
+              {
+                "const": "file",
+                "description": "A regular file.",
+                "type": "string"
+              },
+              {
+                "const": "dir",
+                "description": "A directory.",
+                "type": "string"
+              },
+              {
+                "const": "symlink",
+                "description": "A symbolic link, whatever it points to; never followed.",
+                "type": "string"
+              },
+              {
+                "const": "other",
+                "description": "A FIFO, socket or device; never opened.",
+                "type": "string"
+              }
+            ]
+          },
+          "TreeEntryOut": {
+            "description": "One listed entry.",
+            "properties": {
+              "kind": {
+                "$ref": "#/$defs/KindName",
+                "description": "The entry's kind."
+              },
+              "path": {
+                "description": "Root-relative path; it begins with the requested `path` as given.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "path"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `project.tree`.",
+        "properties": {
+          "entries": {
+            "description": "Entries in preorder; each directory's entries in byte order of their names.",
+            "items": {
+              "$ref": "#/$defs/TreeEntryOut"
+            },
+            "type": "array"
+          },
+          "ignored": {
+            "description": "Entries not listed (and not descended) because they are the root's `target` directory,\nare named `.git`, or are ignored by a `.gitignore`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "Names not listed because they are not UTF-8 or not a valid path segment.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "too_deep": {
+            "description": "Directories listed but not descended because their path has 128 segments.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True iff an entry beyond `limit` exists.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "entries",
+          "ignored",
+          "skipped",
+          "too_deep",
+          "truncated"
+        ],
+        "title": "TreeResult",
+        "type": "object"
+      }
     }
   ],
   "error_kinds": {
