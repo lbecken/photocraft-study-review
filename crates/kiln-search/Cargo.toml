@@ -9,3 +9,11 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+# T-017: the regex engine behind `kiln_search::Regex`, with default features (`std`, `perf`,
+# `unicode`; case folding and `\w` need `unicode`). 1.13.1 is the version already locked through
+# `jsonschema`, so adding it changed no locked version. The exact pin also holds `regex` at
+# 1.13.1 for the whole workspace (`jsonschema`, `tree-sitter`): one semver-compatible 1.x version
+# per lock file, so a later update edits this line.
+regex = "=1.13.1"
