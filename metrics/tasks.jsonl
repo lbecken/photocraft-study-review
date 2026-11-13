@@ -386,3 +386,4 @@
 {"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:18:42Z","from":"ready","to":"in_progress"}
 {"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:23:07Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-040","iteration":1,"at":"2026-11-13T18:23:07Z","from":"self_verified","to":"queued"}
+{"kind":"run","task":"iter-1","iteration":1,"run":"R-153","role":"retrospective-analyst","tier":null,"started_at":"2026-11-13T17:58:30Z","ended_at":"2026-11-13T18:21:18Z","wall_s":1368,"tokens":398288,"tool_calls":81,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"retrospective of iteration 1 (retrospectives/iter-1.md, three scripts): claims C1-C8 scored, 40 director errors classified, 18 changes proposed for v1.2, scope recommended for iteration 2; evaluation section filled from the evaluator's results in the same run"}

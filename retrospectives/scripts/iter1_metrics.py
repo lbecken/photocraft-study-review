@@ -76,7 +76,12 @@ def desc(xs):
 recs = load_jsonl("metrics/tasks.jsonl")
 queue = load_jsonl("metrics/queue.jsonl")
 runs = [r for r in recs if r["kind"] == "run"]
-runs1 = [r for r in runs if r["iteration"] == 1]
+# Iteration-1 build work. The iteration-1 evaluation (R-152) and this retrospective (R-153) are
+# booked to iter-1 too but happened after the close; they are reported separately (section
+# "evaluation") so that the build figures do not change when they are booked.
+CLOSE_RUNS = ("evaluator", "retrospective-analyst")
+runs1 = [r for r in runs if r["iteration"] == 1 and r["role"] not in CLOSE_RUNS]
+runs1_close = [r for r in runs if r["iteration"] == 1 and r["role"] in CLOSE_RUNS]
 trans = [r for r in recs if r["kind"] == "transition"]
 joins = [r for r in recs if r["kind"] == "join"]
 reverts = [r for r in recs if r["kind"] == "revert_check"]
@@ -579,7 +584,27 @@ def budgets():
     print("T-010 pre-code stop (R-107 111,572 + R-108 114,823 from the run notes):", 111572 + 114823)
 
 
-SECTIONS = {"completeness": completeness, "provenance": provenance, "tokens": tokens, "tiers": tiers,
+def evaluation():
+    section("iteration-1 close runs (evaluator, retrospective) and the evaluation file")
+    for r in runs1_close:
+        print(r["run"], r["task"], r["role"], r["tokens"], r["tool_calls"], r["started_at"], r["ended_at"], r["wall_s"])
+    p = ROOT / "evaluations" / "iter-1.md"
+    if p.exists():
+        fm = front(p)
+        for k in ("confirmed_items", "rejected_items", "not_evaluated", "defects_filed"):
+            v = fm.get(k, "")
+            print(k, len([x for x in v.strip("[]").split(",") if x.strip()]), v[:80])
+        txt = p.read_text()
+        print("findings NEW-n:", sorted(set(__import__("re").findall(r"NEW-\d", txt))))
+    ev = [r for r in runs1_close if r["role"] == "evaluator"]
+    if ev:
+        t = ev[0]["tokens"]
+        print(f"evaluator tokens per finding (4): {t / 4:,.0f}; per item checked (28): {t / 28:,.0f}")
+    r1 = [fm for k, fm in reviews1.items() if k.endswith("-r1")]
+    print("for comparison, see section reviews: round-1 tokens 1,720,532 over 11 defects and 51 findings")
+
+
+SECTIONS = {"completeness": completeness, "evaluation": evaluation, "provenance": provenance, "tokens": tokens, "tiers": tiers,
             "lead": lead, "queue": queue_, "gates": gates, "joins": joins_, "reviews": reviews_,
             "arms": arms, "rework": rework, "specchecks": specchecks_, "rulings": rulings,
             "decisions": decisions_, "concurrency": concurrency, "idle": idle,
