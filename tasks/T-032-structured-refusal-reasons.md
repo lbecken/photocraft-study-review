@@ -438,6 +438,19 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
     `acceptance_t032_control` on base: expected, R-030) · not run: the gate with the
     implementation; a real host panic (AC-6, by reading) · missing context: none · next:
     join with `task/T-032`.
+- 2026-11-13T12:12Z · R-103 · ready · did: applied ruling r6 (D-052).
+  - (i) Removed `guard_t032_cli.rs::protocol_doc_is_unchanged_outside_the_kinds_paragraph`,
+    together with `fnv1a`, `TABLE`, `DOC_BEFORE` and `DOC_AFTER`.
+  - (ii) The two directory-open cases (`d`, `e: I/O error: z`) in `guard_t032.rs`,
+    `acceptance_t032.rs` and `acceptance_t032_json.rs` now carry `UNPINNED` instead of their
+    message. They assert `Rejected`, code `rejected` and reason `not_a_file`; the guard keeps
+    them with class, code and an unchanged context. Every other message stays pinned,
+    including the missing file named `x: is a directory, not a file` (`not_found`).
+  - (iii) The `not_a_file` description check is unchanged.
+  - T-032 guards: 5 (guard_t032 3, guard_t032_cli 2), all pass on base. The acceptance
+    results on base are as in R-095.
+  - fmt and clippy are clean on the targets that compile. · gate attempts: 0 · not run: the
+    stub mutants (stub deleted in R-095) · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13T11:58Z · R-099 · tests_joined · did: round 1 full review of

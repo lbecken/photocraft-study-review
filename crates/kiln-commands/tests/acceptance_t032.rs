@@ -55,6 +55,10 @@ type Case = (
 
 const ABC: &[(&str, &[u8])] = &[("a.txt", b"abc")];
 
+/// Stands for the message of a refusal that opens a directory: not pinned, because T-008 rewords
+/// it (ruling r6, D-052); its error class, code and reason are still checked.
+const UNPINNED: &str = "<directory refusal: message not pinned (D-052)>";
+
 /// The AC-1 list, then further refusal sites and hostile names whose messages look like another
 /// kind's message (the reason must come from where the refusal is raised, not from text).
 fn cases() -> Vec<Case> {
@@ -120,7 +124,7 @@ fn cases() -> Vec<Case> {
             "doc.open",
             json!({"path": "d"}),
             "not_a_file",
-            "cannot open d: is a directory, not a file",
+            UNPINNED,
         ),
         (
             "doc.open \\xff",
@@ -298,7 +302,7 @@ fn cases() -> Vec<Case> {
             "doc.open",
             json!({"path": "e: I/O error: z"}),
             "not_a_file",
-            "cannot open e: I/O error: z: is a directory, not a file",
+            UNPINNED,
         ),
         (
             "undecodable file named like a missing one",
@@ -357,6 +361,16 @@ fn refusals_carry_reasons_at_their_sources() {
         let (what, .., kind, message) = case;
         let err = run_case(&r, &case);
         let want = expected(kind);
+        match &err {
+            CommandError::Rejected { reason, .. } => assert_eq!(*reason, want, "{what}"),
+            other => panic!("{what}: expected a refusal, got {other:?}"),
+        }
+        assert_eq!(err.to_json()["code"], "rejected", "{what}");
+        assert_eq!(err.to_json()["reason"], want.as_str(), "{what}");
+        seen.insert(kind);
+        if message == UNPINNED {
+            continue;
+        }
         assert_eq!(
             err,
             CommandError::Rejected {
@@ -372,7 +386,6 @@ fn refusals_carry_reasons_at_their_sources() {
             json!({"code": "rejected", "message": message, "reason": kind}),
             "{what}"
         );
-        seen.insert(kind);
     }
     assert_eq!(
         seen.len(),

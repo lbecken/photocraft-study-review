@@ -9,8 +9,7 @@
 //! `control`), the `exec` cases including Pinned (g), and a fixed-seed session of more than 300
 //! requests whose paths come from `[a-z0-9/._]`, never contain `: ` and never name a directory,
 //! and whose ids are at most 64 characters (D-043). `kiln-cli commands` output is deliberately
-//! not compared (D-043). The second test guards `docs/control-protocol.md` outside the one
-//! paragraph T-032 replaces (Pinned (b): "nothing else in the file changes").
+//! not compared (D-043).
 //!
 //! Every spawned process is killed after [`TIMEOUT`] (D-028 (8)).
 #![cfg(test)]
@@ -646,74 +645,6 @@ fn protocol_bytes_are_unchanged() {
     exec_cases();
     session("run");
     session("control");
-}
-
-// ---------------------------------------------------------------------------------------------
-// docs/control-protocol.md outside the replaced paragraph.
-
-/// FNV-1a, 64 bit.
-fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| {
-        (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
-/// The table of "Error codes and kinds", recorded on base: it stays whole (all 23 rows).
-const TABLE: &str = "\
-| Code | Kind | When | `id` in the response |
-|---|---|---|---|
-| `invalid_json` | `not_utf8` | the line is not valid UTF-8 | `null` |
-| `invalid_json` | `syntax` | the line is not valid JSON | `null` |
-| `invalid_request` | `not_an_object` | the JSON is not an object | `null` |
-| `invalid_request` | `bad_id` | `id` is not a string or an integer | `null` |
-| `invalid_request` | `unknown_key` | a top-level key other than `id`, `command`, `params` | echoed if valid, else `null` |
-| `invalid_request` | `missing_command` | no `command` | echoed if valid, else `null` |
-| `invalid_request` | `command_not_string` | `command` is not a string | echoed if valid, else `null` |
-| `invalid_request` | `params_not_object` | `params` is not an object | echoed if valid, else `null` |
-| `unknown_command` | `unknown_command` | no command has this name | echoed |
-| `invalid_params` | `schema` | `params` does not match the command's params schema | echoed |
-| `rejected` | `invalid_path` | the path is not a valid root-relative path (see Paths) | echoed |
-| `rejected` | `no_such_document` | no open document has this id | echoed |
-| `rejected` | `unsaved_changes` | `doc.close` of a modified document without `discard` | echoed |
-| `rejected` | `not_found` | the file (or, for a save, its directory) does not exist | echoed |
-| `rejected` | `not_a_file` | the path names a directory | echoed |
-| `rejected` | `io_error` | any other file-system failure (permissions, name too long, …) | echoed |
-| `rejected` | `decode_error` | the file is not valid UTF-8 / UTF-16 text | echoed |
-| `rejected` | `out_of_range` | an offset beyond the end of the text | echoed |
-| `rejected` | `inverted_range` | a range whose start is after its end | echoed |
-| `rejected` | `other` | any other refusal | echoed |
-| `internal` | `panic` | a command panicked (a bug in Kiln) | echoed |
-| `internal` | `result_schema` | a command's result violates its own schema (a bug in Kiln) | echoed |
-| `internal` | `other` | any other internal error | echoed |
-";
-
-/// Recorded on base: (length, FNV-1a) of the file up to and including the table, and from
-/// "A request that fails validation" to the end.
-const DOC_BEFORE: (usize, u64) = (5871, 12327610972216830658);
-const DOC_AFTER: (usize, u64) = (7630, 12697753870511510650);
-
-/// Pinned (b)/AC-7: `docs/control-protocol.md` changes only in the paragraph after the table;
-/// the table itself is byte-identical.
-#[test]
-fn protocol_doc_is_unchanged_outside_the_kinds_paragraph() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/control-protocol.md");
-    let doc = fs::read_to_string(&path).expect("docs/control-protocol.md");
-    let table = doc.find(TABLE).expect("the table is unchanged and whole");
-    let before = &doc[..table + TABLE.len()];
-    let after = &doc[doc
-        .find("\nA request that fails validation")
-        .expect("next paragraph")
-        + 1..];
-    assert_eq!(
-        (before.len(), fnv1a(before.as_bytes())),
-        DOC_BEFORE,
-        "docs/control-protocol.md changed before the replaced paragraph"
-    );
-    assert_eq!(
-        (after.len(), fnv1a(after.as_bytes())),
-        DOC_AFTER,
-        "docs/control-protocol.md changed after the replaced paragraph"
-    );
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -44,6 +44,10 @@ type Case = (
 
 const ABC: &[(&str, &[u8])] = &[("a.txt", b"abc")];
 
+/// Stands for the message of a refusal that opens a directory: not pinned, because T-008 rewords
+/// it (ruling r6, D-052); its error class, code and reason are still checked.
+const UNPINNED: &str = "<directory refusal: message not pinned (D-052)>";
+
 fn cases() -> Vec<Case> {
     let open_a = || ("doc.open", json!({"path": "a.txt"}));
     vec![
@@ -138,7 +142,7 @@ fn cases() -> Vec<Case> {
             vec![],
             "doc.open",
             json!({"path": "d"}),
-            "cannot open d: is a directory, not a file",
+            UNPINNED,
         ),
         (
             "undecodable bytes",
@@ -218,7 +222,7 @@ fn cases() -> Vec<Case> {
             vec![],
             "doc.open",
             json!({"path": "e: I/O error: z"}),
-            "cannot open e: I/O error: z: is a directory, not a file",
+            UNPINNED,
         ),
         (
             "undecodable file named like a missing one",
@@ -307,12 +311,18 @@ fn refusal_messages_and_codes_are_unchanged() {
         let log = ctx.log().to_vec();
         let err = r.execute(&mut ctx, name, params.clone()).expect_err(what);
         match &err {
-            CommandError::Rejected { message: m, .. } => assert_eq!(m, message, "{what}"),
+            CommandError::Rejected { message: m, .. } => {
+                if message != UNPINNED {
+                    assert_eq!(m, message, "{what}");
+                }
+            }
             other => panic!("{what}: expected a refusal, got {other:?}"),
         }
-        assert_eq!(err.to_string(), message, "{what}: Display");
         assert_eq!(err.to_json()["code"], "rejected", "{what}");
-        assert_eq!(err.to_json()["message"], message, "{what}");
+        if message != UNPINNED {
+            assert_eq!(err.to_string(), message, "{what}: Display");
+            assert_eq!(err.to_json()["message"], message, "{what}");
+        }
         assert_eq!(ctx.log(), log.as_slice(), "{what}: the refusal was logged");
         assert_eq!(read_all(&ctx), bytes, "{what}: files changed");
         assert_eq!(ok(&r, &mut ctx, "doc.list", json!({})), list, "{what}");
