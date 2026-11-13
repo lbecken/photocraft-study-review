@@ -2,7 +2,7 @@
 id: T-032
 title: "Give every refusal a structured reason, derive protocol error kinds from reasons alone, and publish the kinds generated from code in the command description"
 tier: high              # ADR-0002: changes CommandError, a CHARTER §3 contract (decision 2) — ADR-0004; no gate path
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []
 depends_on: [T-015]   # T-015 edits registry.rs/lib.rs first
