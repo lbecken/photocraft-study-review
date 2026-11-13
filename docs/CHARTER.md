@@ -110,7 +110,7 @@ Decisions:
 |---|---|---|
 | 0 Foundations | workspace, gate, architecture checks, queue, CI, scorecard machinery, one vertical slice (open → edit → save, driven headlessly) | gate green on main; queue has merged ≥3 tasks; slice passes evaluator |
 | 1 Fan-out | parallel feature work across L0–L4; independent test authors on high-tier tasks and on one arm of the medium-tier experiment (ADR-0002, D-035) | ≥60% scorecard items verified; metrics complete for every task |
-| 2 Product | UI, end-to-end flows, budgets, hardening | every item verified; evaluator sign-off; budgets enforced |
+| 2 Product | in two stages (ADR-0005): stage 1 reaches the 60% line that iteration 1 missed, with the tasks ADR-0005 lists; stage 2 is the UI, end-to-end flows, budgets and hardening, drafted after stage 1 | stage 1: ≥60% scorecard items verified, read from `cargo xtask scorecard` after stage 1's evaluation, before any stage-2 task is dispatched; stage 2: every item verified; evaluator sign-off; budgets enforced |
 
 Each iteration ends with a retrospective (`retrospectives/`) that scores claims C1–C8 from
 the metrics and proposes methodology changes. The methodology version is bumped only then.

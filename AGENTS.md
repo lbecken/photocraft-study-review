@@ -50,6 +50,9 @@ Records: `tasks/`, `reviews/`, `evaluations/`, `incidents/`, `retrospectives/`, 
 8. **Provenance.** Every builder commit carries `Task: T-NNN` and `Role: <role>` lines
    (`implementer`, `test-author`, `reviewer`). Never write model names or session identifiers
    (including session-scoped scratch paths) into code, docs or records.
+9. **No brittle pins.** No test pins a message text, a whole document or a command list that a
+   drafted task changes; that this task left something alone is the reviewer's diff check, not a
+   guard (METHODOLOGY §6).
 
 ## Picking up a task
 - Builders (implementer, test author, reviewer) work in the worktree the director names:
@@ -58,6 +61,8 @@ Records: `tasks/`, `reviews/`, `evaluations/`, `incidents/`, `retrospectives/`, 
 - Planner, evaluator and retrospective analyst write their files where their brief says; the
   director commits them.
 - Read the task log first: earlier runs may have left questions, rulings or a blocked report.
+- Acknowledge each ruling in your log, accepting it or questioning it, before you act on it
+  (METHODOLOGY §2.1).
 - Do not change the task's front matter; the director owns `state`.
 - Log every question (`QUESTION:` line) by the end of your first gate attempt, then go on with
   the rest; the director answers all builders at once in the task file.
