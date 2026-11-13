@@ -178,7 +178,7 @@ fn real_main() -> Result<bool> {
                         }
                     );
                     println!(
-                        "\nuse:\n  cd {}\n  export CARGO_TARGET_DIR={}",
+                        "\nuse:\n  cd {}\ncargo uses {} by itself there; set no target-directory variable (D-019)",
                         info.path.display(),
                         info.target.display()
                     );
@@ -292,8 +292,8 @@ fn real_main() -> Result<bool> {
                 println!("{}", serde_json::to_string_pretty(&r)?);
                 if r.base_fail_kind != "fails" {
                     eprintln!(
-                        "join: base evidence is `{}` (weak); the reviewer must run `cargo xtask join --revert-check {}`",
-                        r.base_fail_kind, r.task
+                        "join: base evidence is `{}` (weak); the reviewer's mutation spot-check must cover it (METHODOLOGY §6)",
+                        r.base_fail_kind
                     );
                 }
                 Ok(r.result == "joined")
@@ -334,9 +334,16 @@ fn main() -> ExitCode {
     match real_main() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
-        Err(e) => {
-            eprintln!("xtask: {e:#}");
-            ExitCode::from(2)
-        }
+        Err(e) => match e.downcast_ref::<util::Refused>() {
+            // A refusal: one stderr line, exit 1 (T-013 Interface).
+            Some(r) => {
+                eprintln!("{r}");
+                ExitCode::FAILURE
+            }
+            None => {
+                eprintln!("xtask: {e:#}");
+                ExitCode::from(2)
+            }
+        },
     }
 }

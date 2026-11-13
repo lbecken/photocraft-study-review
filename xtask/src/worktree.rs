@@ -2,8 +2,9 @@
 //!
 //! `new T-NNN` creates `.worktrees/T-NNN` on `task/T-NNN` from `main`; `new T-NNN --tests` (or
 //! `new T-NNN-tests`) creates `.worktrees/T-NNN-tests` on `task/T-NNN-tests` for the test author.
-//! The worktree's target directory is `<worktree>/target` (cargo's default for that workspace;
-//! the printed `CARGO_TARGET_DIR` overrides any global setting). Unless `--no-seed`, it is seeded
+//! The worktree's target directory is `<worktree>/target`, cargo's default for that workspace:
+//! no target-directory variable is printed or needed (D-019). `new` first requires the task to
+//! be `ready` in main's committed task file (METHODOLOGY §5.1, T-013 (3)). Unless `--no-seed`, it is seeded
 //! from main's `target/` with copies of the artifacts of non-member packages only
 //! (`crate::seed`), so the first build reuses compiled dependencies and rebuilds every workspace
 //! crate from the worktree's own source.
@@ -12,7 +13,7 @@ use anyhow::{Result, bail};
 use std::path::{Path, PathBuf};
 
 use crate::git::{branch_exists, git, git_try};
-use crate::util::task_id;
+use crate::util::{Refused, task_id};
 
 /// Which worktree of a task.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,8 +69,61 @@ pub struct Info {
     pub seeded: Option<crate::seed::Stats>,
 }
 
-/// Create the worktree for `spec` from `main`.
+/// Refuse unless `task` is `ready` in main's committed tree (T-013 Interface (3)). A main
+/// without any `tasks/` directory (repositories that do not track tasks) is not checked.
+pub fn require_ready_on_main(root: &Path, task: &str) -> Result<()> {
+    let listing = git(root, &["ls-tree", "--name-only", "main", "--", "tasks/"])?;
+    if listing.trim().is_empty() {
+        return Ok(());
+    }
+    let prefix = format!("tasks/{task}-");
+    let found: Vec<&str> = listing
+        .lines()
+        .filter(|l| l.starts_with(&prefix) && l.ends_with(".md"))
+        .collect();
+    let file = match found.as_slice() {
+        [one] => *one,
+        [] => {
+            return Err(Refused(format!("worktree: refused: no tasks/{task}-*.md on main")).into());
+        }
+        many => {
+            return Err(Refused(format!(
+                "worktree: refused: {} files match tasks/{task}-*.md on main: {}",
+                many.len(),
+                many.join(", ")
+            ))
+            .into());
+        }
+    };
+    let text = crate::precheck::show(root, "main", file)?.unwrap_or_default();
+    let state = crate::frontmatter::parse(&text)
+        .ok()
+        .and_then(|(m, _)| m.get("state").and_then(|v| v.as_str()).map(str::to_owned))
+        .unwrap_or_else(|| "without a state".to_owned());
+    if state != "ready" {
+        return Err(Refused(format!(
+            "worktree: refused: {task} is {state} on main; worktree new needs ready"
+        ))
+        .into());
+    }
+    Ok(())
+}
+
+/// Create the worktree for `spec` from `main`, after the `ready` check.
 pub fn create(root: &Path, spec: &Spec, seed: bool) -> Result<Info> {
+    require_ready_on_main(root, &spec.task)?;
+    add(root, spec, seed)
+}
+
+/// Unit-test fixtures of other modules (queue, join) whose toy task files are in later states:
+/// the worktree without the `ready` check. Compiled into tests only, so the binary has no
+/// bypass (D-026 R8).
+#[cfg(test)]
+pub fn create_unchecked_for_tests(root: &Path, spec: &Spec, seed: bool) -> Result<Info> {
+    add(root, spec, seed)
+}
+
+fn add(root: &Path, spec: &Spec, seed: bool) -> Result<Info> {
     let path = spec.path(root);
     let branch = spec.branch();
     if path.exists() {
@@ -192,6 +246,40 @@ mod tests {
         );
         assert!(Spec::parse("T-1", false).is_err());
         assert!(Spec::parse("feature", false).is_err());
+    }
+
+    #[test]
+    fn create_needs_ready_on_main() {
+        let repo = testrepo::init(
+            "wt-ready",
+            &[(
+                "tasks/T-008-x.md",
+                "---\nid: T-008\nstate: specified\n---\n",
+            )],
+        );
+        let root = repo.path();
+        let spec = Spec::parse("T-008", false).unwrap();
+        let e = create(root, &spec, false).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "worktree: refused: T-008 is specified on main; worktree new needs ready"
+        );
+        assert!(!spec.path(root).exists());
+        assert!(!branch_exists(root, "task/T-008").unwrap());
+        // Ready only in the working copy: still refused.
+        testrepo::write(
+            root,
+            "tasks/T-008-x.md",
+            "---\nid: T-008\nstate: ready\n---\n",
+        );
+        assert!(create(root, &spec, false).is_err());
+        let e = create(root, &Spec::parse("T-009", true).unwrap(), false).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "worktree: refused: no tasks/T-009-*.md on main"
+        );
+        testrepo::g(root, &["commit", "-qam", "ready"]);
+        assert!(create(root, &Spec::parse("T-008-tests", false).unwrap(), false).is_ok());
     }
 
     #[test]

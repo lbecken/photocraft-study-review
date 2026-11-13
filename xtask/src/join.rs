@@ -1,4 +1,5 @@
-//! `cargo xtask join T-NNN` and `cargo xtask join --revert-check T-NNN` (METHODOLOGY §6).
+//! `cargo xtask join T-NNN` (METHODOLOGY §6) and the optional diagnostic
+//! `cargo xtask join --revert-check T-NNN`.
 //!
 //! Acceptance tests are the integration-test targets `acceptance_tNNN*` (files
 //! `crates/*/tests/acceptance_tNNN*.rs`, `apps/*/tests/…` or `xtask/tests/…`) written on
@@ -8,7 +9,8 @@
 //! `join`:
 //! 1. **base**: in `.worktrees/T-NNN-tests` (base + tests only) build and run the acceptance
 //!    tests. `base_fail_kind` is `fails` (every acceptance test compiles and fails), `does_not_compile`
-//!    (no acceptance target compiles: weak evidence, the reviewer must run `--revert-check`),
+//!    (no acceptance target compiles: weak evidence, covered by the reviewer's mutation
+//!    spot-check, METHODOLOGY §6),
 //!    `mixed` (some do not compile, the rest fail), or `passes` (at least one passes on base:
 //!    the test proves nothing, so the join is refused and undone);
 //! 2. `impl_tests_green`: the implementer branch's own `cargo test --workspace` before the merge;
@@ -21,7 +23,8 @@
 //!    every acceptance test passes on the joined branch, and the gate is green. Acceptance
 //!    failures keep the merge: the task goes back to the implementer with the tests.
 //!
-//! `--revert-check [--revert <sha>…]`: in a temporary worktree at the joined `task/T-NNN`, revert
+//! `--revert-check [--revert <sha>…]` (an optional diagnostic, not part of the method since
+//! v1.1; no stub/logic commit split is required): in a temporary worktree at the joined `task/T-NNN`, revert
 //! the implementation commits (default: every non-merge commit in `main..task/T-NNN` that is not
 //! on `task/T-NNN-tests`; or the given ones, e.g. only the logic behind an API stub), keep the
 //! tests, run the acceptance tests and record whether they now fail (`revert_check` record).
@@ -573,7 +576,7 @@ mod tests {
         let repo = testrepo::init(tag, &files);
         let root = repo.path();
         for tests in [false, true] {
-            worktree::create(
+            worktree::create_unchecked_for_tests(
                 root,
                 &Spec {
                     task: "T-004".into(),
@@ -696,7 +699,7 @@ mod tests {
         );
         let root = repo.path();
         for tests in [false, true] {
-            worktree::create(
+            worktree::create_unchecked_for_tests(
                 root,
                 &Spec {
                     task: "T-009".into(),

@@ -852,7 +852,12 @@ mod tests {
                 ("gen.txt", "a\n"),
             ],
         );
-        worktree::create(repo.path(), &Spec::parse("T-001", false).unwrap(), false).unwrap();
+        worktree::create_unchecked_for_tests(
+            repo.path(),
+            &Spec::parse("T-001", false).unwrap(),
+            false,
+        )
+        .unwrap();
         repo
     }
 
@@ -1129,7 +1134,12 @@ mod tests {
                 ],
             );
             let root = repo.path();
-            worktree::create(root, &Spec::parse("T-001", false).unwrap(), false).unwrap();
+            worktree::create_unchecked_for_tests(
+                root,
+                &Spec::parse("T-001", false).unwrap(),
+                false,
+            )
+            .unwrap();
             testrepo::commit(
                 &root.join(".worktrees/T-001"),
                 "m",
@@ -1169,7 +1179,12 @@ mod tests {
                     ("lib/Cargo.toml", "[package]\nname = \"lib\"\n"),
                 ],
             );
-            worktree::create(repo.path(), &Spec::parse("T-001", false).unwrap(), false).unwrap();
+            worktree::create_unchecked_for_tests(
+                repo.path(),
+                &Spec::parse("T-001", false).unwrap(),
+                false,
+            )
+            .unwrap();
             repo
         };
         for (path, content) in [
@@ -1265,7 +1280,12 @@ mod tests {
                     ("app/Cargo.toml", &manifest("")),
                 ],
             );
-            worktree::create(repo.path(), &Spec::parse("T-001", false).unwrap(), false).unwrap();
+            worktree::create_unchecked_for_tests(
+                repo.path(),
+                &Spec::parse("T-001", false).unwrap(),
+                false,
+            )
+            .unwrap();
             repo
         };
         // (R4) Cargo.lock or a dependency table in a low task: `dependencies`.
@@ -1355,7 +1375,8 @@ mod tests {
             ],
         );
         let root = repo.path();
-        worktree::create(root, &Spec::parse("T-001", false).unwrap(), false).unwrap();
+        worktree::create_unchecked_for_tests(root, &Spec::parse("T-001", false).unwrap(), false)
+            .unwrap();
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "b", &[("items/b", ""), ("gen.txt", "a\nb\n")]);
         testrepo::commit(root, "c", &[("items/c", ""), ("gen.txt", "a\nc\n")]);

@@ -63,6 +63,25 @@ impl StepResult {
     }
 }
 
+/// A refusal: printed as its one line on stderr, exit 1, nothing written (T-013 Interface).
+/// The text carries its own prefix (`metrics: refused: …`, `worktree: refused: …`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Refused(pub String);
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let one: Vec<&str> = self
+            .0
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        f.write_str(&one.join("; "))
+    }
+}
+
+impl std::error::Error for Refused {}
+
 /// The workspace root: the nearest ancestor of the current directory whose `Cargo.toml`
 /// declares `[workspace]`.
 pub fn repo_root() -> Result<PathBuf> {
