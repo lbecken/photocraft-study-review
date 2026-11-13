@@ -2,7 +2,7 @@
 id: T-010
 title: "Expose line access and position conversion as read-only document commands"
 tier: medium            # ADR-0002: new commands in one command group, in-memory reads only; adding a command is not a contract change; no persistence, process, gate, security or dependency criterion
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: [text.lines, text.positions]
 depends_on: [T-032]     # D-041: reason enum + generated kind list
@@ -179,6 +179,11 @@ Director rulings on the builders' pre-code checks (2026-11-13, decision D-059; q
 - q3 (stale sentence). D-2's remark that the task adds an error-kind line to `docs/control-protocol.md` is struck; that file is not touched (Pinned (b), AC-6).
 - q4 (`doc` parameter). `doc` has the same schema as in the existing doc commands (an unsigned integer, as `doc.info` takes it); `doc: 0` is refused with `no_such_document`, not `invalid_params`.
 - q5 (existing unit test). The unit test `describe_lists_doc_commands_with_mutating_flag` in `crates/kiln-commands/src/doc.rs` is updated by the implementer to include the two commands; its hard-coded number of doc commands becomes a check that the expected names are present, so later tasks do not edit it (logged under golden rule 4).
+Director rulings after review round 1 (2026-11-13, decision D-064; review `reviews/T-010-r1.md`, run R-113: no defect, one test gap, two nits):
+- t1 (test gap, test author). "Document id before position" for `doc.position` is tested with an out-of-range value in every unit the command accepts (`char`, `byte`, `utf16`, `line_col`), each with an unknown document id, through the API and the CLI; the reviewer's surviving mutant (a pre-check of a huge `char` value before the id lookup) must be caught.
+- t2 (nit, test author). The guard at `guard_t010.rs:164` that pins the `out_of_range` description is removed: the T-032 acceptance tests already pin that text, and "this task left the row alone" is a diff check the reviewer made (D-052).
+- t3 (nit). The repeated bound check near `doc.rs:959` stays; removing it changes no behaviour and is not worth an implementer round.
+- t4 (scorecard). The director ties `text.lines` and `text.positions` to the task's CLI-level acceptance tests on the task branch after the re-join (METHODOLOGY §5: `scorecard/` is the director's at join) and regenerates `docs/scorecard.md` there.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
