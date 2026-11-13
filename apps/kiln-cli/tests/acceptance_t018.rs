@@ -698,6 +698,8 @@ fn random_command(
                     m.anchor = anchor;
                     m.head = h;
                     m.typing_open = false;
+                    // A one-char insert may follow at the same place: a new undo step.
+                    *last_typed = typed;
                     reqs.push("cursor.set", params, Expect::Result(m.cursor(1)));
                 }
             }
@@ -712,6 +714,7 @@ fn random_command(
                 m.anchor = new_head;
             }
             m.typing_open = false;
+            *last_typed = typed;
             let params = match extend {
                 0 => json!({"doc": 1, "by": by, "forward": forward}),
                 1 => json!({"doc": 1, "by": by, "forward": forward, "extend": true}),
@@ -1299,7 +1302,7 @@ fn eol_texts() -> Vec<String> {
     .iter()
     .map(|s| (*s).to_owned())
     .collect();
-    let mut rng = Rng(0x7018_E01);
+    let mut rng = Rng(0x7018_0E01);
     for _ in 0..14 {
         texts.push(random_text(&mut rng, 2, 14));
     }

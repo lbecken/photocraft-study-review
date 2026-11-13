@@ -9,6 +9,7 @@
 //!
 //! On base this file does not compile (the API is new); the CLI tests in
 //! `apps/kiln-cli/tests/acceptance_t018.rs` fail there by assertion.
+#![cfg(test)]
 
 use std::ops::Range;
 
@@ -150,7 +151,10 @@ fn random_edits(rng: &mut Rng, text: &[char], near: &[usize]) -> Vec<(Range<usiz
     edits
 }
 
-fn as_refs(edits: &[(Range<usize>, String)]) -> Vec<(Range<usize>, &str)> {
+/// An edit list as `apply_edits` takes it.
+type Edits<'a> = Vec<(Range<usize>, &'a str)>;
+
+fn as_refs(edits: &[(Range<usize>, String)]) -> Edits<'_> {
     edits.iter().map(|(r, t)| (r.clone(), t.as_str())).collect()
 }
 
@@ -375,7 +379,7 @@ fn batch_edits_and_anchors() {
         index,
         len_chars: len,
     };
-    let invalid: Vec<(Vec<(Range<usize>, &str)>, BatchError)> = vec![
+    let invalid: Vec<(Edits, BatchError)> = vec![
         (
             vec![(2..3, "x"), (2..4, "y")],
             BatchError::Unordered { index: 1 },
@@ -418,14 +422,14 @@ fn batch_edits_and_anchors() {
             },
         ),
         (
-            vec![(5..3, "")],
+            vec![(Range { start: 5, end: 3 }, "")],
             BatchError::Edit {
                 index: 0,
                 error: EditError::InvertedRange { start: 5, end: 3 },
             },
         ),
         (
-            vec![(0..1, "x"), (3..2, "")],
+            vec![(0..1, "x"), (Range { start: 3, end: 2 }, "")],
             BatchError::Edit {
                 index: 1,
                 error: EditError::InvertedRange { start: 3, end: 2 },
