@@ -91,7 +91,10 @@ fn synopsis_block(doc: &str) -> Vec<String> {
         .take_while(|l| l.trim() != "```")
         .map(str::to_owned)
         .collect();
-    assert!(!block.is_empty(), "empty synopsis block under ## `kiln-cli`");
+    assert!(
+        !block.is_empty(),
+        "empty synopsis block under ## `kiln-cli`"
+    );
     block
 }
 
