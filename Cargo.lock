@@ -276,6 +276,8 @@ name = "kiln-cli"
 version = "0.0.0"
 dependencies = [
  "kiln-commands",
+ "kiln-control",
+ "kiln-workspace",
  "serde_json",
 ]
 
@@ -294,6 +296,11 @@ dependencies = [
 [[package]]
 name = "kiln-control"
 version = "0.0.0"
+dependencies = [
+ "kiln-commands",
+ "kiln-workspace",
+ "serde_json",
+]
 
 [[package]]
 name = "kiln-search"

@@ -26,6 +26,7 @@ publish = false
 kiln-text = { path = "crates/kiln-text" }
 kiln-workspace = { path = "crates/kiln-workspace" }
 kiln-commands = { path = "crates/kiln-commands" }
+kiln-control = { path = "crates/kiln-control" }
 kiln-ui = { path = "crates/kiln-ui" }
 # T-001 (D-1): rope storage for kiln-text. `cr_lines` without `unicode_lines` makes ropey break
 # lines on exactly LF, CRLF and lone CR, as the kiln-text API specifies.

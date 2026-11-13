@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 kiln-commands.workspace = true
+kiln-control.workspace = true
+kiln-workspace.workspace = true
 serde_json.workspace = true
 
 [lints]
