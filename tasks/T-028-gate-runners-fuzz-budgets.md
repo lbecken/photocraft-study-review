@@ -1,6 +1,6 @@
 ---
 id: T-028
-title: "Give the gate's fuzz and budgets steps a runner, and enforce the first latency budget: single-char edits in a 10 MB rope"
+title: "Give the gate's fuzz and budgets steps a runner, and enforce the first two budgets: single-char edits in a 10 MB rope, and a 50 MB open-edit-save through the built CLI"
 tier: high              # ADR-0002: gate paths (xtask/src, xtask/budgets.toml); approval row must contain `gate paths`
 state: draft
 owner_role: planner
@@ -9,8 +9,9 @@ depends_on: [T-009, T-013]   # both touch xtask/src (directory); runs after them
 touches:
   - xtask/src/registries.rs                 # GATE PATH: the runners
   - xtask/src/gate.rs                       # GATE PATH: only if the step dispatch must change
-  - xtask/budgets.toml                      # GATE PATH: register rope-edit-10mb
-  - crates/kiln-text/examples/budget_rope.rs   # the measuring program (product-side, not a gate path)
+  - xtask/budgets.toml                      # GATE PATH: register rope-edit-10mb and cli-roundtrip-50mb
+  - crates/kiln-text/examples/budget_rope.rs   # measuring program 1 (product-side, not a gate path)
+  - apps/kiln-cli/examples/budget_roundtrip.rs # measuring program 2: drives the built kiln-cli binary
   - docs/development.md                     # gate table rows `fuzz`, `budgets`; "Other registries"
 budget_tokens: 850000   # high (v1.1)
 iteration: 1
@@ -57,11 +58,24 @@ name = "rope-edit-10mb"
 description = "…"
 command = ["cargo", "run", "--release", "--locked", "-q", "-p", "kiln-text", "--example", "budget_rope"]
 timeout_s = 600
-metric = "p99_edit_us"
+metric = "median_edit_us"
 unit = "us"
-max = 250                          # PROPOSED (Question Q-4 of the iteration plan)
+max = 200                          # ≈ 5 × the iteration-0 measurement (director, R-060)
 attempts = 3                       # 1..=5
+
+[[target]]
+name = "cli-roundtrip-50mb"
+description = "kiln-cli run: open a 50 MB file, one edit, save; whole process wall time"
+prepare = ["cargo", "build", "--release", "--locked", "-q", "-p", "kiln-cli"]   # optional key: run once before the attempts
+command = ["cargo", "run", "--release", "--locked", "-q", "-p", "kiln-cli", "--example", "budget_roundtrip"]
+timeout_s = 900
+metric = "roundtrip_ms"
+unit = "ms"
+max = 1500                         # ≈ 5 × the iteration-0 measurement (director, R-060)
+attempts = 3
 ```
+`prepare` (optional, argv) runs once per target before the first attempt with the same
+`timeout_s`; its failure is FAIL with reason `prepare`.
 
 ### Output protocol (what a target program prints)
 The last non-empty stdout line must be one JSON object.
@@ -75,7 +89,7 @@ The last non-empty stdout line must be one JSON object.
   wrong-typed field, a wrong metric name) is FAIL. The detail shows the target name, the reason
   and the last 20 lines of stderr.
 - An empty registry stays EMPTY, as today. Each target's detail line shows its result, e.g.
-  `rope-edit-10mb: p99_edit_us 41.2 ≤ 250 (attempt 1/3)` or `commands-random-params: 3000
+  `rope-edit-10mb: median_edit_us 31.0 ≤ 200 (attempt 1/3)` or `commands-random-params: 3000
   cases, 0 failures`.
 
 ### The measuring program (`crates/kiln-text/examples/budget_rope.rs`)
@@ -86,8 +100,28 @@ It uses only `kiln_text::Buffer`'s public API on `main` when this task lands.
   `delete(p..p+1)`. The positions come from the same LCG modulo the current length; a delete
   position that would split a CRLF moves one char left.
 - Time each operation with `std::time::Instant`. Print
-  `{"metric":"p99_edit_us","value":<p99>,"median_us":…,"max_us":…,"ops":2000,"len_chars":…}`.
+  `{"metric":"median_edit_us","value":<median>,"p99_us":…,"max_us":…,"ops":2000,"len_chars":…}`.
   This tooling is outside L0–L4 behaviour, so the clock is allowed here.
+
+### The measuring program (`apps/kiln-cli/examples/budget_roundtrip.rs`)
+- Generate, by the same LCG, a Rust-like file of exactly 52,428,800 bytes (LF lines of 1–100
+  ASCII chars) in `<root>/target/budget-roundtrip/` (created fresh; nothing outside `target/`).
+  Write the script `{"id":1,"command":"doc.open","params":{"path":"big.rs"}}`, then a
+  `doc.insert` of `"x"` at offset 26,214,400, then `doc.save`.
+- Run `<root>/target/release/kiln-cli run s.jsonl --root <dir>`, built by `prepare` (the
+  example finds the root from `CARGO_MANIFEST_DIR`). It is spawned with a 300 s timeout, and the
+  wall time is measured from spawn to exit.
+- Check exit 0, three `ok:true` lines, and that the file is 52,428,801 bytes. Otherwise it exits
+  1 with the reason on stderr.
+- Print `{"metric":"roundtrip_ms","value":<ms>,"bytes":52428801}`. Delete the directory.
+
+### Budget values (director, R-060)
+Both maxima are about **five times** the iteration-0 evaluator's release-build measurements
+(`evaluations/iter-0.md` "Measurements"): 0.04 ms median per edit command → 200 µs, and
+0.28–0.34 s for open + edit + save of a 50 MB file → 1,500 ms. The purpose is to catch
+**order-of-magnitude regressions on any machine** (sandbox, CI, a loaded 4-core box), not to tune
+performance. A budget is never raised to get green (golden rule 4); a change needs a
+retrospective decision.
 
 ## Pinned
 - (a) FAIL reasons as listed; per target, the first reason wins in the order config → spawn →
@@ -108,21 +142,21 @@ It uses only `kiln_text::Buffer`'s public API on `main` when this task lands.
   the log as a golden-rule-4 disclosure. The EMPTY half stays. `docs/development.md` rows for
   `fuzz`/`budgets` change.
 - (g) Worked example: the iteration-0 evaluator measured 1,000 single-char inserts in a 50 MB
-  file through `kiln-cli control` (release) at median 0.04 ms, p99 0.09 ms
-  (`evaluations/iter-0.md` "Measurements"). The 250 µs budget is about 2.8× that p99, measured
-  at the protocol level, which is heavier than the Buffer level. A buffer that copies its text
-  per edit (a `String`) would need about 10 MB of memmove per edit, about 1 ms (INFERRED, not
-  measured), so the budget separates a rope from a flat string. The implementer records the
+  file through `kiln-cli control` (release) at median 0.04 ms, p99 0.09 ms, and open + edit +
+  save at 0.28–0.34 s (`evaluations/iter-0.md` "Measurements"). Hence 200 µs and 1,500 ms. A
+  buffer that copies its text per edit (a `String`) would need about 10 MB of memmove per edit,
+  roughly 1 ms (INFERRED, not measured), so the rope budget still separates a rope from a flat
+  string. The implementer records the
   measured median, p99 and max on the bootstrap machine in the log and in `docs/development.md`.
-- (h) Evaluator call (`text.rope`): `cargo xtask budgets` prints `PASS budgets` with the
-  measured `p99_edit_us`. The evaluator may also run the example itself. Question Q-4 asks
-  whether a second target measured through `kiln_control::Host` is wanted.
+- (h) Evaluator call (`text.rope`): `cargo xtask budgets` prints `PASS budgets` with both
+  measured values. That is accepted as the public check for this item (director, R-060 answer 3).
+  The evaluator may also run either example itself.
 
 ## Acceptance criteria
 In `xtask/tests/`, driving the xtask binary in temporary roots with hand-written registries
 whose commands are small shell scripts (`sh -c 'printf …'`).
 - AC-1 (fuzz judgement): each of these gives FAIL with the pinned reason: exit 0 with a
-  passing line; exit 1 with a passing line; `failures: 1`; `self_test: "failed"`; `cases` below
+  exit 1 with a passing line; `failures: 1`; `self_test: "failed"`; `cases` below
   `min_cases`; no JSON line; a 10 s sleep with `timeout_s = 1` (killed; the step returns within
   5 s). A correct line with exit 0 gives PASS. An empty registry gives EMPTY. Oracle: exact
   value.
@@ -132,7 +166,7 @@ whose commands are small shell scripts (`sh -c 'printf …'`).
 - AC-3 (config strictness): an unknown key, a duplicate name, `attempts = 0`, `timeout_s = 0`,
   or a missing `command` gives FAIL naming the file and the key. Oracle: exact value.
 - AC-4 (`text.rope`, gate CLI): in the repository, `cargo xtask budgets` runs `rope-edit-10mb`
-  and passes. Its detail shows `p99_edit_us` and the attempt. The example's output line has
+  and `cli-roundtrip-50mb` and passes. Its detail shows both metrics and the attempts. The example's output line has
   `len_chars` ≥ 10,000,000 and `ops: 2000`. Oracle: the enforced budget.
 - AC-5 (budget discriminates): the example run against a test-only flat-`String` buffer
   exceeds the registered `max`, or at least its p99 is more than 3× the rope's in the same run.
@@ -147,8 +181,7 @@ whose commands are small shell scripts (`sh -c 'printf …'`).
 Also `xtask::acceptance_t028::{fuzz_judgement, budget_judgement, registry_config_is_strict}`.
 
 ## Out of scope and implementer notes
-- The command-fuzz program and its registration (T-029); further budgets (open-50MB, protocol
-  latency: Q-4); trend tracking.
+- The command-fuzz program and its registration (T-029); further budgets; trend tracking.
 - Gate time: the release build of `kiln-text` + `ropey` adds a few seconds cold. Record the
   measured `cargo xtask ci` wall time before and after in `docs/development.md`.
 - Your tests: unit tests in `xtask/src/registries.rs`.
@@ -171,6 +204,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   because they own `xtask/src` as a directory in their touches. Unsure: whether
   `cargo xtask budgets` counts as the "CLI" for the per-item AC rule (Q-4). · gate attempts: 0
   · missing context: none · next: director.
+- 2026-11-13 · R-060 · draft · did: applied answer 3. Added the second target `cli-roundtrip-50mb` (built CLI, 50 MB open + one edit + save), with an optional `prepare` key so the release binary is built first. Both maxima are about 5× the iteration-0 measurements: median 0.04 ms → 200 µs (metric changed to `median_edit_us`), 0.3 s → 1,500 ms. The purpose (order-of-magnitude regressions on any machine) is stated in the spec. Fixed an AC-1 slip (a correct line with exit 0 was listed among the FAIL cases). Touches gain `apps/kiln-cli/examples/budget_roundtrip.rs`, which is disjoint from T-007/T-011/T-024 (`src/main.rs`). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
