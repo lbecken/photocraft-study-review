@@ -594,6 +594,60 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   fmt, clippy, layers, ui-commands, hygiene, schema, scorecard, test (551 passed), no-skip all
   PASS; fuzz and budgets EMPTY) · not run: macOS; the test author's acceptance tests (not
   visible) · missing context: none · next: join.
+- 2026-11-13T16:25Z · R-132 · in_progress (rework after review r1; rulings v4–v8, D-072/D-074, read
+  in main's copy) · did: inherited R-130's uncommitted `disk.rs` (no mutation or debug change left
+  in it; `current_root` re-resolved the stored canonical root per call and compared (device,
+  inode)); committed it as `a2b12ea4f6dc20d0e84b1e77e69a7ec90bcbc145`. Kept that approach (v4/v8:
+  re-validate on every call) and REPAIRED it twice. (1) Inode reuse: removing the root frees its
+  inode and a new directory gets the same number at once on this file system (`rmdir r; mkdir r`
+  ×3 gave the same inode each time); reproduced through `kiln-cli control`: `rm -r root; mkdir
+  outside/x; ln -s outside/x root` → `doc.open secret.txt` ok and a save wrote into `outside/x`
+  with R-130's code. Fix (`333626e4f5261b00785562a5915f068e21f79089`): `DiskFs` holds the root
+  directory open (`fs::File`, read-only) for its life so the inode cannot be reused; it is ONLY
+  an identity anchor, nothing is looked up through it, every walk starts from the path resolved
+  again, so v8's objection to "holding the directory" (saving into the moved-aside directory)
+  does not apply: after a swap every request is still refused. If the root cannot be opened (no
+  read permission) the handle is `None` and the reuse case is not excluded (documented in code).
+  NOTE for the director: the R-132 dispatch correction said "do not introduce a held directory
+  handle"; I kept it because without it v8's pinned observable fails in the reproduced case
+  above; it is the `_root_handle` field and the two lines in `DiskFs::new` of `333626e`, and
+  removing it makes `root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside` fail.
+  (2) v8 says "the path given at construction"; R-130 re-resolved the canonical path, so a root
+  given as `rootlink -> root` and later re-pointed at another directory kept working in the old
+  root. Now (`b989803f5b9b5b930fa63037851763873c8de736`) the given path, made absolute
+  (`std::path::absolute`, symlinks kept), is resolved again each call; a link that follows the
+  moved root keeps working; AC-1/AC-5 roots through a link work. Renamed/removed root with
+  nothing in place: `OutsideRoot` for every path (`canonicalize` fails), nothing read or written;
+  if the directory comes back to the path, the session works again. Still racy within one call
+  (D-3, accepted): the root check, the walk and the open/rename are separate system calls, so a
+  root, component or file swapped in between can reach outside, leave a temp file, or block on a
+  FIFO. v7: link target ending in `/` pushes a directory requirement (R-130's `DirMark`); a file
+  there is `NotFound`, a directory `NotAFile`, below it works. v5/v6/v4 docs in
+  `docs/protocol/paths.md`: root paragraph (root is the directory; once the root path stops
+  leading to it, every path `outside_root`, incl. saves of documents opened before); FIFO
+  sentence limited to a FIFO present when checked, with pointer to Residual limits; "nothing
+  outside … no temporary file" qualified "unless the file system is changed while the request
+  runs"; dangling-link sentence narrowed per v6 plus the out-and-back caveat; trailing-slash
+  sentence; "changes between two requests are always caught" kept and extended to the root and
+  its ancestors (now true). Unit tests (disk.rs): `root_replaced_by_a_symlink_between_requests_is_outside`,
+  `parent_replaced_by_a_symlink_between_requests_is_outside`,
+  `link_target_with_trailing_slash_requires_a_directory` (R-130), new
+  `root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside`,
+  `root_given_through_a_link_that_is_retargeted`. Mutations, each applied alone then reverted
+  (`git diff` checked equal to pre-mutation): `current_root` returns the stored path unchecked →
+  2 swap tests fail; inode comparison dropped → same 2 fail; `DirMark` not pushed → trailing-slash
+  test fails; handle not held → reuse test fails (3/3 runs; depends on the file system reusing
+  inodes); canonical instead of given path → retarget test fails. Exploit through `kiln-cli
+  control` (`timeout 20`, each response awaited ≤ 5 s), fresh dirs under `/tmp`, deleted after:
+  head `4847ac69c97945047d773a7f9e08255768bc764e` build: root swap and parent swap → open+save ok,
+  `outside/secret.txt` = `PWNED s3cr3t-content`; final build: `outside_root` at open and save
+  (`cannot save f.txt: resolves outside the root`, `dirty:true`), outside sha256 + listing
+  identical, no `.kiln-tmp-*`; reuse case refused. · gate attempts: 1 (last: green, 11 steps:
+  fmt, clippy, layers, ui-commands, hygiene, schema, scorecard, test 568 passed, no-skip, fuzz
+  EMPTY, budgets EMPTY) · not run: the test author's v4/v8 tests (not visible to me); macOS;
+  non-root permission cases (root without read permission → no handle) · missing context: v8
+  arrived on main during the run (read it) · next: director; join with the test author's
+  branch, review round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T13:36Z · R-120 · ready · did: wrote the tests from the spec alone against base `ba35ac03cf3e7bba99340628042fa75453083d9b` (implementer branch not read). Files: `crates/kiln-workspace/tests/acceptance_t008.rs` (6), `crates/kiln-workspace/tests/guard_t008.rs` (1), `apps/kiln-cli/tests/acceptance_t008_cli.rs` (5); item `scorecard/items/ws.path-confinement.toml` with the spec's 10 claimed tests, `docs/scorecard.md` regenerated. Fixtures: fresh `work/` under `std::env::temp_dir()` per test (root, outside, rootx, the spec's links), each escape first read through `std::fs` to show the outside bytes are reachable, whole-`work/` snapshot (type, link target, bytes) compared after every refusal; every FIFO/socket/device call runs on a thread with a 5 s limit (the FIFO is then released), every `kiln-cli` process is killed after 10 s. Criterion → tests → result on base:
