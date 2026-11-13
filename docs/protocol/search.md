@@ -141,6 +141,15 @@ before any matching: a bad template is refused even when nothing matches.
 - A pattern the `regex` crate does not accept (syntax, its size limits, nesting deeper than
   250) is refused.
 
+A pattern may have at most 1,000 chars and, in regex mode, at most 100 capture groups.
+These limits do not bound the time a search takes: a counted repetition is short to write
+but can be slow to run. Measured with a release build on texts of 1,000,000 chars,
+`[ab]{5000}[^ab]` (15 chars, no match) took 41 to 42 s, `[ab]{3000}` (10 chars, 333 matches)
+12 s and `([ab]*)` repeated 100 times (700 chars, one match) 5.6 to 5.8 s. Kiln sets no time
+limit on a search. (Elapsed time of `kiln-cli run` minus that of a `doc.open`-only script, two
+runs each, on a 4-core machine running other builds at the same time; measured figures, not
+bounds.)
+
 ## Refusals
 
 Checked in this order; the first failure is reported and nothing changes (not the text, the

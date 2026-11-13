@@ -769,6 +769,15 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   what it names, so I did not copy S4 and did not reword it. With 700 the rest holds on my
   release build (T1 ≈ 42 s, T2 ≈ 12 s, T3 ≈ 5.8 s; `[ab]{5000}[^ab]` is 15 chars and
   `[ab]{3000}` 10 chars with 333 matches, as stated). Which wording goes in?
+- 2026-11-13T23:10Z · R-177 · ready · did: acknowledged D-106 (director's ruling on my R-173
+  QUESTION, read in the primary checkout's copy of this file): accept. Copied S4 into
+  `docs/protocol/search.md` (Limits) with "700 chars" and my R-173 release figures (T1 41 to
+  42 s, T2 12 s, T3 5.6 to 5.8 s) and their conditions (elapsed time minus the doc.open-only
+  script, two runs each, 4-core machine running other builds, not bounds); the two sentences
+  added beyond Pinned stay. No new measurement, no release rebuild. Checks: `cargo fmt --all
+  --check` clean; `cargo xtask hygiene` PASS (reviews ok; session-paths: 418 tracked files clean). · gate attempts: 0
+  (full gate left to the join, as instructed) · not run: `cargo xtask ci` · missing context:
+  none · next: director: join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
