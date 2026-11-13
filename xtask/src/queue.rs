@@ -16,7 +16,7 @@
 //! 6. run main's gate in the worktree (and, if the task changes a gate path, the task's own gate
 //!    too; both must pass);
 //! 7. only if green, fast-forward `main` to it (never push);
-//! 8. append one record to `metrics/queue.jsonl`.
+//! 8. append one record to `metrics/queue.jsonl` and commit it on main (D-030 R12).
 
 use std::collections::BTreeSet;
 use std::io::Write as _;
@@ -251,12 +251,12 @@ impl Drop for Restore<'_> {
 }
 
 /// Whether `p` (in the primary checkout) is an evidence file whose uncommitted change is
-/// refused at `ledger` (D-026 R6, director clarification): everything under `metrics/` except
-/// the queue's own output log `metrics/queue.jsonl`, `docs/decisions.md`, `tasks/`, `reviews/`
-/// and the two policy files.
+/// refused at `ledger` (D-026 R6, D-027, D-030 R12): everything under `metrics/` (the queue now
+/// commits its own `metrics/queue.jsonl` records, so there is no exemption), `docs/decisions.md`,
+/// `tasks/`, `reviews/` and the two policy files.
 pub fn is_evidence_path(p: &str) -> bool {
     let p = p.trim_matches('"');
-    (crate::policy::path_under(p, "metrics") && p != "metrics/queue.jsonl")
+    crate::policy::path_under(p, "metrics")
         || p == "docs/decisions.md"
         || crate::policy::path_under(p, "tasks")
         || crate::policy::path_under(p, "reviews")
@@ -733,7 +733,43 @@ pub fn run(
     drop(restore);
     record.ended_at = format_utc(now_secs(clock));
     append_jsonl(&metrics, &record)?;
+    commit_record(root, &record)?;
     Ok(record)
+}
+
+/// D-030 R12: commit the record just appended, on main, as a commit that touches only
+/// `metrics/queue.jsonl` (subject `queue: record T-NNN <result>`). It lands after the
+/// fast-forward of a merge (so the merged record's `head_sha` is its parent and the record
+/// commit is a ledger commit for the next `main-history` check) and after a non-merged outcome
+/// alike; the task branch is never touched by it.
+fn commit_record(root: &Path, record: &QueueRecord) -> Result<()> {
+    let path = "metrics/queue.jsonl";
+    git(root, &["add", "--", path])?;
+    let msg = format!(
+        "queue: record {} {}\n\nTask: {}\nRole: director",
+        record.task, record.result, record.task
+    );
+    let mut args: Vec<&str> = Vec::new();
+    // A repository without an identity (fresh toy repositories) still gets its record.
+    let has_identity = git_try(root, &["config", "user.email"])?.0
+        || std::env::var_os("GIT_COMMITTER_EMAIL").is_some();
+    if !has_identity {
+        args.extend([
+            "-c",
+            "user.name=kiln queue",
+            "-c",
+            "user.email=queue@kiln.invalid",
+        ]);
+    }
+    args.extend(["commit", "--quiet", "--no-verify", "-m", &msg, "--", path]);
+    let (ok, _, err) = git_try(root, &args)?;
+    if !ok {
+        bail!(
+            "the record was appended to {path} but committing it on main failed (commit it by hand): {}",
+            err.trim()
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -831,6 +867,29 @@ mod tests {
         )
     }
 
+    /// D-030 R12: every commit on main after `since` is a queue record commit: subject
+    /// `queue: record T-001 <result>`, touching only `metrics/queue.jsonl`; and the committed
+    /// file equals the working copy (nothing left uncommitted).
+    fn assert_only_records_since(root: &Path, since: &str) {
+        let commits = g(root, &["rev-list", &format!("{since}..main")]);
+        for c in commits.lines() {
+            let subject = g(root, &["log", "-1", "--format=%s", c]);
+            assert!(
+                subject.starts_with("queue: record T-001 "),
+                "{c}: {subject}"
+            );
+            let files = g(root, &["diff", "--name-only", &format!("{c}^"), c]);
+            assert_eq!(files, "metrics/queue.jsonl", "{c}");
+        }
+        assert!(
+            dirty_paths(root, Some("never/"))
+                .unwrap()
+                .iter()
+                .all(|l| !l.contains("metrics/")),
+            "record committed"
+        );
+    }
+
     fn read_records(root: &Path) -> Vec<serde_json::Value> {
         read_jsonl(&root.join("metrics/queue.jsonl")).unwrap()
     }
@@ -857,7 +916,8 @@ mod tests {
             ("main", base.as_str())
         );
         assert!(r.regenerated.is_empty());
-        assert_eq!(rev(root, "main").unwrap(), r.head_sha);
+        assert_eq!(rev(root, "main^").unwrap(), r.head_sha);
+        assert_only_records_since(root, &r.head_sha);
         assert!(root.join("feature.txt").is_file() && root.join("STATE.md").is_file());
         assert_eq!(r.started_at, "2026-10-26T07:33:20Z");
         assert_eq!(r.ended_at, "2026-10-26T07:33:24Z");
@@ -904,7 +964,7 @@ mod tests {
             (r1.result.as_str(), r1.failed_step.as_deref(), r1.attempt),
             ("gate_failed", Some("test"), 1)
         );
-        assert_eq!(rev(root, "main").unwrap(), before);
+        assert_only_records_since(root, &before);
         assert_eq!(rev(&wt, "HEAD").unwrap(), head0);
         let r2 = run(root, "T-001", &clock(), &gate(true, false)).unwrap();
         assert_eq!((r2.result.as_str(), r2.attempt), ("merged", 2));
@@ -993,7 +1053,7 @@ mod tests {
         let r = run(root, "T-001", &clock(), &fake).unwrap();
         assert_eq!(r.failed_step.as_deref(), Some("task:test"));
         assert_eq!(*fake.calls.borrow(), ["build", "main", "own"]);
-        assert_eq!(rev(root, "main").unwrap(), before);
+        assert_only_records_since(root, &before);
         assert_eq!(rev(&wt, "HEAD").unwrap(), head0, "branch put back (R5)");
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(
@@ -1396,7 +1456,7 @@ mod tests {
             (r.result.as_str(), r.failed_step.as_deref()),
             ("conflict", Some("rebase"))
         );
-        assert_eq!(rev(root, "main").unwrap(), before);
+        assert_only_records_since(root, &before);
         assert_eq!(
             rev(&wt, "HEAD").unwrap(),
             task_head,
@@ -1421,7 +1481,7 @@ mod tests {
             std::fs::read_to_string(root.join("gen.txt")).unwrap(),
             "a\nb\nc\n"
         );
-        let msg = g(root, &["log", "-1", "--format=%B"]);
+        let msg = g(root, &["log", "-1", "--format=%B", "main^"]);
         assert_eq!(
             msg,
             "queue: regenerate generated files\n\nTask: T-001\nRole: director"
@@ -1443,7 +1503,7 @@ mod tests {
             (r.result.as_str(), r.failed_step.as_deref()),
             ("conflict", Some("rebase"))
         );
-        assert_eq!(rev(root, "main").unwrap(), main0);
+        assert_only_records_since(root, &main0);
         assert_eq!(rev(&wt, "HEAD").unwrap(), head0);
 
         let repo = setup("q-gen-fail");
@@ -1464,7 +1524,7 @@ mod tests {
             (r.result.as_str(), r.failed_step.as_deref()),
             ("conflict", Some("regenerate:gen.txt"))
         );
-        assert_eq!(rev(root, "main").unwrap(), main0);
+        assert_only_records_since(root, &main0);
         assert_eq!(rev(&wt, "HEAD").unwrap(), head0, "task branch restored");
         assert!(dirty_paths(&wt, None).unwrap().is_empty());
     }
@@ -1492,7 +1552,7 @@ mod tests {
             (r.result.as_str(), r.failed_step.as_deref()),
             ("conflict", Some("regenerate:gen.txt"))
         );
-        assert_eq!(rev(root, "main").unwrap(), main0);
+        assert_only_records_since(root, &main0);
         assert_eq!(rev(&wt, "HEAD").unwrap(), head0);
         assert!(dirty_paths(&wt, None).unwrap().is_empty());
     }
@@ -1776,8 +1836,26 @@ mod tests {
         ] {
             let c = testrepo::commit(root, "direct", &[(p, c)]);
             assert_refused(root, "main-history", &c);
+            // F15 / D-030 R12: a fake `merged` record cannot move the anchor: uncommitted it is
+            // refused at `ledger`, and only committed records are read.
+            let fake =
+                format!("{{\"task\":\"T-009\",\"result\":\"merged\",\"head_sha\":\"{c}\"}}\n");
+            let real = std::fs::read_to_string(root.join("metrics/queue.jsonl")).unwrap();
+            std::fs::write(root.join("metrics/queue.jsonl"), format!("{real}{fake}")).unwrap();
+            assert_refused(root, "ledger", "metrics/queue.jsonl");
+            std::fs::write(root.join("metrics/queue.jsonl"), real).unwrap();
             g(root, &["reset", "-q", "--hard", &mark]);
         }
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(r.result, "merged");
+        // The record commit after the merge is itself tolerated by the next main-history check.
+        assert_eq!(rev(root, "main^").unwrap(), r.head_sha);
+        assert_eq!(
+            g(root, &["log", "-1", "--format=%s"]),
+            "queue: record T-001 merged"
+        );
+        assert!(g(root, &["show", "main:metrics/queue.jsonl"]).contains(&r.head_sha));
+        testrepo::commit(&wt, "f3", &[("f2", "y")]);
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(r.result, "merged");
     }
@@ -1944,10 +2022,11 @@ mod tests {
                 None => std::fs::remove_file(root.join(p)).unwrap(),
             }
         }
+        // D-030 R12: no exemption for the queue's own log any more.
         testrepo::write(root, "metrics/queue.jsonl", "");
-        assert!(
-            is_evidence_path("metrics/tasks.jsonl") && !is_evidence_path("metrics/queue.jsonl")
-        );
+        assert_refused(root, "ledger", "metrics/queue.jsonl");
+        std::fs::remove_file(root.join("metrics/queue.jsonl")).unwrap();
+        assert!(is_evidence_path("metrics/tasks.jsonl") && is_evidence_path("metrics/queue.jsonl"));
         assert!(!is_evidence_path("docs/decisions.md.bak") && !is_evidence_path("STATE.md"));
         testrepo::write(root, "scratch.txt", "x");
         let e = run(root, "T-001", &clock(), &gate(true, true)).unwrap_err();

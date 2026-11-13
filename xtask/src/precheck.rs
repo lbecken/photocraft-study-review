@@ -3,10 +3,10 @@
 //! `approval`, `main-history` (the queue checks `ledger` before all of them).
 //!
 //! Every input is read from a committed tree (D-026 R6): **main's** (task file, policy files,
-//! `docs/decisions.md`, `metrics/tasks.jsonl`) or the task branch head's (its task-file copy,
+//! `docs/decisions.md`, `metrics/`) or the task branch head's (its task-file copy,
 //! review files, changed paths) — never from an uncommitted working-copy file, and never from
-//! the task branch's copy of a rule file. The `main-history` check reads the queue's own output
-//! log `metrics/queue.jsonl` as it is (not evidence). A failed check is a [`Refusal`]; nothing is
+//! the task branch's copy of a rule file; `main-history` reads the `merged` records of main's
+//! committed `metrics/queue.jsonl` (D-030 R12). A failed check is a [`Refusal`]; nothing is
 //! changed or written.
 
 use std::collections::BTreeMap;
@@ -927,11 +927,8 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
 
     // main-history
     const MH: &str = "main-history";
-    // The queue's own output log, not evidence (D-026 R6 clarification): read as it is.
-    let queue = or_refuse(
-        MH,
-        crate::util::read_jsonl(&root.join("metrics/queue.jsonl")),
-    )?;
+    // D-030 R12: `merged` records only from main's committed tree.
+    let queue = or_refuse(MH, committed_jsonl(root, "metrics/queue.jsonl"))?;
     let last_merged = queue
         .iter()
         .rev()

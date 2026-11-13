@@ -199,9 +199,10 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    commits beyond `main`;
 2. refuses at `ledger` (exit 1, one line, nothing changed) if the primary checkout has
    uncommitted changes — modified, staged or untracked — to an evidence file: anything under
-   `metrics/` except the queue's own output log `metrics/queue.jsonl`, `docs/decisions.md`,
-   `tasks/`, `reviews/`, `xtask/generated.toml` or `xtask/ledger.toml`. Evidence is read only
-   from main's committed tree, so commit the ledger on `main` first (D-026 R6, D-027);
+   `metrics/` (no exemption: the queue commits its own `metrics/queue.jsonl`, D-030 R12),
+   `docs/decisions.md`, `tasks/`, `reviews/`, `xtask/generated.toml` or `xtask/ledger.toml`.
+   Evidence is read only from main's committed tree, so commit the ledger on `main` first
+   (D-026 R6, D-027);
 3. runs the **preconditions** below; the first that fails is a refusal: exit 1, one stderr line
    `queue: refused: <check>: <reason>`, nothing changed and no record written;
 4. builds main's xtask from `base_sha` (= `main`) in a private build tree
@@ -229,7 +230,13 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    on the commit it pointed at before the run (`git rebase --abort`, `git reset --hard`,
    `git clean -d --force`; ignored files such as `target/` stay) and its worktree is clean, so
    the join and review evidence still names ancestors of the head and a re-queue needs no
-   re-join or re-review (D-026 R5). Then it appends to `metrics/queue.jsonl`:
+   re-join or re-review (D-026 R5). Then it appends to `metrics/queue.jsonl` and **commits that
+   record on main** (D-030 R12): one commit touching only `metrics/queue.jsonl`, subject
+   `queue: record T-NNN <result>` (`Task:`/`Role: director` lines). After a merge it sits on top
+   of the fast-forwarded head, so main is then `head_sha` plus the record commit; after any
+   other outcome it is the only change to main (the task branch is still put back, R5). A
+   refusal writes and commits nothing. The record commit is a ledger commit (`metrics/` is a
+   ledger path), so the next `main-history` check tolerates it:
 
 ```json
 {"task":"T-001","attempt":1,"started_at":"…Z","ended_at":"…Z","base_sha":"…","head_sha":"…",
@@ -255,7 +262,7 @@ JSON `{"passed": bool, "failed_step": string|null, …}`.
 | `gate-path` | a task whose changed paths include a **gate path** is tier high (D-026 R3). Gate paths: anything under `xtask/` or `.github/`; any path with a `.cargo` directory segment; any file named `build.rs`, `rust-toolchain.toml`, `rust-toolchain`, `clippy.toml`, `.clippy.toml`, `rustfmt.toml` or `.rustfmt.toml` (at any depth); any `Cargo.toml` whose `[lints]` table (including `lints.workspace`) or package `build` key the task adds, removes or changes; any file that a package `build` key names in main's tree or at the task head (a build script need not be called `build.rs`, D-030 R10); and the root `Cargo.toml` when the task changes its `[workspace.lints]`, `[workspace.metadata]` or any `[profile.*]` table. "The task changes" a value relative to main when the head's value differs from main's **and** from the merge base's, so a value main changed after the branch was made is not blamed on the task (the rebase brings main's); an unparsable manifest at the head always counts |
 | `dependencies` | a task whose changed paths include a `Cargo.lock` or a `Cargo.toml` whose dependency tables differ between the merge base and the head (`[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `[target.*]` forms, `[workspace.dependencies]`, `[patch.*]`, `[replace]`; a new manifest with any of them counts) is tier high; and for every changed `Cargo.lock`, no registry or git package of main's lock has a version at the task head that the task's own diff changed (head differs from main's and from the merge base's; path packages are not compared, D-027). A version that is only stale because main moved is replaced by the rebase or regeneration, and the rule runs again on the rebased tree before the gate (D-026 R4). A version change is allowed only for a tier-high task whose approval row (as for `approval`) contains the words `dependency versions` (D-030 R11); then it merges. Regeneration of a conflicted `Cargo.lock` never changes such versions (`regenerate:Cargo.lock`) |
 | `approval` | high: main's `docs/decisions.md` has a table row whose Decision cell begins with `Approve T-NNN` (D-2) followed by the cell's end or a character that cannot continue an id (so `Approve T-005-tests` does not approve T-005); for a task that changes gate paths, that same cell must also contain the words `gate paths` (D-026 R3). Only real Markdown table rows count: a header row with a `Decision` cell, then a delimiter row, then rows starting with `|` after at most three spaces — never lines in fenced code blocks, indented code, block quotes or HTML comments (D-026 R7) |
-| `main-history` | every commit on main's first-parent history after the newest `head_sha` of a `merged` record in `metrics/queue.jsonl` changes only ledger paths, respecting their mode; trivially true before the first merge |
+| `main-history` | every commit on main's first-parent history after the newest `head_sha` of a `merged` record in main's **committed** `metrics/queue.jsonl` (D-030 R12) changes only ledger paths, respecting their mode; trivially true before the first merge |
 
 **Allowed paths** (`touches` check): `p` is allowed if `p == t` or `p` starts with `t/` for an
 entry `t` of main's `touches` (a trailing `/` on `t` is ignored; `crates/a` allows
@@ -298,10 +305,20 @@ task branch is reset to its pre-queue head and `main` is unchanged. Regeneration
 such a conflict; a rebase without conflicts keeps the task's generated files as committed (its
 gate checks them).
 
-`metrics/queue.jsonl` is the queue's own output log: the queue appends to it in the working
-tree, it is exempt from the `ledger` and clean checks, and `main-history` reads it as it is. The
-director commits it with the other metrics records (a ledger path). Every other evidence file
-must be committed on `main` before a queue run (`ledger` above).
+`metrics/queue.jsonl` is written and committed by the queue itself (above); every other
+evidence file must be committed on `main` by the director before a queue run (`ledger` above).
+If committing the record fails (e.g. no git identity can be found), the queue reports an error
+and the uncommitted record makes the next run stop at `ledger` until it is committed by hand.
+
+### Accepted residual risks
+
+The queue defends against honest mistakes and corner-cutting, not a malicious agent (D-026).
+These risks are accepted (D-030) and not defended against:
+
+- cached dependency build artifacts can be tampered with;
+- gated code runs with the director's privileges;
+- acceptance tests edited after a review are not re-reviewed;
+- an approval row is not tied to a commit.
 
 This queue was introduced by T-005. T-005 itself was the last task queued by the old queue,
 which ran the task branch's own gate and checked none of the above.
