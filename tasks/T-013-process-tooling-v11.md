@@ -623,6 +623,33 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   tests. · missing context: none · next: join.
 <!-- end implementer log -->
 ### test author
+- 2026-11-13T04:05Z · R-059 · ready (worktree copy; in_progress on main) · did: read spec,
+  fixture and xtask sources; questions logged before writing tests · gate attempts: 0 · not
+  run: gate · missing context: see questions · next: write tests on the assumptions below.
+  QUESTION: Pinned (g) says the over-budget line is "over budget by 50000 tokens"; Interface (1)
+  and AC-4 give `T-NNN: over its ceiling <ceiling> by <sum - ceiling> tokens; the queue refuses
+  it without …`. Tests assert the Interface (1) text exactly. Proposed: strike the (g) wording.
+  QUESTION: Interface (4) pins no line format for "acceptance-caught defects by tier and arm",
+  "tokens per merged task" (without/with overhead) or "budget overruns". Tests assert: a line
+  starting `acceptance-caught defects: <total>` (today's prefix); the hand-computed integers
+  (no decimals) appear on report lines that name the tier/arm, or `overhead` for the
+  with-overhead value; `T-NNN (from T-MMM)` lines; `extend to: <N>|none` and
+  `within ceiling: yes|no` on a line naming the task. Proposed: pin exactly these.
+  QUESTION: AC-10 asks for "the exact line" but Interface (5) pins only `publish: refused:
+  <reason>` for an input under `docs/`, an existing task file, another uncommitted change in
+  `tasks/` and a malformed item. Tests assert exit 1, exactly one stderr line starting
+  `publish: refused: `, naming the offending path (for the malformed item: containing the toy
+  scorecard's own error text), and nothing changed. Proposed: that is the testable wording.
+  QUESTION: Interface (5) steps 1 and 4 say "regenerating docs/scorecard.md" / "the `scorecard`
+  command". Tests assume the checkout's own `cargo xtask scorecard` (as the queue's
+  `xtask/generated.toml` regeneration runs it), so a toy repository's toy scorecard decides;
+  an implementation that calls the tool's built-in scorecard module on the toy tree fails AC-9.
+  Proposed: "the command `xtask/generated.toml` lists for `docs/scorecard.md`".
+  QUESTION: AC-9 "main's first-parent log shows, in order" — tests assert the five subjects are
+  exactly the first-parent commits after main's pre-publish tip, in that order (no other commit
+  between). Proposed: say "exactly these five".
+  QUESTION: AC-11 says "PASS or EMPTY" on this repository's main; Interface (6) says the step is
+  never EMPTY. Tests require PASS (run on a clone of the tested commit, a toy repository).
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
