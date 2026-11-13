@@ -23,7 +23,8 @@
 //! Confinement (T-008, `docs/protocol/paths.md`):
 //! - The root is resolved once, at construction (`fs::canonicalize`; a root given as a symlink
 //!   to a directory is that directory), and that *directory* is the root: its device and inode
-//!   are kept. Every call resolves the stored root path again and walks from there only if it
+//!   are kept, and it is held open for the life of the `DiskFs` (so the inode number cannot be
+//!   reused by another directory after the root is removed). Every call resolves the stored root path again and walks from there only if it
 //!   still reaches that same directory; if the root path or a directory above it has been
 //!   replaced since (for example by a symlink to another directory), or leads nowhere, the
 //!   call is refused with `OutsideRoot` before anything else is looked at.
@@ -50,8 +51,7 @@
 //!   open or rename are separate system calls. Another process that changes the tree *during*
 //!   one call (for example swaps the root, a component or the file for a symlink, or the file
 //!   for a FIFO, between the walk and the open) can make that call reach outside the root or
-//!   block. A hard link inside the root to a
-//!   file outside cannot be detected by path.
+//!   block. A hard link inside the root to a file outside cannot be detected by path.
 //! - Documented limitations (D-014 (4)): because the content is swapped in as a new inode, a
 //!   hard link to the target keeps the old content (the link is split), the file's owner and
 //!   group become those of the saving process, and extended attributes and ACLs are not
@@ -91,6 +91,12 @@ pub struct DiskFs {
     /// Device and inode of the root directory at construction: the root *is* this directory,
     /// whatever later happens to the path that led to it.
     root_id: (u64, u64),
+    /// The root directory, held open (read-only, never read through) for as long as this
+    /// `DiskFs` lives, so that its inode cannot be freed and given to another directory: a
+    /// root removed and replaced by a link to a new directory that reused the inode number
+    /// would otherwise pass the `root_id` check. `None` only if the root cannot be opened
+    /// (no read permission); then that reuse is not excluded.
+    _root_handle: Option<fs::File>,
 }
 
 /// One step of the walk to a location.
@@ -147,10 +153,20 @@ impl DiskFs {
             _ => io_error(&placeholder(), &e),
         };
         match fs::metadata(root) {
-            Ok(meta) if meta.is_dir() => Ok(DiskFs {
-                root: fs::canonicalize(root).map_err(root_error)?,
-                root_id: (meta.dev(), meta.ino()),
-            }),
+            Ok(meta) if meta.is_dir() => {
+                let resolved = fs::canonicalize(root).map_err(root_error)?;
+                let handle = fs::File::open(&resolved).ok();
+                // The identity of the directory actually held, where there is one.
+                let held = handle.as_ref().and_then(|h| h.metadata().ok());
+                let id = held
+                    .as_ref()
+                    .map_or((meta.dev(), meta.ino()), |m| (m.dev(), m.ino()));
+                Ok(DiskFs {
+                    root: resolved,
+                    root_id: id,
+                    _root_handle: handle,
+                })
+            }
             Ok(_) => Err(VfsError::Io {
                 path: placeholder(),
                 kind: io::ErrorKind::NotADirectory,
@@ -162,7 +178,8 @@ impl DiskFs {
 
     /// The path at which the root directory is reached now: the stored root resolved again
     /// (`fs::canonicalize`), which must still be the directory found at construction (same
-    /// device and inode). If the root path, or a directory above it, has since been replaced
+    /// device and inode; the held handle keeps that inode from being reused). If the root
+    /// path, or a directory above it, has since been replaced
     /// (for example by a symlink to another directory), or no longer leads anywhere, every
     /// location is outside the root: `OutsideRoot`. If the root directory itself was only
     /// reached through a new path (an ancestor renamed and linked back), that path is used.
@@ -992,6 +1009,52 @@ mod tests {
                 .file_type()
                 .is_symlink()
         );
+    }
+
+    /// Ruling v4: the root removed (its inode freed unless held) and replaced by a link to a
+    /// new directory outside; on Linux file systems such a directory often gets the freed inode
+    /// number, which a bare (device, inode) comparison would take for the root.
+    #[test]
+    fn root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside() {
+        use std::os::unix::fs::symlink;
+        let work = swap_fixture("root-reuse");
+        let root = work.join("parent/root");
+        let mut fs_ = DiskFs::new(&root).unwrap();
+        let old = fs::metadata(&root).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+        // New directories outside; without the held handle one of them usually gets the root's
+        // freed inode number.
+        for i in 0..4 {
+            let d = work.join(format!("outside/x{i}"));
+            fs::create_dir(&d).unwrap();
+            fs::write(d.join("secret.txt"), b"s3cr3t-content\n").unwrap();
+            let m = fs::metadata(&d).unwrap();
+            assert!(
+                (m.dev(), m.ino()) != (old.dev(), old.ino()),
+                "the removed root's inode was reused while the DiskFs holds it"
+            );
+        }
+        symlink("../outside/x0", &root).unwrap();
+        assert_eq!(
+            fs::read(root.join("secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        let before = listing(&work.join("outside"));
+        for path in ["secret.txt", "new.txt"] {
+            let want = VfsError::OutsideRoot { path: p(path) };
+            assert_eq!(fs_.read(&p(path)), Err(want.clone()), "read {path}");
+            assert_eq!(
+                fs_.write_atomic(&p(path), b"PWNED"),
+                Err(want),
+                "write {path}"
+            );
+        }
+        assert_eq!(
+            fs::read(work.join("outside/x0/secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        assert_eq!(listing(&work.join("outside")), before);
+        assert_eq!(listing(&work.join("outside/x0")), ["secret.txt"]);
     }
 
     /// Review r1 N-1 (ruling v7): a link target ending in `/` requires a directory.

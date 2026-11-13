@@ -11,6 +11,15 @@ The root is resolved once, when the session starts: if `--root` is a symlink to 
 that directory is the root. A root that does not exist, or is not a directory, is refused as
 before (the messages end in `: not found` and `: not a directory`).
 
+The root is that directory, not its path; Kiln keeps it open while the session runs. Before
+each request Kiln resolves the root's path
+again and goes on only if it still leads to the same directory. If the root, or a directory
+above it, has since been replaced (for example by a symlink to another directory), every path
+of the request is outside the root and refused as `outside_root`; files in the other directory
+are neither read nor written. The same refusal is given while the root's path leads nowhere
+(the root renamed or removed with nothing in its place); if the directory comes back to that
+path, the session works there again.
+
 ## Lexical refusals (unchanged)
 
 Before the file system is consulted, a path is refused as `rejected` / `invalid_path` if it is
@@ -36,25 +45,32 @@ At open and at save (and whenever Kiln checks whether a file exists):
 
 - **A path whose location is outside the root is refused** as `rejected` / `outside_root`, with
   the message `cannot open <path>: resolves outside the root` or
-  `cannot save <path>: resolves outside the root`. Nothing outside the root is read, created,
-  replaced or removed, and no temporary file is left anywhere. This holds for links to files or
+  `cannot save <path>: resolves outside the root`. Unless the file system is changed while
+  the request runs (see Residual limits), nothing outside the root is read, created, replaced
+  or removed, and no temporary file is left anywhere. This holds for links to files or
   directories outside, absolute links, chains of links, links whose target uses `..` after a
-  link to a directory, and dangling links that point outside: a dangling link to a missing file
-  outside is `outside_root`, not `not_found`, so a refusal reveals nothing about what exists
-  outside the root.
+  link to a directory, and dangling links that point outside. A dangling link whose walk ends
+  outside the root is `outside_root`, not `not_found`. (Only the final location counts, so a
+  chain that leaves the root and comes back can show, by `not_found` versus `outside_root`,
+  whether a directory it passes through outside exists.)
 - **Symlinks whose location stays inside the root are followed.** A save through such a link
   replaces the file it leads to and keeps the link; a save through a dangling link inside the
   root creates its target, as a save of a new file does.
 - **Directories, FIFOs, sockets and devices are refused** as `rejected` / `not_a_file`
   (`cannot open <path>: not a regular file`, `cannot save <path>: not a regular file`), without
-  opening them, so a FIFO never makes a request wait. A refused save leaves the entry as it was.
+  opening them, so a FIFO present when the request is checked never makes it wait (a FIFO
+  swapped in while the request runs can; see Residual limits). A refused save leaves the entry
+  as it was.
 - **Each request is checked again.** What `doc.open` saw does not authorise a later
-  `doc.save`: if the file was replaced in between by a link that leads outside, or by a FIFO,
-  the save is refused, and the document stays modified.
+  `doc.save`: if the file, a directory on its path, the root or a directory above the root
+  was replaced in between by a link that leads outside, or the file by a FIFO, the save is
+  refused, and the document stays modified.
 
 When several of these apply, the first in this order is reported: `invalid_path`,
 `outside_root`, `not_found`, `not_a_file`, any other failure (`io_error`). A path that follows
-more than 40 symlinks is `io_error` (`too many levels of symbolic links`).
+more than 40 symlinks is `io_error` (`too many levels of symbolic links`). A link whose target
+ends in `/` must lead to a directory, as the kernel requires; a file reached that way is
+`not_found`.
 
 Messages name the path as given in the request, never the root, a host path or a link target.
 `doc.open` and `doc.save` refusals leave the session as it was (a failed `doc.save` keeps the
@@ -65,8 +81,11 @@ error object on stderr.
 
 - **Hard links.** A hard link inside the root to a file outside it is an ordinary file inside
   the root; it cannot be told apart by its path, and it is followed.
-- **Changes during a request.** The check and the following open or rename are separate steps.
-  A path changed by another process *while* a request runs (for example a directory swapped for
-  a symlink between the check and the write) can slip through, and a FIFO swapped in during that
-  window can make the request block. Changes made between two requests are always caught.
+- **Changes during a request.** The check of the root, the walk of the path and the following
+  open or rename are separate steps. A path changed by another process *while* a request runs
+  (for example the root, a directory or the file swapped for a symlink between the check and
+  the write) can slip through, so a file outside can be read or written and a temporary file
+  can be left behind, and a FIFO swapped in during that window can make the request block.
+  Changes made between two requests, to the path or to the root and the directories above it,
+  are always caught.
 - Unix only.
