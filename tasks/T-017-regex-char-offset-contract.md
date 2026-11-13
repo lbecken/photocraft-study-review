@@ -324,6 +324,17 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   nest assertion for s1 (e.g. with `(?:` groups); then gate again.
   NOTE: the group-heavy probe is under the memory limit but takes 190 s in debug on 1 MB. That
   is outside the Pinned (e) list, but T-022 (find in files) may care.
+- 2026-11-13T13:56Z · R-126 · rework after review r1 (D-070) · did: s4: rustdoc of
+  `find_all` (`src/regex.rs:271`) and the module `# Limits` docs (`src/regex.rs:39–43`) state
+  result memory ∝ matches × (groups + 1), ~2.4 kB/match at 100 groups, 2.40 GB measured for 100
+  empty groups on 1 MB, cap bounds the engine's working memory not the result, callers with
+  untrusted input must bound the search. s5: `src/regex.rs:45–48` says the 5 s bound covers
+  compiling and searching a non-matching text; a 100 kB pattern on a matching text takes longer
+  in the engine. s6: `tests/regex.rs:173` builds the expected engine error with
+  `RegexBuilder` + `multi_line` + `crlf`. No API, behaviour or timing-test change. Commit
+  871e28abb713d82f74cd3706fe33a99d5b264cd6. · gate attempts: 1 (last: green, 11 steps; fuzz and
+  budgets EMPTY; test 506 passed) · not run: s3 tests (test author's, at re-join) · missing
+  context: none · next: re-join, review round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T12:34Z · R-105 · ready · did: wrote `crates/kiln-search/tests/acceptance_t017.rs`
