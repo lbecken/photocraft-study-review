@@ -2,7 +2,7 @@
 id: T-017
 title: "Compile and run regular expressions in kiln-search with char-offset matches, line-aware anchors, pinned empty-match iteration and replacement expansion"
 tier: high              # ADR-0002: dependency-table change (kiln-search gains `regex`)
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # library contract; search.* items are claimed by T-021 through commands
 depends_on: []
@@ -229,6 +229,12 @@ Do not add `fancy-regex` or any other engine. Your tests: `src/regex.rs` unit te
 Director rulings on the test author's questions (2026-11-13, decision D-060; run R-105), given to both builders at once:
 - s1 (memory). Pinned (e) says a pathological pattern must "answer or error" — an aborted process is neither. The test author found that `(a)` repeated 34,000 times compiles and then makes `find_all` on a matching text try to allocate about 55 GB (capture slots × engine states). `Regex::new` therefore refuses a pattern with more than 100 explicit capture groups: `Err(PatternError { message })` with `message` exactly `the pattern has more than 100 capture groups`. The check runs after the crate has accepted the pattern (a pattern the crate rejects keeps the crate's error); exactly 100 groups is accepted. Acceptance tests: 100 groups accepted and usable, 101 refused with that message, the 34,000-group pattern refused within 5 s. The reviewer measures peak memory of `find_all` for adversarial patterns under the cap (group-heavy and state-heavy) and reports it; above about 1 GB is a finding.
 - s2 (error messages). A `PatternError` message for a pattern the crate rejects is the crate's message for the pattern text exactly as the caller gave it, built with builder options (multi-line, CRLF, case-insensitive) and no inline-flag prefix added to the pattern, then cut as Pinned says.
+Director rulings after review round 1 (2026-11-13, decision D-070; review `reviews/T-017-r1.md`, run R-117: no defect, one test gap, two spec gaps, two nits). Checked against `regex.rs` (the `find_all` loop, the four public functions) and the drafts of T-021 and T-022 before the builders got them:
+- s3 (finding 1, test gap; test author). A template reference is a group number only if it is all ASCII digits. Acceptance tests add references that `str::parse::<usize>` accepts but the rule refuses, at least `${+1}`: the result is `Err(TemplateError)` whose `reference` is the text between the braces. The reviewer's surviving mutant (the digits check dropped) must be killed.
+- s4 (finding 2, spec gap; corrects s1). s1 claimed the 100-group cap bounds memory. It bounds the engine's working memory, not the result: `find_all` returns every match with `group_count() + 1` slots, about 2.4 kB per match at 100 groups, so peak memory grows with matches × groups (2.40 GB measured for 100 empty groups on a 1 MB text). No cap on groups can bound a quantity that grows with the text. The API of this task does not change: `find_all` keeps its pinned signature, and a bounded search (stop after N matches, or count without building group slots) changes what `find_all`, `search.find`'s `total` and replace-all promise, which is new scope and not round-2 work. The implementer states the cost in the crate documentation of `find_all`: memory proportional to matches × (groups + 1), with the measured figure, and that a caller handling untrusted text or patterns must bound it. The bounded search is specified by the planner in T-021 before T-021 is dispatched.
+- s5 (finding 3, spec gap). Pinned (e)'s 5 s bound holds for compiling a pattern and for searching a text the pattern does not match; on a matching text a 100 kB pattern takes longer inside the regex crate itself. Pinned (e) is read that way, the crate documentation says so, and no test asserts a time for a 100 kB pattern on a matching text. A pattern-size or time limit for searches is T-021's to specify with the bounded search.
+- s6 (nit 4; implementer). The truncation oracle in `crates/kiln-search/tests/regex.rs` builds the expected engine error with the same builder options as the code (ruling s2).
+- s7 (nit 5). The wall-clock assertions stay, as Pinned (e) requires them; no change.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
