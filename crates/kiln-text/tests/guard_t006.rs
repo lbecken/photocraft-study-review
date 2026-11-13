@@ -45,7 +45,9 @@ fn rejected_edit_or_failed_redo_keeps_typing_group_open() {
         ("insert(99, \"x\")", |b| assert!(b.insert(99, "x").is_err())),
         ("delete(5..9)", |b| assert!(b.delete(5..9).is_err())),
         ("delete(2..1)", |b| assert!(b.delete(2..1).is_err())),
-        ("replace(7..7, \"y\")", |b| assert!(b.replace(7..7, "y").is_err())),
+        ("replace(7..7, \"y\")", |b| {
+            assert!(b.replace(7..7, "y").is_err())
+        }),
         ("redo()", |b| assert!(!b.redo())),
     ];
     let typed_with = |x: fn(&mut Buffer)| {
@@ -60,7 +62,11 @@ fn rejected_edit_or_failed_redo_keeps_typing_group_open() {
     };
     for (name, x) in interrupts {
         let b = typed_with(x);
-        assert_eq!(b.text(), "", "after {name}: one undo removes the whole group");
+        assert_eq!(
+            b.text(),
+            "",
+            "after {name}: one undo removes the whole group"
+        );
         assert!(!b.can_undo(), "after {name}: the group was one step");
     }
     // Control: a real group break makes "c" its own step, so the probe tells the two apart.
