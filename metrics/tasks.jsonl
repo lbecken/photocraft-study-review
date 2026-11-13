@@ -358,3 +358,4 @@
 {"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T17:20:44Z","from":"tests_joined","to":"in_progress"}
 {"kind":"transition","task":"T-035","iteration":1,"at":"2026-11-13T17:22:51Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-035","iteration":1,"at":"2026-11-13T17:22:51Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-035","iteration":1,"at":"2026-11-13T17:23:14Z","from":"ready","to":"in_progress"}
