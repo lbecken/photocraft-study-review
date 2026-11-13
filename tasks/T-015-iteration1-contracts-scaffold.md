@@ -1,21 +1,17 @@
 ---
 id: T-015
-title: "Lay the iteration-1 contracts before fan-out: a structured reason on every refusal, the error-kind list generated from code, one empty module per new command group, per-group session state, the external-tool trait and the internal dependency edges"
-tier: high              # ADR-0002: changes CommandError, a CHARTER §3 contract (ADR-0004 required); gate path xtask/generated.toml (approval row must contain `gate paths`); dependency edges
+title: "Scaffold iteration 1 before fan-out: one empty module per new command group, per-group session state, the external-tool trait with spawning off by default, glob re-exports in kiln-workspace, and the internal dependency edges"
+tier: high              # ADR-0002: dependency-table changes (workspace-internal edges + serde/serde_json in kiln-workspace); no gate path, no §3 contract
 state: draft
 owner_role: planner
-scorecard_items: []     # enabling task; T-007, T-008, T-010, T-030 and every feature task depend on it
-depends_on: []          # T-006 (shared doc.rs/registry.rs) is merged; ready to dispatch
+scorecard_items: []     # enabling task
+depends_on: []          # no touches held by T-013 (in flight) or any other in-flight task; dispatchable now
 touches:
-  - Cargo.toml                                   # [workspace.dependencies]: kiln-syntax, kiln-search path entries only
+  - Cargo.toml                                   # [workspace.dependencies]: kiln-syntax, kiln-search path entries only (not a gate path)
   - Cargo.lock                                   # generated
-  - xtask/generated.toml                         # GATE PATH: one [[generated]] entry for docs/protocol/error-kinds.md
   - crates/kiln-commands/Cargo.toml              # + kiln-syntax, kiln-search
-  - crates/kiln-commands/src/lib.rs              # mod lines, one register line per new group, re-exports of reasons
-  - crates/kiln-commands/src/registry.rs         # CommandError with reasons; Context slots, Parts, Docs, set_tools
-  - crates/kiln-commands/src/reason.rs           # new: RejectReason, InternalReason, descriptions, exhaustive lower-layer mappings
-  - crates/kiln-commands/src/doc.rs              # a reason at every refusal site (messages unchanged)
-  - crates/kiln-commands/src/buffer.rs           # a reason at every refusal site (messages unchanged)
+  - crates/kiln-commands/src/lib.rs              # mod lines + one register call per new group
+  - crates/kiln-commands/src/registry.rs         # Context: Docs, state slots, tools; Parts; set_tools, tools
   - crates/kiln-commands/src/cursor.rs           # new, empty group (T-018)
   - crates/kiln-commands/src/eol.rs              # new, empty group (T-018)
   - crates/kiln-commands/src/project.rs          # new, empty group (T-019)
@@ -30,166 +26,61 @@ touches:
   - crates/kiln-commands/src/palette.rs          # new, empty group (T-031)
   - crates/kiln-commands/src/keymap.rs           # new, empty group + KeymapState (T-031)
   - crates/kiln-commands/tests/scaffold.rs       # implementer's own integration tests
-  - crates/kiln-control/src/lib.rs               # kinds from reasons only; message classification removed
-  - crates/kiln-control/src/bin/kiln-error-kinds.rs   # new: renders the kind list
-  - crates/kiln-control/tests/error_kinds.rs     # implementer's own tests, incl. the currency test
   - crates/kiln-workspace/Cargo.toml             # + kiln-search, serde, serde_json
-  - crates/kiln-workspace/src/lib.rs             # pub mod lines + re-exports of tools
-  - crates/kiln-workspace/src/tools.rs           # new: the ToolRunner contract and NoTools
+  - crates/kiln-workspace/src/lib.rs             # pub mod lines; glob re-exports of vfs, document; tools re-exports
+  - crates/kiln-workspace/src/tools.rs           # new: ToolRunner contract, NoTools
   - crates/kiln-workspace/src/project.rs         # new, empty (T-019)
   - crates/kiln-workspace/src/find.rs            # new, empty (T-022)
   - crates/kiln-workspace/src/diagnostics.rs     # new, empty (T-024)
   - crates/kiln-workspace/src/format.rs          # new, empty (T-026)
-  - docs/protocol/error-kinds.md                 # new, generated
-  - docs/control-protocol.md                     # kinds table → pointer; kind-derivation sentence
-  - docs/commands.json                           # generated; must come out unchanged
+  - crates/kiln-workspace/tests/tools_contract.rs   # implementer's own integration tests
+  # docs/commands.json is generated and must come out byte-identical
 budget_tokens: 850000   # high (v1.1)
 iteration: 1
 found_by: planner
 origin_task: null
 ---
 
-# T-015 Lay the iteration-1 contracts before fan-out
+# T-015 Scaffold iteration 1 before fan-out
 
 ## Goal
-Claim C1 says to build contracts and checks first and fan agents out second (principle P1).
-Iteration 1 fans out to up to three builders, and every feature adds commands and refusals.
-Three things stand in the way today. First, `CommandError::Rejected` carries only a message,
-so `kiln-control` derives the protocol `kind` by matching message text, and a reworded message
-silently becomes `other`. Second, the kinds are a hand-written table in `docs/control-protocol.md`
-that every task adding a kind must edit. Third, `crates/kiln-commands/src/{lib,registry}.rs`
-and `crates/kiln-workspace/src/lib.rs` would be edited by every feature task. All of these break
-disjoint `touches` (METHODOLOGY §5.2) and CHARTER §3 decision 6.
+Iteration 1 fans out to up to three builders, and every feature adds commands, session state
+and lower-layer types. Today each feature would have to edit four shared files:
+- `crates/kiln-commands/src/lib.rs`: a `mod` line and a register call per group;
+- `registry.rs`: `Context` holds all session state;
+- `crates/kiln-workspace/src/lib.rs`: private modules plus named re-exports, so T-019's
+  `EntryKind`/`DirListing` and T-027's `SaveError`/`DiskState` would be unreachable;
+- the error representation.
 
-After this task:
-- (a) every refusal and internal error carries a structured reason set where it is raised, and
-  `kiln-control` reports `kind = reason.as_str()` without reading any message (part (d) of the
-  former T-030, moved here by the director, R-060);
-- (b) the list of `(code, kind, when)` pairs is **generated from code** into
-  `docs/protocol/error-kinds.md`, and a gate test fails when it is stale. A task that adds a
-  kind adds a reason variant and regenerates the file; nobody edits a list by hand;
-- (c) each later iteration-1 task owns its own new files ("Ownership");
-- (d) the external-tool contract exists with a default that never spawns;
-- (e) the dependency graph gains five edges.
+That breaks disjoint `touches` (METHODOLOGY §5.2) and CHARTER §3 decision 6. After this task
+each later iteration-1 task adds its commands, state and types in files only it owns
+("Ownership"). The default tool runner can never start a process (CHARTER §3 decision 4).
+`Registry::names()`, every command result, every protocol response and `docs/commands.json`
+are byte-identical to `main`.
 
-Every protocol response, `kiln-cli exec` error object and command result stays byte-identical.
+Split by the director (D-041, from spec check R-062, finding 28). How refusals are represented,
+and the list of error kinds, are task T-032 (ADR-0004). This task changes neither: no
+`CommandError` change, no new error kind, no `kiln-control` change, no `xtask/` path, no ADR.
+None of its `touches` is in the `touches` of T-013 (in flight), T-007, T-008, T-010 or T-011.
 
-**Gate path:** `xtask/generated.toml` (one entry). The approval row must contain `gate paths`.
-**CHARTER §3 contract change** (the registry's error interface, decision 2): ADR-0004
-(`docs/adr/0004-structured-refusal-reasons.md`, drafted in R-060, status proposed) must be
-accepted before `ready`.
-
-Reading list: CHARTER §3 (decisions 2, 4, 6); ADR-0002; draft ADR-0004;
-`crates/kiln-commands/src/{lib,registry,doc,buffer}.rs` (every `CommandError::rejected` and
-`Internal` site); `crates/kiln-control/src/lib.rs` (`Failure::from_command`, `rejected_kind`,
-`ERROR_KINDS`, `PANICKED`); `docs/control-protocol.md` "Error codes and kinds";
-`xtask/generated.toml`; `docs/development.md` "Generated-file conflicts".
+Reading list: CHARTER §3 (decisions 4, 6); ADR-0002; `crates/kiln-commands/src/{lib,registry}.rs`;
+`crates/kiln-workspace/src/lib.rs`; `tasks/spec-checks/T-015.md` findings 6–8, 12–14, 19, 30, 31.
 
 ## Interface
 
-### Structured reasons (`kiln_commands::…`, re-exported from the crate root; defined in `reason.rs`)
+### Ownership: the one line each later task adds
+Each new module has exactly this body, plus a `//!` doc naming the group and the task that
+fills it:
 ```rust
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RejectReason {
-    // today's kinds
-    InvalidPath, NoSuchDocument, UnsavedChanges, NotFound, NotAFile, IoError, DecodeError,
-    OutOfRange, InvertedRange, Other,
-    // iteration-1 feature kinds (T-016…T-031)
-    InvalidPattern, StalePreview, NoSuchPreview, ToolUnavailable, ToolNotFound, ToolTimeout,
-    ToolFailed, NoRecording, FormatError, ChangedOnDisk, InvalidKeymap,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InternalReason { ResultSchema, Panic, Other }
-impl RejectReason   { pub fn as_str(self) -> &'static str; pub fn description(self) -> &'static str; pub const ALL: &'static [RejectReason]; }
-impl InternalReason { pub fn as_str(self) -> &'static str; pub fn description(self) -> &'static str; pub const ALL: &'static [InternalReason]; }
-
-pub enum CommandError {                     // derives unchanged
-    UnknownCommand { message: String },                          // unchanged
-    InvalidParams { message: String, details: Vec<String> },     // unchanged
-    Rejected { reason: RejectReason, message: String },          // CHANGED: + reason
-    Internal { reason: InternalReason, message: String },        // CHANGED: + reason
-}
-impl CommandError {
-    pub fn rejected(reason: RejectReason, message: impl Into<String>) -> Self;   // CHANGED: reason required
-    /// `{"code":…,"message":…[,"details":…][,"reason":…]}`; `reason` only for rejected/internal.
-    pub fn to_json(&self) -> serde_json::Value;
-}
-// Display of CommandError: unchanged. Patterns `Rejected { .. }` / `Internal { .. }` keep compiling.
-```
-`ALL` lists the variants in declaration order. `as_str()` equals the serde form. `description`
-is the one-line "When" text of the generated list. For today's kinds it is the current table's
-cell, word for word. For the new ones it is the "When" column below.
-
-`T-008` adds `OutsideRoot` (`outside_root`) and `T-010` adds `NotABoundary`
-(`not_a_boundary`), each in `reason.rs` with its mapping row. This task must not add them.
-
-| New variant | Kind | When (description) | Raised by |
-|---|---|---|---|
-| `InvalidPattern` | `invalid_pattern` | the search pattern is empty or is not a valid regular expression | T-021, T-022, T-023 |
-| `StalePreview` | `stale_preview` | a file of a replace preview changed since the preview | T-022 |
-| `NoSuchPreview` | `no_such_preview` | no stored replace preview has this id | T-022 |
-| `ToolUnavailable` | `tool_unavailable` | external tools are off for this session (the default) | T-024, T-026 |
-| `ToolNotFound` | `tool_not_found` | the external tool's program was not found | T-024, T-026 |
-| `ToolTimeout` | `tool_timeout` | the external tool ran longer than its limit and was stopped | T-024, T-026 |
-| `ToolFailed` | `tool_failed` | the external tool failed or gave no usable result | T-024 |
-| `NoRecording` | `no_recording` | the replayed tool recording has no output for this request | T-024, T-026 |
-| `FormatError` | `format_error` | rustfmt could not format the text | T-026 |
-| `ChangedOnDisk` | `changed_on_disk` | the file changed or was removed on disk since it was read | T-027 |
-| `InvalidKeymap` | `invalid_keymap` | the keymap file is not valid | T-031 |
-
-### Where reasons come from (the specification for today's refusals)
-| Source | Reason |
-|---|---|
-| `RelPath::new` fails on a request path | `InvalidPath` |
-| no open document has the id | `NoSuchDocument` |
-| `doc.close` of a dirty document without `discard` | `UnsavedChanges` |
-| `VfsError::NotFound` / `NotAFile` / `Io` | `NotFound` / `NotAFile` / `IoError` |
-| `OpenError::Decode` | `DecodeError` |
-| `EditError::OutOfBounds` / `InvertedRange` | `OutOfRange` / `InvertedRange` |
-| `ToolError::Unavailable` / `NotFound` / `Timeout` / `Failed` / `NoRecording` | `ToolUnavailable` / `ToolNotFound` / `ToolTimeout` / `ToolFailed` / `NoRecording` |
-| result fails its schema | `InternalReason::ResultSchema` |
-| result does not serialize | `InternalReason::Other` |
-| a panic caught by the `kiln-control` host | `InternalReason::Panic` |
-
-The mappings live in `reason.rs` as functions over the lower layers' error enums (`VfsError`,
-`OpenError`, `EditError`, `ToolError`). Each is an exhaustive `match` **without a catch-all arm**,
-so a variant added later (T-008's `OutsideRoot`, T-010's position errors, T-027's `SaveError`)
-does not compile until it is mapped there. `RejectReason::Other` is produced by no current
-command.
-
-### Control protocol and the generated list
-- `kind` of a `rejected` / `internal` error = `reason.as_str()`. **No message text is consulted**
-  for any `code` or `kind`. `rejected_kind` and the per-document path tracking used only for it
-  are removed.
-- `crates/kiln-control/src/bin/kiln-error-kinds.rs` renders the list. It contains the
-  request-level pairs of `kiln-control` (`invalid_json`, `invalid_request`, `unknown_command`,
-  `invalid_params`, in today's order, with today's "When" and "id" cells), then every
-  `RejectReason::ALL`, then every `InternalReason::ALL`. Output: a Markdown file whose first
-  line is `<!-- generated by kiln-error-kinds; do not edit -->`, followed by a table
-  `| Code | Kind | When | id in the response |`. `--write <path>` writes it; no argument prints
-  it.
-- `xtask/generated.toml` gains, after the existing entries:
-  `path = "docs/protocol/error-kinds.md"`, `command = ["cargo", "run", "-q", "--locked", "-p",
-  "kiln-control", "--bin", "kiln-error-kinds", "--", "--write", "docs/protocol/error-kinds.md"]`.
-- Currency: a `kiln-control` test (`error_kinds_doc_is_current`, run by the gate's `test`
-  step) fails, naming the file, when the committed file differs from the rendering.
-- `docs/control-protocol.md` "Error codes and kinds": the table is replaced by one sentence
-  pointing to `docs/protocol/error-kinds.md`. The sentence "The `kind` of a `rejected` error is
-  currently derived … from the message" becomes: kinds come from a structured reason set where
-  the error is raised; the list is generated from code. Nothing else in the file changes.
-
-### Ownership: the file each later task adds its commands to
-Each module is created with this body plus a `//!` doc naming the group and its task:
-```rust
+use crate::registry::{Registry, RegistryError};
 pub(crate) fn register(_registry: &mut Registry) -> Result<(), RegistryError> { Ok(()) }
 ```
-`lib.rs` gets one `mod` line and one register call per module, in this order after
-`doc::register`: cursor, eol, project, syntax, search, find, nav, tool, diag, edit, fmt, palette,
-keymap. A later task adds `registry.register::<X>()?;` lines only inside its own module.
+`lib.rs` gets one `mod` line and one `x::register(&mut registry)?;` call per module, in this
+order after `doc::register`: cursor, eol, project, syntax, search, find, nav, tool, diag, edit,
+fmt, palette, keymap. A later task adds `registry.register::<X>()?;` lines **inside its own
+module's `register`**, and never edits `lib.rs` or `registry.rs`.
 
-| Module (`crates/kiln-commands/src/`) | Prefix | Filled by | State struct (in that module) |
+| Module (`crates/kiln-commands/src/`) | Prefix | Filled by | State struct (defined in that module) |
 |---|---|---|---|
 | `cursor.rs`, `eol.rs` | `cursor.*`, `eol.*` | T-018 | — |
 | `project.rs` | `project.*` | T-019 | — |
@@ -202,17 +93,28 @@ keymap. A later task adds `registry.register::<X>()?;` lines only inside its own
 | `fmt.rs` | `fmt.*` | T-026 | — |
 | `palette.rs`, `keymap.rs` | `palette.*`, `keymap.*` | T-031 | `KeymapState` (in `keymap.rs`) |
 
-State structs are created empty (`#[derive(Debug, Default)] pub(crate) struct XState {}`), and
-the owning task adds the fields. `crates/kiln-workspace/src/lib.rs` gets `pub mod project; pub
-mod find; pub mod tools; pub mod diagnostics; pub mod format;` and `pub use tools::{NoTools,
-Tool, ToolError, ToolOutput, ToolRequest, ToolRunner};`. The four non-tool modules contain only
-a `//!` doc.
+Each state struct is created as `#[derive(Debug, Default)] pub(crate) struct XState {}`, and
+its owning task adds the fields. A feature task maps its own lower-layer errors to refusals
+inside its own module (spec check, finding 12).
+
+`crates/kiln-workspace/src/lib.rs`:
+- `pub use vfs::{Vfs, VfsError};` becomes `pub use vfs::*;`, and `pub use document::{Document,
+  OpenError};` becomes `pub use document::*;`. A later `pub` item in those modules (T-019's
+  `EntryKind`, `DirEntry`, `DirListing`; T-027's `DiskState`, `SaveError`) is then exported
+  without editing `lib.rs`. Today both modules have no other `pub` items, so nothing new is
+  exported.
+- It adds `pub mod project; pub mod find; pub mod tools; pub mod diagnostics; pub mod format;`
+  and `pub use tools::{NoTools, Tool, ToolError, ToolOutput, ToolRequest, ToolRunner};`.
+  `project.rs`, `find.rs`, `diagnostics.rs` and `format.rs` contain only a `//!` doc.
 
 ### Session state (`registry.rs`)
 ```rust
 impl Context {
     /// NEW. Replace the external-tool runner. Every constructor starts with `NoTools`.
     pub fn set_tools(&mut self, tools: Box<dyn kiln_workspace::ToolRunner>);
+    /// NEW. The current runner (read-only; `Debug` names its type, e.g. `NoTools`).
+    pub fn tools(&self) -> &dyn kiln_workspace::ToolRunner;
+    /// NEW, crate-private. Disjoint mutable borrows of every part.
     pub(crate) fn parts(&mut self) -> Parts<'_>;
 }
 pub(crate) struct Parts<'a> {
@@ -225,22 +127,34 @@ pub(crate) struct Parts<'a> {
     pub(crate) diag: &'a mut crate::diag::DiagState,
     pub(crate) keymap: &'a mut crate::keymap::KeymapState,
 }
-pub(crate) struct Docs { /* open documents + id counter: ids 1, 2, 3, …, never reused */ }
+/// Owns the open documents and the id counter (ids 1, 2, 3, …, never reused).
+pub(crate) struct Docs { /* map + next id */ }
 impl Docs {
-    pub(crate) fn get(&self, id: u64) -> Result<&Document, CommandError>;     // NoSuchDocument
+    pub(crate) fn get(&self, id: u64) -> Result<&Document, CommandError>;     // today's `no open document {id}` refusal
     pub(crate) fn get_mut(&mut self, id: u64) -> Result<&mut Document, CommandError>;
     pub(crate) fn add(&mut self, doc: Document) -> u64;
     pub(crate) fn remove(&mut self, id: u64) -> Result<Document, CommandError>;
     pub(crate) fn id_of(&self, path: &RelPath) -> Option<u64>;
+    pub(crate) fn map(&self) -> &BTreeMap<u64, Document>;
     pub(crate) fn iter(&self) -> impl Iterator<Item = (u64, &Document)>;       // increasing id
 }
 ```
-The existing `Context` helpers keep their signatures and behaviour.
+- `Context` replaces its fields `docs` and `next_doc` by one `docs: Docs`. The existing helpers
+  keep their signatures and behaviour, and delegate: `doc` → `get`, `doc_mut` → `get_mut`,
+  `add_doc` → `add`, `remove_doc` → `remove`, and `docs()` returns `Docs::map()`.
+  `doc_and_vfs_mut` borrows `docs` and `vfs` disjointly. `doc.rs` and `buffer.rs` are not
+  edited.
+- **Dead code.** Under `clippy -D warnings`, `Parts`, `parts()`, and every `Docs` method and
+  state-struct field reached only through them, carry exactly
+  `#[allow(dead_code)] // slot for T-018…T-031 (T-015)`. It is `allow`, not `expect`, because
+  the tasks that start using them cannot edit `registry.rs`. Nothing else may carry a lint
+  attribute. The reviewer lists each one.
 
-### The external-tool contract (`crates/kiln-workspace/src/tools.rs`, CHARTER §3 decision 4)
+### The external-tool contract (`crates/kiln-workspace/src/tools.rs`)
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Tool { Cargo, Rustfmt }                    // as_str: "cargo", "rustfmt"
+pub enum Tool { Cargo, Rustfmt }
+impl Tool { pub fn as_str(self) -> &'static str; }           // "cargo", "rustfmt"
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ToolRequest { pub tool: Tool, pub args: Vec<String>, pub stdin: Option<String> }  // cwd = project root
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -250,111 +164,94 @@ pub enum ToolError {
     Unavailable, NotFound { tool: Tool }, Timeout { tool: Tool, seconds: u64 },
     Failed { tool: Tool, message: String }, NoRecording { tool: Tool },
 }
+impl std::fmt::Display for ToolError { … }
+impl std::error::Error for ToolError {}
 pub trait ToolRunner: std::fmt::Debug { fn run(&mut self, request: &ToolRequest) -> Result<ToolOutput, ToolError>; }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct NoTools;                                 // every run → Err(Unavailable)
+pub struct NoTools;                                          // every run → Err(ToolError::Unavailable)
 ```
-`Display` of `ToolError`, exactly:
+`Display`, exactly:
 - `external tools are off for this session (start with --tools real to run them)`;
 - `` `<tool>` was not found ``;
 - `` `<tool>` timed out after <seconds> s ``;
 - `` `<tool>` failed: <message> ``;
 - `` no recorded output for this `<tool>` request ``.
 
-No message contains a host path.
+`<tool>` is `as_str()`. No message contains a host path. There is no serde on these types;
+T-024 serialises recordings itself. `NoTools` is the only `ToolRunner` in non-test code after
+this task. The mapping of `ToolError` to refusal kinds is T-032's.
 
 ### Dependency edges
-- Root `[workspace.dependencies]`: `kiln-syntax` and `kiln-search` path entries, nothing else.
-- `kiln-commands`: `kiln-syntax.workspace = true`, `kiln-search.workspace = true`.
-- `kiln-workspace`: `kiln-search.workspace = true`, `serde.workspace = true`,
-  `serde_json.workspace = true` (already locked; used by T-022 and T-024).
+- Root `[workspace.dependencies]`: `kiln-syntax = { path = "crates/kiln-syntax" }`,
+  `kiln-search = { path = "crates/kiln-search" }`. No other change to the root manifest.
+- `kiln-commands` `[dependencies]`: `kiln-syntax.workspace = true`, `kiln-search.workspace = true`.
+- `kiln-workspace` `[dependencies]`: `kiln-search.workspace = true`, `serde.workspace = true`,
+  `serde_json.workspace = true`. These are already locked, so no registry package changes
+  version.
 
 ## Pinned
-- (a) Errors: the reason tables are the specification. Messages and codes are unchanged, and
-  precedence is unchanged in every command. `to_json` adds `"reason"` for `rejected`/`internal`
-  only; the protocol error object does not carry `reason` (its `kind` already does).
-- (b) Files: `docs/protocol/error-kinds.md` (generated; written only by the renderer);
-  `docs/control-protocol.md` (table → pointer, one sentence); `xtask/generated.toml` (one
-  entry). No runtime file access changes.
-- (c) Order of checks: unchanged everywhere.
-- (d) n/a: no path handling changes.
-- (e) Threat model:
-  - gate: the currency test cannot pass vacuously. It parses the committed file and fails
-    for a missing file, an extra row, a changed cell, or a reason without a row;
-  - integrity: no message text can change a `kind`; the reviewer checks that no mapping has
-    a catch-all arm;
-  - processes: `NoTools` is the default of every `Context`, so no command can spawn.
-- (f) Snapshots:
-  - `kiln-control` unit tests of `rejected_kind` go away with it. They are replaced by
-    mapping tests, disclosed under golden rule 4;
-  - `every_kind_is_documented` is replaced by the currency test plus "every pair the host can
-    produce is in the file";
-  - every `acceptance_t003*`, `acceptance_t004*` and guard test passes **unchanged**;
-  - `kiln-cli commands --schema` output is unchanged.
-- (g) Worked examples:
-  - today on `main`, `"no open document 1"` maps to `no_such_document` by message
-    (`rejected_kind`, `crates/kiln-control/src/lib.rs:357`). After this task,
-    `command_error_json("doc.open", &json!({}), &CommandError::rejected(RejectReason::NotFound,
-    "no open document 1"))` has `kind: "not_found"`;
-  - `kiln-cli exec doc.open '{"path":"x"}' --memory` prints the same bytes before and after
-    (exit 2).
+- (a) Errors: no command's refusal changes. `ToolError` texts are as above.
+- (b) Files: none at run time. `docs/commands.json` is byte-identical after `cargo xtask schema --write`.
+- (c) n/a: no new runtime logic beyond the `NoTools` refusal.
+- (d) n/a: no path handling.
+- (e) Threat model: no process can be started through any `Context`, `Host` or `kiln-cli`
+  session, because every constructor installs `NoTools` and `Host` exposes no setter (T-024
+  adds the opt-in). The reviewer checks that no other `ToolRunner` impl exists outside tests.
+- (f) Snapshots: none change. Every existing acceptance and guard test passes unchanged,
+  including `guard_t006.rs` (exact messages, which are kept) and `schema_lists_every_command`.
+- (g) Worked example: `kiln-cli commands | sha256sum`, and `kiln-cli exec doc.open
+  '{"path":"x"}' --memory` (stderr bytes, exit 2), are equal before and after.
 - (h) Scorecard: none.
 
 ## Acceptance criteria
-- AC-1 (reasons at their sources): through `standard_registry().execute`, each refusal row
-  gives exactly its reason:
-  - `doc.open "../x"`; `doc.text {"doc":9}`; a dirty `doc.close`;
-  - `doc.open` of a missing file, of a directory (`MemoryFs` with `d/x`, open `d`), and of
-    `b"\xff"`;
-  - `doc.insert` at offset 99; `doc.delete` 2..1; `buffer.insert` at offset 99;
-  - `doc.save` with `set_fail_writes(true)` → `IoError`.
+- AC-1 (no observable change, CLI; a **guard**, meant to pass on base):
+  `apps/kiln-cli/tests/guard_t015_cli.rs` runs fixed scripts through `kiln-cli run --memory`
+  and `kiln-cli exec`. The scripts are the worked example of `docs/control-protocol.md` with
+  its files, plus a ≥ 300-request fixed-seed session whose request paths come from
+  `[a-z0-9/._]` and never contain `: `. They also run `kiln-cli commands` and `commands
+  --schema`. The outputs equal constants embedded in the `.rs` file, recorded on base. Oracle:
+  differential against base output.
+- AC-2 (no process by default, Rust API): `format!("{:?}", ctx.tools()) == "NoTools"` for
+  `Context::new()`, `with_text`, `with_files`, `with_vfs`. After `set_tools(Box::new(R))`, `tools()`
+  is `R`'s `Debug`. `NoTools.run(&req)` is `Err(ToolError::Unavailable)` for requests of both
+  tools. For `kiln_control::Host`, the reviewer checks by reading that it builds its `Context`
+  through these constructors and never calls `set_tools`. Oracle: exact value; reading for
+  `Host`.
+- AC-3 (`ToolError` and `Tool`): each `Display` equals the pinned text; `Tool::as_str` is
+  exact; `ToolError` is a `std::error::Error`. Oracle: exact value.
+- AC-4 (re-exports): `kiln_workspace::{Vfs, VfsError, Document, OpenError, RelPath, MemoryFs,
+  DiskFs, Encoding, decode, encode, NoTools, Tool, ToolError, ToolOutput, ToolRequest,
+  ToolRunner}` and `kiln_workspace::tools::NoTools` all resolve in an integration test.
+  Oracle: compile + exact value.
+- AC-5 (layers and ownership): `cargo xtask layers` passes with the five new edges, and
+  `Registry::names()` is unchanged (exact value). The module list and order in `lib.rs`, and
+  the lint attributes, are checked by the reviewer by reading (spec check, finding 31). Oracle:
+  gate step + exact value + reading.
 
-  `to_json()["reason"] == as_str()`. Oracle: exact value.
-- AC-2 (kinds from reasons only): for every `RejectReason` `r`, `command_error_json` of
-  `rejected(r, m)` has `code: "rejected"` and `kind: r.as_str()`. This holds for `m` =
-  `"zz unrelated"` and for the worked-example message. The same holds for every
-  `InternalReason`, with `internal`. Oracle: exact value.
-- AC-3 (protocol bytes unchanged): every T-003/T-004 acceptance test passes unmodified. The
-  worked example of `docs/control-protocol.md` and a ≥ 300-request fixed-seed session through
-  `kiln-cli run` give byte-identical output to the base binary (recorded output committed with
-  the tests). Oracle: regression + differential.
-- AC-4 (generated list): the committed `docs/protocol/error-kinds.md` equals the rendering.
-  Its `rejected`/`internal` kinds are exactly `RejectReason::ALL`/`InternalReason::ALL`, each
-  serde form equals `as_str()`, and every pair the host produced in the T-004 kind tests is
-  present. With a variant added in a scratch copy, the currency test fails naming the file, and
-  running the `generated.toml` command makes it pass. `docs/control-protocol.md` has no kind
-  table. Oracle: exact value.
-- AC-5 (no process by default): `Context::new()`, `with_files`, `with_vfs` and both `Host`
-  constructors hold `NoTools`. `set_tools` replaces it, and a test runner sees the exact
-  requests sent through `parts().tools` (unit test). Oracle: exact value.
-- AC-6 (`ToolError` text and mapping): each `Display` is exact, and each variant maps to its
-  reason. Oracle: exact value.
-- AC-7 (layers and ownership): `cargo xtask layers` passes. Every module of the Ownership table
-  exists, is registered in the pinned order, and `Registry::names()` is unchanged. Oracle: gate
-  step + exact value.
-- AC-8 (panic kind): a panic is still `internal`/`panic` with message `` command `<name>`
-  panicked ``, now via `InternalReason::Panic`. The panic path itself is exercised by T-029's
-  fuzz self-test; here the reviewer checks it by reading. Oracle: reading + T-029.
+AC-2 to AC-4 fail on base only at compile time (weak evidence, METHODOLOGY §6). The reviewer's
+mutation spot-check makes up for it.
 
 ## Scorecard items and intended test names
-None. `crates/kiln-commands/tests/acceptance_t015.rs` (`refusals_carry_reasons_at_their_sources`,
-`internal_errors_carry_reasons`, `contexts_start_without_tools`, `tool_errors_display_and_map`),
-`crates/kiln-control/tests/acceptance_t015_control.rs` (`kinds_follow_reasons_not_messages`,
-`generated_kind_list_is_current_and_complete`), and `apps/kiln-cli/tests/acceptance_t015.rs`
-(`cli_output_is_byte_identical_to_base`). Distinct target names are used because of the
-join's per-name counting (T-009 (6)).
+None. Distinct target names: `crates/kiln-commands/tests/acceptance_t015.rs`
+(`contexts_start_without_tools`, `set_tools_replaces_the_runner`),
+`crates/kiln-workspace/tests/acceptance_t015_tools.rs` (`no_tools_never_runs`,
+`tool_error_texts_are_exact`, `workspace_reexports_resolve`) and
+`apps/kiln-cli/tests/guard_t015_cli.rs` (`cli_output_is_byte_identical_to_base`).
 
 ## Out of scope and implementer notes
-- `outside_root` (T-008), `not_a_boundary` (T-010); the error-cap follow-ups (T-030); any
-  command; any `ToolRunner` that spawns or replays (T-024); `list_dir` (T-019); `kiln-text`,
-  `kiln-syntax`, `kiln-search` sources.
-- `docs/development.md` ("Adding a command", the generated-files list) is not in `touches`
-  because T-013 holds it. The director updates it as a docs follow-up.
-- Determinism: nothing reads a clock or the environment.
+- Refusal reasons, kind derivation, error-kind list, `ToolError` → kind mapping: T-032. Any
+  command (T-018…T-031). A spawning or replaying runner, and `Host::set_tools`: T-024.
+  `list_dir`: T-019.
+- Do not put future fields into the state structs; each owning task designs its own.
+- `docs/development.md` "Adding a command" ("add it to your group's module") is a docs
+  follow-up for the director: that file is T-013's.
+- Your tests: `crates/kiln-commands/tests/scaffold.rs`, `crates/kiln-workspace/tests/tools_contract.rs`,
+  unit tests (including that a test runner installed with `set_tools` sees the exact requests
+  sent through `parts().tools`).
 
 ## Questions and rulings
-- R-060 (director): contracts first. This task absorbs T-030 part (d) and depends on nothing;
-  T-007, T-008 and T-010 depend on it and add their kinds as reason variants.
+- D-041 (director, R-066): split from the R-060 version. Part (d) of former T-030 and every
+  error-kind change move to T-032.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -364,24 +261,23 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### director
 <!-- end director log -->
 ### planner
-- 2026-11-13 · R-056 · (new) · did: planned this enabling task after reading
-  `kiln-commands/src`: two group modules, `lib.rs` registers each, `Context` lives in
-  `registry.rs`. Without it every feature would edit `lib.rs`, `registry.rs`, the kinds table
-  and `kiln-workspace/src/lib.rs`. · gate attempts: 0 · next: director.
-- 2026-11-13 · R-060 · draft · did: restructured per the director:
-  - absorbed T-030 part (d) (reasons on `CommandError`, kinds from reasons, the generated list
-    with a currency test and a `generated.toml` entry); the renderer is a `kiln-control`
-    binary, so `apps/kiln-cli/src/main.rs` stays out and T-011 is unaffected;
-  - removed `depends_on` T-030; `outside_root` and `not_a_boundary` are left to T-008 and
-    T-010;
-  - kept the 11 feature kinds;
-  - changed the `NoTools` message to name the opt-in flag (T-024's `--tools real`);
-  - drafted ADR-0004.
+- 2026-11-13 · R-056 · (new) · did: planned the enabling task. · gate attempts: 0 · next: director.
+- 2026-11-13 · R-060 · draft · did: absorbed T-030 part (d) (superseded by R-066). · gate attempts: 0.
+- 2026-11-13 · R-066 · draft · did: split per D-041. This task is the scaffold only and has no
+  T-013 overlap (T-013 touches `xtask/src`, `xtask/tests/acceptance_t005_support.rs`,
+  `docs/CHARTER.md`, `docs/development.md`, reviews). Resolved spec-check findings:
+  - 6: glob re-exports;
+  - 7: dead code, as `allow` with a fixed comment;
+  - 12: features map their own errors in their own module;
+  - 13: `Docs` owns map and counter, helpers delegate;
+  - 14: `Tool::as_str`, `Display`, `Error`;
+  - 15 and 19: AC-1 is the guard `guard_t015_cli.rs` with embedded constants, and the target
+    names are distinct;
+  - 30: `Context::tools()`;
+  - 31: module order by reading.
 
-  Tier high: §3 contract, gate path, dependency edges. It touches `doc.rs` and `registry.rs`
-  like T-006 (in flight), so dispatch after T-006 merges. `xtask/generated.toml` is in neither
-  T-009's nor T-013's `touches`. · gate attempts: 0 · missing context: none · next: director,
-  ADR-0004.
+  Tier high only for the dependency edges. Pinned (b)–(d) n/a: no runtime logic. · gate
+  attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
