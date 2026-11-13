@@ -133,7 +133,10 @@ fn contexts_start_without_tools() {
         // runner has `NoTools`'s size and alignment, which a runner that carries anything
         // (a root, a timeout, a recording) does not.
         assert_eq!(
-            (std::mem::size_of_val(runner), std::mem::align_of_val(runner)),
+            (
+                std::mem::size_of_val(runner),
+                std::mem::align_of_val(runner)
+            ),
             (
                 std::mem::size_of::<NoTools>(),
                 std::mem::align_of::<NoTools>()
