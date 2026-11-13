@@ -705,6 +705,13 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   dir and the redirected homes. If no built binary survives a run there, R13a cannot plant one.
   QUESTION: R13b result shape after a rebase (refusal vs record); I accept either.
   · gate attempts: 0 · missing context: none.
+- 2026-11-13 · R-046 · final join fixes · did: (1) `generated_only_conflict_is_regenerated_and_merged`
+  now finds the regeneration commit below the queue's record commits (R12) and still asserts its
+  subject/trailers and that it changes only `docs/scorecard.md`. (2) `lock_rule_applies_to_the_rebased_tree`
+  accepts a `dependencies` refusal or a `conflict` at `regenerate:Cargo.lock` whose stderr names
+  regdep 1.0.0 and 1.1.0 (director ruling). It still requires not merged, main's lock at 1.0.0 and the
+  branch restored. Both still fail on base by assertion; clippy and fmt pass. · gate attempts: 0 ·
+  missing context: none.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-028 · tests_joined (main) · did: review round 1 of 055821a → `reviews/T-005-r1.md`,

@@ -886,7 +886,19 @@ fn generated_only_conflict_is_regenerated_and_merged() {
         "Cargo.lock must not change"
     );
     assert_eq!(read(&r.root, "docs/commands.json"), COMMANDS_JSON);
-    let msg = git(&r.root, &["log", "-1", "--format=%B", "main"]);
+    // The regeneration commit is main's newest commit other than the queue's own record
+    // commits (D-030 R12), which may sit on top of it.
+    let regen = git(&r.root, &["rev-list", "--first-parent", "main"])
+        .lines()
+        .find(|c| {
+            git(
+                &r.root,
+                &["show", "--name-only", "--format=", "--no-renames", c],
+            ) != "metrics/queue.jsonl"
+        })
+        .unwrap_or_default()
+        .to_owned();
+    let msg = git(&r.root, &["log", "-1", "--format=%B", &regen]);
     let lines: Vec<&str> = msg.lines().map(str::trim).collect();
     for want in [
         "queue: regenerate generated files",
@@ -899,7 +911,7 @@ fn generated_only_conflict_is_regenerated_and_merged() {
         );
     }
     assert_eq!(
-        git(&r.root, &["show", "--name-only", "--format=", "main"]),
+        git(&r.root, &["show", "--name-only", "--format=", &regen]),
         "docs/scorecard.md"
     );
     // Idempotence: regenerating on merged main changes nothing.

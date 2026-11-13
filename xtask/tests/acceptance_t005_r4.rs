@@ -733,19 +733,24 @@ fn lock_rule_applies_to_the_rebased_tree() {
         .lines()
         .any(|l| l.starts_with("queue: refused: dependencies: "));
     let rec = r.queue_lines().get(records).cloned();
-    let recorded = rec.as_ref().is_some_and(|v| {
-        v["result"] != "merged"
-            && v["failed_step"]
-                .as_str()
-                .is_some_and(|f| f.contains("dependencies"))
-    });
+    // Or (director ruling, R-046): a failed regeneration of the lock, naming the package and
+    // both versions.
+    let failed_regen = rec
+        .as_ref()
+        .is_some_and(|v| v["result"] == "conflict" && v["failed_step"] == "regenerate:Cargo.lock")
+        && o.stderr
+            .lines()
+            .any(|l| l.contains("regdep") && l.contains("1.0.0") && l.contains("1.1.0"));
     assert!(
-        o.code != 0 && (refusal || recorded),
-        "T-030: the rebased lock bumps regdep; expected `dependencies` (exit {}, record {rec:?})\nstdout:\n{}\nstderr:\n{}",
+        o.code != 0 && (refusal || failed_regen),
+        "T-030: the rebased lock bumps regdep; expected a `dependencies` refusal or a `conflict` at `regenerate:Cargo.lock` naming regdep 1.0.0 -> 1.1.0 (exit {}, record {rec:?})\nstdout:\n{}\nstderr:\n{}",
         o.code,
         o.stdout,
         o.stderr
     );
+    if let Some(v) = &rec {
+        assert_ne!(v["result"], "merged", "record: {v}");
+    }
     r.assert_only_records_since(&main_before, "main before the run");
     assert_eq!(
         lock_version(&show(&r.root, "main", "Cargo.lock"), "regdep").as_deref(),
