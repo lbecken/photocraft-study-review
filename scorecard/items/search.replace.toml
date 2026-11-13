@@ -2,4 +2,10 @@ id = "search.replace"
 title = "Replace one or all matches in a buffer as a single undoable operation, with regex capture groups"
 crate = "kiln-search"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t021_cli::replace_all_matches_naive_model_and_undoes_in_one_step",
+    "kiln_cli::acceptance_t021_cli::replace_one_from_offset",
+    "kiln_cli::acceptance_t021_cli::replace_all_is_linear",
+    "kiln_cli::acceptance_t021_cli::search_memory_is_bounded",
+    "kiln_cli::acceptance_t021_cli::replace_reply_is_limited",
+]

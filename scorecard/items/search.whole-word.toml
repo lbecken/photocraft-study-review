@@ -2,4 +2,6 @@ id = "search.whole-word"
 title = "Whole-word option restricts matches to identifier boundaries"
 crate = "kiln-search"
 tier = "low"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t021_cli::whole_word_filters_at_identifier_boundaries",
+]

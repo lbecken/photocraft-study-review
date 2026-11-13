@@ -2,4 +2,7 @@ id = "search.literal"
 title = "Literal search in a buffer, case-sensitive and case-insensitive, agrees with a naive scan"
 crate = "kiln-search"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t021_cli::literal_find_matches_naive_scan",
+    "kiln_cli::acceptance_t021_cli::find_limit_counts_every_match",
+]

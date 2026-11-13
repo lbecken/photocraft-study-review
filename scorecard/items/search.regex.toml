@@ -2,4 +2,8 @@ id = "search.regex"
 title = "Regex search in a buffer with match ranges in char offsets; invalid patterns are reported"
 crate = "kiln-search"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t021_cli::regex_find_matches_naive_backtracker",
+    "kiln_cli::acceptance_t021_cli::invalid_patterns_are_reported",
+    "kiln_cli::acceptance_t021_cli::pattern_length_is_capped",
+]
