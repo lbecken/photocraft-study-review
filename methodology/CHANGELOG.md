@@ -4,6 +4,46 @@ Each version lists what changed and the evidence behind it. From v1.1 on, every 
 metric (file, field, value) or an incident (`INC-NNN`) from this repository; v1.0 cites the
 PhotoCraft study (`/home/user/photocraft-study/deliverables/`), because no Kiln data exists yet.
 
+## v1.2 — 2026-11-13
+
+Adopted by D-091 from retrospective 1 (`retrospectives/iter-1.md`, "retro-1"). Changes keep the
+numbers of retro-1's proposal table, which D-091 decides one by one; the evidence figures are
+retro-1's (commands there). Tooling for 1, 8, 9 and 10 is T-033, cut down to those parts; for 14
+it is T-041. Until they merge, the rules state an interim step.
+
+| # | What changed (METHODOLOGY § unless named) | Evidence (retro-1) | Claim |
+|---|---|---|---|
+| 1 | Planner runs and spec checks are booked to `iter-N`; a task's budget covers building and review only; until the tool has a role for it, a spec check is booked as role `planner` with a note beginning `spec check:` (§11, §13, planner brief, handoff template). | 354,110 tokens never booked (D-055); spec checks pushed T-015 and T-008 over budget (286,583; 271,944); T-017's overrun hidden; T-006 and T-014 overruns were planner bookings. | C6 |
+| 2 | When round 1 is `request-changes` at 75 % or more of the ceiling, the director writes an `Extend T-NNN to <N>` row before any rework run: N caps the rework, the row names the findings sent to follow-up, and rework that would pass N stops and is split (§11, §2.1). | 5 Extend rows at 100.2–102.3 % of spend, none changing anything; post-round-1 rework 2,194,642 tokens (24.6 %). | C6 |
+| 3 | Ceilings: high 1,100,000; medium 700,000 (provisional, three tasks); low 150,000 (§11, task template, planner brief). | p75 of builder and review runs: high 1,073,747, medium 665,024, low 116,752; 7 of 12 over the v1.1 ceilings. | C6 |
+| 4 | A ruling states observable behaviour, never a mechanism; a bound cites its measurement; each builder acknowledges a ruling in its log before acting on it (§2.1, all builder briefs, task template). | 14 ruling errors, 9 reached a builder, 9 caught by agents; 3 unmeasured bounds, 3 pinned mechanisms. | C7 |
+| 5 | A `docs/protocol/` sentence stating a guarantee or a limit is written in the spec's Pinned section with its evidence, and the implementer copies it; an implementer who has to write one the spec lacks records in its log the command and output that show it (D-091's addition) (§6, planner and implementer briefs, task template (i)). | 6 of 14 review defects and 3 of 3 round-2 defects were documentation sentences; at least 3 of the 6 came from text written for a ruling. | C4, C5 |
+| 6 | No test pins a message text, a whole document or a command list that a drafted task changes; "this task left X alone" is a reviewer's diff check (§6, builder briefs). | D-043, D-046 (two guards), D-052, D-069 (blocked run, 190,104 tokens), T-010 r1 nit 3. | C1 |
+| 7 | A spec written before its `depends_on` merged gets one spec check before dispatch, whatever its tier; builders do not repeat it (§5.7, §3, planner brief). Also accepted (D-091, from retro-1's budget section): a high-tier spec that bundles independent items is split before dispatch. | T-010, unchecked: both builders stopped, 226,395 tokens for 2 mismatches; checks found 16 blockers for 912,637; T-013 bundled seven items (2.11×). | C1, C6 |
+| 8 | The director alone edits `scorecard/`, at the join; the test author lists test names in its log; the join regenerates `docs/scorecard.md` (T-033) (§6, test-author brief). | 2 joins failed at `scorecard` (T-011, T-008); three documents disagreed (D-075). | C2 |
+| 9 | The join counts acceptance targets by path and refuses a failing record without `--acc-defects`; queue precondition refusals are written to `metrics/queue.jsonl` (T-033) (§6, §8, §13). | T-018 counted 6 of 12; 28 joins with `acc_defects` null, 2 failing joins unclassified; 2 refusals unrecorded. | C3 |
+| 10 | The revert check leaves the briefs and the methodology now, the `join --revert-check` command with T-033 (§6, §16, reviewer brief). | 5 run in iteration 1, 0 defects. | C3, C5 |
+| 12 | Resume after a usage-limit stop and schedule a resume at every such stop; after a container restart, `git status` in every worktree and relaunch fresh (§2.1, handoff template). | Rule and practice disagreed (D-038; handoff line 62); 6.8 h of 14.76 h idle; one stop with no check-in. | C7 |
+| 13 | "One `role: director` run per session" and the "Director cost" metric are dropped; the director's cost is stated as not measured; the handoff records each director session's start and end time (§2.1, §12, §13, handoff and retrospective templates, analyst brief). | 0 director records in two iterations; O-10. | C7 |
+| 14 | No CI run for a push that changes only ledger paths, as a task through the queue because `.github/` is a gate path (T-041) (§8). | About 128 CI runs (handoff; D-091 notes the run number had reached 203); 15 handoff/STATE-only commits. | C2 |
+| 16 | Iteration 2 is staged by ADR-0005: a first stage to the 60 % line, then the UI tasks (§14). | Exit criterion missed: 28 of 64 after the evaluation, 11 short. | C4 |
+| 17 | Review round 1 checks against the built binary every sentence the task adds or changes in `docs/` and every sentence elsewhere in `docs/protocol/`, `docs/control-protocol.md` and the generated `error_kinds` naming the same command, option or kind (§7, reviewer brief). | The evaluator found 4 mismatches no review found (D-090). | C4 |
+| 18 | A task that changes the CLI updates its synopsis and exit codes in `docs/control-protocol.md` (D-037's restriction lifted for those sections); only kinds a registered command can produce are published, how decided in T-038's spec (§6). | NEW-4 (T-011 told not to touch the file); NEW-2 (11 kinds of unbuilt features published). | C4 |
+
+Rejected and deferred: 11 (the queue writes the high-tier approval row from the review) is
+rejected, because the approval row is the control the owner chose and the director signs it as
+the owner's delegate; removing it is the owner's choice. 15 (ADR text for `docs/CHARTER.md`
+committed as ledger) is deferred, because the charter is not a ledger path for the queue's check
+of main's history and one occurrence does not justify the tool change; revisit at the second.
+
+Removed: the revert check; "one `role: director` run per session" and the "Director cost"
+metric; "relaunched fresh, never resumed"; the check of a ruling by a planner or reviewer run and
+the citing of its commit (planner and reviewer briefs' "checking a ruling", task template); the
+queue-time Extend interim; booking planner runs and spec checks to tasks; the test author's edit
+of scorecard items; interims for tooling T-013 delivered; open questions O-10 and O-13
+(answered); the duplicated low-tier line of §6 (§4 states it). Rules in `docs/development.md` and
+`AGENTS.md` follow through a low-tier task (D-091).
+
 ## v1.1 — 2026-11-13
 
 Adopted by D-035 from retrospective 0 (`retrospectives/iter-0.md`, "retro-0"); changes 1–15 are

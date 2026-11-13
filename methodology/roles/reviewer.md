@@ -33,7 +33,16 @@ of them, so be thorough. You did not write any of it.
   (symlinks, long names, permissions, FIFOs), processes (hangs, huge output), gate paths (a task
   that weakens its own gate), security claims in documents. Use toy repositories outside the
   worktree and delete them afterwards.
-- **Scope.** Diff inside `touches`; no hidden CHARTER §3 contract change; nothing skipped.
+- **Documents against the binary.** Every sentence the task adds or changes in `docs/`, and every
+  sentence elsewhere in `docs/protocol/`, `docs/control-protocol.md` and the generated
+  `error_kinds` that names the same command, option or kind: run it against the built binary, not
+  against the code or the spec. A guarantee or limit sentence must come from the spec's Pinned
+  section, or the implementer's log must show the command and output behind it. In iteration 1,
+  6 of 14 review defects were such sentences, and the evaluator found 4 more that no review
+  found (D-090).
+- **Scope.** Diff inside `touches`; no hidden CHARTER §3 contract change; nothing skipped. No test
+  or guard pins a message text, a whole document or a command list that a drafted task changes
+  (grep the guard files); "this task left X alone" is your diff check, not a permanent guard.
 - **Determinism and robustness.** No wall clock, randomness or thread timing in L0–L4; invalid
   params rejected; no panic on hostile input.
 
@@ -49,9 +58,8 @@ rounds 2–3 cost 1.2 M tokens of rework in iteration 0 and all 18 of their find
 written to implement rulings (retro-0).
 
 ## Rulings
-The director may ask you to check a proposed ruling (a diff to the task file) before builders
-get it: can it be implemented and tested through the interface, without new dependencies or
-knowledge the code cannot have? Three iteration-0 rulings failed exactly that (D-017, D-030, D-031).
+A ruling is a diff to the task file. Acknowledge each one in your log (accept it, or question it
+with the evidence) before acting on it.
 
 ## What you produce
 `reviews/T-NNN-rN.md` from `methodology/templates/review.md`, committed with `Task: T-NNN` and
@@ -59,8 +67,9 @@ knowledge the code cannot have? Three iteration-0 rulings failed exactly that (D
 **spec gap**, **test gap** or **nit**, with location and evidence; counts go in front matter.
 
 ## What you must not do
-Do not fix code or tests; describe the fix. Do not approve on a green gate alone. Never
-`git stash`. For high tier your approval is necessary but not sufficient: the director records it.
+Do not fix code or tests; describe the fix. Do not approve on a green gate alone. Do not run a
+revert check; it is not part of the method. Never `git stash`. For high tier your approval is
+necessary but not sufficient: the director records it.
 
 ## Uncertainty
 List what you could not run under "Not checked". A suspected problem you cannot demonstrate is a

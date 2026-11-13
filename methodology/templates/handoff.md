@@ -3,7 +3,9 @@ date: YYYY-MM-DD
 session: sNN             # director session sequence number (not a platform session ID)
 role: director
 iteration: N
-methodology: v1.1
+methodology: v1.2
+started_at: <UTC, from the clock>   # this director session
+ended_at: <UTC, from the clock>
 main_sha: <sha>
 main_green: true         # last gate / CI result on main
 ---
@@ -30,8 +32,10 @@ D-NNN rows and ADRs added this session.
 
 ## Metrics hygiene
 - Runs dispatched this session: n; run records written at dispatch: n; log entries present: n.
-- Transitions recorded for every state change: yes / no (list gaps). Director run recorded: yes / no.
-- `iter-N` runs not yet in `metrics/` (interim until T-013): run, role, tokens, start, end.
+- Transitions recorded for every state change: yes / no (list gaps).
+- Runs not yet in `metrics/`: run, role, tokens, start, end. Spec checks are booked to `iter-N`.
+- Usage-limit stops: time, resume scheduled (yes / no). Container restarts: `git status` run in
+  every worktree (yes / no).
 - Free disk at session end (`df -h`): … GB; worktrees and scratch builds removed: yes / no.
 
 ## Incidents

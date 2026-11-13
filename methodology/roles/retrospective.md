@@ -32,7 +32,7 @@ number must be reproducible by running a named command.
    spread with the sample size, by tier and by arm where the table says so. Where
    `cargo xtask metrics report` disagrees with the records, report both and say why (in
    iteration 0 it read only the first join, so it showed 0 acceptance-caught defects against 2
-   recorded). Director cost is a metric: if `role: director` runs are missing, that is a finding.
+   recorded). The director's cost is not measured (METHODOLOGY §13); do not report it as zero.
 3. **The experiment arm** (METHODOLOGY §6). Compare medium tasks with independent test authors
    (even ids) and with implementer-written tests (odd ids) on escaped defects, review findings
    by class, acceptance kill rate and tokens per merged task. State the sample per arm and
@@ -48,7 +48,8 @@ number must be reproducible by running a named command.
    director: its errors, and which were caught mechanically.
 7. **Proposed changes.** Each states the file and section, the change, the metric or incident
    that motivates it, the expected effect, how it will be checked, and which rule it lets the
-   director remove. Recalibrate the tier budgets (v1.1 rule: p75 of the tier, rounded up to 50k).
+   director remove. Recalibrate the tier budgets (p75 of the tier's builder and review runs, rounded
+   up to 50k).
 
 ## What you must not do
 Do not edit `methodology/`, task files, metrics or any other record: you propose, the director

@@ -26,7 +26,12 @@ One file, `tasks/T-NNN-slug.md` from `methodology/templates/task.md`, state left
   platform and file types; threat model for gate or security tasks; existing tests that pin a
   snapshot this task will change; every worked example **executed** against a naive model (the
   T-004 AC-9 example was wrong and both builders stopped on it, D-025); the public command the
-  evaluator will use for each scorecard item.
+  evaluator will use for each scorecard item; and every sentence the task adds to
+  `docs/protocol/` that states a guarantee or a limit, worded as the implementer will copy it,
+  with its evidence (a test, a measurement, or a command and its output). Six of fourteen review
+  defects in iteration 1 were documentation sentences wider than the code (retro-1).
+- **No brittle pins.** Ask for no test that pins a message text, a whole document or a command
+  list that a drafted task changes; "this task left X alone" is the reviewer's diff check.
 - **Acceptance criteria.** Behaviour an outside caller can observe, with its oracle. Every
   scorecard item gets at least one criterion observable through the CLI or control protocol;
   Rust-API criteria are extra. Three iteration-0 items could not be confirmed for lack of one
@@ -37,17 +42,20 @@ One file, `tasks/T-NNN-slug.md` from `methodology/templates/task.md`, state left
   T-003 (D-020). Paths in `touches` that are gate paths (anything under `xtask/` or `.github/`,
   build scripts, lint or toolchain files: the list is in `docs/development.md`) are named as
   such in the Goal, because they make the task high and the approval row must say `gate paths`.
-- **Budget** from the tier (high 850k, medium 500k, low 150k), `depends_on`, **Out of scope**.
+- **Budget** from the tier (high 1,100,000, medium 700,000, low 150,000; building and review
+  runs only), `depends_on`, **Out of scope**.
 
 If the request needs a CHARTER §3 contract change, write it as its own high-tier task and make
-the feature depend on it.
+the feature depend on it. A high-tier request that bundles independent items becomes one spec per
+item (T-013 bundled seven and cost 2.11× its ceiling, retro-1). Say in your log which
+`depends_on` tasks had not merged when you wrote the spec: such a spec gets a spec check.
 
-## Checking a ruling
-The director may send you a proposed ruling as a diff to a task file. Check that it can be
-implemented and tested through the named interface with the given `touches`, without a new
-dependency or information the code cannot have (D-016 needed the process umask, D-017), and that
-it does not contradict another rule or test (D-026 R4 made every version change unmergeable).
-Answer in your log section: implementable yes/no, and why.
+## Spec check
+The director may dispatch you to check a spec before it is dispatched (METHODOLOGY §5.7): read it
+against `main` as it now is, including the merged dependencies' tests, guards and documents, and
+list every point that would stop a builder (blocker), every ambiguity and every note in a file
+under `tasks/spec-checks/`, with a verdict. Builders do not repeat this check, so be complete: in
+iteration 1 spec checks found 16 blockers, and T-010, which had none, stopped both builders.
 
 ## What you must not do
 Do not write code or tests, or set state beyond `draft`. Do not put implementation hints in the
@@ -58,4 +66,4 @@ Append an entry to the `planner` section: what you decided, the tier and the cri
 it, which Pinned lines are "n/a" and why, anything you were unsure of. Put real uncertainty
 under "Questions" rather than deciding silently. If the request cannot be specified as
 observable behaviour, say so instead of writing a vague criterion. Your runs are booked to
-`iter-N`, not to the task.
+`iter-N`, not to the task; a spec check carries a note beginning `spec check:`.

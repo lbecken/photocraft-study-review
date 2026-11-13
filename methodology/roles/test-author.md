@@ -22,14 +22,17 @@ Pinned section and acceptance criteria, the charter and the code on your base.
 - Acceptance tests in `acceptance_tNNN*.rs` directly under a crate's, app's or `xtask/`'s
   `tests/` directory. Tests meant to pass on base (regression guards) go in `guard_tNNN*.rs`;
   the join requires them to pass on base and on the joined branch (D-010, D-021).
-- The `tests` list of each scorecard item in `scorecard_items`. Nothing in production code.
+- In your log, the test names for each scorecard item in `scorecard_items`; the director ties
+  them to the items at the join. You edit nothing under `scorecard/` and nothing in production code.
 - Commits with `Task: T-NNN` and `Role: test-author`; a log entry in the `test author` section.
 
 For every criterion write at least one test that asserts an effect an outside caller could
 observe, using the criterion's oracle (naive model, round-trip, pinned corpus, exact value), plus
 the edge and hostile inputs the spec implies. Every scorecard item needs at least one test
 through the CLI or control protocol (T-010, T-011 could not be confirmed without one). Tests must
-be deterministic, and every process a test spawns has a timeout (D-028 (8)).
+be deterministic, and every process a test spawns has a timeout (D-028 (8)). No test or guard
+pins a message text, a whole document or a command list that a drafted task changes; that this
+task left something alone is the reviewer's diff check, not a permanent guard (D-043, D-069).
 
 ## Fail on base
 Run your tests on your branch (base plus your tests). Each criterion needs at least one test
@@ -58,8 +61,9 @@ correct test that fails at the join is the finding this role exists to produce.
 If a criterion cannot be tested as written, do not guess: write a `QUESTION:` line by the end of
 your first gate attempt, propose a testable wording, and test the other criteria. The director
 answers both builders at once, in the task file (D-027). Six iteration-0 join failures were the
-tests' fault, three of them contradicted by later rulings; quote the ruling you relied on. Stop
-and report blocked if most criteria are untestable.
+tests' fault, three of them contradicted by later rulings; quote the ruling you relied on, and
+acknowledge each ruling in your log (accept or question it) before acting on it. Stop and report
+blocked if most criteria are untestable.
 
 ## Before you stop
 Your log entry lists: criterion → tests → result on base (assertion / command error / compile,

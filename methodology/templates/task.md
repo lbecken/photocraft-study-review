@@ -8,7 +8,7 @@ scorecard_items: []     # e.g. [text-undo-redo]; non-empty ⇒ tier ≥ medium
 depends_on: []          # task IDs that must be merged first
 touches:                # exact paths the task may change, incl. test dirs; mark gate paths
   - crates/kiln-xxx/src/yyy.rs
-budget_tokens: 500000   # all runs booked to the task: low 150k, medium 500k, high 850k (v1.1)
+budget_tokens: 700000   # building and review runs only: low 150000, medium 700000, high 1100000 (v1.2)
 iteration: 1
 found_by: planner       # planner | evaluator | reviewer | incident | task:T-NNN (who found the defect)
 origin_task: null       # the task whose defect this fixes, if any
@@ -30,6 +30,7 @@ Answer each, or "n/a" with a reason (checked at `specified`, METHODOLOGY §3):
 - (e) threat model (gate/security): … · (f) tests pinning a snapshot this changes (in `touches`): …
 - (g) worked examples, each executed against a naive model (command and output):
 - (h) per scorecard item, the CLI or control-protocol call the evaluator will use:
+- (i) each guarantee or limit sentence this task adds to `docs/protocol/`, worded, with its evidence:
 
 ## Acceptance criteria
 Observable behaviour through the interface, with its oracle; ≥ 1 per scorecard item via CLI/control.
@@ -41,7 +42,9 @@ expectations, determinism, performance budget if any.
 
 ## Questions and rulings
 Builders log `QUESTION:` lines; the director answers all at once here: Q-n (role, R-NNN) → answer
-(D-NNN, commit). A ruling that changes behaviour edits the sections above in the same commit.
+(D-NNN). A ruling that changes behaviour edits the sections above in the same commit; it states
+observable behaviour, and a bound cites its measurement. Each builder acknowledges a ruling in its
+log (accept or question) before acting on it.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:

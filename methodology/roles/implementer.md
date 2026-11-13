@@ -38,8 +38,15 @@ one stash (R-006). Never set `CARGO_TARGET_DIR` (D-019). Remove any scratch buil
 repository you created outside the worktree before you stop (D-022: 9 GB left behind).
 
 Do not write tests that pin an exact snapshot of something that grows, such as the full command
-list or the full scorecard: the next task that adds an entry breaks them, as T-003 found (D-020).
-Assert that what you added is present and that the listing equals the registry's own.
+list or the full scorecard, or a message text, a whole document or a command list that a drafted
+task changes: the later task breaks them, as T-003 found (D-020) and six incidents of
+iteration 1 showed (retro-1). Assert that what you added is present and that the listing equals the
+registry's own. That your task left something alone is the reviewer's diff check, not a guard.
+
+A sentence in `docs/protocol/` that states a guarantee or a limit comes from the spec's Pinned
+section, with its evidence: copy it. If you have to write a guarantee sentence the spec lacks,
+record in your log the command and its output that show it holds. Six of fourteen review defects
+in iteration 1 were documentation sentences wider than the code (retro-1).
 
 ## Limits and why they exist
 - Edit only paths in `touches`. Other tasks may be editing everything else; out-of-scope edits
@@ -65,6 +72,7 @@ plainly what you did not verify: "I believe X but did not run Y" is useful; a co
 about something that did not run is harmful. If you saw a defect you did not fix, say so.
 
 ## After the join or a review
-If the task comes back with failing acceptance tests, review findings or a queue log, you are a
-new run: read the log and any rulings committed to the task file, fix the cause, record what
-changed. If an acceptance test looks wrong, write a `QUESTION:` with the evidence; stop on it.
+If the task comes back with failing acceptance tests, review findings or a queue log, read the
+log and any rulings committed to the task file, fix the cause, record what changed. Acknowledge
+each ruling in your log (accept it, or question it with the evidence) before acting on it. If an
+acceptance test looks wrong, write a `QUESTION:` with the evidence; stop on it.
