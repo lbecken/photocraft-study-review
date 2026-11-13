@@ -17,7 +17,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::os::unix::fs::{FileTypeExt, symlink};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, symlink};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -739,4 +739,104 @@ fn root_swapped_between_requests_is_refused() {
 #[test]
 fn parent_swapped_between_requests_is_refused() {
     swapped_root_is_refused("parentswap", true);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ruling v9 (D-076): the root directory removed and its path replaced, (a) by a symlink to a new
+// directory or (b) by a new directory at the same path. The replacement is created right after
+// the removal, so the freed inode number is likely to be reused; the refusal must hold either
+// way, and every message says whether it was.
+
+/// Remove `work/root` and put a replacement holding `secret.txt` in its place: a link to the
+/// new directory `work/fresh` (`link == true`) or a new `work/root`. Returns the replacement
+/// directory and a note on whether the inode number was reused.
+fn replace_root(w: &Work, link: bool) -> (PathBuf, String) {
+    let root = w.root();
+    let old = fs::metadata(&root).unwrap();
+    fs::remove_dir_all(&root).unwrap();
+    let fresh = if link { w.at("fresh") } else { root.clone() };
+    fs::create_dir(&fresh).unwrap();
+    if link {
+        symlink("fresh", &root).unwrap();
+    }
+    fs::write(fresh.join("secret.txt"), SECRET).unwrap();
+    // The replacement really is what the root path now reaches.
+    assert_eq!(fs::read(root.join("secret.txt")).unwrap(), SECRET);
+    assert!(!root.join("f.txt").exists());
+    let new = fs::metadata(&root).unwrap();
+    let note = format!(
+        "old root inode {} (dev {}), new {} (dev {}): inode number reused: {}",
+        old.ino(),
+        old.dev(),
+        new.ino(),
+        new.dev(),
+        old.ino() == new.ino() && old.dev() == new.dev()
+    );
+    (fresh, note)
+}
+
+fn removed_root_is_refused(name: &str, link: bool) {
+    let w = Work::new(name);
+    w.file("root/f.txt", b"f original\n");
+    let mut fs_ = w.fs();
+    let mut doc = Document::open(&fs_, &rp("f.txt")).unwrap();
+    doc.buffer_mut().insert(0, "EDIT ").unwrap();
+
+    let (fresh, note) = replace_root(&w, link);
+    let before = snapshot(&w.dir);
+    let fresh_before = snapshot(&fresh);
+
+    assert_refused(
+        &format!("[{note}] read"),
+        fs_.read(&rp("secret.txt")),
+        "secret.txt",
+        OUTSIDE,
+        &w,
+    );
+    assert!(!fs_.is_file(&rp("secret.txt")), "[{note}] is_file");
+    match Document::open(&fs_, &rp("secret.txt")) {
+        Ok(_) => panic!("[{note}] Document::open(secret.txt) succeeded after the replacement"),
+        Err(e) => assert_eq!(
+            e.to_string(),
+            "cannot open secret.txt: resolves outside the root",
+            "[{note}]"
+        ),
+    }
+    assert_refused(
+        &format!("[{note}] write_atomic"),
+        fs_.write_atomic(&rp("secret.txt"), b"PWNED"),
+        "secret.txt",
+        OUTSIDE,
+        &w,
+    );
+    match doc.save(&mut fs_) {
+        Ok(_) => panic!("[{note}] save of f.txt (opened before the removal) succeeded"),
+        Err(e) => {
+            assert_eq!(
+                save_message(&e),
+                "cannot save f.txt: resolves outside the root",
+                "[{note}]"
+            );
+            assert_eq!(e.path().as_str(), "f.txt", "[{note}]");
+        }
+    }
+    assert!(doc.is_dirty(), "[{note}] document no longer dirty");
+    assert_eq!(
+        snapshot(&fresh),
+        fresh_before,
+        "[{note}] replacement changed"
+    );
+    assert!(!fresh.join("f.txt").exists(), "[{note}] f.txt created");
+    assert_eq!(snapshot(&w.dir), before, "[{note}] work changed");
+    assert_no_temp(&w.dir);
+}
+
+#[test]
+fn root_removed_and_replaced_by_link_is_refused() {
+    removed_root_is_refused("rmlink", true);
+}
+
+#[test]
+fn root_removed_and_replaced_by_new_directory_is_refused() {
+    removed_root_is_refused("rmdir", false);
 }

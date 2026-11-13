@@ -14,7 +14,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::fs::{FileTypeExt, symlink};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, symlink};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, ExitStatus, Output, Stdio};
@@ -658,4 +658,97 @@ fn root_swap_between_requests_is_refused_through_control() {
 #[test]
 fn parent_swap_between_requests_is_refused_through_control() {
     swapped_root_is_refused_through_control("ctl-parentswap", true);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ruling v9 (D-076): the root directory removed and its path replaced, between two requests of
+// one `control` session, (a) by a symlink to a new directory or (b) by a new directory. The
+// replacement is created right after the removal (the freed inode number is likely reused);
+// the refusal must hold either way, and every message says whether it was.
+
+fn removed_root_is_refused_through_control(name: &str, link: bool) {
+    let w = Work::new(name);
+    w.file("root/f.txt", b"f original\n");
+    let root = w.at("root");
+
+    let mut s = Session::start_at(&w.dir, &root);
+    let r = s.ask(json!({"id":1,"command":"doc.open","params":{"path":"f.txt"}}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    let r = s.ask(json!({"id":2,"command":"doc.insert",
+                         "params":{"doc":1,"offset":0,"text":"PWNED "}}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+
+    // Between two requests, while the session runs: remove the root, replace it at once.
+    let old = fs::metadata(&root).unwrap();
+    fs::remove_dir_all(&root).unwrap();
+    let fresh = if link { w.at("fresh") } else { root.clone() };
+    fs::create_dir(&fresh).unwrap();
+    if link {
+        symlink("fresh", &root).unwrap();
+    }
+    fs::write(fresh.join("secret.txt"), SECRET).unwrap();
+    assert_eq!(fs::read(root.join("secret.txt")).unwrap(), SECRET);
+    assert!(!root.join("f.txt").exists());
+    let new = fs::metadata(&root).unwrap();
+    let note = format!(
+        "old root inode {} (dev {}), new {} (dev {}): inode number reused: {}",
+        old.ino(),
+        old.dev(),
+        new.ino(),
+        new.dev(),
+        old.ino() == new.ino() && old.dev() == new.dev()
+    );
+    let before = snapshot(&w.dir);
+    let fresh_before = snapshot(&fresh);
+
+    let checks = [
+        (
+            3,
+            json!({"id":3,"command":"doc.open","params":{"path":"secret.txt"}}),
+            "cannot open secret.txt: resolves outside the root",
+        ),
+        (
+            4,
+            json!({"id":4,"command":"doc.save","params":{"doc":1}}),
+            "cannot save f.txt: resolves outside the root",
+        ),
+    ];
+    for (id, request, message) in checks {
+        let r = s.ask(request);
+        assert_eq!(r["id"], json!(id), "[{note}] {r}");
+        assert_eq!(
+            r["ok"],
+            json!(false),
+            "[{note}] request {id} not refused: {r}"
+        );
+        assert_eq!(r["error"]["code"], json!("rejected"), "[{note}] {r}");
+        assert_eq!(r["error"]["kind"], json!("outside_root"), "[{note}] {r}");
+        assert_eq!(r["error"]["message"], json!(message), "[{note}] {r}");
+        assert!(
+            !r.to_string().contains(&w.text()),
+            "[{note}] names the work path: {r}"
+        );
+    }
+    let r = s.ask(json!({"id":5,"command":"doc.info","params":{"doc":1}}));
+    assert_eq!(r["result"]["dirty"], json!(true), "[{note}] {r}");
+    assert_eq!(s.finish().code(), Some(0), "[{note}]");
+
+    assert_eq!(
+        snapshot(&fresh),
+        fresh_before,
+        "[{note}] replacement changed"
+    );
+    assert!(!fresh.join("f.txt").exists(), "[{note}] f.txt created");
+    assert_eq!(snapshot(&w.dir), before, "[{note}] work changed");
+    assert_no_temp(&w.dir);
+}
+
+#[test]
+fn root_removed_and_replaced_by_link_is_refused_through_control() {
+    removed_root_is_refused_through_control("ctl-rmlink", true);
+}
+
+#[test]
+fn root_removed_and_replaced_by_new_directory_is_refused_through_control() {
+    removed_root_is_refused_through_control("ctl-rmdir", false);
 }
