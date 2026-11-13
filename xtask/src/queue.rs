@@ -690,11 +690,11 @@ pub fn run(
                 continue;
             };
             let bumped = lock_version_changes(&main_lock, &new_lock)?;
-            if !bumped.is_empty() {
+            if !bumped.is_empty() && !checked.versions_approved {
                 return Err(Refusal {
                     check: "dependencies",
                     reason: format!(
-                        "{p} after the rebase changes the version of package(s) already in main's lock: {}",
+                        "{p} after the rebase changes the version of package(s) already in main's lock: {} (needs tier high and an approval row containing `dependency versions`)",
                         bumped.join(", ")
                     ),
                 }
@@ -1254,6 +1254,64 @@ mod tests {
         evidence(root, &wt);
         approve(root, "Approve T-001.");
         assert_refused(root, "dependencies", "serde 1.0.1 -> 1.0.2");
+        assert_refused(root, "dependencies", "dependency versions");
+        // D-030 R11: with `dependency versions` in the approval row the change merges.
+        approve(root, "Approve T-001, Dependency Versions included."); // F16: case matters
+        assert_refused(root, "dependencies", "serde 1.0.1 -> 1.0.2");
+        approve(root, "Approve T-001, including its dependency versions.");
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(r.result, "merged", "{r:?}");
+        assert!(
+            std::fs::read_to_string(root.join("Cargo.lock"))
+                .unwrap()
+                .contains("1.0.2")
+        );
+    }
+
+    #[test]
+    fn lock_rule_is_applied_to_the_rebased_tree() {
+        // D-030 R13 (b): the only bump appears after the rebase (a regeneration command for
+        // another generated file rewrites the lock after the lock's own check ran), so only the
+        // check on the rebased tree can catch it. Refusal `dependencies`; branch put back.
+        let reg = "registry+https://github.com/rust-lang/crates.io-index";
+        let lock = format!(
+            "version = 4\n\n[[package]]\nname = \"serde\"\nversion = \"1.0.1\"\nsource = \"{reg}\"\n"
+        );
+        let policy = "[[generated]]\npath = \"Cargo.lock\"\ncommand = [\"true\"]\n\n[[generated]]\npath = \"gen.txt\"\ncommand = [\"sh\", \"-c\", \"ls items | sort > gen.txt; sed -i s/1.0.1/1.0.2/ Cargo.lock\"]\n";
+        let repo = testrepo::init(
+            "q-lock-rebased",
+            &[
+                ("base.txt", "base\n"),
+                (".gitignore", ".worktrees/\ntarget/\n"),
+                (
+                    "tasks/T-001-thing.md",
+                    &task_md("low", "self_verified", &["items"]),
+                ),
+                ("xtask/generated.toml", policy),
+                ("xtask/ledger.toml", LED),
+                ("Cargo.lock", &lock),
+                ("items/a", ""),
+                ("gen.txt", "a\n"),
+            ],
+        );
+        let root = repo.path();
+        worktree::create(root, &Spec::parse("T-001", false).unwrap(), false).unwrap();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "b", &[("items/b", ""), ("gen.txt", "a\nb\n")]);
+        testrepo::commit(root, "c", &[("items/c", ""), ("gen.txt", "a\nc\n")]);
+        let (main0, head0) = (rev(root, "main").unwrap(), rev(&wt, "HEAD").unwrap());
+        let fake = gate(true, true);
+        let r = refusal(run(root, "T-001", &clock(), &fake));
+        assert_eq!(r.check, "dependencies", "{r}");
+        assert!(
+            r.reason.contains("after the rebase") && r.reason.contains("serde 1.0.1 -> 1.0.2"),
+            "{r}"
+        );
+        assert_eq!(*fake.calls.borrow(), ["build"], "the gate never ran");
+        assert_eq!(rev(root, "main").unwrap(), main0);
+        assert_eq!(rev(&wt, "HEAD").unwrap(), head0);
+        assert!(dirty_paths(&wt, None).unwrap().is_empty());
+        assert!(read_records(root).is_empty(), "a refusal writes nothing");
     }
 
     /// A gate that litters the worktree and, if `move_main`, lets main move meanwhile.
@@ -1778,6 +1836,29 @@ mod tests {
             }
         }
         std::fs::write(&bin, fake).unwrap();
+        // D-030 R13 (a): and future-dates everything of the member, so cargo's mtime freshness
+        // would trust it if the private target were not pruned.
+        let future = std::time::SystemTime::now() + std::time::Duration::from_secs(86_400 * 365);
+        let profile = bin.parent().unwrap().to_path_buf();
+        let mut stack = vec![profile.clone()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else {
+                    let rel = crate::util::rel(&profile, &p);
+                    if rel.contains("xtask") {
+                        std::fs::File::options()
+                            .write(true)
+                            .open(&p)
+                            .unwrap()
+                            .set_modified(future)
+                            .unwrap();
+                    }
+                }
+            }
+        }
         std::fs::write(
             src.join("xtask/src/main.rs"),
             "fn main() { println!(\"edited\"); }\n",

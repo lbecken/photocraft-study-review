@@ -63,6 +63,8 @@ pub struct Checked {
     pub changed: Vec<String>,
     /// The changed paths that are gate paths (D-026 R3), in `changed` order.
     pub gate_paths: Vec<String>,
+    /// Whether main approves this task's changes to versions of main's lock (D-030 R11).
+    pub versions_approved: bool,
 }
 
 /// File names that configure a tool the gate runs, wherever they are (clippy and rustfmt read
@@ -484,9 +486,16 @@ fn approves(cell: &str, task: &str) -> bool {
 /// Whether `text` (a `docs/decisions.md`) has a table row whose Decision cell begins with
 /// `Approve <task>` and, if `gate_paths`, also contains the words `gate paths` (D-026 R3 (c)).
 pub fn has_approval(text: &str, task: &str, gate_paths: bool) -> bool {
+    has_approval_with(text, task, if gate_paths { &["gate paths"] } else { &[] })
+}
+
+/// Whether `text` has a table row whose Decision cell begins with `Approve <task>` and contains
+/// every phrase of `words` (case-sensitive): `gate paths` (D-026 R3), `dependency versions`
+/// (D-030 R11).
+pub fn has_approval_with(text: &str, task: &str, words: &[&str]) -> bool {
     decision_cells(text)
         .iter()
-        .any(|c| approves(c, task) && (!gate_paths || c.contains("gate paths")))
+        .any(|c| approves(c, task) && words.iter().all(|w| c.contains(w)))
 }
 
 /// The paths a commit changes against its first parent, with their status letter.
@@ -850,6 +859,7 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
             ),
         );
     }
+    let mut version_changes = Vec::new();
     for p in changed.iter().filter(|p| crate::queue::is_lock(p)) {
         let (Some(main_lock), Some(head_lock)) = (
             or_refuse(DP, show(root, "main", p))?,
@@ -876,15 +886,22 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
         .into_iter()
         .filter(|c| own.contains(&pkg(c)))
         .collect();
-        if !bumped.is_empty() {
-            return refuse(
-                DP,
-                format!(
-                    "{p} on {branch} changes the version of package(s) already in main's lock: {}",
-                    bumped.join(", ")
-                ),
-            );
-        }
+        version_changes.extend(bumped.into_iter().map(|c| format!("{p}: {c}")));
+    }
+    // D-030 R11: such a change merges only for a tier-high task approved for it.
+    let decisions = or_refuse(DP, show(root, "main", "docs/decisions.md"))?;
+    let versions_approved = tier == "high"
+        && decisions
+            .as_deref()
+            .is_some_and(|t| has_approval_with(t, task, &["dependency versions"]));
+    if !version_changes.is_empty() && !versions_approved {
+        return refuse(
+            DP,
+            format!(
+                "{branch} changes the version of package(s) already in main's lock ({}); that needs tier high and an `Approve {task}` row in main's docs/decisions.md containing `dependency versions`",
+                version_changes.join(", ")
+            ),
+        );
     }
 
     // approval (with D-026 R3 (c) for gate paths)
@@ -960,6 +977,7 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
         policy,
         changed,
         gate_paths,
+        versions_approved,
     })
 }
 
@@ -1089,6 +1107,20 @@ mod tests {
         let gp = "| # | Decision | Why |\n|---|---|---|\n| D-1 | Approve T-005 incl. gate paths. | x |\n";
         assert!(has_approval(gp, "T-005", true));
         assert!(!has_approval(row, "T-005", true));
+        // F16: the wording is case-sensitive.
+        let upper = "| # | Decision |\n|---|---|\n| D-1 | Approve T-005, Gate Paths. |\n";
+        assert!(!has_approval(upper, "T-005", true));
+        let both = "| # | Decision |\n|---|---|\n| D-1 | Approve T-005: gate paths and dependency versions. |\n";
+        assert!(has_approval_with(
+            both,
+            "T-005",
+            &["gate paths", "dependency versions"]
+        ));
+        assert!(!has_approval_with(
+            gp,
+            "T-005",
+            &["gate paths", "dependency versions"]
+        ));
         let other_cell =
             "| # | Decision | Why |\n|---|---|---|\n| D-1 | Approve T-005 | gate paths |\n";
         assert!(!has_approval(other_cell, "T-005", true));
