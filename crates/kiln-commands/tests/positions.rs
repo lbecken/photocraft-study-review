@@ -68,7 +68,7 @@ fn naive_position(t: &str, c: usize) -> Option<Value> {
         .enumerate()
         .filter(|(_, l)| l.1 <= c)
         .map(|(i, l)| (i, l.1))
-        .last()
+        .next_back()
         .unwrap();
     Some(json!({
         "char": c,
