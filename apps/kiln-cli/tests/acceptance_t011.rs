@@ -259,7 +259,8 @@ struct Coverage {
 
 fn gen_files(rng: &mut Rng, set: usize, cov: &mut Coverage) -> Vec<GenFile> {
     const DIRS: [&str; 5] = ["", "", "src/", "src/deep/", "docs/a/b/"];
-    let n = 1 + rng.below(5);
+    // 1–5 files per set (AC-1), the undecodable one included where there is one.
+    let n = 1 + rng.below(if set.is_multiple_of(3) { 4 } else { 5 });
     let mut files = Vec::new();
     for i in 0..n {
         let dir = rng.pick(&DIRS);
@@ -518,7 +519,7 @@ fn check_generator(runs: &[SetRun], cov: &Coverage) {
     assert!(cov.nested > 0 && cov.undecodable > 0);
     let mut changed = 0;
     for (n, run) in runs.iter().enumerate() {
-        assert!((1..=6).contains(&run.files.len()));
+        assert!((1..=5).contains(&run.files.len()));
         let disk = parse_lines(&stdout(&run.disk));
         for (path, info, text) in &run.finals.info_text {
             let info = by_id(&disk, *info);
@@ -1101,11 +1102,24 @@ fn memory_seed_writes_nothing_to_disk() {
         "nothing written under the current directory"
     );
     assert!(!work.join("a.txt").exists() && !work.join("n").exists());
-    // A second session starts from the manifest again.
-    let out = kiln(&["run", "s.jsonl", "--memory-seed", "m.json"], &work);
+    // A second session starts from the manifest again: a read-only script sees the
+    // manifest's contents, not the first session's saves.
+    let reader = concat!(
+        r#"{"id":1,"command":"doc.open","params":{"path":"a.txt"}}"#,
+        "\n",
+        r#"{"id":2,"command":"doc.text","params":{"doc":1}}"#,
+        "\n",
+        r#"{"id":3,"command":"doc.open","params":{"path":"n/b.txt"}}"#,
+        "\n",
+        r#"{"id":4,"command":"doc.text","params":{"doc":2}}"#,
+        "\n",
+    );
+    std::fs::write(work.join("read.jsonl"), reader).unwrap();
+    let out = kiln(&["run", "read.jsonl", "--memory-seed", "m.json"], &work);
+    assert_eq!(code(&out), 0, "{}", first_stderr_line(&out));
     let r = parse_lines(&stdout(&out));
-    assert_eq!(by_id(&r, 10)["result"]["text"], json!("new a\r\n"));
-    assert_eq!(by_id(&r, 13)["result"]["text"], json!("bé"));
+    assert_eq!(by_id(&r, 2)["result"]["text"], json!("a\r\n"));
+    assert_eq!(by_id(&r, 4)["result"]["text"], json!("b"));
 }
 
 /// Documentation: `kiln-cli --help` (and `run --help`, `exec --help`) lists `--memory-seed`.
