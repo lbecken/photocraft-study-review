@@ -278,6 +278,32 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `docs/protocol/search.md`.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T12:23Z · R-104 · ready · did: restated the ACs: (1, 3) `find_all` gives
+  leftmost-first, non-overlapping matches with char offsets, groups included, CRLF-mode anchors,
+  the discard-and-restart-at-`e+1` rule for an empty match at the previous end, both case modes;
+  (2) `expand` follows Kiln's scanning rule, errors on the first reference to a group the pattern
+  lacks (independent of `caps`/`text`), tolerates captures that do not fit, never panics; (4)
+  `PatternError` for the listed patterns, message cut to 199 chars + `…`; (5, 6) Pinned (g)
+  exactly. Built `crates/kiln-search/src/regex.rs` on `regex = "=1.13.1"` (default features,
+  declared in the crate manifest with the workspace-pin comment): `RegexBuilder` with
+  `multi_line`, `crlf`, `case_insensitive`; own iteration loop over `captures_read_at` (rule as
+  specified, not `captures_iter`); byte→char conversion with one forward cursor over the text
+  (O(text + matches·groups)); expansion by hand (`scan` + `group_index`; a name is a number only
+  if all ASCII digits and parses as `usize`). Lock change: only `kiln-search`'s dependency list
+  (no package added or re-versioned). Tests: 7 unit tests in `src/regex.rs`; 11 in
+  `tests/regex.rs` (every Pinned (g) example incl. the nullable table in both modes, all `Err`
+  expansions with `Display`, odd captures, AC-4 patterns and the exact 199+`…` cut, inline
+  flags, pathological probes of Pinned (e) under 5 s in debug, 100k-match linearity, and a
+  3,000-pair fixed-seed differential of `find_all` against the engine's own `captures_iter`,
+  converted to chars by brute force). Mutation check: with `crlf(false)` two tests fail. Commit
+  6dde8c046dbb33f9bdfa82d366d2e9fddeed675a. · gate attempts: 1 (last: green, 11 steps; fuzz
+  and budgets EMPTY) · not run: no naive backtracker of my own (the test author's AC-1/AC-3
+  oracle); nothing is observable through `kiln-cli` or the control protocol until T-021, so no
+  outside check. · missing context: none · next: test author join, reviewer.
+  NOTE (not a question): `expand` maps a group's char range to bytes by walking `text` from its
+  start (O(end) per reference), because the API passes char offsets and the whole text. T-021's
+  replace-all over many matches is then O(text·matches); T-021 may want to pass the matched
+  slice or a char index. Not a T-017 contract change.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
