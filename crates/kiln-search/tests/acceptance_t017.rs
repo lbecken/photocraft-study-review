@@ -857,7 +857,7 @@ const EXPAND_CASES: &[ExpandCase] = &[
 ];
 
 const TEMPLATE_ALPHABET: &[char] = &[
-    '$', '$', '$', '$', '{', '}', '0', '1', '9', 'a', 'w', '_', 'x', '!', 'é', '😀',
+    '$', '$', '$', '$', '{', '}', '0', '1', '9', 'a', 'w', '_', 'x', '!', 'é', '😀', '+',
 ];
 const EXPAND_TEXT_ALPHABET: &[char] = &['a', 'b', 'c', 'd', 'é', '😀', '\r', '\n'];
 
@@ -943,6 +943,32 @@ fn expansion_equals_naive_model() {
     }
     assert!(oks > 2_000 && errs > 2_000, "oks={oks} errs={errs}");
     assert!(nonempty_ok > 1_000, "nonempty_ok={nonempty_ok}");
+}
+
+/// AC-2, ruling s3 (D-070): a reference is a group number only if it is all ASCII digits.
+/// `${+1}` and `${+0}` parse as `usize` but are names, and no group has those names.
+#[test]
+fn plus_signed_references_are_not_group_numbers() {
+    let re = compile("(?<w>a)(b)?", false);
+    let caps = Captures {
+        groups: vec![Some(cm(0, 1)), Some(cm(0, 1)), None],
+    };
+    for (template, reference) in [
+        ("${+1}", "+1"),
+        ("${+0}", "+0"),
+        ("${+2}", "+2"),
+        ("x${0}${+1}", "+1"),
+    ] {
+        assert_eq!(
+            re.expand(&caps, "ac", template),
+            Err(TemplateError {
+                reference: reference.to_string()
+            }),
+            "{template:?}"
+        );
+    }
+    // Without braces `+` is not a name char: the `$` is literal.
+    assert_eq!(re.expand(&caps, "ac", "$+1"), Ok("$+1".to_string()));
 }
 
 /// AC-2 edge cases for captures that do not fit `text` or the pattern (each expands to

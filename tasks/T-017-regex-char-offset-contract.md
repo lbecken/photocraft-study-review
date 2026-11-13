@@ -401,6 +401,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   before the crate, named not counted, `(?:…)` counted, no cap, wrong message), 7 killed.
   Clippy with stub and fmt clean; stub removed. · gate attempts: 0 · not run: `cargo xtask ci`
   · missing context: none · next: join.
+- 2026-11-13T13:54Z · R-125 · ready · did: ruling s3 (D-070): new test `plus_signed_references_are_not_group_numbers` (`${+1}`, `${+0}`, `${+2}`, `x${0}${+1}` → `Err` with the text between the braces; `$+1` → literal `Ok("$+1")`); `+` added to the AC-2 template alphabet (the naive model already checks all-ASCII-digits before parsing, unchanged). Base: compile. Stub self-check: passes; the digits-check-dropped mutant is killed by both new test and `expansion_equals_naive_model`. fmt clean; stub removed. · gate attempts: 0 · not run: `cargo xtask ci` · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13T14:05Z · R-117 · tests_joined · did: round-1 review of `43fae907bda9ee0abe2c21b3adb3419e09160dfb`
