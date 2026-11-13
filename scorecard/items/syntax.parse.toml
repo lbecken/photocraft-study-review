@@ -2,4 +2,8 @@ id = "syntax.parse"
 title = "Parse Rust with tree-sitter; every file of the pinned compiling corpus parses without error nodes"
 crate = "kiln-syntax"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t020_cli::corpus_parses_through_protocol",
+    "kiln_cli::acceptance_t020_cli::oversized_documents_are_refused",
+    "kiln_cli::acceptance_t020_cli::syntax_commands_are_read_only",
+]

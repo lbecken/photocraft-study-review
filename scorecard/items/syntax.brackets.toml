@@ -2,4 +2,8 @@ id = "syntax.brackets"
 title = "Find the matching bracket for (), [], {} ignoring brackets in strings and comments"
 crate = "kiln-syntax"
 tier = "low"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t020_cli::brackets_agree_with_token_groups",
+    "kiln_cli::acceptance_t020_cli::bracket_worked_examples",
+    "kiln_cli::acceptance_t020_cli::deep_nesting_is_answered",
+]

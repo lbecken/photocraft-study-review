@@ -2,4 +2,8 @@ id = "syntax.highlight"
 title = "Highlight spans for Rust (keywords, strings, comments, types, functions) cover the text without overlap"
 crate = "kiln-syntax"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t020_cli::highlight_partitions_text",
+    "kiln_cli::acceptance_t020_cli::highlight_agrees_with_tokenizer",
+    "kiln_cli::acceptance_t020_cli::highlight_marks_fn_names",
+]

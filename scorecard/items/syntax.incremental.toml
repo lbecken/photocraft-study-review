@@ -2,4 +2,6 @@ id = "syntax.incremental"
 title = "Incremental reparse after an edit yields the same tree as parsing from scratch"
 crate = "kiln-syntax"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t020_cli::incremental_equals_fresh_session",
+]
