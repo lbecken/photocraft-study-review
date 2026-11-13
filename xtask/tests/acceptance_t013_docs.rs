@@ -17,7 +17,9 @@ fn a_join_with_weak_base_evidence_points_to_the_mutation_spot_check() {
         "implementation",
         &[(
             "crates/a/src/lib.rs",
-            Some(&format!("{LIB_V1}\n/// New API.\npub fn extra() -> u32 {{\n    7\n}}\n")),
+            Some(&format!(
+                "{LIB_V1}\n/// New API.\npub fn extra() -> u32 {{\n    7\n}}\n"
+            )),
         )],
     );
     // The test calls the new API: it does not compile on base (weak evidence).
@@ -38,10 +40,16 @@ fn a_join_with_weak_base_evidence_points_to_the_mutation_spot_check() {
         o.stdout,
         o.stderr
     );
-    let weak: Vec<&str> = o.stderr.lines().filter(|l| l.starts_with("join: base evidence")).collect();
+    let weak: Vec<&str> = o
+        .stderr
+        .lines()
+        .filter(|l| l.starts_with("join: base evidence"))
+        .collect();
     assert_eq!(
         weak,
-        ["join: base evidence is `does_not_compile` (weak); the reviewer's mutation spot-check must cover it (METHODOLOGY §6)"],
+        [
+            "join: base evidence is `does_not_compile` (weak); the reviewer's mutation spot-check must cover it (METHODOLOGY §6)"
+        ],
         "stderr:\n{}",
         o.stderr
     );
@@ -64,7 +72,10 @@ fn development_md_has_no_stale_v10_references() {
             .filter(|(_, l)| l.contains(stale))
             .map(|(i, _)| i + 1)
             .collect();
-        assert!(at.is_empty(), "docs/development.md still contains `{stale}` at line(s) {at:?}");
+        assert!(
+            at.is_empty(),
+            "docs/development.md still contains `{stale}` at line(s) {at:?}"
+        );
     }
     // The Join section no longer requires a revert check or a stub/logic commit split.
     let join = section(&text, "## Join");
@@ -73,18 +84,31 @@ fn development_md_has_no_stale_v10_references() {
         "the reviewer must run",
         "split such work into a stub commit and a logic commit",
     ] {
-        assert!(!flat.contains(required), "Join section still says `{required}`:\n{join}");
+        assert!(
+            !flat.contains(required),
+            "Join section still says `{required}`:\n{join}"
+        );
     }
     assert!(
         flat.contains("mutation spot-check"),
         "Join section should name the reviewer's mutation spot-check:\n{join}"
     );
     // The new section and the new record kind are documented.
-    assert!(text.contains("Publishing a ledger input"), "no \"Publishing a ledger input\" section");
-    assert!(text.contains("join_defects"), "the join_defects record kind is not documented");
-    assert!(text.contains("hygiene"), "the hygiene step is not documented");
+    assert!(
+        text.contains("Publishing a ledger input"),
+        "no \"Publishing a ledger input\" section"
+    );
+    assert!(
+        text.contains("join_defects"),
+        "the join_defects record kind is not documented"
+    );
+    assert!(
+        text.contains("hygiene"),
+        "the hygiene step is not documented"
+    );
 }
 
+#[cfg(test)]
 /// The text from the heading starting with `heading` to the next `## ` heading.
 fn section<'a>(text: &'a str, heading: &str) -> &'a str {
     let start = text

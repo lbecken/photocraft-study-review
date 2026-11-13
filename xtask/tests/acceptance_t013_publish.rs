@@ -17,6 +17,7 @@ use t13::*;
 const PUBLISH_TOY_MAIN: &str = r##"use std::path::Path;
 use std::process::ExitCode;
 
+#[cfg(test)]
 fn items() -> Result<Vec<(String, String)>, String> {
     let mut v = Vec::new();
     if let Ok(rd) = std::fs::read_dir("scorecard/items") {
@@ -33,6 +34,7 @@ fn items() -> Result<Vec<(String, String)>, String> {
     Ok(v)
 }
 
+#[cfg(test)]
 fn summary() -> Result<String, String> {
     let mut out = String::from("# Scorecard (publish toy)\n");
     for (n, b) in items()? {
@@ -41,6 +43,7 @@ fn summary() -> Result<String, String> {
     Ok(out)
 }
 
+#[cfg(test)]
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -97,6 +100,7 @@ const NEW_ITEM: &str = "id = \"x.y\"\nstatus = \"claimed\"\n";
 const EVAL_V1: &str = "# Evaluation iteration 0\n\nnothing yet\n";
 const EVAL_V2: &str = "# Evaluation iteration 0\n\nx.y confirmed\n";
 
+#[cfg(test)]
 fn summary_of(items: &[(&str, &str)]) -> String {
     let mut v = items.to_vec();
     v.sort();
@@ -107,6 +111,7 @@ fn summary_of(items: &[(&str, &str)]) -> String {
     out
 }
 
+#[cfg(test)]
 /// A toy repository on main with the publish toy xtask, a consistent scorecard and an
 /// evaluation file.
 fn publish_repo(name: &str) -> Repo {
@@ -127,20 +132,35 @@ fn publish_repo(name: &str) -> Repo {
 
 const SLUG_FILE: &str = "tasks/T-050-publish-publish-x.md";
 
+#[cfg(test)]
 fn publish(r: &Repo, inputs: &[&str]) -> Out {
-    let mut a = vec!["publish", "T-050", "--title", "Publish x", "--iteration", "1"];
+    let mut a = vec![
+        "publish",
+        "T-050",
+        "--title",
+        "Publish x",
+        "--iteration",
+        "1",
+    ];
     a.extend_from_slice(inputs);
     xt(&r.root, &a)
 }
 
+#[cfg(test)]
 /// Everything a refusal must leave untouched: refs, worktrees, the primary checkout's status,
 /// the bytes of the inputs and of the metrics file.
 fn snap(r: &Repo, inputs: &[&str]) -> Vec<String> {
     let mut v = vec![
-        git(&r.root, &["for-each-ref", "--format=%(refname) %(objectname)"]),
+        git(
+            &r.root,
+            &["for-each-ref", "--format=%(refname) %(objectname)"],
+        ),
         git(&r.root, &["worktree", "list", "--porcelain"]),
         status(&r.root),
-        format!("{:?}", std::fs::read(r.root.join("metrics/tasks.jsonl")).ok()),
+        format!(
+            "{:?}",
+            std::fs::read(r.root.join("metrics/tasks.jsonl")).ok()
+        ),
     ];
     for i in inputs {
         v.push(format!("{i}: {:?}", std::fs::read(r.root.join(i)).ok()));
@@ -148,14 +168,20 @@ fn snap(r: &Repo, inputs: &[&str]) -> Vec<String> {
     v
 }
 
+#[cfg(test)]
 fn assert_publish_refused(r: &Repo, inputs: &[&str], what: &str) -> String {
     let before = snap(r, inputs);
     let o = publish(r, inputs);
     let line = assert_refusal(&o, "publish: refused: ", what);
-    assert_eq!(snap(r, inputs), before, "{what}: the refusal changed something");
+    assert_eq!(
+        snap(r, inputs),
+        before,
+        "{what}: the refusal changed something"
+    );
     line
 }
 
+#[cfg(test)]
 /// Mini front-matter reader: `(key, value)` in order; a block list becomes `[a, b]`.
 fn front_matter(text: &str) -> Vec<(String, String)> {
     let body = text.strip_prefix("---\n").expect("front matter");
@@ -164,7 +190,11 @@ fn front_matter(text: &str) -> Vec<(String, String)> {
     for line in fm.lines() {
         if let Some(item) = line.trim_start().strip_prefix("- ") {
             let last = out.last_mut().expect("list item without key");
-            let inner = last.1.trim_start_matches('[').trim_end_matches(']').to_owned();
+            let inner = last
+                .1
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_owned();
             last.1 = if inner.is_empty() {
                 format!("[{}]", item.trim())
             } else {
@@ -178,13 +208,23 @@ fn front_matter(text: &str) -> Vec<(String, String)> {
     out
 }
 
+#[cfg(test)]
 fn first_parent_subjects(r: &Repo, since: &str) -> Vec<(String, String)> {
-    git(&r.root, &["rev-list", "--first-parent", "--reverse", &format!("{since}..main")])
-        .lines()
-        .map(|c| (c.to_owned(), git(&r.root, &["log", "-1", "--format=%s", c])))
-        .collect()
+    git(
+        &r.root,
+        &[
+            "rev-list",
+            "--first-parent",
+            "--reverse",
+            &format!("{since}..main"),
+        ],
+    )
+    .lines()
+    .map(|c| (c.to_owned(), git(&r.root, &["log", "-1", "--format=%s", c])))
+    .collect()
 }
 
+#[cfg(test)]
 fn transitions(r: &Repo, task: &str) -> Vec<serde_json::Value> {
     read(&r.root, "metrics/tasks.jsonl")
         .lines()
@@ -208,7 +248,8 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
     assert_ok(&o, "publish");
     for i in inputs {
         assert!(
-            o.stdout.contains(&format!("publish: {i} moved to task/T-050")),
+            o.stdout
+                .contains(&format!("publish: {i} moved to task/T-050")),
             "hand-over line for {i}:\n{}",
             o.stdout
         );
@@ -217,7 +258,11 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
     // main's first-parent history: exactly these five commits, in this order.
     let log = first_parent_subjects(&r, &start);
     let subjects: Vec<&str> = log.iter().map(|(_, s)| s.as_str()).collect();
-    assert_eq!(subjects.len(), 5, "first-parent log since the start: {subjects:#?}");
+    assert_eq!(
+        subjects.len(),
+        5,
+        "first-parent log since the start: {subjects:#?}"
+    );
     assert_eq!(subjects[0], "publish: T-050 ready");
     assert_eq!(subjects[1], "publish: T-050 queued");
     assert!(
@@ -244,7 +289,12 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
             .map(str::to_owned)
             .collect();
         files.sort();
-        assert_eq!(files, ["metrics/tasks.jsonl", SLUG_FILE], "files of `{}`", log[i].1);
+        assert_eq!(
+            files,
+            ["metrics/tasks.jsonl", SLUG_FILE],
+            "files of `{}`",
+            log[i].1
+        );
     }
     // The content commit: the inputs and docs/scorecard.md only, inputs byte-identical.
     let mut files: Vec<String> = git(&r.root, &["show", "--name-only", "--format=", &log[2].0])
@@ -252,7 +302,14 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
         .map(str::to_owned)
         .collect();
     files.sort();
-    assert_eq!(files, ["docs/scorecard.md", "evaluations/iter-0.md", "scorecard/items/x.y.toml"]);
+    assert_eq!(
+        files,
+        [
+            "docs/scorecard.md",
+            "evaluations/iter-0.md",
+            "scorecard/items/x.y.toml"
+        ]
+    );
     assert_eq!(git_show(&r.root, "main:scorecard/items/x.y.toml"), NEW_ITEM);
     assert_eq!(git_show(&r.root, "main:evaluations/iter-0.md"), EVAL_V2);
     assert_eq!(
@@ -264,9 +321,22 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
     let tr = transitions(&r, "T-050");
     let pairs: Vec<(String, String)> = tr
         .iter()
-        .map(|t| (t["from"].as_str().unwrap().to_owned(), t["to"].as_str().unwrap().to_owned()))
+        .map(|t| {
+            (
+                t["from"].as_str().unwrap().to_owned(),
+                t["to"].as_str().unwrap().to_owned(),
+            )
+        })
         .collect();
-    let want = ["draft", "specified", "ready", "in_progress", "self_verified", "queued", "merged"];
+    let want = [
+        "draft",
+        "specified",
+        "ready",
+        "in_progress",
+        "self_verified",
+        "queued",
+        "merged",
+    ];
     let want_pairs: Vec<(String, String)> = want
         .windows(2)
         .map(|w| (w[0].to_owned(), w[1].to_owned()))
@@ -280,7 +350,10 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
         last = parse_ts(at);
     }
     // The records are committed on main.
-    assert_eq!(git_show(&r.root, "main:metrics/tasks.jsonl"), read(&r.root, "metrics/tasks.jsonl"));
+    assert_eq!(
+        git_show(&r.root, "main:metrics/tasks.jsonl"),
+        read(&r.root, "metrics/tasks.jsonl")
+    );
 
     // The task file: exactly Interface (5) step 2, state merged.
     let listed = git(&r.root, &["ls-tree", "--name-only", "main", "tasks/"]);
@@ -295,7 +368,10 @@ fn publish_carries_a_ledger_input_to_main_in_one_command() {
         ("owner_role", "director"),
         ("scorecard_items", "[]"),
         ("depends_on", "[]"),
-        ("touches", "[evaluations/iter-0.md, scorecard/items/x.y.toml]"),
+        (
+            "touches",
+            "[evaluations/iter-0.md, scorecard/items/x.y.toml]",
+        ),
         ("budget_tokens", "150000"),
         ("iteration", "1"),
         ("found_by", "planner"),
@@ -333,7 +409,10 @@ fn publish_refusals_change_nothing() {
     let r = publish_repo("t013-ac10-refusals");
     r.main_commit(
         "director: T-049",
-        &[("tasks/T-049-toy.md", Some(&task_md("T-049", "low", "merged", &["crates/a"], &[])))],
+        &[(
+            "tasks/T-049-toy.md",
+            Some(&task_md("T-049", "low", "merged", &["crates/a"], &[])),
+        )],
     );
     let item = "scorecard/items/x.y.toml";
     let eval = "evaluations/iter-0.md";
@@ -352,10 +431,17 @@ fn publish_refusals_change_nothing() {
     assert!(line.contains("docs/notes.md"), "{line}");
     git(&r.root, &["checkout", "--", "docs/notes.md"]);
     // An existing scorecard item is not new.
-    write(&r.root, "scorecard/items/existing.toml", "id = \"existing\"\nstatus = \"x\"\n");
+    write(
+        &r.root,
+        "scorecard/items/existing.toml",
+        "id = \"existing\"\nstatus = \"x\"\n",
+    );
     let line = assert_publish_refused(&r, &["scorecard/items/existing.toml"], "modified item");
     assert!(line.contains("scorecard/items/existing.toml"), "{line}");
-    git(&r.root, &["checkout", "--", "scorecard/items/existing.toml"]);
+    git(
+        &r.root,
+        &["checkout", "--", "scorecard/items/existing.toml"],
+    );
     // An input equal to main's version.
     git(&r.root, &["checkout", "--", eval]);
     let line = assert_publish_refused(&r, &[item, eval], "unchanged input");
@@ -364,11 +450,26 @@ fn publish_refusals_change_nothing() {
     // No input; a malformed id.
     assert_publish_refused(&r, &[], "no input");
     let before = snap(&r, &[item]);
-    let o = xt(&r.root, &["publish", "T-50", "--title", "Publish x", "--iteration", "1", item]);
+    let o = xt(
+        &r.root,
+        &[
+            "publish",
+            "T-50",
+            "--title",
+            "Publish x",
+            "--iteration",
+            "1",
+            item,
+        ],
+    );
     assert_refusal(&o, "publish: refused: ", "malformed id");
     assert_eq!(snap(&r, &[item]), before);
     // Another uncommitted change in tasks/.
-    write(&r.root, "tasks/T-049-toy.md", &task_md("T-049", "low", "evaluated", &["crates/a"], &[]));
+    write(
+        &r.root,
+        "tasks/T-049-toy.md",
+        &task_md("T-049", "low", "evaluated", &["crates/a"], &[]),
+    );
     let line = assert_publish_refused(&r, &[item, eval], "uncommitted change in tasks/");
     assert!(line.contains("tasks/T-049-toy.md"), "{line}");
     git(&r.root, &["checkout", "--", "tasks/T-049-toy.md"]);
@@ -387,7 +488,10 @@ fn publish_refusals_change_nothing() {
     // An existing tasks/T-050-*.md on main (last: it moves main).
     r.main_commit(
         "director: T-050 by hand",
-        &[("tasks/T-050-old.md", Some(&task_md("T-050", "low", "draft", &["crates/a"], &[])))],
+        &[(
+            "tasks/T-050-old.md",
+            Some(&task_md("T-050", "low", "draft", &["crates/a"], &[])),
+        )],
     );
     let line = assert_publish_refused(&r, &[item, eval], "existing task file");
     assert!(line.contains("T-050"), "{line}");
@@ -403,17 +507,30 @@ fn publish_stops_when_the_gate_fails_and_keeps_the_inputs() {
     assert_eq!(o.code, 1, "gate failure exit:\n{}\n{}", o.stdout, o.stderr);
     let want = "publish: gate failed in .worktrees/T-050 at red; T-050 stays in_progress; fix the input and re-run the gate there, or abandon (metrics transition --to abandoned; worktree rm T-050 --force)";
     assert!(
-        format!("{}\n{}", o.stdout, o.stderr).lines().any(|l| l == want),
+        format!("{}\n{}", o.stdout, o.stderr)
+            .lines()
+            .any(|l| l == want),
         "expected the step-5 line\nstdout:\n{}\nstderr:\n{}",
         o.stdout,
         o.stderr
     );
     let tr = transitions(&r, "T-050");
-    assert_eq!(tr.last().map(|t| t["to"].clone()), Some("in_progress".into()), "{tr:?}");
-    assert_eq!(read(&r.root, item), red, "the primary checkout's input must stay");
+    assert_eq!(
+        tr.last().map(|t| t["to"].clone()),
+        Some("in_progress".into()),
+        "{tr:?}"
+    );
+    assert_eq!(
+        read(&r.root, item),
+        red,
+        "the primary checkout's input must stay"
+    );
     assert!(r.wt("T-050").is_dir(), "the worktree stays for the fix");
     // main got only the `ready` commit.
-    assert_eq!(git(&r.root, &["log", "-1", "--format=%s", "main"]), "publish: T-050 ready");
+    assert_eq!(
+        git(&r.root, &["log", "-1", "--format=%s", "main"]),
+        "publish: T-050 ready"
+    );
     assert!(r.queue_lines().is_empty(), "the queue must not run");
 }
 
@@ -428,10 +545,17 @@ fn a_failed_ready_commit_stops_publish_and_prints_the_commit_command() {
     let o = sh(Path::new("/"), &format!("chmod +x '{}'", signer.display()));
     assert_ok(&o, "chmod");
     git(&r.root, &["config", "commit.gpgsign", "true"]);
-    git(&r.root, &["config", "gpg.program", &signer.to_string_lossy()]);
+    git(
+        &r.root,
+        &["config", "gpg.program", &signer.to_string_lossy()],
+    );
 
     let o = publish(&r, &[item]);
-    assert_eq!(o.code, 2, "commit failure exit:\n{}\n{}", o.stdout, o.stderr);
+    assert_eq!(
+        o.code, 2,
+        "commit failure exit:\n{}\n{}",
+        o.stdout, o.stderr
+    );
     let lines: Vec<&str> = o.stderr.lines().filter(|l| !l.trim().is_empty()).collect();
     assert_eq!(lines.len(), 1, "one stderr line:\n{}", o.stderr);
     let tail = format!(
@@ -444,7 +568,10 @@ fn a_failed_ready_commit_stops_publish_and_prints_the_commit_command() {
     );
     // Nothing after the failed commit.
     assert_eq!(r.main_sha(), start, "main moved");
-    assert!(!r.wt("T-050").exists(), "a worktree was made after the failed commit");
+    assert!(
+        !r.wt("T-050").exists(),
+        "a worktree was made after the failed commit"
+    );
     assert!(
         git(&r.root, &["branch", "--list", "task/T-050"]).is_empty(),
         "a branch was made after the failed commit"
@@ -461,6 +588,9 @@ fn a_failed_ready_commit_stops_publish_and_prints_the_commit_command() {
         .collect();
     files.sort();
     assert_eq!(files, ["metrics/tasks.jsonl", SLUG_FILE]);
-    assert_eq!(git(&r.root, &["log", "-1", "--format=%s", "main"]), "publish: T-050 ready");
+    assert_eq!(
+        git(&r.root, &["log", "-1", "--format=%s", "main"]),
+        "publish: T-050 ready"
+    );
     assert_eq!(git(&r.root, &["rev-parse", "main~1"]), start);
 }

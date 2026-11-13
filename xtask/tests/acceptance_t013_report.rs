@@ -10,11 +10,13 @@ use serde_json::Value;
 mod t13;
 use t13::*;
 
+#[cfg(test)]
 /// Lines of the report, trimmed.
 fn lines(s: &str) -> Vec<String> {
     s.lines().map(|l| l.trim().to_owned()).collect()
 }
 
+#[cfg(test)]
 /// Whether `line` contains `n` as a whole number (not part of a longer digit run).
 fn has_num(line: &str, n: u64) -> bool {
     let n = n.to_string();
@@ -32,6 +34,7 @@ struct Fixture {
     at35: String,
 }
 
+#[cfg(test)]
 fn fixture(name: &str) -> Fixture {
     let l = Lite::new(name);
     let task = |id, tier, it, budget| {
@@ -87,11 +90,14 @@ fn fixture(name: &str) -> Fixture {
     write(
         &l.root,
         "docs/decisions.md",
-        &format!("{DECISIONS}| D-002 | 2026-11-13 | Extend T-038 to 1200000 for the rework. | x | yes |\n"),
+        &format!(
+            "{DECISIONS}| D-002 | 2026-11-13 | Extend T-038 to 1200000 for the rework. | x | yes |\n"
+        ),
     );
     Fixture { l, at35 }
 }
 
+#[cfg(test)]
 fn caught_total(report: &str) -> Option<u64> {
     lines(report).iter().find_map(|l| {
         let rest = l.strip_prefix("acceptance-caught defects: ")?;
@@ -107,7 +113,11 @@ fn report_computes_the_v11_metrics() {
     let r = &o.stdout;
     let ls = lines(r);
     // An unclassified iteration-1 join: still the full report, exit 1, exactly one line.
-    assert_eq!(o.code, 1, "report with an unclassified join must exit 1:\n{r}\n{}", o.stderr);
+    assert_eq!(
+        o.code, 1,
+        "report with an unclassified join must exit 1:\n{r}\n{}",
+        o.stderr
+    );
     let unclassified: Vec<String> = format!("{}\n{}", o.stdout, o.stderr)
         .lines()
         .map(str::trim)
@@ -123,24 +133,44 @@ fn report_computes_the_v11_metrics() {
         )],
         "report:\n{r}"
     );
-    assert!(r.contains("budget overruns"), "the report must still be printed in full:\n{r}");
+    assert!(
+        r.contains("budget overruns"),
+        "the report must still be printed in full:\n{r}"
+    );
 
     // Acceptance-caught: 1 + 2 over both joins of T-031; T-034 (impl tests red) not counted.
     assert_eq!(caught_total(r), Some(3), "report:\n{r}");
 
     // Tokens per merged task without overhead (merged: T-031 medium/odd, T-032 high).
     let line_with = |words: &[&str], n: u64| {
-        ls.iter().any(|l| words.iter().all(|w| l.contains(w)) && has_num(l, n))
+        ls.iter()
+            .any(|l| words.iter().all(|w| l.contains(w)) && has_num(l, n))
     };
-    assert!(line_with(&["medium"], 300_000), "medium merged task: 300000\n{r}");
-    assert!(line_with(&["high"], 500_000), "high merged task: 500000\n{r}");
-    assert!(line_with(&["implementer"], 300_000), "implementer arm: 300000\n{r}");
-    assert!(line_with(&["independent"], 500_000), "independent arm: 500000\n{r}");
+    assert!(
+        line_with(&["medium"], 300_000),
+        "medium merged task: 300000\n{r}"
+    );
+    assert!(
+        line_with(&["high"], 500_000),
+        "high merged task: 500000\n{r}"
+    );
+    assert!(
+        line_with(&["implementer"], 300_000),
+        "implementer arm: 300000\n{r}"
+    );
+    assert!(
+        line_with(&["independent"], 500_000),
+        "independent arm: 500000\n{r}"
+    );
     // With overhead, iteration 1: (300000 + 500000 + 100000) / 2.
-    assert!(line_with(&["overhead"], 450_000), "with overhead: 450000\n{r}");
+    assert!(
+        line_with(&["overhead"], 450_000),
+        "with overhead: 450000\n{r}"
+    );
     // iter-1 runs are tier `overhead` in tokens by tier.
     assert!(
-        ls.iter().any(|l| l.starts_with("overhead") && has_num(l, 100_000)),
+        ls.iter()
+            .any(|l| l.starts_with("overhead") && has_num(l, 100_000)),
         "tokens by tier lists overhead 100000\n{r}"
     );
     assert!(
@@ -150,31 +180,58 @@ fn report_computes_the_v11_metrics() {
 
     // Known defects merged by decision.
     let low = r.to_lowercase();
-    assert!(low.contains("known defects merged by decision"), "heading missing:\n{r}");
-    assert!(ls.iter().any(|l| l.contains("T-040 (from T-031)")), "T-040 listed\n{r}");
-    assert!(!r.contains("T-041 (from"), "T-041's origin is not merged\n{r}");
-    assert!(!r.contains("T-042 (from"), "T-042 is not found_by reviewer\n{r}");
+    assert!(
+        low.contains("known defects merged by decision"),
+        "heading missing:\n{r}"
+    );
+    assert!(
+        ls.iter().any(|l| l.contains("T-040 (from T-031)")),
+        "T-040 listed\n{r}"
+    );
+    assert!(
+        !r.contains("T-041 (from"),
+        "T-041's origin is not merged\n{r}"
+    );
+    assert!(
+        !r.contains("T-042 (from"),
+        "T-042 is not found_by reviewer\n{r}"
+    );
 
     // Budget overruns with the extension.
     assert!(
-        ls.iter().any(|l| l.contains("T-038") && l.contains("extend to: 1200000") && l.contains("within ceiling: yes")),
+        ls.iter().any(|l| l.contains("T-038")
+            && l.contains("extend to: 1200000")
+            && l.contains("within ceiling: yes")),
         "T-038 over budget, extended to 1200000, within it\n{r}"
     );
     assert!(
-        ls.iter().any(|l| l.contains("T-032") && l.contains("extend to: none") && l.contains("within ceiling: no")),
+        ls.iter().any(|l| l.contains("T-032")
+            && l.contains("extend to: none")
+            && l.contains("within ceiling: no")),
         "T-032 over budget, no extension\n{r}"
     );
     assert!(
-        !ls.iter().any(|l| l.contains("T-031") && l.contains("within ceiling")),
+        !ls.iter()
+            .any(|l| l.contains("T-031") && l.contains("within ceiling")),
         "T-031 is within its budget\n{r}"
     );
 }
 
+#[cfg(test)]
 fn jd(task: &str, s: &str, n: &str) -> Vec<String> {
-    ["metrics", "join-defects", "--task", task, "--joined-sha", s, "--acc-defects", n]
-        .iter()
-        .map(|x| (*x).to_owned())
-        .collect()
+    [
+        "metrics",
+        "join-defects",
+        "--task",
+        task,
+        "--joined-sha",
+        s,
+        "--acc-defects",
+        n,
+    ]
+    .iter()
+    .map(|x| (*x).to_owned())
+    .collect()
 }
 
 #[test]
@@ -183,12 +240,27 @@ fn join_defects_appends_one_record_and_classifies_the_join() {
     let l = &f.l;
     let s35 = sha(35);
     // Refusals, each leaving the file byte-identical.
-    l.refused(&strs(&jd("T-035", &s35, "3")), "N > acc_fail_first_join (3 > 2)");
+    l.refused(
+        &strs(&jd("T-035", &s35, "3")),
+        "N > acc_fail_first_join (3 > 2)",
+    );
     l.refused(&strs(&jd("T-035", &sha(999), "1")), "no join with that sha");
-    l.refused(&strs(&jd("T-036", &s35, "1")), "the sha is another task's join");
-    l.refused(&strs(&jd("T-031", &sha(31), "1")), "join has its own acc_defects");
-    l.refused(&strs(&jd("T-037", &sha(37), "0")), "acc_fail_first_join is 0");
-    l.refused(&strs(&jd("T-039", &sha(39), "1")), "two joins with that sha");
+    l.refused(
+        &strs(&jd("T-036", &s35, "1")),
+        "the sha is another task's join",
+    );
+    l.refused(
+        &strs(&jd("T-031", &sha(31), "1")),
+        "join has its own acc_defects",
+    );
+    l.refused(
+        &strs(&jd("T-037", &sha(37), "0")),
+        "acc_fail_first_join is 0",
+    );
+    l.refused(
+        &strs(&jd("T-039", &sha(39), "1")),
+        "two joins with that sha",
+    );
     l.refused(&strs(&jd("iter-1", &s35, "1")), "iter-1");
 
     let old = l.bytes();
@@ -196,9 +268,15 @@ fn join_defects_appends_one_record_and_classifies_the_join() {
     let (rec, _) = l.appended(&strs(&jd("T-035", &s35, "1")), "join-defects 1");
     let after = now_s();
     let new = l.bytes();
-    assert!(new.starts_with(&old), "old lines must be a byte prefix of the new file");
+    assert!(
+        new.starts_with(&old),
+        "old lines must be a byte prefix of the new file"
+    );
     let line = std::str::from_utf8(&new[old.len()..]).unwrap().trim_end();
-    assert!(!line.contains(": ") && !line.contains(", "), "not compact JSON: {line}");
+    assert!(
+        !line.contains(": ") && !line.contains(", "),
+        "not compact JSON: {line}"
+    );
     let obj = rec.as_object().unwrap();
     let keys: Vec<&str> = obj.keys().map(String::as_str).collect();
     let mut want = vec!["acc_defects", "at", "joined_sha", "kind", "task"];
@@ -210,15 +288,30 @@ fn join_defects_appends_one_record_and_classifies_the_join() {
     assert_eq!(rec["task"], "T-035");
     assert_eq!(rec["joined_sha"], s35.as_str());
     assert_eq!(rec["acc_defects"], 1);
-    assert_in_bracket(rec["at"].as_str().unwrap(), before, after, "join_defects at");
+    assert_in_bracket(
+        rec["at"].as_str().unwrap(),
+        before,
+        after,
+        "join_defects at",
+    );
 
     // A second classification of the same join is refused.
-    l.refused(&strs(&jd("T-035", &s35, "1")), "earlier join_defects for that join");
-    l.refused(&strs(&jd("T-035", &s35, "2")), "earlier join_defects for that join (other N)");
+    l.refused(
+        &strs(&jd("T-035", &s35, "1")),
+        "earlier join_defects for that join",
+    );
+    l.refused(
+        &strs(&jd("T-035", &s35, "2")),
+        "earlier join_defects for that join (other N)",
+    );
 
     // Now the report has no unclassified join, exits 0, and the total grew by 1.
     let o = l.x(&["metrics", "report"]);
-    assert_eq!(o.code, 0, "report after classification:\n{}\n{}", o.stdout, o.stderr);
+    assert_eq!(
+        o.code, 0,
+        "report after classification:\n{}\n{}",
+        o.stdout, o.stderr
+    );
     assert!(
         !format!("{}{}", o.stdout, o.stderr).contains("unclassified join:"),
         "{}",
@@ -227,7 +320,9 @@ fn join_defects_appends_one_record_and_classifies_the_join() {
     assert_eq!(caught_total(&o.stdout), Some(4), "report:\n{}", o.stdout);
     let recs = l.records();
     assert_eq!(
-        recs.iter().filter(|r: &&Value| r["kind"] == "join_defects").count(),
+        recs.iter()
+            .filter(|r: &&Value| r["kind"] == "join_defects")
+            .count(),
         1
     );
 }
