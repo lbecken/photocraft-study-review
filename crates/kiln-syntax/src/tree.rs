@@ -468,6 +468,9 @@ mod tests {
         assert_eq!(common_affixes("aa", "aaa"), (2, 0));
         // "😀" and "😁" share three leading bytes.
         assert_eq!(common_affixes("x😀y", "x😁y"), (1, 1));
+        // "é" = C3 A9, "©" = C2 A9: one common suffix byte that is not a char start must back
+        // up to 0 (T-016 review N2).
+        assert_eq!(common_affixes("é", "©"), (0, 0));
     }
 
     #[test]
