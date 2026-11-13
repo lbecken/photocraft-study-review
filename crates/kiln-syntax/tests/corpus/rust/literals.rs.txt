@@ -1,0 +1,102 @@
+//! Literals: raw strings, byte strings, C strings, chars, byte chars, suffixes and separators.
+
+use std::ffi::CStr;
+
+/// A raw string with quotes and hashes inside.
+pub const RAW: &str = r#"He said "hi" and left a # behind"#;
+
+/// A raw string that needs two hashes.
+pub const RAW2: &str = r##"a "# inside"##;
+
+/// A plain raw string without hashes.
+pub const RAW0: &str = r"C:\path\no\escapes";
+
+/// Escapes in ordinary strings.
+pub const ESCAPES: &str = "tab\tnewline\nquote\"backslash\\nul\0unicode\u{2603}hex\x41";
+
+/// A string continued over a line break.
+pub const CONTINUED: &str = "first part \
+                             second part";
+
+/// Byte strings, raw and escaped.
+pub const BYTES: &[u8] = b"bytes\x00\xff\n";
+pub const RAW_BYTES: &[u8] = br#"raw "bytes""#;
+pub const BYTE_ARRAY: &[u8; 3] = b"abc";
+
+/// C strings, plain and raw.
+pub const GREETING: &CStr = c"hello, world";
+pub const RAW_C: &CStr = cr#"quoted "c""#;
+
+/// Characters and byte characters.
+pub const CHARS: [char; 6] = ['a', '\'', '\\', '\n', '\u{1F600}', 'ß'];
+pub const BYTE_CHARS: [u8; 5] = [b'a', b'\'', b'\\', b'\x7f', b'\t'];
+
+/// Integer literals with suffixes, bases and separators.
+pub const INTS: (u8, i16, u32, i64, u128, usize, isize) =
+    (0xffu8, -0b1010_1010i16, 1_000_000u32, -0o777i64, 0xdead_beef_u128, 42usize, -7isize);
+
+/// Float literals with suffixes, exponents and separators.
+pub const FLOATS: (f32, f64, f64, f64) = (1.5f32, 2.0e-3_f64, 1_234.567_8, 6.022e23);
+
+/// Literals in expressions.
+pub fn mixed() -> f64 {
+    let a = 1u64 << 40;
+    let b = 0x10 + 0o10 + 0b10 + 10;
+    let c = 3.0_f32.powi(2) as f64;
+    let d = 1e3;
+    let e = 255_u8 as f64;
+    let f = '7'.to_digit(10).unwrap_or(0) as f64;
+    (a as f64) / 1e12 + b as f64 + c + d + e + f
+}
+
+/// Count the bytes of every constant.
+pub fn sizes() -> usize {
+    RAW.len()
+        + RAW2.len()
+        + RAW0.len()
+        + ESCAPES.len()
+        + CONTINUED.len()
+        + BYTES.len()
+        + RAW_BYTES.len()
+        + BYTE_ARRAY.len()
+        + GREETING.to_bytes().len()
+        + RAW_C.to_bytes_with_nul().len()
+        + CHARS.iter().map(|c| c.len_utf8()).sum::<usize>()
+        + BYTE_CHARS.len()
+}
+
+/// Boolean, unit and tuple literals.
+pub fn misc() -> (bool, (), (i32,), [u8; 0]) {
+    (true && !false, (), (1,), [])
+}
+
+/// Escapes that are easy to get wrong in a tokenizer.
+pub fn tricky() -> Vec<String> {
+    vec![
+        String::from("/* not a comment */"),
+        String::from("// not a comment either"),
+        String::from(r"\"),
+        String::from("'"),
+        String::from(r#"""#),
+        format!("{}{{}}", '}'),
+        String::from("emoji: 😀, accent: é, cjk: 漢字"),
+    ]
+}
+
+/// Exercise everything.
+pub fn demo() -> f64 {
+    let (u8v, i16v, u32v, i64v, u128v, usz, isz) = INTS;
+    let (f1, f2, f3, f4) = FLOATS;
+    let ints = u8v as f64 + i16v as f64 + u32v as f64 + i64v as f64 + (u128v % 1000) as f64;
+    let floats = f1 as f64 + f2 + f3 + f4 / 1e23;
+    let (t, (), (one,), empty) = misc();
+    ints + floats
+        + usz as f64
+        + isz as f64
+        + mixed()
+        + sizes() as f64
+        + f64::from(u8::from(t))
+        + one as f64
+        + empty.len() as f64
+        + tricky().len() as f64
+}

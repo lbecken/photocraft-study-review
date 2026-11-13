@@ -1,0 +1,163 @@
+//! The builder pattern, typestate builders and `Default` with struct update syntax.
+
+use std::marker::PhantomData;
+use std::time::Duration;
+
+/// A request to send.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Request {
+    pub method: Method,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<Vec<u8>>,
+    pub timeout: Duration,
+    pub retries: u8,
+}
+
+/// HTTP methods.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Method {
+    #[default]
+    Get,
+    Post,
+    Put,
+    Delete,
+}
+
+/// A plain builder with `&mut self` setters.
+#[derive(Debug, Default)]
+pub struct RequestBuilder {
+    method: Method,
+    url: Option<String>,
+    headers: Vec<(String, String)>,
+    body: Option<Vec<u8>>,
+    timeout: Option<Duration>,
+    retries: u8,
+}
+
+/// What can go wrong when building.
+#[derive(Debug, PartialEq, Eq)]
+pub enum BuildError {
+    MissingUrl,
+    BodyOnGet,
+}
+
+impl RequestBuilder {
+    /// Set the method.
+    pub fn method(&mut self, m: Method) -> &mut Self {
+        self.method = m;
+        self
+    }
+    /// Set the URL.
+    pub fn url(&mut self, u: impl Into<String>) -> &mut Self {
+        self.url = Some(u.into());
+        self
+    }
+    /// Add a header.
+    pub fn header(&mut self, k: &str, v: &str) -> &mut Self {
+        self.headers.push((k.to_owned(), v.to_owned()));
+        self
+    }
+    /// Set the body.
+    pub fn body(&mut self, b: &[u8]) -> &mut Self {
+        self.body = Some(b.to_vec());
+        self
+    }
+    /// Set the timeout.
+    pub fn timeout(&mut self, t: Duration) -> &mut Self {
+        self.timeout = Some(t);
+        self
+    }
+    /// Set the retry count.
+    pub fn retries(&mut self, n: u8) -> &mut Self {
+        self.retries = n;
+        self
+    }
+    /// Validate and build.
+    pub fn build(&self) -> Result<Request, BuildError> {
+        let url = self.url.clone().ok_or(BuildError::MissingUrl)?;
+        if self.method == Method::Get && self.body.is_some() {
+            return Err(BuildError::BodyOnGet);
+        }
+        Ok(Request {
+            method: self.method,
+            url,
+            headers: self.headers.clone(),
+            body: self.body.clone(),
+            timeout: self.timeout.unwrap_or(Duration::from_secs(30)),
+            retries: self.retries,
+        })
+    }
+}
+
+/// Typestate markers.
+pub struct NoUrl;
+pub struct HasUrl;
+
+/// A builder whose `build` exists only once a URL is set.
+pub struct Typed<State> {
+    url: String,
+    retries: u8,
+    _state: PhantomData<State>,
+}
+
+impl Typed<NoUrl> {
+    /// Start without a URL.
+    pub fn new() -> Self {
+        Typed { url: String::new(), retries: 0, _state: PhantomData }
+    }
+    /// Setting the URL changes the state type.
+    pub fn url(self, u: &str) -> Typed<HasUrl> {
+        Typed { url: u.to_owned(), retries: self.retries, _state: PhantomData }
+    }
+}
+
+impl<S> Typed<S> {
+    /// Available in every state.
+    pub fn retries(mut self, n: u8) -> Self {
+        self.retries = n;
+        self
+    }
+}
+
+impl Typed<HasUrl> {
+    /// Build, infallibly.
+    pub fn build(self) -> Request {
+        Request { url: self.url, retries: self.retries, ..defaults() }
+    }
+}
+
+/// Defaults for struct update syntax.
+pub fn defaults() -> Request {
+    Request {
+        method: Method::default(),
+        url: String::new(),
+        headers: Vec::new(),
+        body: None,
+        timeout: Duration::from_millis(1_500),
+        retries: 0,
+    }
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let built = RequestBuilder::default()
+        .method(Method::Post)
+        .url("https://example.invalid/upload")
+        .header("content-type", "text/plain")
+        .body(b"hello")
+        .timeout(Duration::from_secs(5))
+        .retries(2)
+        .build();
+    let missing = RequestBuilder::default().build();
+    let get_with_body = RequestBuilder::default().url("x").body(b"!").build();
+    let typed = Typed::new().retries(1).url("/path").retries(3).build();
+    let other = Request { method: Method::Delete, ..typed.clone() };
+    built.map(|r| r.url.len() + r.headers.len()).unwrap_or(0)
+        + usize::from(missing == Err(BuildError::MissingUrl))
+        + usize::from(get_with_body == Err(BuildError::BodyOnGet))
+        + typed.retries as usize
+        + other.url.len()
+        + usize::from(other.method == Method::Delete)
+        + [Method::Get, Method::Put].len()
+}

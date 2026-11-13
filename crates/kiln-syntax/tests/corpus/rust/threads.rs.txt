@@ -1,0 +1,125 @@
+//! Scoped threads, channels, `Mutex`, `RwLock`, atomics and `OnceLock`.
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
+use std::sync::{Arc, Condvar, Mutex, OnceLock, RwLock};
+use std::thread;
+
+/// Sum chunks of a slice on scoped threads.
+pub fn parallel_sum(xs: &[u64], parts: usize) -> u64 {
+    let parts = parts.max(1);
+    let chunk = xs.len().div_ceil(parts).max(1);
+    thread::scope(|s| {
+        let handles: Vec<_> = xs.chunks(chunk).map(|c| s.spawn(move || c.iter().sum::<u64>())).collect();
+        handles.into_iter().map(|h| h.join().unwrap_or(0)).sum()
+    })
+}
+
+/// Fan out work over a channel and collect results in order.
+pub fn squares_via_channel(n: u64) -> Vec<u64> {
+    let (tx, rx) = mpsc::channel::<(u64, u64)>();
+    let mut handles = Vec::new();
+    for i in 0..n {
+        let tx = tx.clone();
+        handles.push(thread::spawn(move || {
+            let _ = tx.send((i, i * i));
+        }));
+    }
+    drop(tx);
+    let mut out: Vec<(u64, u64)> = rx.iter().collect();
+    for h in handles {
+        let _ = h.join();
+    }
+    out.sort_unstable();
+    out.into_iter().map(|(_, v)| v).collect()
+}
+
+/// A counter shared through `Arc<Mutex<_>>`.
+pub fn mutex_counter(threads: usize, per: usize) -> usize {
+    let c = Arc::new(Mutex::new(0usize));
+    let hs: Vec<_> = (0..threads)
+        .map(|_| {
+            let c = Arc::clone(&c);
+            thread::spawn(move || {
+                for _ in 0..per {
+                    if let Ok(mut g) = c.lock() {
+                        *g += 1;
+                    }
+                }
+            })
+        })
+        .collect();
+    for h in hs {
+        let _ = h.join();
+    }
+    c.lock().map(|g| *g).unwrap_or(0)
+}
+
+/// An atomic counter with relaxed ordering.
+pub fn atomic_counter() -> u64 {
+    static HITS: AtomicU64 = AtomicU64::new(0);
+    thread::scope(|s| {
+        for _ in 0..4 {
+            s.spawn(|| {
+                for _ in 0..100 {
+                    HITS.fetch_add(1, Ordering::Relaxed);
+                }
+            });
+        }
+    });
+    HITS.load(Ordering::SeqCst)
+}
+
+/// Readers and a writer on an `RwLock`.
+pub fn rwlock_demo() -> usize {
+    let data = RwLock::new(vec![1, 2, 3]);
+    {
+        let r1 = data.read();
+        let r2 = data.read();
+        if let (Ok(a), Ok(b)) = (r1, r2) {
+            assert_eq!(a.len(), b.len());
+        }
+    }
+    if let Ok(mut w) = data.write() {
+        w.push(4);
+    }
+    data.read().map(|v| v.len()).unwrap_or(0)
+}
+
+/// A lazily initialised global.
+pub fn config() -> &'static str {
+    static CONFIG: OnceLock<String> = OnceLock::new();
+    CONFIG.get_or_init(|| String::from("default-config"))
+}
+
+/// Wait for a flag with a condition variable.
+pub fn condvar_handshake() -> bool {
+    let pair = Arc::new((Mutex::new(false), Condvar::new()));
+    let pair2 = Arc::clone(&pair);
+    let h = thread::spawn(move || {
+        let (lock, cv) = &*pair2;
+        if let Ok(mut ready) = lock.lock() {
+            *ready = true;
+            cv.notify_one();
+        }
+    });
+    let (lock, cv) = &*pair;
+    let ok = match lock.lock() {
+        Ok(guard) => cv.wait_while(guard, |ready| !*ready).map(|g| *g).unwrap_or(false),
+        Err(_) => false,
+    };
+    let _ = h.join();
+    ok
+}
+
+/// Exercise everything.
+pub fn demo() -> u64 {
+    let xs: Vec<u64> = (1..=100).collect();
+    parallel_sum(&xs, 3)
+        + squares_via_channel(5).iter().sum::<u64>()
+        + mutex_counter(3, 10) as u64
+        + atomic_counter()
+        + rwlock_demo() as u64
+        + config().len() as u64
+        + u64::from(condvar_handshake())
+}

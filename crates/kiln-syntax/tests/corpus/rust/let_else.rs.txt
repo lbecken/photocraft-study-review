@@ -1,0 +1,125 @@
+//! `let … else` and `if let` chains (edition 2024).
+
+use std::collections::BTreeMap;
+
+/// A parsed key/value line.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Entry<'a> {
+    pub key: &'a str,
+    pub value: i64,
+}
+
+/// Parse `key=value`; anything else is `None`.
+pub fn parse_entry(line: &str) -> Option<Entry<'_>> {
+    let Some((key, raw)) = line.split_once('=') else {
+        return None;
+    };
+    let Ok(value) = raw.trim().parse::<i64>() else {
+        return None;
+    };
+    let key = key.trim();
+    if key.is_empty() {
+        return None;
+    }
+    Some(Entry { key, value })
+}
+
+/// Sum the values of the lines that parse, skipping the rest.
+pub fn sum_entries(text: &str) -> i64 {
+    let mut total = 0;
+    for line in text.lines() {
+        let Some(Entry { value, .. }) = parse_entry(line) else {
+            continue;
+        };
+        total += value;
+    }
+    total
+}
+
+/// The first even value greater than `min`, using an `if let` chain.
+pub fn first_big_even(values: &[Option<i64>], min: i64) -> Option<i64> {
+    for v in values {
+        if let Some(x) = v
+            && *x > min
+            && x % 2 == 0
+        {
+            return Some(*x);
+        }
+    }
+    None
+}
+
+/// Look up two keys and add them when both are present and positive.
+pub fn add_two(map: &BTreeMap<String, i64>, a: &str, b: &str) -> Option<i64> {
+    if let Some(&x) = map.get(a)
+        && let Some(&y) = map.get(b)
+        && x > 0
+        && y > 0
+    {
+        Some(x + y)
+    } else {
+        None
+    }
+}
+
+/// A token from a tiny command language.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Token {
+    Num(f64),
+    Word(String),
+    End,
+}
+
+/// Read the number after a `push` word.
+pub fn push_arg(tokens: &[Token]) -> Result<f64, String> {
+    let [Token::Word(w), Token::Num(n), ..] = tokens else {
+        return Err(String::from("expected `push <number>`"));
+    };
+    if w != "push" {
+        return Err(format!("unknown word {w}"));
+    }
+    Ok(*n)
+}
+
+/// Destructure nested data with let-else.
+pub fn middle_name(full: &str) -> &str {
+    let parts: Vec<&str> = full.split(' ').collect();
+    let [_, middle, _] = parts.as_slice() else {
+        return "";
+    };
+    *middle
+}
+
+/// A while-let loop with a chain inside the body.
+pub fn drain_until_zero(stack: &mut Vec<i32>) -> i32 {
+    let mut sum = 0;
+    while let Some(top) = stack.pop() {
+        if let 0 = top {
+            break;
+        }
+        if top < 0
+            && let Some(next) = stack.last()
+            && *next > 0
+        {
+            sum += next;
+        }
+        sum += top;
+    }
+    sum
+}
+
+/// Exercise everything.
+pub fn demo() -> i64 {
+    let text = "a = 1\nb=2\nbad\n=3\nc= x\nd = 40\n";
+    let mut map = BTreeMap::new();
+    map.insert(String::from("a"), 5);
+    map.insert(String::from("b"), 7);
+    let toks = vec![Token::Word("push".into()), Token::Num(2.5), Token::End];
+    let mut stack = vec![0, 3, -1, 4];
+    sum_entries(text)
+        + first_big_even(&[None, Some(3), Some(8)], 4).unwrap_or(0)
+        + add_two(&map, "a", "b").unwrap_or(0)
+        + push_arg(&toks).map(|f| f as i64).unwrap_or(-1)
+        + middle_name("Ada King Lovelace").len() as i64
+        + drain_until_zero(&mut stack) as i64
+}

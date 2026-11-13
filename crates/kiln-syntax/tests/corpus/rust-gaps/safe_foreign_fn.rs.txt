@@ -1,0 +1,21 @@
+//! Grammar gap: the edition-2024 `safe` qualifier on a function in an `unsafe extern` block.
+
+use std::ffi::c_int;
+
+unsafe extern "C" {
+    /// `abs` has no preconditions, so it is declared `safe` and callable without `unsafe`.
+    pub safe fn abs(x: c_int) -> c_int;
+    /// An ordinary foreign function still needs `unsafe` at the call site.
+    pub fn labs(x: i64) -> i64;
+}
+
+/// Call the safe foreign function directly.
+pub fn distance(a: i32, b: i32) -> i32 {
+    abs(a - b)
+}
+
+/// Call the unsafe one inside an `unsafe` block.
+pub fn distance_long(a: i64, b: i64) -> i64 {
+    // SAFETY: `labs` has no preconditions for these inputs.
+    unsafe { labs(a - b) }
+}

@@ -1,0 +1,12 @@
+//! Invalid: a tuple opened with `(` and closed with `]`.
+
+/// A pair of values.
+pub fn pair() -> (i32, i32) {
+    let p = (1, 2];
+    p
+}
+
+/// Fine on its own.
+pub fn single() -> i32 {
+    3
+}

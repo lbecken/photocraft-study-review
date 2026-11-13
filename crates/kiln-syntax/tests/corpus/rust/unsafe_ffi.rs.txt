@@ -1,0 +1,155 @@
+//! `unsafe` blocks, `unsafe fn`, `unsafe extern "C"` blocks, raw pointers and `unsafe impl`.
+
+use std::ffi::{CStr, c_char, c_int};
+use std::mem::MaybeUninit;
+use std::ptr::{self, NonNull};
+
+unsafe extern "C" {
+    /// The C library's absolute value.
+    fn abs(x: c_int) -> c_int;
+    /// The C library's string length.
+    fn strlen(s: *const c_char) -> usize;
+    /// An item that is explicitly `unsafe` to call.
+    pub unsafe fn atoi(s: *const c_char) -> c_int;
+}
+
+/// Call into C through a safe wrapper.
+pub fn c_abs(x: i32) -> i32 {
+    // SAFETY: `abs` has no preconditions for values other than `INT_MIN`.
+    if x == i32::MIN { i32::MAX } else { unsafe { abs(x) } }
+}
+
+/// Length of a C string through FFI.
+pub fn c_len(s: &CStr) -> usize {
+    // SAFETY: `s` is NUL terminated.
+    unsafe { strlen(s.as_ptr()) }
+}
+
+/// Parse a C string as an integer.
+pub fn c_atoi(s: &CStr) -> i32 {
+    // SAFETY: `s` is a valid C string.
+    unsafe { atoi(s.as_ptr()) }
+}
+
+/// Read a value through a raw pointer.
+///
+/// # Safety
+/// `p` must be valid for reads and aligned.
+pub unsafe fn read_raw<T: Copy>(p: *const T) -> T {
+    // SAFETY: the caller guarantees validity.
+    unsafe { *p }
+}
+
+/// Swap two values through raw pointers.
+///
+/// # Safety
+/// Both pointers must be valid and may not overlap.
+pub unsafe fn swap_raw<T>(a: *mut T, b: *mut T) {
+    unsafe {
+        ptr::swap(a, b);
+    }
+}
+
+/// A minimal owning pointer.
+pub struct MyBox<T> {
+    ptr: NonNull<T>,
+}
+
+impl<T> MyBox<T> {
+    /// Allocate a value.
+    pub fn new(v: T) -> Self {
+        let b = Box::new(v);
+        MyBox { ptr: NonNull::from(Box::leak(b)) }
+    }
+
+    /// Borrow the value.
+    pub fn get(&self) -> &T {
+        // SAFETY: the pointer came from a live `Box`.
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T> Drop for MyBox<T> {
+    fn drop(&mut self) {
+        // SAFETY: reconstruct the box we leaked in `new`.
+        unsafe {
+            drop(Box::from_raw(self.ptr.as_ptr()));
+        }
+    }
+}
+
+// SAFETY: `MyBox<T>` owns its `T` like `Box<T>` does.
+unsafe impl<T: Send> Send for MyBox<T> {}
+
+/// A marker trait whose implementations make a promise.
+///
+/// # Safety
+/// Implementors must be plain data.
+pub unsafe trait PlainData: Copy {}
+
+unsafe impl PlainData for u32 {}
+unsafe impl PlainData for [u8; 4] {}
+
+/// Reinterpret plain data of equal size.
+pub fn cast<A: PlainData, B: PlainData>(a: A) -> B {
+    assert_eq!(size_of::<A>(), size_of::<B>());
+    // SAFETY: both are plain data of the same size.
+    unsafe { ptr::read_unaligned(&a as *const A as *const B) }
+}
+
+/// Initialise an array with `MaybeUninit`.
+pub fn squares() -> [u32; 8] {
+    let mut arr: [MaybeUninit<u32>; 8] = [const { MaybeUninit::uninit() }; 8];
+    for (i, slot) in arr.iter_mut().enumerate() {
+        slot.write((i * i) as u32);
+    }
+    // SAFETY: every element was written above.
+    unsafe { std::mem::transmute::<[MaybeUninit<u32>; 8], [u32; 8]>(arr) }
+}
+
+/// Pointer arithmetic over a slice.
+pub fn sum_by_pointer(xs: &[i64]) -> i64 {
+    let mut total = 0;
+    let base = xs.as_ptr();
+    for i in 0..xs.len() {
+        // SAFETY: `i` is in bounds.
+        total += unsafe { *base.add(i) };
+    }
+    total
+}
+
+/// Raw borrows of a place.
+pub fn raw_borrow() -> i32 {
+    let mut v = 5;
+    let p = &raw mut v;
+    let q = &raw const v;
+    // SAFETY: both point at the live local `v`.
+    unsafe {
+        *p += 1;
+        *q
+    }
+}
+
+/// Exercise everything.
+pub fn demo() -> i64 {
+    let mut a = 1;
+    let mut b = 2;
+    // SAFETY: two distinct locals.
+    unsafe { swap_raw(&mut a, &mut b) };
+    let boxed = MyBox::new(41);
+    let bytes: [u8; 4] = cast(0x0102_0304u32);
+    let x = 7u64;
+    // SAFETY: `x` is a live local.
+    let read = unsafe { read_raw(&x) };
+    c_abs(-3) as i64
+        + c_len(c"four") as i64
+        + c_atoi(c"12") as i64
+        + a as i64
+        + b as i64
+        + *boxed.get() as i64
+        + bytes.iter().map(|&v| v as i64).sum::<i64>()
+        + squares().iter().map(|&v| v as i64).sum::<i64>()
+        + sum_by_pointer(&[1, 2, 3])
+        + raw_borrow() as i64
+        + read as i64
+}

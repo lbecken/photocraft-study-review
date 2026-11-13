@@ -1,0 +1,158 @@
+//! Hand-written bit flags, bit tricks and integer arithmetic helpers.
+
+use std::fmt;
+use std::ops::{BitAnd, BitOr, BitOrAssign, BitXor, Sub};
+
+/// File permissions as bit flags.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Perms(u16);
+
+impl Perms {
+    pub const NONE: Perms = Perms(0);
+    pub const READ: Perms = Perms(0b0000_0100);
+    pub const WRITE: Perms = Perms(0b0000_0010);
+    pub const EXEC: Perms = Perms(0b0000_0001);
+    pub const ALL: Perms = Perms(Self::READ.0 | Self::WRITE.0 | Self::EXEC.0);
+
+    /// Whether every bit of `other` is set.
+    pub const fn contains(self, other: Perms) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// The raw bits.
+    pub const fn bits(self) -> u16 {
+        self.0
+    }
+
+    /// From an octal digit, ignoring higher bits.
+    pub const fn from_octal_digit(d: u8) -> Perms {
+        Perms((d & 0o7) as u16)
+    }
+}
+
+impl BitOr for Perms {
+    type Output = Perms;
+    fn bitor(self, o: Perms) -> Perms {
+        Perms(self.0 | o.0)
+    }
+}
+
+impl BitAnd for Perms {
+    type Output = Perms;
+    fn bitand(self, o: Perms) -> Perms {
+        Perms(self.0 & o.0)
+    }
+}
+
+impl BitXor for Perms {
+    type Output = Perms;
+    fn bitxor(self, o: Perms) -> Perms {
+        Perms(self.0 ^ o.0)
+    }
+}
+
+impl Sub for Perms {
+    type Output = Perms;
+    fn sub(self, o: Perms) -> Perms {
+        Perms(self.0 & !o.0)
+    }
+}
+
+impl BitOrAssign for Perms {
+    fn bitor_assign(&mut self, o: Perms) {
+        self.0 |= o.0;
+    }
+}
+
+impl fmt::Debug for Perms {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let r = if self.contains(Perms::READ) { 'r' } else { '-' };
+        let w = if self.contains(Perms::WRITE) { 'w' } else { '-' };
+        let x = if self.contains(Perms::EXEC) { 'x' } else { '-' };
+        write!(f, "{r}{w}{x}")
+    }
+}
+
+/// Population count without the intrinsic.
+pub const fn popcount(mut x: u64) -> u32 {
+    let mut n = 0;
+    while x != 0 {
+        x &= x - 1;
+        n += 1;
+    }
+    n
+}
+
+/// Round up to the next power of two (0 stays 0).
+pub const fn next_pow2(x: u32) -> u32 {
+    if x == 0 {
+        return 0;
+    }
+    let mut v = x - 1;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v.wrapping_add(1)
+}
+
+/// Reverse the bits of a byte.
+pub fn reverse_byte(b: u8) -> u8 {
+    let mut b = b;
+    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+    b
+}
+
+/// Checked, wrapping, saturating and overflowing arithmetic.
+pub fn arith(a: u8, b: u8) -> (Option<u8>, u8, u8, (u8, bool)) {
+    (a.checked_add(b), a.wrapping_mul(b), a.saturating_sub(b), a.overflowing_add(b))
+}
+
+/// Pack four bytes into a `u32`, big-endian, and back.
+pub fn pack(bytes: [u8; 4]) -> (u32, [u8; 4]) {
+    let v = u32::from(bytes[0]) << 24 | u32::from(bytes[1]) << 16 | u32::from(bytes[2]) << 8 | u32::from(bytes[3]);
+    (v, v.to_be_bytes())
+}
+
+/// Gray code and its inverse.
+pub fn gray(n: u32) -> (u32, u32) {
+    let g = n ^ (n >> 1);
+    let mut inv = g;
+    let mut shift = 1;
+    while shift < 32 {
+        inv ^= inv >> shift;
+        shift <<= 1;
+    }
+    (g, inv)
+}
+
+/// Exercise everything.
+pub fn demo() -> u64 {
+    let mut p = Perms::READ | Perms::WRITE;
+    p |= Perms::from_octal_digit(0o5);
+    let without = Perms::ALL - Perms::WRITE;
+    let shown = format!("{:?}{:?}", p, without);
+    let (c, w, s, (o, flag)) = arith(200, 100);
+    let (packed, back) = pack([0xDE, 0xAD, 0xBE, 0xEF]);
+    let (g, inv) = gray(1234);
+    u64::from(p.bits())
+        + u64::from((p & Perms::EXEC).bits())
+        + u64::from((p ^ Perms::ALL).bits())
+        + shown.len() as u64
+        + u64::from(popcount(0xFFFF_0000_FFFF))
+        + u64::from(next_pow2(1000))
+        + u64::from(reverse_byte(0b0000_0001))
+        + u64::from(c.unwrap_or(0))
+        + u64::from(w)
+        + u64::from(s)
+        + u64::from(o)
+        + u64::from(flag)
+        + u64::from(packed % 1000)
+        + u64::from(back[0])
+        + u64::from(g)
+        + u64::from(inv)
+        + u64::from(Perms::NONE == Perms::default())
+}

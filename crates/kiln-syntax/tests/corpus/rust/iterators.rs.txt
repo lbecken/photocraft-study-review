@@ -1,0 +1,163 @@
+//! Custom iterators, `IntoIterator` impls and iterator adaptor chains.
+
+use std::collections::VecDeque;
+use std::iter::{FromIterator, Peekable};
+
+/// The Fibonacci numbers, stopping before overflow.
+#[derive(Debug, Clone)]
+pub struct Fib {
+    a: u64,
+    b: u64,
+    done: bool,
+}
+
+impl Fib {
+    /// Start at 0, 1.
+    pub fn new() -> Self {
+        Fib { a: 0, b: 1, done: false }
+    }
+}
+
+impl Iterator for Fib {
+    type Item = u64;
+    fn next(&mut self) -> Option<u64> {
+        if self.done {
+            return None;
+        }
+        let out = self.a;
+        match self.a.checked_add(self.b) {
+            Some(next) => {
+                self.a = self.b;
+                self.b = next;
+            }
+            None => self.done = true,
+        }
+        Some(out)
+    }
+}
+
+/// A ring of values that can be iterated by reference or by value.
+#[derive(Debug, Default)]
+pub struct Ring<T> {
+    items: VecDeque<T>,
+}
+
+impl<T> FromIterator<T> for Ring<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        Ring { items: iter.into_iter().collect() }
+    }
+}
+
+impl<T> IntoIterator for Ring<T> {
+    type Item = T;
+    type IntoIter = std::collections::vec_deque::IntoIter<T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Ring<T> {
+    type Item = &'a T;
+    type IntoIter = std::collections::vec_deque::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.iter()
+    }
+}
+
+/// Group consecutive equal items, using `Peekable`.
+pub fn runs<I>(iter: I) -> Vec<(I::Item, usize)>
+where
+    I: Iterator,
+    I::Item: PartialEq + Clone,
+{
+    let mut it: Peekable<I> = iter.peekable();
+    let mut out = Vec::new();
+    while let Some(x) = it.next() {
+        let mut n = 1;
+        while it.peek() == Some(&x) {
+            it.next();
+            n += 1;
+        }
+        out.push((x, n));
+    }
+    out
+}
+
+/// A long adaptor chain.
+pub fn chain(words: &[&str]) -> Vec<String> {
+    words
+        .iter()
+        .copied()
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .enumerate()
+        .skip_while(|(i, _)| *i == 0)
+        .take_while(|(_, w)| w != "stop")
+        .flat_map(|(i, w)| std::iter::repeat_n(w, i % 2 + 1))
+        .inspect(|_| {})
+        .collect()
+}
+
+/// Folds, scans and reductions.
+pub fn stats(xs: &[i32]) -> (i32, i32, Vec<i32>, Option<i32>) {
+    let sum = xs.iter().fold(0, |acc, x| acc + x);
+    let product = xs.iter().product();
+    let running: Vec<i32> = xs
+        .iter()
+        .scan(0, |state, &x| {
+            *state += x;
+            Some(*state)
+        })
+        .collect();
+    let max = xs.iter().copied().reduce(i32::max);
+    (sum, product, running, max)
+}
+
+/// `zip`, `unzip`, `partition`, `chain` and `cycle`.
+pub fn shuffle(xs: &[u8]) -> (Vec<u8>, Vec<u8>, usize) {
+    let (even, odd): (Vec<u8>, Vec<u8>) = xs.iter().partition(|&&x| x % 2 == 0);
+    let (a, b): (Vec<u8>, Vec<u8>) = even.iter().zip(odd.iter()).map(|(&e, &o)| (e, o)).unzip();
+    let cyc = a.iter().chain(b.iter()).cycle().take(10).count();
+    (a, b, cyc)
+}
+
+/// An iterator built from a closure.
+pub fn powers_of(base: u32) -> impl Iterator<Item = u32> {
+    let mut cur = Some(1u32);
+    std::iter::from_fn(move || {
+        let out = cur?;
+        cur = out.checked_mul(base);
+        Some(out)
+    })
+}
+
+/// `successors` and `sum` over a mapped range.
+pub fn halvings(n: u32) -> usize {
+    std::iter::successors(Some(n), |&x| (x > 1).then_some(x / 2)).count()
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let fibs = Fib::new().take_while(|&f| f < 100).count();
+    let all_fibs = Fib::new().count();
+    let ring: Ring<i32> = (1..=4).collect();
+    let by_ref: i32 = (&ring).into_iter().sum();
+    let by_val: Vec<i32> = ring.into_iter().rev().collect();
+    let r = runs("aaabccdd".chars());
+    let c = chain(&["Skip", "A", "", "b", "C", "stop", "d"]);
+    let (s, p, run, m) = stats(&[1, 2, 3, 4]);
+    let (a, b, cyc) = shuffle(&[1, 2, 3, 4, 5, 6]);
+    fibs + all_fibs
+        + by_ref as usize
+        + by_val.len()
+        + r.len()
+        + c.len()
+        + (s + p) as usize
+        + run.len()
+        + m.unwrap_or(0) as usize
+        + a.len()
+        + b.len()
+        + cyc
+        + powers_of(3).count()
+        + halvings(100)
+}

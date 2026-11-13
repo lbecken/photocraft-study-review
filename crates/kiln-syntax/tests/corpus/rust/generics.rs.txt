@@ -1,0 +1,157 @@
+//! Generic containers: bounds, `where` clauses, lifetimes, const generics,
+//! associated types and associated consts.
+
+use std::collections::HashMap;
+use std::fmt::{self, Debug, Display};
+use std::hash::Hash;
+
+/// A fixed-capacity ring buffer whose capacity is a const generic.
+pub struct Ring<T, const N: usize> {
+    items: [Option<T>; N],
+    head: usize,
+    len: usize,
+}
+
+impl<T: Copy, const N: usize> Ring<T, N> {
+    /// An empty ring.
+    pub const fn new() -> Self {
+        Ring { items: [None; N], head: 0, len: 0 }
+    }
+
+    /// Push, overwriting the oldest item when full.
+    pub fn push(&mut self, value: T) {
+        let slot = (self.head + self.len) % N;
+        self.items[slot] = Some(value);
+        if self.len < N {
+            self.len += 1;
+        } else {
+            self.head = (self.head + 1) % N;
+        }
+    }
+
+    /// The items, oldest first.
+    pub fn to_vec(&self) -> Vec<T> {
+        (0..self.len)
+            .filter_map(|i| self.items[(self.head + i) % N])
+            .collect()
+    }
+
+    /// The capacity.
+    pub const CAPACITY: usize = N;
+}
+
+/// Something that can be measured.
+pub trait Measure {
+    /// The unit of the measure.
+    type Unit: Copy + Debug + PartialOrd;
+    /// The smallest possible measure.
+    const ZERO: Self::Unit;
+    /// Measure `self`.
+    fn measure(&self) -> Self::Unit;
+}
+
+impl Measure for str {
+    type Unit = usize;
+    const ZERO: usize = 0;
+    fn measure(&self) -> usize {
+        self.chars().count()
+    }
+}
+
+impl<T> Measure for [T] {
+    type Unit = usize;
+    const ZERO: usize = 0;
+    fn measure(&self) -> usize {
+        self.len()
+    }
+}
+
+/// The largest measure in `items`, or `M::ZERO`.
+pub fn largest<'a, M>(items: &[&'a M]) -> M::Unit
+where
+    M: Measure + ?Sized + 'a,
+{
+    let mut best = M::ZERO;
+    for item in items {
+        let m = item.measure();
+        if m > best {
+            best = m;
+        }
+    }
+    best
+}
+
+/// Count how often each key occurs.
+pub fn histogram<K, I>(keys: I) -> HashMap<K, usize>
+where
+    K: Eq + Hash,
+    I: IntoIterator<Item = K>,
+{
+    let mut map = HashMap::new();
+    for k in keys {
+        *map.entry(k).or_insert(0) += 1;
+    }
+    map
+}
+
+/// A pair that borrows both halves.
+#[derive(Debug, Clone, Copy)]
+pub struct Pair<'a, 'b: 'a, A: ?Sized, B: ?Sized> {
+    left: &'a A,
+    right: &'b B,
+}
+
+impl<'a, 'b: 'a, A, B> Display for Pair<'a, 'b, A, B>
+where
+    A: Display + ?Sized,
+    B: Display + ?Sized,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.left, self.right)
+    }
+}
+
+/// Pick the longer of two strings; both share one lifetime.
+pub fn longer<'s>(a: &'s str, b: &'s str) -> &'s str {
+    if a.len() >= b.len() { a } else { b }
+}
+
+/// Sum an array of any length.
+pub fn sum_array<const LEN: usize>(xs: [i64; LEN]) -> i64 {
+    xs.iter().copied().sum()
+}
+
+/// A matrix shape known at compile time.
+pub struct Shape<const R: usize, const C: usize>;
+
+impl<const R: usize, const C: usize> Shape<R, C> {
+    /// Number of cells.
+    pub const CELLS: usize = R * C;
+    /// Whether the shape is square.
+    pub const fn is_square() -> bool {
+        R == C
+    }
+}
+
+/// Exercise everything above.
+pub fn demo() -> String {
+    let mut ring: Ring<u8, 3> = Ring::new();
+    for b in 1..=5u8 {
+        ring.push(b);
+    }
+    let words: [&str; 3] = ["a", "abc", "ab"];
+    let refs: Vec<&str> = words.to_vec();
+    let biggest = largest::<str>(&refs);
+    let hist = histogram("hello".chars());
+    let pair = Pair { left: "x", right: &3 };
+    format!(
+        "{:?} {} {} {} {} {} {}",
+        ring.to_vec(),
+        biggest,
+        hist[&'l'],
+        pair,
+        longer("ab", "abc"),
+        sum_array([1, 2, 3, 4]),
+        Shape::<2, 3>::CELLS + Ring::<u8, 3>::CAPACITY + usize::from(Shape::<2, 2>::is_square())
+    )
+}

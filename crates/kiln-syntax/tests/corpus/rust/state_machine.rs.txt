@@ -1,0 +1,150 @@
+//! A traffic-light state machine and a small tokenizer driven by states.
+
+use std::fmt;
+
+/// The light's state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Light {
+    Red { remaining: u8 },
+    Green { remaining: u8 },
+    Yellow { remaining: u8 },
+    Flashing,
+}
+
+/// Inputs to the light.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    Tick,
+    Fault,
+    Reset,
+}
+
+impl Light {
+    /// The initial state.
+    pub const START: Light = Light::Red { remaining: 3 };
+
+    /// Advance by one event.
+    pub fn step(self, e: Event) -> Light {
+        use Light::*;
+        match (self, e) {
+            (_, Event::Fault) => Flashing,
+            (Flashing, Event::Reset) | (_, Event::Reset) => Self::START,
+            (Flashing, Event::Tick) => Flashing,
+            (Red { remaining: 0 }, Event::Tick) => Green { remaining: 4 },
+            (Green { remaining: 0 }, Event::Tick) => Yellow { remaining: 1 },
+            (Yellow { remaining: 0 }, Event::Tick) => Red { remaining: 3 },
+            (Red { remaining: n }, Event::Tick) => Red { remaining: n - 1 },
+            (Green { remaining: n }, Event::Tick) => Green { remaining: n - 1 },
+            (Yellow { remaining: n }, Event::Tick) => Yellow { remaining: n - 1 },
+        }
+    }
+
+    /// Whether cars may drive.
+    pub fn go(self) -> bool {
+        matches!(self, Light::Green { .. })
+    }
+}
+
+impl fmt::Display for Light {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (name, n) = match *self {
+            Light::Red { remaining } => ("red", remaining),
+            Light::Green { remaining } => ("green", remaining),
+            Light::Yellow { remaining } => ("yellow", remaining),
+            Light::Flashing => return f.write_str("flashing"),
+        };
+        write!(f, "{name}({n})")
+    }
+}
+
+/// Tokens of a tiny arithmetic language.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Tok {
+    Num(i64),
+    Ident(String),
+    Op(char),
+    LParen,
+    RParen,
+}
+
+/// Tokenizer states.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Start,
+    InNumber,
+    InIdent,
+}
+
+/// Tokenize `src`, returning the offending char on error.
+pub fn tokenize(src: &str) -> Result<Vec<Tok>, char> {
+    let mut out = Vec::new();
+    let mut mode = Mode::Start;
+    let mut buf = String::new();
+    let mut chars = src.chars().chain(std::iter::once(' ')).peekable();
+    while let Some(&c) = chars.peek() {
+        match mode {
+            Mode::Start => {
+                chars.next();
+                match c {
+                    ' ' | '\t' | '\n' => {}
+                    '0'..='9' => {
+                        buf.push(c);
+                        mode = Mode::InNumber;
+                    }
+                    'a'..='z' | 'A'..='Z' | '_' => {
+                        buf.push(c);
+                        mode = Mode::InIdent;
+                    }
+                    '+' | '-' | '*' | '/' => out.push(Tok::Op(c)),
+                    '(' => out.push(Tok::LParen),
+                    ')' => out.push(Tok::RParen),
+                    other => return Err(other),
+                }
+            }
+            Mode::InNumber if c.is_ascii_digit() || c == '_' => {
+                chars.next();
+                if c != '_' {
+                    buf.push(c);
+                }
+            }
+            Mode::InIdent if c.is_ascii_alphanumeric() || c == '_' => {
+                chars.next();
+                buf.push(c);
+            }
+            Mode::InNumber => {
+                out.push(Tok::Num(buf.parse().map_err(|_| '?')?));
+                buf.clear();
+                mode = Mode::Start;
+            }
+            Mode::InIdent => {
+                out.push(Tok::Ident(std::mem::take(&mut buf)));
+                mode = Mode::Start;
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Run a sequence of events and record every state.
+pub fn run(events: &[Event]) -> Vec<Light> {
+    events
+        .iter()
+        .scan(Light::START, |s, &e| {
+            *s = s.step(e);
+            Some(*s)
+        })
+        .collect()
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let evs = [Event::Tick; 12];
+    let states = run(&evs);
+    let greens = states.iter().filter(|s| s.go()).count();
+    let text: String = states.iter().map(|s| s.to_string()).collect();
+    let after_fault = Light::START.step(Event::Fault).step(Event::Tick);
+    let reset = after_fault.step(Event::Reset);
+    let toks = tokenize("x1 + (2_000 * y) - 7").unwrap_or_default();
+    let bad = tokenize("a $ b").err().map_or(0, |c| c.len_utf8());
+    greens + text.len() + usize::from(reset == Light::START) + toks.len() + bad
+}

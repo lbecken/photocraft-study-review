@@ -1,0 +1,129 @@
+//! Inner and outer attributes, doc comments of every kind and nested block comments.
+//!
+//! This module doc uses `//!` lines.
+#![allow(dead_code, unused_variables)]
+#![warn(clippy::pedantic)]
+
+/*! An inner block doc comment, opened with slash, star and bang. */
+
+/// An outer line doc comment.
+///
+/// # Examples
+/// ```
+/// let x = 1;
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct Tagged {
+    /// The tag.
+    pub tag: u16,
+    /** A block doc comment on a field. */
+    pub value: i32,
+}
+
+/**
+ * A block doc comment on a function,
+ * spread over several lines.
+ */
+#[inline]
+#[must_use = "the sum is the point"]
+pub fn sum(a: i32, b: i32) -> i32 {
+    a + b // a trailing line comment
+}
+
+/* A plain block comment. /* With a nested comment inside, /* even two levels */ deep. */
+   Still the outer comment. */
+#[cfg(not(any(target_os = "none", feature = "never-enabled")))]
+pub fn available() -> bool {
+    true
+}
+
+#[cfg(feature = "never-enabled")]
+pub fn available() -> bool {
+    false
+}
+
+/// Attributes on statements, expressions and parameters.
+pub fn attributes_everywhere(#[allow(unused)] unused: u8) -> u32 {
+    #[allow(unused_mut)]
+    let mut x = 1;
+    #[cfg(any())]
+    let x = 100;
+    #[allow(unused_parens)]
+    let y = (x + 1);
+    y
+}
+
+/// An enum with attributes on its variants.
+#[derive(Debug)]
+#[repr(u8)]
+pub enum Level {
+    /// Low.
+    #[doc(alias = "small")]
+    Low = 1,
+    /// High.
+    High = 2,
+    #[deprecated(note = "use High")]
+    /// Very high, deprecated.
+    VeryHigh = 3,
+}
+
+/// A trait with documented items.
+pub trait Documented {
+    /// An associated constant.
+    const NAME: &'static str;
+    /// A required method.
+    #[must_use]
+    fn doc(&self) -> String;
+}
+
+impl Documented for Tagged {
+    const NAME: &'static str = "tagged";
+    #[inline(always)]
+    fn doc(&self) -> String {
+        /* block comment inside a body */
+        format!("{}#{}", Self::NAME, self.tag)
+    }
+}
+
+// A comment that contains "a string" and 'c' and /* an unclosed opener
+// on two lines.
+/// A function whose body is mostly comments.
+pub fn commented() -> u8 {
+    // one
+    /* two */
+    /* three /* four */ */
+    /// a doc comment on a statement is allowed for `let`
+    let v = 5;
+    v
+}
+
+#[test]
+fn a_test_is_just_an_attribute() {
+    assert_eq!(sum(1, 2), 3);
+}
+
+#[cfg(test)]
+mod tests {
+    //! Inner doc comment of a module.
+    use super::*;
+
+    #[test]
+    fn tagged_doc() {
+        assert_eq!(Tagged { tag: 7, value: 0 }.doc(), "tagged#7");
+    }
+}
+
+/// Exercise everything.
+pub fn demo() -> i64 {
+    let t = Tagged::default();
+    #[allow(deprecated)]
+    let lv = Level::VeryHigh as i64;
+    sum(t.value, 1) as i64
+        + i64::from(available())
+        + attributes_everywhere(0) as i64
+        + Level::Low as i64
+        + Level::High as i64
+        + lv
+        + t.doc().len() as i64
+        + commented() as i64
+}

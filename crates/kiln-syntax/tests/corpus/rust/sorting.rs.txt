@@ -1,0 +1,158 @@
+//! Sorting algorithms over generic slices with `Ord` and comparator closures.
+
+use std::cmp::Ordering;
+
+/// Insertion sort, stable.
+pub fn insertion_sort<T: Ord>(xs: &mut [T]) {
+    for i in 1..xs.len() {
+        let mut j = i;
+        while j > 0 && xs[j - 1] > xs[j] {
+            xs.swap(j - 1, j);
+            j -= 1;
+        }
+    }
+}
+
+/// Merge sort with a comparator, allocating a buffer.
+pub fn merge_sort_by<T: Clone, F>(xs: &mut [T], cmp: &F)
+where
+    F: Fn(&T, &T) -> Ordering,
+{
+    let n = xs.len();
+    if n <= 1 {
+        return;
+    }
+    let mid = n / 2;
+    merge_sort_by(&mut xs[..mid], cmp);
+    merge_sort_by(&mut xs[mid..], cmp);
+    let mut merged = Vec::with_capacity(n);
+    let (mut i, mut j) = (0, mid);
+    while i < mid && j < n {
+        if cmp(&xs[j], &xs[i]) == Ordering::Less {
+            merged.push(xs[j].clone());
+            j += 1;
+        } else {
+            merged.push(xs[i].clone());
+            i += 1;
+        }
+    }
+    merged.extend_from_slice(&xs[i..mid]);
+    merged.extend_from_slice(&xs[j..]);
+    xs.clone_from_slice(&merged);
+}
+
+/// Quicksort with Lomuto partitioning.
+pub fn quicksort<T: PartialOrd + Copy>(xs: &mut [T]) {
+    if xs.len() <= 1 {
+        return;
+    }
+    let p = partition(xs);
+    let (left, right) = xs.split_at_mut(p);
+    quicksort(left);
+    quicksort(&mut right[1..]);
+}
+
+fn partition<T: PartialOrd + Copy>(xs: &mut [T]) -> usize {
+    let last = xs.len() - 1;
+    let pivot = xs[last];
+    let mut store = 0;
+    for i in 0..last {
+        if xs[i] < pivot {
+            xs.swap(i, store);
+            store += 1;
+        }
+    }
+    xs.swap(store, last);
+    store
+}
+
+/// Heap sort through a sift-down helper.
+pub fn heap_sort<T: Ord>(xs: &mut [T]) {
+    let n = xs.len();
+    for start in (0..n / 2).rev() {
+        sift_down(xs, start, n);
+    }
+    for end in (1..n).rev() {
+        xs.swap(0, end);
+        sift_down(xs, 0, end);
+    }
+}
+
+fn sift_down<T: Ord>(xs: &mut [T], mut root: usize, end: usize) {
+    loop {
+        let mut child = 2 * root + 1;
+        if child >= end {
+            break;
+        }
+        if child + 1 < end && xs[child] < xs[child + 1] {
+            child += 1;
+        }
+        if xs[root] >= xs[child] {
+            break;
+        }
+        xs.swap(root, child);
+        root = child;
+    }
+}
+
+/// Counting sort for small keys.
+pub fn counting_sort(xs: &[u8]) -> Vec<u8> {
+    let mut counts = [0usize; 256];
+    for &x in xs {
+        counts[x as usize] += 1;
+    }
+    counts
+        .iter()
+        .enumerate()
+        .flat_map(|(v, &c)| std::iter::repeat_n(v as u8, c))
+        .collect()
+}
+
+/// Whether a slice is sorted by `key`.
+pub fn is_sorted_by_key<T, K: PartialOrd>(xs: &[T], key: impl Fn(&T) -> K) -> bool {
+    xs.windows(2).all(|w| key(&w[0]) <= key(&w[1]))
+}
+
+/// A record sorted by several keys.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Row {
+    pub name: &'static str,
+    pub score: u32,
+    pub time: f32,
+}
+
+/// Sort rows by score descending, then time ascending, then name.
+pub fn rank(rows: &mut [Row]) {
+    rows.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.time.partial_cmp(&b.time).unwrap_or(Ordering::Equal))
+            .then_with(|| a.name.cmp(b.name))
+    });
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let mut a = [5, 2, 9, 1, 5, 6];
+    insertion_sort(&mut a);
+    let mut b = vec!["pear", "fig", "apple", "kiwi"];
+    merge_sort_by(&mut b, &|x: &&str, y: &&str| x.len().cmp(&y.len()));
+    let mut c = [3.5, -1.0, 2.25, 0.0];
+    quicksort(&mut c);
+    let mut d = vec![10, 3, 7, 3, 1];
+    heap_sort(&mut d);
+    let e = counting_sort(b"banana");
+    let mut rows = vec![
+        Row { name: "b", score: 10, time: 2.0 },
+        Row { name: "a", score: 10, time: 2.0 },
+        Row { name: "c", score: 12, time: 9.5 },
+    ];
+    rank(&mut rows);
+    usize::from(is_sorted_by_key(&a, |x| *x))
+        + usize::from(is_sorted_by_key(&b, |s| s.len()))
+        + usize::from(is_sorted_by_key(&c, |x| *x))
+        + usize::from(is_sorted_by_key(&d, |x| *x))
+        + e.len()
+        + rows[0].name.len()
+        + rows.iter().position(|r| r.name == "a").unwrap_or(9)
+}

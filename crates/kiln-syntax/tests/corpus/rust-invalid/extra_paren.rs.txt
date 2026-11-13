@@ -1,0 +1,11 @@
+//! Invalid: an extra closing parenthesis in a call.
+
+/// Clamp a value.
+pub fn clamp(v: i32, lo: i32, hi: i32) -> i32 {
+    v.max(lo)).min(hi)
+}
+
+/// Fine on its own.
+pub fn twice(v: i32) -> i32 {
+    v * 2
+}

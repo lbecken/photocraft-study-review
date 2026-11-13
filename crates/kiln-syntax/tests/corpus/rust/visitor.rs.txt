@@ -1,0 +1,184 @@
+//! A visitor over a small statement language, with default methods that walk children.
+
+use std::collections::HashMap;
+
+/// Expressions.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    Int(i64),
+    Name(String),
+    Bin(Box<Expr>, Op, Box<Expr>),
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
+}
+
+/// Binary operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Op {
+    Add,
+    Sub,
+    Mul,
+    Lt,
+}
+
+/// Statements.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    Let(String, Expr),
+    Print(Expr),
+    While(Expr, Vec<Stmt>),
+    Assign(String, Expr),
+}
+
+/// A visitor; every method has a default that walks into children.
+pub trait Visitor {
+    /// Visit a statement.
+    fn visit_stmt(&mut self, s: &Stmt) {
+        walk_stmt(self, s);
+    }
+    /// Visit an expression.
+    fn visit_expr(&mut self, e: &Expr) {
+        walk_expr(self, e);
+    }
+    /// Visit a name use.
+    fn visit_name(&mut self, _name: &str) {}
+}
+
+/// Walk a statement's children.
+pub fn walk_stmt<V: Visitor + ?Sized>(v: &mut V, s: &Stmt) {
+    match s {
+        Stmt::Let(_, e) | Stmt::Print(e) | Stmt::Assign(_, e) => v.visit_expr(e),
+        Stmt::While(c, body) => {
+            v.visit_expr(c);
+            for s in body {
+                v.visit_stmt(s);
+            }
+        }
+    }
+}
+
+/// Walk an expression's children.
+pub fn walk_expr<V: Visitor + ?Sized>(v: &mut V, e: &Expr) {
+    match e {
+        Expr::Int(_) => {}
+        Expr::Name(n) => v.visit_name(n),
+        Expr::Bin(a, _, b) => {
+            v.visit_expr(a);
+            v.visit_expr(b);
+        }
+        Expr::If(c, t, f) => {
+            v.visit_expr(c);
+            v.visit_expr(t);
+            v.visit_expr(f);
+        }
+    }
+}
+
+/// Counts every name use.
+#[derive(Default)]
+pub struct NameCounter {
+    pub counts: HashMap<String, usize>,
+}
+
+impl Visitor for NameCounter {
+    fn visit_name(&mut self, name: &str) {
+        *self.counts.entry(name.to_owned()).or_default() += 1;
+    }
+}
+
+/// Finds the maximum nesting depth of expressions.
+#[derive(Default)]
+pub struct Depth {
+    cur: usize,
+    pub max: usize,
+}
+
+impl Visitor for Depth {
+    fn visit_expr(&mut self, e: &Expr) {
+        self.cur += 1;
+        self.max = self.max.max(self.cur);
+        walk_expr(self, e);
+        self.cur -= 1;
+    }
+}
+
+/// An interpreter, not a visitor: it needs return values.
+pub struct Machine {
+    vars: HashMap<String, i64>,
+    pub output: Vec<i64>,
+    fuel: u32,
+}
+
+impl Machine {
+    /// A machine with a step budget.
+    pub fn new(fuel: u32) -> Self {
+        Machine { vars: HashMap::new(), output: Vec::new(), fuel }
+    }
+
+    fn eval(&self, e: &Expr) -> i64 {
+        match e {
+            Expr::Int(i) => *i,
+            Expr::Name(n) => self.vars.get(n).copied().unwrap_or(0),
+            Expr::Bin(a, op, b) => {
+                let (x, y) = (self.eval(a), self.eval(b));
+                match op {
+                    Op::Add => x + y,
+                    Op::Sub => x - y,
+                    Op::Mul => x * y,
+                    Op::Lt => i64::from(x < y),
+                }
+            }
+            Expr::If(c, t, f) => if self.eval(c) != 0 { self.eval(t) } else { self.eval(f) },
+        }
+    }
+
+    /// Run statements until done or out of fuel.
+    pub fn run(&mut self, prog: &[Stmt]) {
+        for s in prog {
+            if self.fuel == 0 {
+                return;
+            }
+            self.fuel -= 1;
+            match s {
+                Stmt::Let(n, e) | Stmt::Assign(n, e) => {
+                    let v = self.eval(e);
+                    self.vars.insert(n.clone(), v);
+                }
+                Stmt::Print(e) => self.output.push(self.eval(e)),
+                Stmt::While(c, body) => {
+                    while self.fuel > 0 && self.eval(c) != 0 {
+                        self.run(body);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn name(s: &str) -> Box<Expr> {
+    Box::new(Expr::Name(s.to_owned()))
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let prog = vec![
+        Stmt::Let("i".into(), Expr::Int(0)),
+        Stmt::Let("acc".into(), Expr::Int(1)),
+        Stmt::While(
+            Expr::Bin(name("i"), Op::Lt, Box::new(Expr::Int(5))),
+            vec![
+                Stmt::Assign("acc".into(), Expr::Bin(name("acc"), Op::Mul, Box::new(Expr::Int(2)))),
+                Stmt::Assign("i".into(), Expr::Bin(name("i"), Op::Add, Box::new(Expr::Int(1)))),
+            ],
+        ),
+        Stmt::Print(Expr::If(name("acc"), name("acc"), Box::new(Expr::Int(-1)))),
+    ];
+    let mut counter = NameCounter::default();
+    let mut depth = Depth::default();
+    for s in &prog {
+        counter.visit_stmt(s);
+        depth.visit_stmt(s);
+    }
+    let mut m = Machine::new(1_000);
+    m.run(&prog);
+    counter.counts.values().sum::<usize>() + depth.max + m.output.iter().sum::<i64>() as usize
+}

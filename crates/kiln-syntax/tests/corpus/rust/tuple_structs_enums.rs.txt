@@ -1,0 +1,169 @@
+//! Tuple structs, unit structs, enums with explicit discriminants and `#[repr]`.
+
+use std::convert::TryFrom;
+
+/// A tuple struct of three channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Rgb(pub u8, pub u8, pub u8);
+
+/// A newtype over a count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Count(u32);
+
+/// A unit struct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Marker;
+
+/// A generic tuple struct with a phantom parameter.
+pub struct Tagged<T, Tag>(pub T, std::marker::PhantomData<Tag>);
+
+/// HTTP-like status codes with explicit discriminants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+pub enum Status {
+    Ok = 200,
+    Created = 201,
+    NotFound = 404,
+    Teapot = 418,
+    Internal = 500,
+}
+
+impl TryFrom<u16> for Status {
+    type Error = u16;
+    fn try_from(v: u16) -> Result<Self, u16> {
+        Ok(match v {
+            200 => Status::Ok,
+            201 => Status::Created,
+            404 => Status::NotFound,
+            418 => Status::Teapot,
+            500 => Status::Internal,
+            other => return Err(other),
+        })
+    }
+}
+
+/// Discriminants computed from constant expressions.
+#[derive(Debug, Clone, Copy)]
+#[repr(i8)]
+pub enum Sign {
+    Minus = -1,
+    Zero = 0,
+    Plus = 1 << 0,
+}
+
+const BASE: isize = 10;
+
+/// Discriminants referring to a constant, with implicit increments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Level {
+    Low = BASE,
+    Mid,
+    High = BASE * 10,
+    Max,
+}
+
+/// An enum mixing tuple, struct and unit variants.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Shape {
+    Circle(f64),
+    Rect { w: f64, h: f64 },
+    Polygon(Vec<(f64, f64)>),
+    Empty,
+}
+
+impl Shape {
+    /// Area of the shape.
+    pub fn area(&self) -> f64 {
+        match self {
+            Shape::Circle(r) => std::f64::consts::PI * r * r,
+            Shape::Rect { w, h } => w * h,
+            Shape::Polygon(pts) => {
+                let n = pts.len();
+                let twice: f64 = (0..n)
+                    .map(|i| {
+                        let (x1, y1) = pts[i];
+                        let (x2, y2) = pts[(i + 1) % n];
+                        x1 * y2 - x2 * y1
+                    })
+                    .sum();
+                twice.abs() / 2.0
+            }
+            Shape::Empty => 0.0,
+        }
+    }
+}
+
+impl Rgb {
+    /// Brightness, the mean of the channels.
+    pub fn brightness(self) -> u8 {
+        let Rgb(r, g, b) = self;
+        ((u16::from(r) + u16::from(g) + u16::from(b)) / 3) as u8
+    }
+
+    /// Swap red and blue through tuple field access.
+    pub fn bgr(self) -> Rgb {
+        Rgb(self.2, self.1, self.0)
+    }
+}
+
+impl Count {
+    /// Increment, saturating.
+    pub fn bump(self) -> Count {
+        Count(self.0.saturating_add(1))
+    }
+}
+
+/// A C-like enum as an index into a table.
+#[derive(Debug, Clone, Copy)]
+pub enum Weekday {
+    Mon,
+    Tue,
+    Wed,
+    Thu,
+    Fri,
+    Sat,
+    Sun,
+}
+
+/// Short names in discriminant order.
+pub const NAMES: [&str; 7] = ["mo", "tu", "we", "th", "fr", "sa", "su"];
+
+/// Name of a weekday through its discriminant.
+pub fn name(d: Weekday) -> &'static str {
+    NAMES[d as usize]
+}
+
+/// Exercise everything.
+pub fn demo() -> i64 {
+    let c = Rgb(10, 20, 30);
+    let t: Tagged<u8, Marker> = Tagged(5, std::marker::PhantomData);
+    let shapes = [
+        Shape::Circle(1.0),
+        Shape::Rect { w: 2.0, h: 3.0 },
+        Shape::Polygon(vec![(0.0, 0.0), (4.0, 0.0), (4.0, 3.0)]),
+        Shape::Empty,
+    ];
+    let area: f64 = shapes.iter().map(Shape::area).sum();
+    let st = Status::try_from(418).map(|s| s as i64).unwrap_or(0);
+    let bad = Status::try_from(999).err().unwrap_or(0) as i64;
+    c.brightness() as i64
+        + c.bgr().0 as i64
+        + Count(1).bump().0 as i64
+        + t.0 as i64
+        + area as i64
+        + st
+        + bad
+        + Sign::Minus as i64
+        + Sign::Zero as i64
+        + Sign::Plus as i64
+        + Level::Mid as i64
+        + Level::Max as i64
+        + i64::from(Level::Low < Level::High)
+        + name(Weekday::Sun).len() as i64
+        + Status::Ok as i64
+        + Status::Created as i64
+        + Status::NotFound as i64
+        + Status::Internal as i64
+        + i64::from(Marker == Marker)
+        + [Weekday::Mon, Weekday::Tue, Weekday::Wed, Weekday::Thu, Weekday::Fri, Weekday::Sat].len() as i64
+}

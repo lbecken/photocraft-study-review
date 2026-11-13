@@ -1,0 +1,144 @@
+//! Operator overloading with generic trait impls, compound assignment and indexing.
+
+use std::cmp::Ordering;
+use std::ops::{Add, AddAssign, Index, IndexMut, Mul, Neg, Not, Sub};
+
+/// A fixed-length vector over any numeric type.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Vector<T, const N: usize>(pub [T; N]);
+
+impl<T: Copy + Default + Add<Output = T>, const N: usize> Add for Vector<T, N> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        let mut out = [T::default(); N];
+        for i in 0..N {
+            out[i] = self.0[i] + rhs.0[i];
+        }
+        Vector(out)
+    }
+}
+
+impl<T: Copy + Default + Sub<Output = T>, const N: usize> Sub for Vector<T, N> {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        let mut out = [T::default(); N];
+        for (i, slot) in out.iter_mut().enumerate() {
+            *slot = self.0[i] - rhs.0[i];
+        }
+        Vector(out)
+    }
+}
+
+impl<T, const N: usize> Mul<T> for Vector<T, N>
+where
+    T: Copy + Mul<Output = T>,
+{
+    type Output = Self;
+    fn mul(self, k: T) -> Self {
+        Vector(self.0.map(|x| x * k))
+    }
+}
+
+impl<T: Copy + Neg<Output = T>, const N: usize> Neg for Vector<T, N> {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Vector(self.0.map(|x| -x))
+    }
+}
+
+impl<T: Copy + AddAssign, const N: usize> AddAssign for Vector<T, N> {
+    fn add_assign(&mut self, rhs: Self) {
+        for i in 0..N {
+            self.0[i] += rhs.0[i];
+        }
+    }
+}
+
+impl<T, const N: usize> Index<usize> for Vector<T, N> {
+    type Output = T;
+    fn index(&self, i: usize) -> &T {
+        &self.0[i]
+    }
+}
+
+impl<T, const N: usize> IndexMut<usize> for Vector<T, N> {
+    fn index_mut(&mut self, i: usize) -> &mut T {
+        &mut self.0[i]
+    }
+}
+
+/// A set of flags with bitwise `!`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Flags(u8);
+
+impl Not for Flags {
+    type Output = Flags;
+    fn not(self) -> Flags {
+        Flags(!self.0)
+    }
+}
+
+/// A version ordered field by field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Version {
+    pub major: u16,
+    pub minor: u16,
+    pub patch: u16,
+}
+
+impl PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Version {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.major
+            .cmp(&other.major)
+            .then(self.minor.cmp(&other.minor))
+            .then_with(|| self.patch.cmp(&other.patch))
+    }
+}
+
+/// Every built-in binary and unary operator on integers and booleans.
+pub fn all_operators(a: i64, b: i64) -> i64 {
+    let arith = a + b - a * b / (b | 1) % 7;
+    let bits = (a & b) | (a ^ b) | (!a & 0xff);
+    let shifts = (a << 2) >> 1;
+    let cmp = i64::from(a < b) + i64::from(a <= b) + i64::from(a > b) + i64::from(a >= b);
+    let eq = i64::from(a == b) + i64::from(a != b);
+    let logic = i64::from((a > 0 && b > 0) || !(a == 0));
+    let mut c = a;
+    c += 1;
+    c -= 2;
+    c *= 3;
+    c /= 2;
+    c %= 100;
+    c &= 0x7f;
+    c |= 1;
+    c ^= 2;
+    c <<= 1;
+    c >>= 1;
+    let neg = -c;
+    let cast = (a as u8) as i64 + (b as f64 * 0.5) as i64;
+    arith + bits + shifts + cmp + eq + logic + neg + cast
+}
+
+/// Exercise everything.
+pub fn demo() -> i64 {
+    let u = Vector([1, 2, 3]);
+    let v = Vector([4, 5, 6]);
+    let mut w = (u + v - u) * 2;
+    w += -u;
+    w[0] = 10;
+    let f = !Flags(0b1010_0000);
+    let mut vs = vec![
+        Version { major: 1, minor: 2, patch: 3 },
+        Version { major: 1, minor: 0, patch: 9 },
+        Version { major: 0, minor: 9, patch: 0 },
+    ];
+    vs.sort();
+    let newest = vs.iter().max().map(|v| v.patch).unwrap_or(0);
+    w[0] + w[1] + w[2] + i64::from(f.0) + i64::from(newest) + all_operators(6, 3)
+}

@@ -1,0 +1,81 @@
+//! Precise capturing with `use<..>` in return-position `impl Trait`.
+
+use std::fmt::Display;
+
+/// Captures nothing: the iterator does not borrow from anything.
+pub fn counter() -> impl Iterator<Item = u32> + use<> {
+    0..10
+}
+
+/// Captures only the lifetime `'a`, not the type parameter.
+pub fn words<'a, T: Display>(text: &'a str, _tag: T) -> impl Iterator<Item = &'a str> + use<'a, T> {
+    text.split_whitespace()
+}
+
+/// Captures the type parameter only.
+pub fn repeat_owned<T: Clone>(value: T, n: usize) -> impl Iterator<Item = T> + use<T> {
+    std::iter::repeat(value).take(n)
+}
+
+/// A store of names.
+pub struct Names {
+    names: Vec<String>,
+}
+
+impl Names {
+    /// A store from a list.
+    pub fn new(names: &[&str]) -> Self {
+        Names { names: names.iter().map(|s| s.to_string()).collect() }
+    }
+
+    /// Iterate names that start with `prefix`; captures `'_` from `self` only.
+    pub fn starting_with<'p>(&self, prefix: &'p str) -> impl Iterator<Item = &str> + use<'_, 'p> {
+        self.names.iter().map(String::as_str).filter(move |n| n.starts_with(prefix))
+    }
+
+    /// Lengths, captured from self.
+    pub fn lengths(&self) -> impl Iterator<Item = usize> + '_ {
+        self.names.iter().map(|n| n.len())
+    }
+}
+
+/// Precise capturing of nothing for an owned argument.
+pub fn render(items: Vec<u8>) -> impl Display + use<> {
+    let v: Vec<String> = items.into_iter().map(|b| b.to_string()).collect();
+    v.join(",")
+}
+
+/// Trait with a method returning `impl Trait`.
+pub trait Source {
+    /// Values from the source.
+    fn values(&self) -> impl Iterator<Item = i32>;
+}
+
+/// A trivial source.
+pub struct Fixed(pub Vec<i32>);
+
+impl Source for Fixed {
+    fn values(&self) -> impl Iterator<Item = i32> {
+        self.0.iter().copied()
+    }
+}
+
+/// Sum a source.
+pub fn total(s: &impl Source) -> i32 {
+    s.values().sum()
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let c = counter().count();
+    let text = String::from("one two three");
+    let w = words(&text, 7u8).count();
+    let r = repeat_owned('x', 3).count();
+    let names = Names::new(&["ann", "bob", "anna"]);
+    let pre = String::from("an");
+    let s = names.starting_with(&pre).count();
+    let lens: usize = names.lengths().sum();
+    let shown = render(vec![1, 2, 3]).to_string();
+    let t = total(&Fixed(vec![1, 2, 3])) as usize;
+    c + w + r + s + lens + shown.len() + t
+}

@@ -1,0 +1,135 @@
+//! Error types, `From` conversions and the `?` operator on `Result` and `Option`.
+
+use std::error::Error;
+use std::fmt;
+use std::num::{ParseFloatError, ParseIntError};
+
+/// Everything that can go wrong while reading a config line.
+#[derive(Debug, PartialEq)]
+pub enum ConfigError {
+    MissingEquals { line: usize },
+    BadInt(ParseIntError),
+    BadFloat(ParseFloatError),
+    UnknownKey(String),
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConfigError::MissingEquals { line } => write!(f, "line {line}: missing `=`"),
+            ConfigError::BadInt(e) => write!(f, "bad integer: {e}"),
+            ConfigError::BadFloat(e) => write!(f, "bad float: {e}"),
+            ConfigError::UnknownKey(k) => write!(f, "unknown key {k:?}"),
+        }
+    }
+}
+
+impl Error for ConfigError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ConfigError::BadInt(e) => Some(e),
+            ConfigError::BadFloat(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<ParseIntError> for ConfigError {
+    fn from(e: ParseIntError) -> Self {
+        ConfigError::BadInt(e)
+    }
+}
+
+impl From<ParseFloatError> for ConfigError {
+    fn from(e: ParseFloatError) -> Self {
+        ConfigError::BadFloat(e)
+    }
+}
+
+/// A parsed configuration.
+#[derive(Debug, Default, PartialEq)]
+pub struct Config {
+    pub width: u32,
+    pub height: u32,
+    pub scale: f64,
+}
+
+/// Parse one `key = value` line into `cfg`.
+pub fn apply_line(cfg: &mut Config, n: usize, line: &str) -> Result<(), ConfigError> {
+    let (k, v) = line.split_once('=').ok_or(ConfigError::MissingEquals { line: n })?;
+    match k.trim() {
+        "width" => cfg.width = v.trim().parse()?,
+        "height" => cfg.height = v.trim().parse()?,
+        "scale" => cfg.scale = v.trim().parse()?,
+        other => return Err(ConfigError::UnknownKey(other.to_string())),
+    }
+    Ok(())
+}
+
+/// Parse a whole config, stopping at the first error.
+pub fn parse(text: &str) -> Result<Config, ConfigError> {
+    let mut cfg = Config::default();
+    for (i, line) in text.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
+        apply_line(&mut cfg, i + 1, line)?;
+    }
+    Ok(cfg)
+}
+
+/// `?` on `Option` inside a function returning `Option`.
+pub fn third_word_len(s: &str) -> Option<usize> {
+    let w = s.split_whitespace().nth(2)?;
+    Some(w.len())
+}
+
+/// `?` with a boxed dynamic error.
+pub fn area(text: &str) -> Result<f64, Box<dyn Error + Send + Sync>> {
+    let cfg = parse(text)?;
+    if cfg.scale <= 0.0 {
+        return Err("scale must be positive".into());
+    }
+    Ok(f64::from(cfg.width) * f64::from(cfg.height) * cfg.scale)
+}
+
+/// Chain `?` through method calls and closures returning `Result`.
+pub fn sum_all(items: &[&str]) -> Result<i64, ParseIntError> {
+    let parsed: Result<Vec<i64>, _> = items.iter().map(|s| s.parse::<i64>()).collect();
+    Ok(parsed?.iter().sum())
+}
+
+/// `?` inside a closure that itself returns a `Result`.
+pub fn doubled(items: &[&str]) -> Vec<Result<i32, ParseIntError>> {
+    items
+        .iter()
+        .map(|s| -> Result<i32, ParseIntError> {
+            let v: i32 = s.parse()?;
+            Ok(v * 2)
+        })
+        .collect()
+}
+
+/// Walk an error's source chain.
+pub fn chain_len(e: &dyn Error) -> usize {
+    let mut n = 1;
+    let mut cur = e.source();
+    while let Some(inner) = cur {
+        n += 1;
+        cur = inner.source();
+    }
+    n
+}
+
+/// Exercise everything.
+pub fn demo() -> f64 {
+    let good = "width = 4\nheight=5\n\nscale = 0.5\n";
+    let bad = "width = four\n";
+    let err = parse(bad).err();
+    let chain = err.as_ref().map(|e| chain_len(e)).unwrap_or(0);
+    let shown = err.map(|e| e.to_string()).unwrap_or_default();
+    area(good).unwrap_or(0.0)
+        + third_word_len("a bb ccc").unwrap_or(0) as f64
+        + sum_all(&["1", "2", "3"]).unwrap_or(0) as f64
+        + doubled(&["1", "x"]).iter().filter(|r| r.is_ok()).count() as f64
+        + chain as f64
+        + shown.len() as f64
+        + area("width=1\nheight=1\nscale=0\n").map_or(1.0, |_| 0.0)
+}

@@ -1,0 +1,130 @@
+//! FNV-1a hashing, a custom `Hasher`/`BuildHasher`, and `Hash` implementations.
+
+use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasher, Hash, Hasher};
+
+/// The 64-bit FNV offset basis.
+pub const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+/// The 64-bit FNV prime.
+pub const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+/// FNV-1a over bytes.
+pub const fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h = FNV_OFFSET;
+    let mut i = 0;
+    while i < bytes.len() {
+        h ^= bytes[i] as u64;
+        h = h.wrapping_mul(FNV_PRIME);
+        i += 1;
+    }
+    h
+}
+
+/// A compile-time hash of a string.
+pub const HELLO_HASH: u64 = fnv1a(b"hello");
+
+/// A `Hasher` using FNV-1a.
+#[derive(Debug, Clone, Copy)]
+pub struct Fnv(u64);
+
+impl Default for Fnv {
+    fn default() -> Self {
+        Fnv(FNV_OFFSET)
+    }
+}
+
+impl Hasher for Fnv {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 ^= u64::from(b);
+            self.0 = self.0.wrapping_mul(FNV_PRIME);
+        }
+    }
+}
+
+/// A `BuildHasher` for `Fnv`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FnvBuild;
+
+impl BuildHasher for FnvBuild {
+    type Hasher = Fnv;
+    fn build_hasher(&self) -> Fnv {
+        Fnv::default()
+    }
+}
+
+/// A map with deterministic hashing.
+pub type FnvMap<K, V> = HashMap<K, V, FnvBuild>;
+
+/// A case-insensitive key: hashing and equality ignore ASCII case.
+#[derive(Debug, Clone)]
+pub struct NoCase(pub String);
+
+impl PartialEq for NoCase {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq_ignore_ascii_case(&other.0)
+    }
+}
+
+impl Eq for NoCase {}
+
+impl Hash for NoCase {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for b in self.0.bytes() {
+            state.write_u8(b.to_ascii_lowercase());
+        }
+        state.write_u8(0xff);
+    }
+}
+
+/// Hash any value with FNV.
+pub fn hash_of<T: Hash + ?Sized>(v: &T) -> u64 {
+    let mut h = Fnv::default();
+    v.hash(&mut h);
+    h.finish()
+}
+
+/// Count distinct case-insensitive words.
+pub fn distinct_words(text: &str) -> usize {
+    let set: HashSet<NoCase, FnvBuild> = text.split_whitespace().map(|w| NoCase(w.to_owned())).collect();
+    set.len()
+}
+
+/// Word frequencies with a deterministic map, sorted for output.
+pub fn frequencies(text: &str) -> Vec<(String, usize)> {
+    let mut m: FnvMap<String, usize> = FnvMap::default();
+    for w in text.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()) {
+        *m.entry(w.to_lowercase()).or_insert(0) += 1;
+    }
+    let mut v: Vec<_> = m.into_iter().collect();
+    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    v
+}
+
+/// A derived `Hash` on a compound key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Cell {
+    pub row: u32,
+    pub col: u32,
+}
+
+/// Exercise everything.
+pub fn demo() -> u64 {
+    let a = hash_of(&NoCase("Hello".into()));
+    let b = hash_of(&NoCase("hELLO".into()));
+    let mut cells: FnvMap<Cell, char> = FnvMap::default();
+    cells.insert(Cell { row: 1, col: 2 }, 'x');
+    cells.insert(Cell { row: 1, col: 2 }, 'y');
+    let f = frequencies("the cat and the hat; The end.");
+    u64::from(a == b)
+        + (HELLO_HASH % 97)
+        + (fnv1a(b"") % 89)
+        + distinct_words("A a B b c") as u64
+        + f[0].1 as u64
+        + cells.len() as u64
+        + (hash_of("str") % 13)
+        + (hash_of(&(1u8, 'c', [2u16; 3])) % 7)
+}

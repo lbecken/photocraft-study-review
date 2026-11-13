@@ -1,0 +1,129 @@
+//! Non-ASCII identifiers and strings: Unicode text handling with `char`s and bytes.
+//! Ünïcödé appears in comments, strings and identifiers in this file.
+
+/// Größe einer Zeichenkette in Zeichen (not bytes).
+pub fn größe(text: &str) -> usize {
+    text.chars().count()
+}
+
+/// Ein Gruß in mehreren Sprachen.
+pub const GRÜSSE: [&str; 6] = ["Grüß Gott", "こんにちは", "Привет", "مرحبا", "😀 hi", "Ελληνικά"];
+
+/// A struct with non-ASCII field names.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Café {
+    pub naïve: bool,
+    pub prix_en_euros: u32,
+    pub crème: String,
+}
+
+/// Count chars, bytes and UTF-16 units of `s`.
+pub fn widths(s: &str) -> (usize, usize, usize) {
+    (s.chars().count(), s.len(), s.encode_utf16().count())
+}
+
+/// Reverse by chars, which is wrong for combining marks but right for scalar values.
+pub fn reverse_chars(s: &str) -> String {
+    s.chars().rev().collect()
+}
+
+/// Byte offset of the `n`-th char.
+pub fn byte_of_char(s: &str, n: usize) -> Option<usize> {
+    s.char_indices().nth(n).map(|(i, _)| i)
+}
+
+/// Upper-case with full Unicode mapping: `ß` becomes `SS`.
+pub fn upper(s: &str) -> String {
+    s.to_uppercase()
+}
+
+/// Classify chars by Unicode properties.
+pub fn classes(s: &str) -> [usize; 4] {
+    let mut out = [0; 4];
+    for c in s.chars() {
+        let i = if c.is_alphabetic() {
+            0
+        } else if c.is_numeric() {
+            1
+        } else if c.is_whitespace() {
+            2
+        } else {
+            3
+        };
+        out[i] += 1;
+    }
+    out
+}
+
+/// Escape non-ASCII chars as `\u{…}`.
+pub fn escape(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_ascii() { c.to_string() } else { c.escape_unicode().to_string() })
+        .collect()
+}
+
+/// Lossy decoding of invalid UTF-8.
+pub fn lossy() -> String {
+    let bytes = [b'a', 0xff, b'b', 0xe2, 0x82, b'c', 0xf0, 0x9f, 0x98, 0x80];
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// Truncate to at most `n` bytes on a char boundary.
+pub fn truncate_bytes(s: &str, n: usize) -> &str {
+    if s.len() <= n {
+        return s;
+    }
+    let mut end = n;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+/// A greek-letter enum with non-ASCII variant names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Buchstabe {
+    Α,
+    Β,
+    Γ,
+    Δ,
+}
+
+impl Buchstabe {
+    /// The letter as a char.
+    pub fn zeichen(self) -> char {
+        match self {
+            Buchstabe::Α => 'α',
+            Buchstabe::Β => 'β',
+            Buchstabe::Γ => 'γ',
+            Buchstabe::Δ => 'δ',
+        }
+    }
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let café = Café { naïve: true, prix_en_euros: 4, crème: String::from("brûlée") };
+    let (c, b, u) = widths("naïve 😀 日本");
+    let größen: usize = GRÜSSE.iter().map(|g| größe(g)).sum();
+    let wörter = reverse_chars("añb");
+    let λ = |x: usize| x * 2;
+    let letters: String = [Buchstabe::Α, Buchstabe::Β, Buchstabe::Γ, Buchstabe::Δ]
+        .iter()
+        .map(|b| b.zeichen())
+        .collect();
+    größen
+        + c
+        + b
+        + u
+        + usize::from(café.naïve)
+        + café.crème.len()
+        + wörter.len()
+        + byte_of_char("aé😀z", 3).unwrap_or(0)
+        + upper("straße").len()
+        + classes("a1 ¿ٱ٣").iter().sum::<usize>()
+        + escape("é").len()
+        + lossy().chars().count()
+        + truncate_bytes("😀😀", 5).len()
+        + λ(letters.chars().count())
+}

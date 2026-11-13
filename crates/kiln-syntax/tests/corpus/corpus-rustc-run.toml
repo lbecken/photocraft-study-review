@@ -1,0 +1,231 @@
+# T-016: the recorded result of the one compiler run over the corpus (director ruling R-079).
+# The test author copied the corpus files into a scratch directory outside the repository and
+# ran `command` there once per file with a 60 s timeout; `<scratch>` and `<file>` are literal.
+command = "rustc +1.97.0 --edition 2024 --crate-type lib --emit metadata --crate-name corpus --cap-lints allow --out-dir <scratch>/out <file>"
+toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
+date = "2026-11-13"
+
+[[file]]
+path = "rust/async_code.rs.txt"
+fnv1a64 = "b7b8d65ba6eb84d3"
+exit = 0
+
+[[file]]
+path = "rust/bitflags.rs.txt"
+fnv1a64 = "6b81695a3b369bcd"
+exit = 0
+
+[[file]]
+path = "rust/builder.rs.txt"
+fnv1a64 = "bbe1fbc490c471d7"
+exit = 0
+
+[[file]]
+path = "rust/closures.rs.txt"
+fnv1a64 = "ecbc8d6f29ca46de"
+exit = 0
+
+[[file]]
+path = "rust/comments_attrs.rs.txt"
+fnv1a64 = "4406c8c0f963603d"
+exit = 0
+
+[[file]]
+path = "rust/crlf_lines.rs.txt"
+fnv1a64 = "610ef83995ae426a"
+exit = 0
+
+[[file]]
+path = "rust/errors_try.rs.txt"
+fnv1a64 = "eed36b558823aedb"
+exit = 0
+
+[[file]]
+path = "rust/expr_parser.rs.txt"
+fnv1a64 = "a28c0a7eb28eb0c6"
+exit = 0
+
+[[file]]
+path = "rust/generics.rs.txt"
+fnv1a64 = "6d72068c9976c674"
+exit = 0
+
+[[file]]
+path = "rust/hashing.rs.txt"
+fnv1a64 = "8f0fab665d4793f8"
+exit = 0
+
+[[file]]
+path = "rust/iterators.rs.txt"
+fnv1a64 = "fb0bfb1ec65486a6"
+exit = 0
+
+[[file]]
+path = "rust/let_else.rs.txt"
+fnv1a64 = "a6cc2b0c01638576"
+exit = 0
+
+[[file]]
+path = "rust/lifetimes.rs.txt"
+fnv1a64 = "fa1f9e0b3cd4f6e7"
+exit = 0
+
+[[file]]
+path = "rust/linked_list.rs.txt"
+fnv1a64 = "ba94b449cb40de98"
+exit = 0
+
+[[file]]
+path = "rust/literals.rs.txt"
+fnv1a64 = "20ec6c1fa6204538"
+exit = 0
+
+[[file]]
+path = "rust/loops.rs.txt"
+fnv1a64 = "45c5a6b4c314db99"
+exit = 0
+
+[[file]]
+path = "rust/macros.rs.txt"
+fnv1a64 = "aa7323d603b79575"
+exit = 0
+
+[[file]]
+path = "rust/modules.rs.txt"
+fnv1a64 = "6b0c601f676b9056"
+exit = 0
+
+[[file]]
+path = "rust/operators.rs.txt"
+fnv1a64 = "222b3e60240ec26c"
+exit = 0
+
+[[file]]
+path = "rust/patterns.rs.txt"
+fnv1a64 = "e0a8953f9732d6c2"
+exit = 0
+
+[[file]]
+path = "rust/precise_capture.rs.txt"
+fnv1a64 = "fd91950549e4e6a2"
+exit = 0
+
+[[file]]
+path = "rust/raw_idents.rs.txt"
+fnv1a64 = "50b179417b3caed3"
+exit = 0
+
+[[file]]
+path = "rust/slices_arrays.rs.txt"
+fnv1a64 = "42b32696d5f2e0ec"
+exit = 0
+
+[[file]]
+path = "rust/smart_pointers.rs.txt"
+fnv1a64 = "e1e863dbcd14891a"
+exit = 0
+
+[[file]]
+path = "rust/sorting.rs.txt"
+fnv1a64 = "68a18512fce7d302"
+exit = 0
+
+[[file]]
+path = "rust/state_machine.rs.txt"
+fnv1a64 = "400c9d7313989728"
+exit = 0
+
+[[file]]
+path = "rust/statics_consts.rs.txt"
+fnv1a64 = "ee2d49d864661d72"
+exit = 0
+
+[[file]]
+path = "rust/text_utf8.rs.txt"
+fnv1a64 = "e85b63fbfdb44ea1"
+exit = 0
+
+[[file]]
+path = "rust/threads.rs.txt"
+fnv1a64 = "118b954d1cd4e90f"
+exit = 0
+
+[[file]]
+path = "rust/traits.rs.txt"
+fnv1a64 = "794ca1ef7d393595"
+exit = 0
+
+[[file]]
+path = "rust/tuple_structs_enums.rs.txt"
+fnv1a64 = "0ecf19e74b30a4ac"
+exit = 0
+
+[[file]]
+path = "rust/unsafe_ffi.rs.txt"
+fnv1a64 = "5f08ca16d602c19d"
+exit = 0
+
+[[file]]
+path = "rust/visitor.rs.txt"
+fnv1a64 = "40fce48e06c29e9a"
+exit = 0
+
+[[file]]
+path = "rust-gaps/safe_foreign_fn.rs.txt"
+fnv1a64 = "c00cbf2cf08b15ea"
+exit = 0
+
+[[file]]
+path = "rust-gaps/safe_foreign_static.rs.txt"
+fnv1a64 = "ae1276f44e258d31"
+exit = 0
+
+[[file]]
+path = "rust-invalid/dangling_operator.rs.txt"
+fnv1a64 = "5ca5728cad16220c"
+exit = 1
+
+[[file]]
+path = "rust-invalid/empty_match_arm.rs.txt"
+fnv1a64 = "84b2b6cbebb1e94d"
+exit = 1
+
+[[file]]
+path = "rust-invalid/extra_paren.rs.txt"
+fnv1a64 = "cffa2a0e152ec881"
+exit = 1
+
+[[file]]
+path = "rust-invalid/fn_without_name.rs.txt"
+fnv1a64 = "4fab27662842acdb"
+exit = 1
+
+[[file]]
+path = "rust-invalid/let_without_pattern.rs.txt"
+fnv1a64 = "8541f3f3b1aa10f9"
+exit = 1
+
+[[file]]
+path = "rust-invalid/mismatched_delimiters.rs.txt"
+fnv1a64 = "82326542fbdc09f9"
+exit = 1
+
+[[file]]
+path = "rust-invalid/missing_semicolon.rs.txt"
+fnv1a64 = "89c168c391a6fb33"
+exit = 1
+
+[[file]]
+path = "rust-invalid/truncated_struct.rs.txt"
+fnv1a64 = "7f5f738a0aae977a"
+exit = 1
+
+[[file]]
+path = "rust-invalid/unbalanced_brace.rs.txt"
+fnv1a64 = "a6523571d0ce2539"
+exit = 1
+
+[[file]]
+path = "rust-invalid/unterminated_string.rs.txt"
+fnv1a64 = "332e9f9dc0e0559e"
+exit = 1

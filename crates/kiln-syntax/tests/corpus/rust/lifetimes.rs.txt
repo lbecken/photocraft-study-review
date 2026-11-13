@@ -1,0 +1,152 @@
+//! Lifetimes: structs that borrow, elision, bounds, `'static` and higher-ranked trait bounds.
+
+use std::collections::HashMap;
+
+/// A cursor over borrowed text.
+#[derive(Debug, Clone, Copy)]
+pub struct Cursor<'src> {
+    src: &'src str,
+    pos: usize,
+}
+
+impl<'src> Cursor<'src> {
+    /// Start at the beginning.
+    pub fn new(src: &'src str) -> Self {
+        Cursor { src, pos: 0 }
+    }
+
+    /// The next word, borrowed from the source, not from the cursor.
+    pub fn next_word(&mut self) -> Option<&'src str> {
+        let rest = &self.src[self.pos..];
+        let start = rest.find(|c: char| !c.is_whitespace())?;
+        let rest = &rest[start..];
+        let len = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        self.pos += start + len;
+        Some(&rest[..len])
+    }
+
+    /// Remaining text; elided lifetime ties it to `self`.
+    pub fn rest(&self) -> &str {
+        &self.src[self.pos..]
+    }
+}
+
+/// An interner that hands out references tied to itself.
+#[derive(Default)]
+pub struct Interner<'a> {
+    map: HashMap<&'a str, usize>,
+    names: Vec<&'a str>,
+}
+
+impl<'a> Interner<'a> {
+    /// Intern a name that lives at least as long as the interner.
+    pub fn intern(&mut self, name: &'a str) -> usize {
+        if let Some(&id) = self.map.get(name) {
+            return id;
+        }
+        let id = self.names.len();
+        self.map.insert(name, id);
+        self.names.push(name);
+        id
+    }
+
+    /// Look a name up.
+    pub fn name(&self, id: usize) -> Option<&'a str> {
+        self.names.get(id).copied()
+    }
+}
+
+/// Two lifetimes, one outliving the other.
+pub fn pick_first<'long: 'short, 'short>(a: &'long str, _b: &'short str) -> &'short str {
+    a
+}
+
+/// A struct with two independent lifetimes.
+pub struct Pair<'a, 'b> {
+    pub key: &'a str,
+    pub value: &'b [u8],
+}
+
+impl<'a, 'b> Pair<'a, 'b> {
+    /// Return the key, which outlives the borrow of `self`.
+    pub fn key(&self) -> &'a str {
+        self.key
+    }
+}
+
+/// A higher-ranked bound: `f` works for any lifetime.
+pub fn apply_to_all<F>(items: &[String], f: F) -> Vec<usize>
+where
+    F: for<'x> Fn(&'x str) -> &'x str,
+{
+    items.iter().map(|s| f(s).len()).collect()
+}
+
+/// A trait with a lifetime parameter and a generic associated type.
+pub trait Lender {
+    /// The borrowed item.
+    type Item<'me>
+    where
+        Self: 'me;
+    /// Lend the next item.
+    fn lend(&mut self) -> Option<Self::Item<'_>>;
+}
+
+/// Lends overlapping windows of a buffer.
+pub struct Windows {
+    buf: Vec<u8>,
+    at: usize,
+}
+
+impl Lender for Windows {
+    type Item<'me> = &'me [u8];
+    fn lend(&mut self) -> Option<&[u8]> {
+        if self.at + 2 > self.buf.len() {
+            return None;
+        }
+        self.at += 1;
+        Some(&self.buf[self.at - 1..self.at + 1])
+    }
+}
+
+/// `'static` data and a `T: 'static` bound.
+pub fn keep<T: 'static + Clone>(x: &T) -> Box<dyn std::any::Any> {
+    Box::new(x.clone())
+}
+
+/// Anonymous lifetime in a type path.
+pub fn first_char(c: &Cursor<'_>) -> Option<char> {
+    c.rest().chars().next()
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let text = String::from("  alpha beta  gamma ");
+    let mut cur = Cursor::new(&text);
+    let mut words = Vec::new();
+    while let Some(w) = cur.next_word() {
+        words.push(w);
+    }
+    let mut interner = Interner::default();
+    let ids: Vec<usize> = words.iter().chain(words.iter()).map(|w| interner.intern(w)).collect();
+    let back = interner.name(1).unwrap_or("");
+    let bytes = [1u8, 2, 3];
+    let pair = Pair { key: "k", value: &bytes };
+    let lens = apply_to_all(&[String::from(" x "), String::from("yy")], str::trim);
+    let mut win = Windows { buf: vec![1, 2, 3, 4], at: 0 };
+    let mut lent = 0;
+    while let Some(w) = win.lend() {
+        lent += w.len();
+    }
+    let any = keep(&5u8);
+    words.len()
+        + ids.iter().sum::<usize>()
+        + back.len()
+        + pick_first("ab", "c").len()
+        + pair.key().len()
+        + pair.value.len()
+        + lens.iter().sum::<usize>()
+        + lent
+        + usize::from(any.is::<u8>())
+        + first_char(&Cursor::new("z")).map_or(0, |c| c as usize)
+}

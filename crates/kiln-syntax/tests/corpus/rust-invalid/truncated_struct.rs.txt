@@ -1,0 +1,20 @@
+//! Invalid: the file ends in the middle of a struct definition.
+
+/// A point.
+#[derive(Debug, Clone, Copy)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl Point {
+    /// The origin.
+    pub fn origin() -> Self {
+        Point { x: 0.0, y: 0.0 }
+    }
+}
+
+/// A rectangle, truncated.
+pub struct Rect {
+    pub min: Point,
+    pub max:

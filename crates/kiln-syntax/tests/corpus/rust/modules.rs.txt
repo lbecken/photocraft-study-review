@@ -1,0 +1,167 @@
+//! Inline modules, visibility, `use` trees, re-exports and paths.
+
+pub mod geometry {
+    //! Points and distances.
+
+    pub mod point {
+        /// A point in the plane.
+        #[derive(Debug, Clone, Copy, PartialEq, Default)]
+        pub struct Point {
+            pub x: f64,
+            pub y: f64,
+        }
+
+        impl Point {
+            /// A new point.
+            pub const fn new(x: f64, y: f64) -> Self {
+                Self { x, y }
+            }
+        }
+
+        pub(crate) fn origin() -> Point {
+            Point::default()
+        }
+
+        pub(super) fn secret_scale() -> f64 {
+            2.0
+        }
+    }
+
+    pub mod distance {
+        use super::point::Point;
+
+        /// Euclidean distance.
+        pub fn euclid(a: Point, b: Point) -> f64 {
+            ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+        }
+
+        /// Manhattan distance.
+        pub fn manhattan(a: Point, b: Point) -> f64 {
+            (a.x - b.x).abs() + (a.y - b.y).abs()
+        }
+    }
+
+    pub use self::distance::{euclid, manhattan as taxi};
+    pub use point::Point;
+
+    /// Uses a `pub(super)` item from a child module.
+    pub fn scaled(p: Point) -> Point {
+        let k = point::secret_scale();
+        Point::new(p.x * k, p.y * k)
+    }
+}
+
+pub mod text {
+    pub mod case {
+        /// Upper-case the first char.
+        pub fn capitalize(s: &str) -> String {
+            let mut cs = s.chars();
+            match cs.next() {
+                Some(f) => f.to_uppercase().chain(cs).collect(),
+                None => String::new(),
+            }
+        }
+    }
+
+    pub mod split {
+        /// Split on commas and trim.
+        pub fn fields(s: &str) -> Vec<&str> {
+            s.split(',').map(str::trim).filter(|f| !f.is_empty()).collect()
+        }
+    }
+
+    pub(in crate::text) fn private_helper() -> usize {
+        3
+    }
+
+    /// Calls a helper restricted to this module path.
+    pub fn helper_len() -> usize {
+        self::private_helper()
+    }
+}
+
+mod private {
+    /// Visible only inside the crate.
+    pub fn answer() -> u32 {
+        42
+    }
+
+    pub mod deeper {
+        /// Reaches up with `super::super`.
+        pub fn twice_answer() -> u32 {
+            super::super::private::answer() * 2
+        }
+    }
+}
+
+use geometry::{Point, euclid, taxi};
+use std::collections::{BTreeMap, HashMap, hash_map::Entry};
+use std::{
+    fmt::{self, Write as _},
+    io::{self, Read},
+};
+use text::{case::capitalize, split::*};
+
+/// A type alias at the crate root.
+pub type Table = BTreeMap<String, Vec<String>>;
+
+/// Group fields by their capitalized first word.
+pub fn group(lines: &[&str]) -> Table {
+    let mut t = Table::new();
+    for line in lines {
+        let fs = fields(line);
+        if let Some((first, rest)) = fs.split_first() {
+            t.entry(capitalize(first))
+                .or_default()
+                .extend(rest.iter().map(|s| s.to_string()));
+        }
+    }
+    t
+}
+
+/// Count words with an `Entry` match.
+pub fn counts(words: &[&str]) -> HashMap<String, u32> {
+    let mut m = HashMap::new();
+    for w in words {
+        match m.entry(w.to_string()) {
+            Entry::Occupied(mut o) => *o.get_mut() += 1,
+            Entry::Vacant(v) => {
+                v.insert(1);
+            }
+        }
+    }
+    m
+}
+
+/// Write through `fmt::Write` imported as `_`.
+pub fn render(p: Point) -> Result<String, fmt::Error> {
+    let mut s = String::new();
+    write!(s, "({}, {})", p.x, p.y)?;
+    Ok(s)
+}
+
+/// Read everything from a reader.
+pub fn slurp(mut r: impl Read) -> io::Result<String> {
+    let mut s = String::new();
+    r.read_to_string(&mut s)?;
+    Ok(s)
+}
+
+/// Exercise everything.
+pub fn demo() -> f64 {
+    let a = Point::new(0.0, 0.0);
+    let b = geometry::scaled(Point::new(1.5, 2.0));
+    let g = group(&["one, a, b", "two, c", ""]);
+    let c = counts(&["x", "y", "x"]);
+    let r = render(geometry::point::origin()).unwrap_or_default();
+    let s = slurp(&b"bytes"[..]).unwrap_or_default();
+    euclid(a, b)
+        + taxi(a, b)
+        + g.len() as f64
+        + c["x"] as f64
+        + r.len() as f64
+        + s.len() as f64
+        + text::helper_len() as f64
+        + private::deeper::twice_answer() as f64
+        + crate::geometry::distance::manhattan(a, a)
+}

@@ -1,0 +1,13 @@
+//! Grammar gap: the edition-2024 `safe` qualifier on a static in an `unsafe extern` block.
+
+unsafe extern "C" {
+    /// A foreign static declared `safe` to read.
+    pub safe static errno_like: i32;
+    /// A foreign static that stays `unsafe` to read.
+    pub static mut counter_like: i32;
+}
+
+/// Read the safe static without an `unsafe` block.
+pub fn read_safe() -> i32 {
+    errno_like
+}

@@ -1,0 +1,11 @@
+//! Invalid: a `match` arm with `=>` but no expression.
+
+/// Name a digit.
+pub fn name(d: u8) -> &'static str {
+    match d {
+        0 => "zero",
+        1 => ,
+        2 => "two",
+        _ => "many",
+    }
+}

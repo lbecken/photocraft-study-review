@@ -1,0 +1,8 @@
+//! Invalid: two `let` statements without the separating semicolon.
+
+/// The sum of two locals.
+pub fn sum() -> i32 {
+    let a = 1
+    let b = 2;
+    a + b
+}

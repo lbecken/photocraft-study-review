@@ -1,0 +1,176 @@
+//! A singly linked stack with `Option<Box<Node>>`, iterators and `Drop`.
+
+/// A node of the list.
+#[derive(Debug)]
+struct Node<T> {
+    elem: T,
+    next: Link<T>,
+}
+
+type Link<T> = Option<Box<Node<T>>>;
+
+/// A stack implemented as a singly linked list.
+#[derive(Debug)]
+pub struct Stack<T> {
+    head: Link<T>,
+    len: usize,
+}
+
+impl<T> Default for Stack<T> {
+    fn default() -> Self {
+        Stack { head: None, len: 0 }
+    }
+}
+
+impl<T> Stack<T> {
+    /// An empty stack.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Push on top.
+    pub fn push(&mut self, elem: T) {
+        let next = self.head.take();
+        self.head = Some(Box::new(Node { elem, next }));
+        self.len += 1;
+    }
+
+    /// Pop the top.
+    pub fn pop(&mut self) -> Option<T> {
+        self.head.take().map(|node| {
+            self.head = node.next;
+            self.len -= 1;
+            node.elem
+        })
+    }
+
+    /// Peek at the top.
+    pub fn peek(&self) -> Option<&T> {
+        self.head.as_ref().map(|n| &n.elem)
+    }
+
+    /// Mutable peek.
+    pub fn peek_mut(&mut self) -> Option<&mut T> {
+        self.head.as_mut().map(|n| &mut n.elem)
+    }
+
+    /// Number of elements.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether the stack is empty.
+    pub fn is_empty(&self) -> bool {
+        self.head.is_none()
+    }
+
+    /// Reverse in place by relinking nodes.
+    pub fn reverse(&mut self) {
+        let mut prev: Link<T> = None;
+        let mut cur = self.head.take();
+        while let Some(mut node) = cur {
+            cur = node.next.take();
+            node.next = prev;
+            prev = Some(node);
+        }
+        self.head = prev;
+    }
+
+    /// Borrowing iterator.
+    pub fn iter(&self) -> Iter<'_, T> {
+        Iter { next: self.head.as_deref() }
+    }
+
+    /// Mutable iterator.
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+        IterMut { next: self.head.as_deref_mut() }
+    }
+}
+
+impl<T> Drop for Stack<T> {
+    fn drop(&mut self) {
+        let mut cur = self.head.take();
+        while let Some(mut node) = cur {
+            cur = node.next.take();
+        }
+    }
+}
+
+/// Iterator by reference.
+pub struct Iter<'a, T> {
+    next: Option<&'a Node<T>>,
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.map(|node| {
+            self.next = node.next.as_deref();
+            &node.elem
+        })
+    }
+}
+
+/// Iterator by mutable reference.
+pub struct IterMut<'a, T> {
+    next: Option<&'a mut Node<T>>,
+}
+
+impl<'a, T> Iterator for IterMut<'a, T> {
+    type Item = &'a mut T;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.take().map(|node| {
+            self.next = node.next.as_deref_mut();
+            &mut node.elem
+        })
+    }
+}
+
+/// Owning iterator.
+pub struct IntoIter<T>(Stack<T>);
+
+impl<T> Iterator for IntoIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        self.0.pop()
+    }
+}
+
+impl<T> IntoIterator for Stack<T> {
+    type Item = T;
+    type IntoIter = IntoIter<T>;
+    fn into_iter(self) -> IntoIter<T> {
+        IntoIter(self)
+    }
+}
+
+impl<T> FromIterator<T> for Stack<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(it: I) -> Self {
+        let mut s = Stack::new();
+        for x in it {
+            s.push(x);
+        }
+        s
+    }
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let mut s: Stack<i32> = (1..=5).collect();
+    if let Some(top) = s.peek_mut() {
+        *top *= 10;
+    }
+    for x in s.iter_mut() {
+        *x += 1;
+    }
+    s.reverse();
+    let seen: Vec<i32> = s.iter().copied().collect();
+    let popped = s.pop().unwrap_or(0);
+    let len = s.len();
+    let rest: i32 = s.into_iter().sum();
+    let mut big = Stack::new();
+    for i in 0..10_000 {
+        big.push(i);
+    }
+    seen.len() + popped as usize + len + rest as usize + big.len() + usize::from(Stack::<u8>::new().is_empty())
+}

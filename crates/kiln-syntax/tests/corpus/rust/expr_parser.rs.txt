@@ -1,0 +1,197 @@
+//! A recursive-descent parser and evaluator for arithmetic with precedence climbing.
+
+use std::collections::HashMap;
+use std::fmt;
+use std::iter::Peekable;
+use std::str::Chars;
+
+/// A parse error with a char position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseError {
+    pub at: usize,
+    pub msg: &'static str,
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "at {}: {}", self.at, self.msg)
+    }
+}
+
+/// The syntax tree.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Ast {
+    Num(f64),
+    Var(String),
+    Unary(char, Box<Ast>),
+    Binary(char, Box<Ast>, Box<Ast>),
+    Call(String, Vec<Ast>),
+}
+
+/// The parser state.
+pub struct Parser<'a> {
+    chars: Peekable<Chars<'a>>,
+    pos: usize,
+}
+
+fn precedence(op: char) -> Option<(u8, bool)> {
+    match op {
+        '+' | '-' => Some((1, false)),
+        '*' | '/' | '%' => Some((2, false)),
+        '^' => Some((3, true)),
+        _ => None,
+    }
+}
+
+impl<'a> Parser<'a> {
+    /// A parser over `src`.
+    pub fn new(src: &'a str) -> Self {
+        Parser { chars: src.chars().peekable(), pos: 0 }
+    }
+
+    fn skip_ws(&mut self) {
+        while self.chars.peek().is_some_and(|c| c.is_whitespace()) {
+            self.bump();
+        }
+    }
+
+    fn bump(&mut self) -> Option<char> {
+        let c = self.chars.next()?;
+        self.pos += 1;
+        Some(c)
+    }
+
+    fn peek(&mut self) -> Option<char> {
+        self.skip_ws();
+        self.chars.peek().copied()
+    }
+
+    fn err(&self, msg: &'static str) -> ParseError {
+        ParseError { at: self.pos, msg }
+    }
+
+    /// Parse a whole expression and require end of input.
+    pub fn parse(mut self) -> Result<Ast, ParseError> {
+        let e = self.expr(0)?;
+        match self.peek() {
+            None => Ok(e),
+            Some(_) => Err(self.err("trailing input")),
+        }
+    }
+
+    fn expr(&mut self, min: u8) -> Result<Ast, ParseError> {
+        let mut lhs = self.atom()?;
+        while let Some(op) = self.peek() {
+            let Some((prec, right)) = precedence(op) else { break };
+            if prec < min {
+                break;
+            }
+            self.bump();
+            let next = if right { prec } else { prec + 1 };
+            let rhs = self.expr(next)?;
+            lhs = Ast::Binary(op, Box::new(lhs), Box::new(rhs));
+        }
+        Ok(lhs)
+    }
+
+    fn atom(&mut self) -> Result<Ast, ParseError> {
+        match self.peek() {
+            Some('-') => {
+                self.bump();
+                Ok(Ast::Unary('-', Box::new(self.expr(3)?)))
+            }
+            Some('(') => {
+                self.bump();
+                let e = self.expr(0)?;
+                if self.peek() != Some(')') {
+                    return Err(self.err("expected `)`"));
+                }
+                self.bump();
+                Ok(e)
+            }
+            Some(c) if c.is_ascii_digit() || c == '.' => {
+                let mut s = String::new();
+                while let Some(&d) = self.chars.peek() {
+                    if !(d.is_ascii_digit() || d == '.') {
+                        break;
+                    }
+                    s.push(d);
+                    self.bump();
+                }
+                s.parse().map(Ast::Num).map_err(|_| self.err("bad number"))
+            }
+            Some(c) if c.is_alphabetic() => {
+                let mut name = String::new();
+                while let Some(&d) = self.chars.peek() {
+                    if !d.is_alphanumeric() {
+                        break;
+                    }
+                    name.push(d);
+                    self.bump();
+                }
+                if self.peek() == Some('(') {
+                    self.bump();
+                    let mut args = Vec::new();
+                    if self.peek() != Some(')') {
+                        loop {
+                            args.push(self.expr(0)?);
+                            match self.peek() {
+                                Some(',') => {
+                                    self.bump();
+                                }
+                                Some(')') => break,
+                                _ => return Err(self.err("expected `,` or `)`")),
+                            }
+                        }
+                    }
+                    self.bump();
+                    Ok(Ast::Call(name, args))
+                } else {
+                    Ok(Ast::Var(name))
+                }
+            }
+            Some(_) => Err(self.err("unexpected char")),
+            None => Err(self.err("unexpected end")),
+        }
+    }
+}
+
+/// Evaluate with variables and a few built-in functions.
+pub fn eval(ast: &Ast, vars: &HashMap<&str, f64>) -> Option<f64> {
+    Some(match ast {
+        Ast::Num(n) => *n,
+        Ast::Var(v) => *vars.get(v.as_str())?,
+        Ast::Unary(_, e) => -eval(e, vars)?,
+        Ast::Binary(op, a, b) => {
+            let (x, y) = (eval(a, vars)?, eval(b, vars)?);
+            match op {
+                '+' => x + y,
+                '-' => x - y,
+                '*' => x * y,
+                '/' if y != 0.0 => x / y,
+                '%' => x % y,
+                '^' => x.powf(y),
+                _ => return None,
+            }
+        }
+        Ast::Call(f, args) => {
+            let vals: Option<Vec<f64>> = args.iter().map(|a| eval(a, vars)).collect();
+            let vals = vals?;
+            match (f.as_str(), vals.as_slice()) {
+                ("max", [first, rest @ ..]) => rest.iter().fold(*first, |m, &v| m.max(v)),
+                ("sqrt", [x]) => x.sqrt(),
+                ("abs", [x]) => x.abs(),
+                _ => return None,
+            }
+        }
+    })
+}
+
+/// Exercise everything.
+pub fn demo() -> f64 {
+    let vars: HashMap<&str, f64> = [("x", 2.0), ("y", 3.0)].into_iter().collect();
+    let srcs = ["1 + 2 * 3", "2 ^ 3 ^ 2", "-(x + y) * 2", "max(1, y, x) + sqrt(16)", "7 % 4", "1 / 0", "(1"];
+    srcs.iter()
+        .map(|s| Parser::new(s).parse().ok().and_then(|a| eval(&a, &vars)).unwrap_or(0.0))
+        .sum()
+}

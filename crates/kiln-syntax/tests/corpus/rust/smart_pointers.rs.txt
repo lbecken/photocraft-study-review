@@ -1,0 +1,146 @@
+//! `Box`, `Rc`, `Weak`, `RefCell`, `Cell` and `Cow` in a small tree structure.
+
+use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+
+/// A tree node with a weak parent link.
+#[derive(Debug)]
+pub struct Node {
+    pub value: i32,
+    pub parent: RefCell<Weak<Node>>,
+    pub children: RefCell<Vec<Rc<Node>>>,
+    pub visits: Cell<u32>,
+}
+
+impl Node {
+    /// A new detached node.
+    pub fn new(value: i32) -> Rc<Node> {
+        Rc::new(Node {
+            value,
+            parent: RefCell::new(Weak::new()),
+            children: RefCell::new(Vec::new()),
+            visits: Cell::new(0),
+        })
+    }
+
+    /// Attach `child` under `parent`.
+    pub fn adopt(parent: &Rc<Node>, child: Rc<Node>) {
+        *child.parent.borrow_mut() = Rc::downgrade(parent);
+        parent.children.borrow_mut().push(child);
+    }
+
+    /// Sum of the subtree, counting visits.
+    pub fn sum(&self) -> i32 {
+        self.visits.set(self.visits.get() + 1);
+        self.value + self.children.borrow().iter().map(|c| c.sum()).sum::<i32>()
+    }
+
+    /// Depth via parent links.
+    pub fn depth(&self) -> usize {
+        let mut d = 0;
+        let mut cur = self.parent.borrow().upgrade();
+        while let Some(p) = cur {
+            d += 1;
+            cur = p.parent.borrow().upgrade();
+        }
+        d
+    }
+}
+
+/// A recursive enum that needs a `Box`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    Lit(i64),
+    Neg(Box<Expr>),
+    Add(Box<Expr>, Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),
+}
+
+impl Expr {
+    /// Evaluate.
+    pub fn eval(&self) -> i64 {
+        match self {
+            Expr::Lit(v) => *v,
+            Expr::Neg(e) => -e.eval(),
+            Expr::Add(a, b) => a.eval() + b.eval(),
+            Expr::Mul(a, b) => a.eval() * b.eval(),
+        }
+    }
+
+    /// Simplify `x * 1`, `x + 0` and double negation.
+    pub fn simplify(self) -> Expr {
+        match self {
+            Expr::Neg(e) => match e.simplify() {
+                Expr::Neg(inner) => *inner,
+                other => Expr::Neg(Box::new(other)),
+            },
+            Expr::Add(a, b) => match (a.simplify(), b.simplify()) {
+                (x, Expr::Lit(0)) | (Expr::Lit(0), x) => x,
+                (x, y) => Expr::Add(Box::new(x), Box::new(y)),
+            },
+            Expr::Mul(a, b) => match (a.simplify(), b.simplify()) {
+                (x, Expr::Lit(1)) | (Expr::Lit(1), x) => x,
+                (x, y) => Expr::Mul(Box::new(x), Box::new(y)),
+            },
+            lit => lit,
+        }
+    }
+}
+
+/// A shared, mutable counter.
+pub fn shared_counter() -> (usize, i32) {
+    let counter = Rc::new(RefCell::new(0));
+    let handles: Vec<Rc<RefCell<i32>>> = (0..3).map(|_| Rc::clone(&counter)).collect();
+    for h in &handles {
+        *h.borrow_mut() += 1;
+    }
+    let strong = Rc::strong_count(&counter);
+    let value = *counter.borrow();
+    (strong, value)
+}
+
+/// Borrow when possible, allocate when needed.
+pub fn escape_spaces(s: &str) -> Cow<'_, str> {
+    if s.contains(' ') {
+        Cow::Owned(s.replace(' ', "_"))
+    } else {
+        Cow::Borrowed(s)
+    }
+}
+
+/// A trait object in a `Box` with a generic constructor.
+pub fn boxed_fns() -> Vec<Box<dyn Fn(i32) -> i32>> {
+    let k = 3;
+    vec![Box::new(|x| x + 1), Box::new(move |x| x * k), Box::new(i32::abs)]
+}
+
+/// Exercise everything.
+pub fn demo() -> i64 {
+    let root = Node::new(1);
+    let child = Node::new(2);
+    let grandchild = Node::new(3);
+    Node::adopt(&child, Rc::clone(&grandchild));
+    Node::adopt(&root, Rc::clone(&child));
+    let s = root.sum();
+    let d = grandchild.depth();
+    let e = Expr::Add(
+        Box::new(Expr::Mul(Box::new(Expr::Lit(7)), Box::new(Expr::Lit(1)))),
+        Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(0)))))),
+    );
+    let simple = e.clone().simplify();
+    let (strong, value) = shared_counter();
+    let cow = escape_spaces("a b c");
+    let borrowed = matches!(escape_spaces("abc"), Cow::Borrowed(_));
+    let fns: i32 = boxed_fns().iter().map(|f| f(-2)).sum();
+    s as i64
+        + d as i64
+        + e.eval()
+        + simple.eval()
+        + strong as i64
+        + value as i64
+        + cow.len() as i64
+        + i64::from(borrowed)
+        + fns as i64
+        + i64::from(root.visits.get())
+}

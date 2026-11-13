@@ -1,0 +1,15 @@
+//! Invalid: a function body whose closing brace is missing.
+
+/// Sum a slice.
+pub fn sum(xs: &[i32]) -> i32 {
+    let mut total = 0;
+    for x in xs {
+        total += x;
+    // the brace closing the `for` loop is missing
+    total
+}
+
+/// A later item that is fine on its own.
+pub fn product(xs: &[i32]) -> i32 {
+    xs.iter().product()
+}

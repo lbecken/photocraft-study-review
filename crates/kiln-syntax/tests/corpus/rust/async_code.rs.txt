@@ -1,0 +1,133 @@
+//! `async fn`, async blocks and `.await`, with a tiny std-only executor.
+
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::task::{Context, Poll, Wake, Waker};
+
+/// A waker that counts how often it was woken.
+struct CountingWaker {
+    wakes: AtomicUsize,
+}
+
+impl Wake for CountingWaker {
+    fn wake(self: Arc<Self>) {
+        self.wakes.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Poll a future to completion on the current thread.
+pub fn block_on<F: Future>(fut: F) -> F::Output {
+    let waker_impl = Arc::new(CountingWaker { wakes: AtomicUsize::new(0) });
+    let waker = Waker::from(waker_impl.clone());
+    let mut cx = Context::from_waker(&waker);
+    let mut fut = Box::pin(fut);
+    loop {
+        match fut.as_mut().poll(&mut cx) {
+            Poll::Ready(v) => break v,
+            Poll::Pending => continue,
+        }
+    }
+}
+
+/// A future that is pending a fixed number of times.
+pub struct YieldN {
+    remaining: u32,
+}
+
+impl Future for YieldN {
+    type Output = u32;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<u32> {
+        if self.remaining == 0 {
+            Poll::Ready(7)
+        } else {
+            self.remaining -= 1;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
+/// Yield `n` times, then produce 7.
+pub fn yield_n(n: u32) -> YieldN {
+    YieldN { remaining: n }
+}
+
+/// An async fn that awaits another future.
+pub async fn add_after_yield(a: u32, b: u32) -> u32 {
+    let seven = yield_n(2).await;
+    a + b + seven
+}
+
+/// An async fn borrowing its argument.
+pub async fn length_of(s: &str) -> usize {
+    yield_n(1).await;
+    s.len()
+}
+
+/// An async fn with a generic parameter.
+pub async fn apply<F, Fut>(f: F, x: u32) -> u32
+where
+    F: FnOnce(u32) -> Fut,
+    Fut: Future<Output = u32>,
+{
+    f(x).await * 2
+}
+
+/// Async blocks, with and without `move`.
+pub fn blocks() -> u32 {
+    let base = 10;
+    let borrowed = async { base + 1 };
+    let owned_name = String::from("kiln");
+    let moved = async move { owned_name.len() as u32 };
+    block_on(async { borrowed.await + moved.await })
+}
+
+/// A boxed future type for dynamic dispatch.
+pub type BoxFut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// Return a boxed future.
+pub fn boxed_answer(n: u32) -> BoxFut<'static, u32> {
+    Box::pin(async move { yield_n(n).await + n })
+}
+
+/// A trait with an async method.
+pub trait Fetch {
+    /// Fetch a value by key.
+    async fn fetch(&self, key: u32) -> Option<String>;
+}
+
+/// A fetcher backed by a vector.
+pub struct VecFetch(pub Vec<String>);
+
+impl Fetch for VecFetch {
+    async fn fetch(&self, key: u32) -> Option<String> {
+        yield_n(1).await;
+        self.0.get(key as usize).cloned()
+    }
+}
+
+/// Await in a loop and in a match.
+pub async fn sum_fetched(f: &VecFetch, keys: &[u32]) -> usize {
+    let mut total = 0;
+    for &k in keys {
+        match f.fetch(k).await {
+            Some(s) => total += s.len(),
+            None => total += 0,
+        }
+    }
+    total
+}
+
+/// Exercise everything.
+pub fn demo() -> u32 {
+    let a = block_on(add_after_yield(1, 2));
+    let b = block_on(length_of("abcd")) as u32;
+    let c = block_on(apply(|x| async move { x + 1 }, 4));
+    let d = blocks();
+    let e = block_on(boxed_answer(3));
+    let fetcher = VecFetch(vec!["a".into(), "bb".into()]);
+    let f = block_on(sum_fetched(&fetcher, &[0, 1, 5])) as u32;
+    a + b + c + d + e + f
+}

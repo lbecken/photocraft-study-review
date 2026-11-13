@@ -1,0 +1,135 @@
+//! Labeled loops, `break 'label value`, `continue 'label`, ranges and iteration.
+
+/// Find the first pair in a grid whose product equals `target`.
+pub fn find_product(grid: &[Vec<i32>], target: i32) -> Option<(usize, usize)> {
+    let found = 'search: {
+        for (i, row) in grid.iter().enumerate() {
+            for (j, &v) in row.iter().enumerate() {
+                if v * (i as i32 + 1) == target {
+                    break 'search Some((i, j));
+                }
+            }
+        }
+        None
+    };
+    found
+}
+
+/// A labeled `loop` that breaks with a value from an inner loop.
+pub fn first_square_above(limit: u64) -> u64 {
+    let mut n = 0u64;
+    'outer: loop {
+        n += 1;
+        let mut k = 0;
+        loop {
+            k += 1;
+            if k * k > n {
+                continue 'outer;
+            }
+            if k * k == n && n > limit {
+                break 'outer n;
+            }
+        }
+    }
+}
+
+/// Count primes below `n` with a sieve, using ranges with steps.
+pub fn count_primes(n: usize) -> usize {
+    if n < 2 {
+        return 0;
+    }
+    let mut sieve = vec![true; n];
+    sieve[0] = false;
+    sieve[1] = false;
+    let mut i = 2;
+    while i * i < n {
+        if sieve[i] {
+            for j in (i * i..n).step_by(i) {
+                sieve[j] = false;
+            }
+        }
+        i += 1;
+    }
+    sieve.iter().filter(|&&p| p).count()
+}
+
+/// Ranges of every kind.
+pub fn ranges() -> Vec<usize> {
+    let data = [10, 20, 30, 40, 50];
+    let full = data[..].len();
+    let from = data[2..].len();
+    let to = data[..2].len();
+    let inclusive = data[1..=3].len();
+    let to_inclusive = data[..=0].len();
+    let r = 3..7;
+    let contains = usize::from(r.contains(&5));
+    let rev: Vec<usize> = (0..4).rev().collect();
+    vec![full, from, to, inclusive, to_inclusive, contains, rev[0]]
+}
+
+/// A `while` loop with a labeled block and an early exit.
+pub fn collatz_steps(mut n: u64) -> u32 {
+    let mut steps = 0;
+    'run: while n != 1 {
+        if steps > 1_000 {
+            break 'run;
+        }
+        n = if n % 2 == 0 { n / 2 } else { 3 * n + 1 };
+        steps += 1;
+    }
+    steps
+}
+
+/// Nested labeled `for` loops with `continue 'label`.
+pub fn pairs_with_sum(xs: &[i32], sum: i32) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    'first: for (i, &a) in xs.iter().enumerate() {
+        for &b in &xs[i + 1..] {
+            if a + b == sum {
+                out.push((a, b));
+                continue 'first;
+            }
+        }
+    }
+    out
+}
+
+/// A labeled loop whose break value is a tuple.
+pub fn min_max(xs: &[i32]) -> (i32, i32) {
+    let mut it = xs.iter();
+    let mut lo = i32::MAX;
+    let mut hi = i32::MIN;
+    'scan: loop {
+        let Some(&x) = it.next() else {
+            break 'scan (lo, hi);
+        };
+        lo = lo.min(x);
+        hi = hi.max(x);
+    }
+}
+
+/// Iterate with `zip`, `windows`, `chunks` and `rev`.
+pub fn shapes(xs: &[u8]) -> (usize, usize, u8) {
+    let rising = xs.windows(2).filter(|w| w[0] < w[1]).count();
+    let chunks = xs.chunks(3).count();
+    let last = xs.iter().rev().zip(1u8..).map(|(&a, b)| a.wrapping_mul(b)).fold(0u8, u8::wrapping_add);
+    (rising, chunks, last)
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let grid = vec![vec![1, 2], vec![3, 4], vec![5, 6]];
+    let (r, c) = find_product(&grid, 12).unwrap_or((9, 9));
+    let (lo, hi) = min_max(&[3, -2, 8]);
+    let (a, b, d) = shapes(&[1, 2, 3, 2, 5]);
+    r + c
+        + first_square_above(20) as usize
+        + count_primes(100)
+        + ranges().iter().sum::<usize>()
+        + collatz_steps(27) as usize
+        + pairs_with_sum(&[1, 2, 3, 4, 5], 6).len()
+        + (hi - lo) as usize
+        + a
+        + b
+        + d as usize
+}

@@ -1,0 +1,106 @@
+//! Raw identifiers (`r#type`, `r#match`, …) for names that are keywords.
+
+/// A token with a field named after a keyword.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub r#type: Kind,
+    pub r#ref: Option<usize>,
+    pub text: String,
+}
+
+/// Token kinds; one is named after a reserved word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Ident,
+    Number,
+    r#Box,
+    Punct,
+}
+
+/// A module whose name is a keyword.
+pub mod r#impl {
+    /// A function whose name is a keyword.
+    pub fn r#fn(x: u32) -> u32 {
+        x + 1
+    }
+
+    /// A function named `match`.
+    pub fn r#match(a: &str, b: &str) -> bool {
+        a == b
+    }
+}
+
+/// A trait with a keyword-named method.
+pub trait r#Trait {
+    /// Returns the keyword-named thing.
+    fn r#loop(&self) -> usize;
+}
+
+impl r#Trait for Token {
+    fn r#loop(&self) -> usize {
+        self.text.len()
+    }
+}
+
+/// Keyword-named locals and parameters.
+pub fn r#use(r#in: &[u32], r#as: u32) -> u32 {
+    let r#let = r#in.iter().sum::<u32>();
+    let r#where = r#let * r#as;
+    let r#yield = r#where + 1;
+    r#yield
+}
+
+/// Edition-2018 and later keywords used as raw identifiers.
+pub fn edition_keywords() -> u32 {
+    let r#async = 1;
+    let r#await = 2;
+    let r#dyn = 3;
+    let r#try = 4;
+    let r#gen = 5;
+    r#async + r#await + r#dyn + r#try + r#gen
+}
+
+/// Raw identifiers that are not keywords are allowed too.
+pub fn plain_raw() -> i32 {
+    let r#value = 10;
+    value + r#value
+}
+
+/// Raw identifiers in patterns and struct expressions.
+pub fn classify(tokens: &[Token]) -> (usize, usize) {
+    let mut numbers = 0;
+    let mut refs = 0;
+    for Token { r#type, r#ref, .. } in tokens {
+        if *r#type == Kind::Number {
+            numbers += 1;
+        }
+        if let Some(r#ref) = r#ref {
+            refs += *r#ref;
+        }
+    }
+    (numbers, refs)
+}
+
+/// Build tokens with raw-identifier fields.
+pub fn tokens() -> Vec<Token> {
+    vec![
+        Token { r#type: Kind::Ident, r#ref: None, text: "x".into() },
+        Token { r#type: Kind::Number, r#ref: Some(2), text: "42".into() },
+        Token { r#type: Kind::r#Box, r#ref: Some(1), text: "box".into() },
+        Token { r#type: Kind::Punct, r#ref: None, text: ";".into() },
+    ]
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let ts = tokens();
+    let (n, r) = classify(&ts);
+    let loops: usize = ts.iter().map(r#Trait::r#loop).sum();
+    n + r
+        + loops
+        + r#impl::r#fn(1) as usize
+        + usize::from(r#impl::r#match("a", "a"))
+        + r#use(&[1, 2], 3) as usize
+        + edition_keywords() as usize
+        + plain_raw() as usize
+}

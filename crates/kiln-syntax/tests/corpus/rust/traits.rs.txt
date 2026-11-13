@@ -1,0 +1,148 @@
+//! Trait objects, `impl Trait`, `dyn`, `where Self: Sized` and generic trait impls.
+
+use std::fmt::Debug;
+use std::ops::Add;
+
+/// A shape with an area.
+pub trait Shape: Debug {
+    /// The area.
+    fn area(&self) -> f64;
+
+    /// A name for display.
+    fn name(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    /// Consume the shape into a box; not object safe, so excluded from the vtable.
+    fn boxed(self) -> Box<dyn Shape>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
+
+/// A circle.
+#[derive(Debug, Clone, Copy)]
+pub struct Circle {
+    pub r: f64,
+}
+
+/// A rectangle.
+#[derive(Debug, Clone, Copy)]
+pub struct Rect {
+    pub w: f64,
+    pub h: f64,
+}
+
+impl Shape for Circle {
+    fn area(&self) -> f64 {
+        std::f64::consts::PI * self.r * self.r
+    }
+}
+
+impl Shape for Rect {
+    fn area(&self) -> f64 {
+        self.w * self.h
+    }
+    fn name(&self) -> String {
+        String::from("rect")
+    }
+}
+
+/// Total area of a heterogeneous list.
+pub fn total_area(shapes: &[Box<dyn Shape>]) -> f64 {
+    shapes.iter().map(|s| s.area()).sum()
+}
+
+/// Return an iterator without naming its type.
+pub fn evens(limit: u32) -> impl Iterator<Item = u32> + Clone {
+    (0..limit).filter(|n| n % 2 == 0)
+}
+
+/// Take any displayable argument by `impl Trait`.
+pub fn shout(x: impl std::fmt::Display) -> String {
+    x.to_string().to_uppercase()
+}
+
+/// A vector in two dimensions.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct V2<T> {
+    pub x: T,
+    pub y: T,
+}
+
+impl<T: Add<Output = T>> Add for V2<T> {
+    type Output = V2<T>;
+    fn add(self, o: V2<T>) -> V2<T> {
+        V2 { x: self.x + o.x, y: self.y + o.y }
+    }
+}
+
+/// Conversion between units.
+pub trait Convert<To> {
+    /// Convert.
+    fn convert(&self) -> To;
+}
+
+impl<T: Copy + Into<f64>> Convert<V2<f64>> for V2<T> {
+    fn convert(&self) -> V2<f64> {
+        V2 { x: self.x.into(), y: self.y.into() }
+    }
+}
+
+/// A listener with a callback object.
+pub struct Listener<'a> {
+    callbacks: Vec<Box<dyn FnMut(u32) -> bool + 'a>>,
+}
+
+impl<'a> Listener<'a> {
+    /// No callbacks.
+    pub fn new() -> Self {
+        Listener { callbacks: Vec::new() }
+    }
+
+    /// Register a callback.
+    pub fn on(&mut self, f: impl FnMut(u32) -> bool + 'a) -> &mut Self {
+        self.callbacks.push(Box::new(f));
+        self
+    }
+
+    /// Fire every callback; returns how many accepted.
+    pub fn fire(&mut self, v: u32) -> usize {
+        self.callbacks.iter_mut().filter_map(|cb| cb(v).then_some(())).count()
+    }
+}
+
+/// A trait object behind a reference with an explicit lifetime bound.
+pub fn describe(items: &[&(dyn Shape + Sync)]) -> Vec<String> {
+    items.iter().map(|s| s.name()).collect()
+}
+
+/// Static dispatch through a generic and dynamic dispatch through `dyn`.
+pub fn both<S: Shape>(s: &S, d: &dyn Shape) -> f64 {
+    s.area() + d.area()
+}
+
+/// Exercise everything.
+pub fn demo() -> f64 {
+    let shapes: Vec<Box<dyn Shape>> = vec![Circle { r: 1.0 }.boxed(), Box::new(Rect { w: 2.0, h: 3.0 })];
+    let mut hits = 0;
+    let mut l = Listener::new();
+    l.on(|v| v > 2).on(|v| {
+        hits += v;
+        true
+    });
+    let accepted = l.fire(3);
+    drop(l);
+    let v: V2<f64> = (V2 { x: 1u8, y: 2u8 } + V2 { x: 3, y: 4 }).convert();
+    let names = describe(&[&Circle { r: 2.0 }, &Rect { w: 1.0, h: 1.0 }]);
+    total_area(&shapes)
+        + evens(10).count() as f64
+        + shout("hi").len() as f64
+        + v.x
+        + accepted as f64
+        + hits as f64
+        + names.len() as f64
+        + both(&Rect { w: 1.0, h: 2.0 }, &Circle { r: 0.5 })
+}

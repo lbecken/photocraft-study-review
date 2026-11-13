@@ -1,0 +1,364 @@
+# T-016 pinned corpus: one entry per file (Pinned (b)). Written by the test author.
+# fnv1a64 = FNV-1a 64 over the raw bytes; lines = number of \n bytes.
+
+[[file]]
+path = "rust/async_code.rs.txt"
+set = "valid"
+bytes = 3475
+lines = 133
+fnv1a64 = "b7b8d65ba6eb84d3"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/bitflags.rs.txt"
+set = "valid"
+bytes = 4137
+lines = 158
+fnv1a64 = "6b81695a3b369bcd"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/builder.rs.txt"
+set = "valid"
+bytes = 4379
+lines = 163
+fnv1a64 = "bbe1fbc490c471d7"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/closures.rs.txt"
+set = "valid"
+bytes = 3377
+lines = 126
+fnv1a64 = "ecbc8d6f29ca46de"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/comments_attrs.rs.txt"
+set = "valid"
+bytes = 2924
+lines = 129
+fnv1a64 = "4406c8c0f963603d"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/crlf_lines.rs.txt"
+set = "valid"
+bytes = 3234
+lines = 118
+fnv1a64 = "610ef83995ae426a"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/errors_try.rs.txt"
+set = "valid"
+bytes = 4134
+lines = 135
+fnv1a64 = "eed36b558823aedb"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/expr_parser.rs.txt"
+set = "valid"
+bytes = 6052
+lines = 197
+fnv1a64 = "a28c0a7eb28eb0c6"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/generics.rs.txt"
+set = "valid"
+bytes = 3832
+lines = 157
+fnv1a64 = "6d72068c9976c674"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/hashing.rs.txt"
+set = "valid"
+bytes = 3401
+lines = 130
+fnv1a64 = "8f0fab665d4793f8"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/iterators.rs.txt"
+set = "valid"
+bytes = 4328
+lines = 163
+fnv1a64 = "fb0bfb1ec65486a6"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/let_else.rs.txt"
+set = "valid"
+bytes = 3222
+lines = 125
+fnv1a64 = "a6cc2b0c01638576"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/lifetimes.rs.txt"
+set = "valid"
+bytes = 4146
+lines = 152
+fnv1a64 = "fa1f9e0b3cd4f6e7"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/linked_list.rs.txt"
+set = "valid"
+bytes = 3936
+lines = 176
+fnv1a64 = "ba94b449cb40de98"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/literals.rs.txt"
+set = "valid"
+bytes = 3231
+lines = 102
+fnv1a64 = "20ec6c1fa6204538"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/loops.rs.txt"
+set = "valid"
+bytes = 3742
+lines = 135
+fnv1a64 = "45c5a6b4c314db99"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/macros.rs.txt"
+set = "valid"
+bytes = 3798
+lines = 152
+fnv1a64 = "aa7323d603b79575"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/modules.rs.txt"
+set = "valid"
+bytes = 4247
+lines = 167
+fnv1a64 = "6b0c601f676b9056"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/operators.rs.txt"
+set = "valid"
+bytes = 3777
+lines = 144
+fnv1a64 = "222b3e60240ec26c"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/patterns.rs.txt"
+set = "valid"
+bytes = 3780
+lines = 123
+fnv1a64 = "e0a8953f9732d6c2"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/precise_capture.rs.txt"
+set = "valid"
+bytes = 2389
+lines = 81
+fnv1a64 = "fd91950549e4e6a2"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/raw_idents.rs.txt"
+set = "valid"
+bytes = 2638
+lines = 106
+fnv1a64 = "50b179417b3caed3"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/slices_arrays.rs.txt"
+set = "valid"
+bytes = 3835
+lines = 144
+fnv1a64 = "42b32696d5f2e0ec"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/smart_pointers.rs.txt"
+set = "valid"
+bytes = 4271
+lines = 146
+fnv1a64 = "e1e863dbcd14891a"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/sorting.rs.txt"
+set = "valid"
+bytes = 4184
+lines = 158
+fnv1a64 = "68a18512fce7d302"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/state_machine.rs.txt"
+set = "valid"
+bytes = 4648
+lines = 150
+fnv1a64 = "400c9d7313989728"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/statics_consts.rs.txt"
+set = "valid"
+bytes = 3428
+lines = 132
+fnv1a64 = "ee2d49d864661d72"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/text_utf8.rs.txt"
+set = "valid"
+bytes = 3541
+lines = 129
+fnv1a64 = "e85b63fbfdb44ea1"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/threads.rs.txt"
+set = "valid"
+bytes = 3596
+lines = 125
+fnv1a64 = "118b954d1cd4e90f"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/traits.rs.txt"
+set = "valid"
+bytes = 3592
+lines = 148
+fnv1a64 = "794ca1ef7d393595"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/tuple_structs_enums.rs.txt"
+set = "valid"
+bytes = 4392
+lines = 169
+fnv1a64 = "0ecf19e74b30a4ac"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/unsafe_ffi.rs.txt"
+set = "valid"
+bytes = 4122
+lines = 155
+fnv1a64 = "5f08ca16d602c19d"
+origin = "written for kiln"
+
+[[file]]
+path = "rust/visitor.rs.txt"
+set = "valid"
+bytes = 4868
+lines = 184
+fnv1a64 = "40fce48e06c29e9a"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-gaps/safe_foreign_fn.rs.txt"
+set = "gap"
+bytes = 670
+lines = 21
+fnv1a64 = "c00cbf2cf08b15ea"
+origin = "written for kiln"
+gap = "tree-sitter-rust 0.24.2 does not parse the edition-2024 `safe` qualifier on a function in an `unsafe extern` block."
+
+[[file]]
+path = "rust-gaps/safe_foreign_static.rs.txt"
+set = "gap"
+bytes = 392
+lines = 13
+fnv1a64 = "ae1276f44e258d31"
+origin = "written for kiln"
+gap = "tree-sitter-rust 0.24.2 does not parse the edition-2024 `safe` qualifier on a static in an `unsafe extern` block."
+
+[[file]]
+path = "rust-invalid/dangling_operator.rs.txt"
+set = "invalid"
+bytes = 205
+lines = 11
+fnv1a64 = "5ca5728cad16220c"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/empty_match_arm.rs.txt"
+set = "invalid"
+bytes = 211
+lines = 11
+fnv1a64 = "84b2b6cbebb1e94d"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/extra_paren.rs.txt"
+set = "invalid"
+bytes = 210
+lines = 11
+fnv1a64 = "cffa2a0e152ec881"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/fn_without_name.rs.txt"
+set = "invalid"
+bytes = 176
+lines = 11
+fnv1a64 = "4fab27662842acdb"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/let_without_pattern.rs.txt"
+set = "invalid"
+bytes = 185
+lines = 11
+fnv1a64 = "8541f3f3b1aa10f9"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/mismatched_delimiters.rs.txt"
+set = "invalid"
+bytes = 194
+lines = 12
+fnv1a64 = "82326542fbdc09f9"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/missing_semicolon.rs.txt"
+set = "invalid"
+bytes = 159
+lines = 8
+fnv1a64 = "89c168c391a6fb33"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/truncated_struct.rs.txt"
+set = "invalid"
+bytes = 347
+lines = 20
+fnv1a64 = "7f5f738a0aae977a"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/unbalanced_brace.rs.txt"
+set = "invalid"
+bytes = 340
+lines = 15
+fnv1a64 = "a6523571d0ce2539"
+origin = "written for kiln"
+
+[[file]]
+path = "rust-invalid/unterminated_string.rs.txt"
+set = "invalid"
+bytes = 165
+lines = 7
+fnv1a64 = "332e9f9dc0e0559e"
+origin = "written for kiln"

@@ -1,0 +1,123 @@
+//! `match` with guards, `@` bindings, nested or-patterns, slice and struct patterns.
+
+/// A shape of a message.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Msg {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    Color(u8, u8, u8),
+    Batch(Vec<Msg>),
+}
+
+/// Classify a number with ranges, bindings and guards.
+pub fn classify(n: i64) -> &'static str {
+    match n {
+        i64::MIN..=-1 => "negative",
+        0 => "zero",
+        small @ 1..=9 if small % 2 == 0 => "small even",
+        1..=9 => "small odd",
+        10 | 20 | 30 => "round",
+        big @ 100.. if big > 1_000_000 => "huge",
+        _ => "other",
+    }
+}
+
+/// Nested or-patterns inside an option, inside an outer or-pattern.
+pub fn is_vowel_or_none(c: Option<char>) -> bool {
+    matches!(c, Some('a' | 'e' | 'i' | 'o' | 'u') | None)
+}
+
+/// Bindings with `@` around a sub-pattern and nested alternatives.
+pub fn describe(m: &Msg) -> String {
+    match m {
+        Msg::Quit => String::from("quit"),
+        Msg::Move { x: 0, y: 0 } => String::from("stay"),
+        Msg::Move { x: dx @ (1 | -1), y } => format!("step {dx} then {y}"),
+        Msg::Move { x, y } if x == y => format!("diagonal {x}"),
+        Msg::Move { x, .. } => format!("move {x}"),
+        Msg::Write(s) if s.is_empty() => String::from("blank"),
+        Msg::Write(s) => format!("write {}", s.len()),
+        Msg::Color(r @ 200..=255, 0, 0) => format!("red {r}"),
+        Msg::Color(r, g, b) => format!("#{r:02x}{g:02x}{b:02x}"),
+        Msg::Batch(v) => match v.as_slice() {
+            [] => String::from("empty batch"),
+            [one] => format!("batch of {}", describe(one)),
+            [first, .., last] => format!("{}..{}", describe(first), describe(last)),
+        },
+    }
+}
+
+/// Slice patterns with rest bindings.
+pub fn sum_ends(xs: &[i32]) -> i32 {
+    match xs {
+        [] => 0,
+        [x] => *x,
+        [a, b] => a + b,
+        [head, middle @ .., tail] => head + tail + middle.len() as i32,
+    }
+}
+
+/// Tuple patterns, references and `ref` bindings.
+pub fn swap_if_ordered(pair: &(i32, i32)) -> (i32, i32) {
+    match *pair {
+        (a, b) if a <= b => (b, a),
+        (ref a, ref b) => (*a, *b),
+    }
+}
+
+/// Patterns in function parameters and `let`.
+pub fn dist(&(x1, y1): &(f64, f64), (x2, y2): (f64, f64)) -> f64 {
+    let (dx, dy) = (x2 - x1, y2 - y1);
+    (dx * dx + dy * dy).sqrt()
+}
+
+/// A point with named fields.
+#[derive(Debug, Clone, Copy)]
+pub struct Point3 {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+/// Struct patterns with renaming and nested or-patterns on fields.
+pub fn on_axis(p: Point3) -> bool {
+    match p {
+        Point3 { x: 0, y: 0, .. } | Point3 { y: 0, z: 0, .. } | Point3 { x: 0, z: 0, .. } => true,
+        Point3 { x: px @ (-1 | 1), y: (0 | 1), z } => px + z == 0,
+        _ => false,
+    }
+}
+
+/// Byte patterns and char ranges.
+pub fn kind_of(b: u8) -> u8 {
+    match b {
+        b'0'..=b'9' => 0,
+        b'a'..=b'z' | b'A'..=b'Z' => 1,
+        b' ' | b'\t' | b'\n' | b'\r' => 2,
+        _ => 3,
+    }
+}
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let msgs = vec![
+        Msg::Quit,
+        Msg::Move { x: 1, y: 4 },
+        Msg::Move { x: 3, y: 3 },
+        Msg::Write(String::new()),
+        Msg::Color(250, 0, 0),
+        Msg::Color(1, 2, 3),
+        Msg::Batch(vec![Msg::Quit, Msg::Write("hi".into())]),
+    ];
+    let text: usize = msgs.iter().map(|m| describe(m).len()).sum();
+    let p = Point3 { x: 1, y: 0, z: -1 };
+    text + classify(4).len()
+        + classify(2_000_000).len()
+        + usize::from(is_vowel_or_none(Some('e')))
+        + sum_ends(&[1, 2, 3, 4]) as usize
+        + swap_if_ordered(&(1, 2)).0 as usize
+        + dist(&(0.0, 0.0), (3.0, 4.0)) as usize
+        + usize::from(on_axis(p))
+        + kind_of(b'Q') as usize
+}

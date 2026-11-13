@@ -1,0 +1,118 @@
+//! This file is stored with CRLF line endings.
+//! It splits text into lines and keeps track of which terminator each line used.
+
+/// A line terminator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ending {
+    /// `\n`
+    Lf,
+    /// `\r\n`
+    CrLf,
+    /// A lone `\r`.
+    Cr,
+    /// No terminator (last line).
+    None,
+}
+
+impl Ending {
+    /// The terminator's text.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Ending::Lf => "\n",
+            Ending::CrLf => "\r\n",
+            Ending::Cr => "\r",
+            Ending::None => "",
+        }
+    }
+}
+
+/// Split `text` into `(line, ending)` pairs; joining them gives back `text`.
+pub fn split_lines(text: &str) -> Vec<(&str, Ending)> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\n' => {
+                out.push((&text[start..i], Ending::Lf));
+                i += 1;
+                start = i;
+            }
+            b'\r' if bytes.get(i + 1) == Some(&b'\n') => {
+                out.push((&text[start..i], Ending::CrLf));
+                i += 2;
+                start = i;
+            }
+            b'\r' => {
+                out.push((&text[start..i], Ending::Cr));
+                i += 1;
+                start = i;
+            }
+            _ => i += 1,
+        }
+    }
+    if start < bytes.len() {
+        out.push((&text[start..], Ending::None));
+    }
+    out
+}
+
+/// Join the pairs back into one string.
+pub fn join(lines: &[(&str, Ending)]) -> String {
+    let mut s = String::new();
+    for (l, e) in lines {
+        s.push_str(l);
+        s.push_str(e.as_str());
+    }
+    s
+}
+
+/// The most common terminator, preferring `CrLf` on a tie.
+pub fn dominant(lines: &[(&str, Ending)]) -> Ending {
+    let count = |want: Ending| lines.iter().filter(|(_, e)| *e == want).count();
+    let (lf, crlf, cr) = (count(Ending::Lf), count(Ending::CrLf), count(Ending::Cr));
+    if crlf >= lf && crlf >= cr && crlf > 0 {
+        Ending::CrLf
+    } else if lf >= cr && lf > 0 {
+        Ending::Lf
+    } else if cr > 0 {
+        Ending::Cr
+    } else {
+        Ending::None
+    }
+}
+
+/// Normalise every terminator to `to`.
+pub fn normalise(text: &str, to: Ending) -> String {
+    let lines = split_lines(text);
+    let fixed: Vec<(&str, Ending)> = lines
+        .into_iter()
+        .map(|(l, e)| if e == Ending::None { (l, e) } else { (l, to) })
+        .collect();
+    join(&fixed)
+}
+
+/* A block comment spanning
+   several CRLF-terminated
+   lines. */
+
+/// A multi-line string literal: its line breaks are CRLF in the file, which rustc
+/// normalises to `\n` inside the literal.
+pub const POEM: &str = "one
+two
+three";
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    let text = "a\r\nb\nc\rd\r\n";
+    let lines = split_lines(text);
+    let round = join(&lines);
+    let dom = dominant(&lines);
+    let n = normalise(text, Ending::Lf);
+    lines.len()
+        + usize::from(round == text)
+        + usize::from(dom == Ending::CrLf)
+        + n.len()
+        + POEM.lines().count()
+}

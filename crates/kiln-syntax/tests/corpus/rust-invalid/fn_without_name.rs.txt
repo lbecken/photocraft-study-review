@@ -1,0 +1,11 @@
+//! Invalid: `fn (` without a function name.
+
+/// A function with no name.
+pub fn (x: u32) -> u32 {
+    x + 1
+}
+
+/// Fine on its own.
+pub fn named(x: u32) -> u32 {
+    x + 2
+}

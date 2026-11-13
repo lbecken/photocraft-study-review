@@ -1,0 +1,7 @@
+//! Invalid: a string literal that is never closed.
+
+/// A greeting.
+pub fn greet(name: &str) -> String {
+    let prefix = "hello, ;
+    format!("{prefix}{name}")
+}

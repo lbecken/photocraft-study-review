@@ -1,0 +1,126 @@
+//! Closures with and without `move`, closure traits and returning closures.
+
+use std::collections::HashMap;
+
+/// Apply `f` twice.
+pub fn twice<F: Fn(i32) -> i32>(f: F, x: i32) -> i32 {
+    f(f(x))
+}
+
+/// Call a mutable closure `n` times.
+pub fn repeat_mut(mut f: impl FnMut(), n: usize) {
+    for _ in 0..n {
+        f();
+    }
+}
+
+/// Consume a closure once.
+pub fn consume<F>(f: F) -> String
+where
+    F: FnOnce() -> String,
+{
+    f()
+}
+
+/// Make an adder; the closure must own `k`.
+pub fn make_adder(k: i32) -> impl Fn(i32) -> i32 {
+    move |x| x + k
+}
+
+/// Make a counter with private state.
+pub fn make_counter() -> impl FnMut() -> u32 {
+    let mut count = 0;
+    move || {
+        count += 1;
+        count
+    }
+}
+
+/// Compose two functions.
+pub fn compose<A, B, C>(f: impl Fn(A) -> B, g: impl Fn(B) -> C) -> impl Fn(A) -> C {
+    move |a| g(f(a))
+}
+
+/// A memoising wrapper.
+pub struct Memo<F: Fn(u64) -> u64> {
+    f: F,
+    cache: HashMap<u64, u64>,
+}
+
+impl<F: Fn(u64) -> u64> Memo<F> {
+    /// Wrap `f`.
+    pub fn new(f: F) -> Self {
+        Memo { f, cache: HashMap::new() }
+    }
+
+    /// Call through the cache.
+    pub fn get(&mut self, x: u64) -> u64 {
+        if let Some(&v) = self.cache.get(&x) {
+            return v;
+        }
+        let v = (self.f)(x);
+        self.cache.insert(x, v);
+        v
+    }
+}
+
+/// Closures stored in a table and called by name.
+pub fn dispatch(name: &str, a: f64, b: f64) -> Option<f64> {
+    let mut ops: HashMap<&str, Box<dyn Fn(f64, f64) -> f64>> = HashMap::new();
+    ops.insert("add", Box::new(|x, y| x + y));
+    ops.insert("sub", Box::new(|x, y| x - y));
+    ops.insert("mul", Box::new(|x: f64, y: f64| -> f64 { x * y }));
+    let scale = 0.5;
+    ops.insert("avg", Box::new(move |x, y| (x + y) * scale));
+    ops.get(name).map(|f| f(a, b))
+}
+
+/// Sort with a closure key, borrowing an outer table.
+pub fn sort_by_rank(items: &mut Vec<&str>, rank: &HashMap<&str, i32>) {
+    items.sort_by_key(|s| rank.get(s).copied().unwrap_or(i32::MAX));
+}
+
+/// Closures that capture by unique borrow.
+pub fn push_all(out: &mut Vec<u8>, data: &[u8]) {
+    let mut push = |b: u8| out.push(b.wrapping_mul(2));
+    data.iter().for_each(|&b| push(b));
+}
+
+/// A closure that ignores its arguments and one with a pattern parameter.
+pub fn patterns() -> (i32, i32) {
+    let zero = |_| 0;
+    let swap_sum = |(a, b): (i32, i32)| b - a;
+    (zero(5), swap_sum((1, 4)))
+}
+
+/// Exercise everything.
+pub fn demo() -> i64 {
+    let dbl = |x| x * 2;
+    let mut ticks = 0;
+    repeat_mut(|| ticks += 1, 3);
+    let owned = String::from("owned");
+    let msg = consume(move || owned + "!");
+    let add5 = make_adder(5);
+    let mut c = make_counter();
+    c();
+    let after = c();
+    let f = compose(|x: i32| x + 1, |y: i32| y * 10);
+    let mut m = Memo::new(|n| (1..=n).product());
+    let fact = m.get(5) + m.get(5);
+    let mut words = vec!["b", "a", "c"];
+    let rank: HashMap<&str, i32> = [("a", 2), ("b", 1)].into_iter().collect();
+    sort_by_rank(&mut words, &rank);
+    let mut out = Vec::new();
+    push_all(&mut out, &[1, 2]);
+    let (z, s) = patterns();
+    twice(dbl, 3) as i64
+        + ticks
+        + msg.len() as i64
+        + add5(1) as i64
+        + after as i64
+        + f(2) as i64
+        + fact as i64
+        + dispatch("avg", 2.0, 4.0).unwrap_or(0.0) as i64
+        + out.len() as i64
+        + (z + s) as i64
+}

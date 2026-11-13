@@ -1,0 +1,152 @@
+//! `macro_rules!` with repetitions, and macro invocations in item, statement and expression
+//! position.
+
+/// Build a `Vec<String>` from anything displayable.
+macro_rules! strings {
+    () => { Vec::<String>::new() };
+    ($($x:expr),+ $(,)?) => {
+        vec![$($x.to_string()),+]
+    };
+}
+
+/// Define a newtype with a constructor and an accessor.
+macro_rules! newtype {
+    ($(#[$meta:meta])* $vis:vis struct $name:ident($inner:ty);) => {
+        $(#[$meta])*
+        $vis struct $name($inner);
+
+        impl $name {
+            /// Wrap a value.
+            pub fn new(v: $inner) -> Self {
+                Self(v)
+            }
+            /// The inner value.
+            pub fn get(&self) -> &$inner {
+                &self.0
+            }
+        }
+    };
+}
+
+/// Generate one getter per field name, with nested repetition.
+macro_rules! record {
+    ($name:ident { $($field:ident : $ty:ty),* $(,)? }) => {
+        /// A generated record.
+        #[derive(Debug, Default, Clone)]
+        pub struct $name {
+            $(pub $field: $ty,)*
+        }
+        impl $name {
+            /// The field names.
+            pub const FIELDS: &'static [&'static str] = &[$(stringify!($field)),*];
+        }
+    };
+}
+
+/// Count token trees recursively.
+macro_rules! count {
+    () => { 0usize };
+    ($head:tt $($tail:tt)*) => { 1usize + count!($($tail)*) };
+}
+
+/// A map literal with key/value pairs.
+macro_rules! map {
+    ($($k:expr => $v:expr),* $(,)?) => {{
+        let mut m = ::std::collections::BTreeMap::new();
+        $( m.insert($k, $v); )*
+        m
+    }};
+}
+
+/// Repetition with separators and a literal fragment.
+macro_rules! max_of {
+    ($x:expr) => { $x };
+    ($x:expr, $($rest:expr),+) => {{
+        let a = $x;
+        let b = max_of!($($rest),+);
+        if a > b { a } else { b }
+    }};
+}
+
+/// A macro that expands to statements.
+macro_rules! square_all {
+    ($($v:ident),*) => {
+        $( let $v = $v * $v; )*
+    };
+}
+
+/// A macro using `$crate` and lifetimes and blocks as fragments.
+macro_rules! with_block {
+    ($lt:lifetime, $body:block) => {
+        $lt: loop {
+            break $lt $body;
+        }
+    };
+}
+
+// Item position.
+newtype! {
+    /// Meters.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct Meters(f64);
+}
+
+record!(Person { name: String, age: u32 });
+
+macro_rules! impl_double {
+    ($($t:ty),*) => {
+        $(impl Double for $t {
+            fn double(self) -> Self { self * 2 as $t }
+        })*
+    };
+}
+
+/// Doubling.
+pub trait Double {
+    /// Twice the value.
+    fn double(self) -> Self;
+}
+
+impl_double!(u8, i32, f64);
+
+/// Exercise everything.
+pub fn demo() -> usize {
+    // Statement position.
+    let a = 3;
+    let b = 4;
+    square_all!(a, b);
+    println!("{} {}", a, b);
+    assert!(a + b > 0, "positive: {}", a + b);
+
+    // Expression position.
+    let s = strings!["x", 1, 2.5];
+    let empty = strings!();
+    let n = count!(a b c d);
+    let m = map! { "one" => 1, "two" => 2 };
+    let biggest = max_of!(3, 9, 4);
+    let blocked = with_block!('blk, { a + 1 });
+    let meters = Meters::new(2.5);
+    let p = Person { name: "Ada".into(), age: 36 };
+    let formatted = format!("{p:?} {:.1}", meters.get());
+    let v = vec![1u8; 4];
+    let cfg = cfg!(debug_assertions);
+    let file = file!().len() + line!() as usize + column!() as usize;
+    let text = concat!("a", 1, 'b', true);
+    s.len()
+        + empty.len()
+        + n
+        + m.len()
+        + biggest as usize
+        + blocked as usize
+        + formatted.len()
+        + v.len()
+        + usize::from(cfg)
+        + file
+        + text.len()
+        + Person::FIELDS.len()
+        + 7u8.double() as usize
+        + 2i32.double() as usize
+        + 1.5f64.double() as usize
+        + stringify!(a + b).len()
+        + matches!(biggest, 1..=10) as usize
+}

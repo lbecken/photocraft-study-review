@@ -1,0 +1,11 @@
+//! Invalid: `let = ;` with neither pattern nor initializer.
+
+/// Count to three.
+pub fn count() -> u32 {
+    let mut n = 0;
+    let = ;
+    while n < 3 {
+        n += 1;
+    }
+    n
+}
