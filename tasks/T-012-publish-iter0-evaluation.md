@@ -2,7 +2,7 @@
 id: T-012
 title: "Publish the iteration-0 evaluation and the scorecard it changes"
 tier: low
-state: draft
+state: self_verified
 owner_role: director
 scorecard_items: []
 depends_on: [T-004, T-005]
