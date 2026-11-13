@@ -2,7 +2,7 @@
 id: T-042
 title: "State the two v1.2 builder rules in AGENTS.md and the two stages of iteration 2 in CHARTER §5"
 tier: low               # ADR-0002: documentation only; neither file is a gate path (precheck.rs is_gate_path)
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # low tier carries no scorecard item (METHODOLOGY §4)
 depends_on: []          # nothing unmerged; no spec check is required by METHODOLOGY §5.7
