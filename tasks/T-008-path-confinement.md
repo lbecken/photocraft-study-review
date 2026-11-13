@@ -611,4 +611,17 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   · gate attempts: 1 (last: red scorecard, only the 9 listed T-008 acceptance tests; fmt, clippy, layers, ui-commands, hygiene, schema green; test, no-skip, fuzz, budgets not run) · not run: the later gate steps; behaviour on a non-Linux Unix · missing context: none · next: join with `task/T-008`.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13T14:13Z · R-128 · tests_joined · did: round 1 full review of `be31cb7` →
+  `reviews/T-008-r1.md`, verdict request-changes. Both original problems are gone through
+  `exec`/`run`/`control` (FIFO, socket, char and block device refused at once; relative and
+  absolute outside links refused at open and save, outside files byte-identical). Findings:
+  D-1 defect (the root or an ancestor replaced by a symlink between two requests lets a
+  `control` session read and replace an outside file; paths.md:71 says such changes are always
+  caught), D-2 defect (paths.md:48–50 "a FIFO never makes a request wait" contradicts the
+  accepted race), SG-1 spec gap (out-and-back chains reveal outside existence), N-1 nit
+  (trailing `/` in a link target ignored). Mutants: 19 introduced, 18 killed (14 by acceptance),
+  1 equivalent, 0 survived. The three allowed edits to merged tests are exactly as ruled. ·
+  gate attempts: 0 (crate tests only) · not run: full gate, in-call races, macOS · missing
+  context: none · next: director rules on D-1 (code fix vs. narrowed guarantee) and SG-1;
+  implementer fixes D-1/D-2.
 <!-- end reviewer log -->
