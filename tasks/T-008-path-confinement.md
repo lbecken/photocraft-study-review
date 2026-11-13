@@ -716,4 +716,13 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   races, ACL/LSM-unreadable roots, cross-device roots, macOS · missing context: none · next:
   implementer fixes R2-D1 in paths.md and disk.rs module docs; round 3 confirms; director decides
   the unreadable-root follow-up.
+- 2026-11-13T17:11Z · R-143 · tests_joined · did: round 3 confirmation of R2-D1 only (v13) at
+  `cce4ae7` (previous `5564979`) → `reviews/T-008-r3.md`, verdict approve. Delta is `paths.md`,
+  `//!` lines of `disk.rs` (no non-comment line) and the implementer's log entry; no code, no
+  test. paths.md now states the unreadable-root limit (:97–101) and qualifies the kept-open
+  (:14–16), other-directory (:20–22), always-caught (:95–96), nothing-outside/temp-file
+  (:52–55) and save-refusal (:69–73) sentences; module docs agree with the `_root_handle`
+  comment. No sentence wider than the code. Mutants 0 (no code changed). · gate attempts: 0
+  (`cargo xtask hygiene` PASS) · not run: full gate (re-join green), no re-probe (no behaviour
+  change) · missing context: none · next: director approval row; follow-up task per v12.
 <!-- end reviewer log -->
