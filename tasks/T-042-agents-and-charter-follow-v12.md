@@ -136,6 +136,19 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   missing context: none · next: director (Q-1); no spec check required.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T21:49Z · R-166 · ready · acknowledged: Q-1 ruling (D-098) accepted, this task holds only
+  `AGENTS.md` and `docs/CHARTER.md` §5; ADR-0005 `task:` already reads T-042 (no action, ledger
+  path). Criteria restated: diff touches exactly the two files; both Interface (1) sentences
+  appear once (rule 9 after rule 8; bullet directly after `Read the task log first:`); the old
+  §5 iteration-2 row is replaced by the Interface (2) row, one line out, one in. · did: copied
+  the two sentences and the row verbatim (wrapped at <=98 columns in `AGENTS.md`); checked the
+  cited sections say what the sentences claim (METHODOLOGY §6 "Pins and documents", §2.1 first
+  row, ADR-0005 Decision); ran AC-1..AC-3: AC-1 prints the two files; AC-2 prints 1 and 1;
+  AC-3 prints 1, 0, and one -/+ pair in hunk @@ -110 (§5). AC-2's command as written fails for
+  the bullet (`grep -cF '- Acknowledge…'` takes the leading `-` as an option); with `-e` it
+  prints 1. `cargo xtask hygiene`: PASS. · gate attempts: 0 (director's instruction: disk is
+  short, the merge queue runs `cargo xtask ci`) · not run: `cargo xtask ci` (AC-4), no other
+  cargo command · missing context: none · next: director diff check and queue.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
