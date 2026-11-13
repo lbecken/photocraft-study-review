@@ -2,7 +2,7 @@
 id: T-004
 title: "Drive a headless session with JSON-lines requests: `kiln-cli run <script>` and `kiln-cli control`, deterministically"
 tier: high              # two layers (L4 + app); Cargo.toml/Cargo.lock; public CLI/protocol contract
-state: in_progress
+state: tests_joined
 owner_role: director
 scorecard_items: [control.protocol, control.errors, control.session, cli.run]
 depends_on: [T-003]
