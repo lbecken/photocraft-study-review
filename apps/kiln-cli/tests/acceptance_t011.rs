@@ -988,17 +988,18 @@ fn ac4_memory_seed_conflicts_are_usage_errors() {
 }
 
 /// Valid edge cases of the manifest are accepted and give exactly the files: empty `files`,
-/// empty `text`/`hex`, upper-case hex, siblings in one directory, a file next to a directory
-/// whose name it prefixes as a string (`d` and `dx/y`, not a prefix directory).
+/// empty `text`/`hex`, upper-case hex, siblings in one directory, and a file `d` next to a
+/// file `dx/y`: `d` prefixes `dx` as a string but is not a directory prefix at a `/` boundary,
+/// so it is no conflict (ruling u1, D-067); both are seeded and read back.
 #[test]
 fn ac4_valid_manifest_edge_cases_are_accepted() {
     let work = fresh("ac4ok");
     let script = concat!(
-        r#"{"id":1,"command":"doc.open","params":{"path":"d/x"}}"#,
+        r#"{"id":1,"command":"doc.open","params":{"path":"c/x"}}"#,
         "\n",
         r#"{"id":2,"command":"doc.text","params":{"doc":1}}"#,
         "\n",
-        r#"{"id":3,"command":"doc.open","params":{"path":"d/y"}}"#,
+        r#"{"id":3,"command":"doc.open","params":{"path":"c/y"}}"#,
         "\n",
         r#"{"id":4,"command":"doc.text","params":{"doc":2}}"#,
         "\n",
@@ -1006,7 +1007,7 @@ fn ac4_valid_manifest_edge_cases_are_accepted() {
         "\n",
         r#"{"id":6,"command":"doc.text","params":{"doc":3}}"#,
         "\n",
-        r#"{"id":7,"command":"doc.open","params":{"path":"e"}}"#,
+        r#"{"id":7,"command":"doc.open","params":{"path":"d"}}"#,
         "\n",
         r#"{"id":8,"command":"doc.text","params":{"doc":4}}"#,
         "\n",
@@ -1018,7 +1019,7 @@ fn ac4_valid_manifest_edge_cases_are_accepted() {
     std::fs::write(work.join("s.jsonl"), script).unwrap();
     std::fs::write(
         work.join("m.json"),
-        r#"{"files":[{"path":"d/x","hex":"C3a961"},{"path":"d/y","text":""},{"path":"dx/y","hex":""},{"path":"e","text":"é\r\n"}]}"#,
+        r#"{"files":[{"path":"c/x","hex":"C3a961"},{"path":"c/y","text":""},{"path":"dx/y","hex":""},{"path":"d","text":"é\r\n"}]}"#,
     )
     .unwrap();
     let out = kiln(&["run", "s.jsonl", "--memory-seed", "m.json"], &work);
