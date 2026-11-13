@@ -260,3 +260,5 @@
 {"kind":"join","task":"T-010","at":"2026-11-13T12:42:43Z","acc_total":12,"acc_fail_base":12,"base_fail_kind":"fails","acc_fail_first_join":0,"acc_defects":null,"impl_tests_green":true,"gate_green":true,"tests_sha":"70963b3317478630a22519e76c0daf56a1438f85","joined_sha":"6c3150352c5359af2d459d295858b81dbd7d8eee","result":"joined","guard_total":3,"guard_fail_base":0,"guard_fail_join":0}
 {"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T12:49:00Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T12:49:00Z","from":"self_verified","to":"tests_joined"}
+{"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T12:49:17Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T12:49:17Z","from":"specified","to":"ready"}
