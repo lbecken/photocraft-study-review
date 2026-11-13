@@ -36,7 +36,10 @@ fn no_tools_refuses_every_request() {
     let mut boxed: Box<dyn ToolRunner> = Box::new(NoTools);
     assert_eq!(boxed.run(&req(Tool::Cargo)), Err(ToolError::Unavailable));
     assert_eq!(format!("{boxed:?}"), "NoTools");
-    assert_eq!(NoTools::default(), NoTools);
+    fn by_default<T: Default>() -> T {
+        T::default()
+    }
+    assert_eq!(by_default::<NoTools>(), NoTools);
 }
 
 #[test]
