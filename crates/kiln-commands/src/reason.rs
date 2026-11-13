@@ -7,199 +7,123 @@
 //! description as `error_kinds`, so the list in `docs/commands.json` is generated from these
 //! enums.
 //!
-//! Adding a kind: add a variant (and its arm in `as_str` and `description`, and its entry in
-//! `ALL`), then run `cargo xtask schema --write`. A lower-layer error enum maps to reasons by
-//! an exhaustive `From` without a catch-all arm, so a new lower-layer variant does not compile
-//! until it is mapped. Errors raised by one command group only are mapped in that group's
-//! module; this file holds the shared mappings.
+//! Adding a kind: add one row to the table of [`RejectReason`] (or [`InternalReason`]) below,
+//! then run `cargo xtask schema --write`. The row is the only place a variant is declared: the
+//! enum, `ALL`, `as_str` and `description` are all generated from the table, so a variant
+//! cannot exist without its `ALL` entry and its description. A lower-layer error enum maps to
+//! reasons by an exhaustive `From` without a catch-all arm, so a new lower-layer variant does
+//! not compile until it is mapped. Errors raised by one command group only are mapped in that
+//! group's module; this file holds the shared mappings.
 
 use kiln_text::EditError;
 use kiln_workspace::{OpenError, ToolError, VfsError};
 use serde::{Deserialize, Serialize};
 
-/// Why a command refused a request (the `kind` of a `rejected` error).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RejectReason {
-    /// The path is not a valid root-relative path.
-    InvalidPath,
-    /// No open document has this id.
-    NoSuchDocument,
-    /// `doc.close` of a modified document without `discard`.
-    UnsavedChanges,
-    /// The file (or, for a save, its directory) does not exist.
-    NotFound,
-    /// The path names a directory.
-    NotAFile,
-    /// Any other file-system failure.
-    IoError,
-    /// The file is not valid UTF-8 / UTF-16 text.
-    DecodeError,
-    /// An offset beyond the end of the text.
-    OutOfRange,
-    /// A range whose start is after its end.
-    InvertedRange,
-    /// Any other refusal.
-    Other,
-    /// The search pattern is empty or is not a valid regular expression.
-    InvalidPattern,
-    /// A file of a replace preview changed or was removed since the preview.
-    StalePreview,
-    /// No stored replace preview has this id.
-    NoSuchPreview,
-    /// External tools are off for this session.
-    ToolUnavailable,
-    /// The external tool's program was not found.
-    ToolNotFound,
-    /// The external tool ran longer than its limit and was stopped.
-    ToolTimeout,
-    /// The external tool failed or gave no usable result.
-    ToolFailed,
-    /// The replayed tool recording has no output for this request.
-    NoRecording,
-    /// rustfmt could not format the text.
-    FormatError,
-    /// The file changed or was removed on disk since it was read.
-    ChangedOnDisk,
-    /// The keymap file or chord is not valid.
-    InvalidKeymap,
+/// Declares a reason enum from one table, one row per variant:
+/// `/// doc` `Variant = "kind" => "description",`. Emits the enum (declaration order = row
+/// order, snake-case serde form), `ALL` in row order, `as_str` and `description`.
+macro_rules! reasons {
+    (
+        $(#[$meta:meta])*
+        pub enum $name:ident {
+            $( $(#[$vmeta:meta])* $variant:ident = $kind:literal => $when:literal, )+
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        pub enum $name {
+            $( $(#[$vmeta])* $variant, )+
+        }
+
+        impl $name {
+            /// Every variant, in declaration order.
+            pub const ALL: &'static [$name] = &[ $( $name::$variant, )+ ];
+
+            /// The protocol kind: the snake-case name, equal to the serde form.
+            pub fn as_str(self) -> &'static str {
+                match self {
+                    $( $name::$variant => $kind, )+
+                }
+            }
+
+            /// When this kind is reported (the `when` of `error_kinds` in
+            /// `docs/commands.json`).
+            pub fn description(self) -> &'static str {
+                match self {
+                    $( $name::$variant => $when, )+
+                }
+            }
+        }
+    };
 }
 
-impl RejectReason {
-    /// Every variant, in declaration order.
-    pub const ALL: &'static [RejectReason] = &[
-        RejectReason::InvalidPath,
-        RejectReason::NoSuchDocument,
-        RejectReason::UnsavedChanges,
-        RejectReason::NotFound,
-        RejectReason::NotAFile,
-        RejectReason::IoError,
-        RejectReason::DecodeError,
-        RejectReason::OutOfRange,
-        RejectReason::InvertedRange,
-        RejectReason::Other,
-        RejectReason::InvalidPattern,
-        RejectReason::StalePreview,
-        RejectReason::NoSuchPreview,
-        RejectReason::ToolUnavailable,
-        RejectReason::ToolNotFound,
-        RejectReason::ToolTimeout,
-        RejectReason::ToolFailed,
-        RejectReason::NoRecording,
-        RejectReason::FormatError,
-        RejectReason::ChangedOnDisk,
-        RejectReason::InvalidKeymap,
-    ];
-
-    /// The protocol kind: the snake-case name, equal to the serde form.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            RejectReason::InvalidPath => "invalid_path",
-            RejectReason::NoSuchDocument => "no_such_document",
-            RejectReason::UnsavedChanges => "unsaved_changes",
-            RejectReason::NotFound => "not_found",
-            RejectReason::NotAFile => "not_a_file",
-            RejectReason::IoError => "io_error",
-            RejectReason::DecodeError => "decode_error",
-            RejectReason::OutOfRange => "out_of_range",
-            RejectReason::InvertedRange => "inverted_range",
-            RejectReason::Other => "other",
-            RejectReason::InvalidPattern => "invalid_pattern",
-            RejectReason::StalePreview => "stale_preview",
-            RejectReason::NoSuchPreview => "no_such_preview",
-            RejectReason::ToolUnavailable => "tool_unavailable",
-            RejectReason::ToolNotFound => "tool_not_found",
-            RejectReason::ToolTimeout => "tool_timeout",
-            RejectReason::ToolFailed => "tool_failed",
-            RejectReason::NoRecording => "no_recording",
-            RejectReason::FormatError => "format_error",
-            RejectReason::ChangedOnDisk => "changed_on_disk",
-            RejectReason::InvalidKeymap => "invalid_keymap",
-        }
-    }
-
-    /// When this kind is reported (the `when` of `error_kinds` in `docs/commands.json`).
-    pub fn description(self) -> &'static str {
-        match self {
-            RejectReason::InvalidPath => {
-                "the path is not a valid root-relative path (see Paths in `docs/control-protocol.md`)"
-            }
-            RejectReason::NoSuchDocument => "no open document has this id",
-            RejectReason::UnsavedChanges => "`doc.close` of a modified document without `discard`",
-            RejectReason::NotFound => "the file (or, for a save, its directory) does not exist",
-            RejectReason::NotAFile => "the path names a directory",
-            RejectReason::IoError => {
-                "any other file-system failure (permissions, name too long, …)"
-            }
-            RejectReason::DecodeError => "the file is not valid UTF-8 / UTF-16 text",
-            RejectReason::OutOfRange => "an offset beyond the end of the text",
-            RejectReason::InvertedRange => "a range whose start is after its end",
-            RejectReason::Other => "any other refusal",
-            RejectReason::InvalidPattern => {
-                "the search pattern is empty or is not a valid regular expression"
-            }
-            RejectReason::StalePreview => {
-                "a file of a replace preview changed or was removed since the preview"
-            }
-            RejectReason::NoSuchPreview => "no stored replace preview has this id",
-            RejectReason::ToolUnavailable => {
-                "external tools are off for this session (the default)"
-            }
-            RejectReason::ToolNotFound => "the external tool's program was not found",
-            RejectReason::ToolTimeout => {
-                "the external tool ran longer than its limit and was stopped"
-            }
-            RejectReason::ToolFailed => "the external tool failed or gave no usable result",
-            RejectReason::NoRecording => {
-                "the replayed tool recording has no output for this request"
-            }
-            RejectReason::FormatError => "rustfmt could not format the text",
-            RejectReason::ChangedOnDisk => {
-                "the file changed or was removed on disk since it was read"
-            }
-            RejectReason::InvalidKeymap => "the keymap file or chord is not valid",
-        }
+reasons! {
+    /// Why a command refused a request (the `kind` of a `rejected` error).
+    pub enum RejectReason {
+        /// The path is not a valid root-relative path.
+        InvalidPath = "invalid_path" =>
+            "the path is not a valid root-relative path (see Paths in `docs/control-protocol.md`)",
+        /// No open document has this id.
+        NoSuchDocument = "no_such_document" => "no open document has this id",
+        /// `doc.close` of a modified document without `discard`.
+        UnsavedChanges = "unsaved_changes" =>
+            "`doc.close` of a modified document without `discard`",
+        /// The file (or, for a save, its directory) does not exist.
+        NotFound = "not_found" => "the file (or, for a save, its directory) does not exist",
+        /// The path names a directory.
+        NotAFile = "not_a_file" => "the path names a directory",
+        /// Any other file-system failure.
+        IoError = "io_error" => "any other file-system failure (permissions, name too long, …)",
+        /// The file is not valid UTF-8 / UTF-16 text.
+        DecodeError = "decode_error" => "the file is not valid UTF-8 / UTF-16 text",
+        /// An offset beyond the end of the text.
+        OutOfRange = "out_of_range" => "an offset beyond the end of the text",
+        /// A range whose start is after its end.
+        InvertedRange = "inverted_range" => "a range whose start is after its end",
+        /// Any other refusal.
+        Other = "other" => "any other refusal",
+        /// The search pattern is empty or is not a valid regular expression.
+        InvalidPattern = "invalid_pattern" =>
+            "the search pattern is empty or is not a valid regular expression",
+        /// A file of a replace preview changed or was removed since the preview.
+        StalePreview = "stale_preview" =>
+            "a file of a replace preview changed or was removed since the preview",
+        /// No stored replace preview has this id.
+        NoSuchPreview = "no_such_preview" => "no stored replace preview has this id",
+        /// External tools are off for this session.
+        ToolUnavailable = "tool_unavailable" =>
+            "external tools are off for this session (the default)",
+        /// The external tool's program was not found.
+        ToolNotFound = "tool_not_found" => "the external tool's program was not found",
+        /// The external tool ran longer than its limit and was stopped.
+        ToolTimeout = "tool_timeout" =>
+            "the external tool ran longer than its limit and was stopped",
+        /// The external tool failed or gave no usable result.
+        ToolFailed = "tool_failed" => "the external tool failed or gave no usable result",
+        /// The replayed tool recording has no output for this request.
+        NoRecording = "no_recording" =>
+            "the replayed tool recording has no output for this request",
+        /// rustfmt could not format the text.
+        FormatError = "format_error" => "rustfmt could not format the text",
+        /// The file changed or was removed on disk since it was read.
+        ChangedOnDisk = "changed_on_disk" =>
+            "the file changed or was removed on disk since it was read",
+        /// The keymap file or chord is not valid.
+        InvalidKeymap = "invalid_keymap" => "the keymap file or chord is not valid",
     }
 }
 
-/// Why a command failed through a bug in Kiln (the `kind` of an `internal` error).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InternalReason {
-    /// A command panicked.
-    Panic,
-    /// A command's result violates its own schema.
-    ResultSchema,
-    /// Any other internal error (e.g. a result that does not serialize).
-    Other,
-}
-
-impl InternalReason {
-    /// Every variant, in declaration order.
-    pub const ALL: &'static [InternalReason] = &[
-        InternalReason::Panic,
-        InternalReason::ResultSchema,
-        InternalReason::Other,
-    ];
-
-    /// The protocol kind: the snake-case name, equal to the serde form.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            InternalReason::Panic => "panic",
-            InternalReason::ResultSchema => "result_schema",
-            InternalReason::Other => "other",
-        }
-    }
-
-    /// When this kind is reported (the `when` of `error_kinds` in `docs/commands.json`).
-    pub fn description(self) -> &'static str {
-        match self {
-            InternalReason::Panic => "a command panicked (a bug in Kiln)",
-            InternalReason::ResultSchema => {
-                "a command's result violates its own schema (a bug in Kiln)"
-            }
-            InternalReason::Other => "any other internal error",
-        }
+reasons! {
+    /// Why a command failed through a bug in Kiln (the `kind` of an `internal` error).
+    pub enum InternalReason {
+        /// A command panicked.
+        Panic = "panic" => "a command panicked (a bug in Kiln)",
+        /// A command's result violates its own schema.
+        ResultSchema = "result_schema" =>
+            "a command's result violates its own schema (a bug in Kiln)",
+        /// Any other internal error (e.g. a result that does not serialize).
+        Other = "other" => "any other internal error",
     }
 }
 
@@ -254,8 +178,41 @@ mod tests {
 
     use super::*;
 
+    /// The kinds pinned by T-032, in pinned order. Later tasks append rows; this checks that
+    /// the pinned names stay a subsequence of `ALL` in this order, not the count.
+    const PINNED_REJECTED: [&str; 21] = [
+        "invalid_path",
+        "no_such_document",
+        "unsaved_changes",
+        "not_found",
+        "not_a_file",
+        "io_error",
+        "decode_error",
+        "out_of_range",
+        "inverted_range",
+        "other",
+        "invalid_pattern",
+        "stale_preview",
+        "no_such_preview",
+        "tool_unavailable",
+        "tool_not_found",
+        "tool_timeout",
+        "tool_failed",
+        "no_recording",
+        "format_error",
+        "changed_on_disk",
+        "invalid_keymap",
+    ];
+    const PINNED_INTERNAL: [&str; 3] = ["panic", "result_schema", "other"];
+
+    /// True iff `pinned` appears in `all` in order (other entries may lie between).
+    fn is_ordered_subsequence(pinned: &[&str], all: &[&str]) -> bool {
+        let mut rest = all.iter();
+        pinned.iter().all(|p| rest.any(|a| a == p))
+    }
+
     #[test]
-    fn as_str_is_the_serde_form_and_all_is_complete() {
+    fn as_str_is_the_serde_form_and_pinned_kinds_are_in_all_in_order() {
         for r in RejectReason::ALL {
             assert_eq!(serde_json::to_value(r).expect("ser"), r.as_str());
             let back: RejectReason = serde_json::from_value(r.as_str().into()).expect("de");
@@ -268,16 +225,22 @@ mod tests {
             assert_eq!(back, *r);
             assert!(!r.description().trim().is_empty(), "{r:?}");
         }
-        let kinds: BTreeSet<_> = RejectReason::ALL.iter().map(|r| r.as_str()).collect();
-        assert_eq!(kinds.len(), RejectReason::ALL.len(), "duplicate in ALL");
-        assert_eq!(RejectReason::ALL.len(), 21);
-        assert_eq!(
-            InternalReason::ALL
-                .iter()
-                .map(|r| r.as_str())
-                .collect::<Vec<_>>(),
-            ["panic", "result_schema", "other"]
+        let kinds: Vec<&str> = RejectReason::ALL.iter().map(|r| r.as_str()).collect();
+        let unique: BTreeSet<_> = kinds.iter().collect();
+        assert_eq!(unique.len(), kinds.len(), "duplicate in ALL");
+        assert!(
+            is_ordered_subsequence(&PINNED_REJECTED, &kinds),
+            "{kinds:?}"
         );
+        let kinds: Vec<&str> = InternalReason::ALL.iter().map(|r| r.as_str()).collect();
+        assert!(
+            is_ordered_subsequence(&PINNED_INTERNAL, &kinds),
+            "{kinds:?}"
+        );
+        // The helper itself: order matters, gaps are allowed.
+        assert!(is_ordered_subsequence(&["a", "c"], &["a", "b", "c"]));
+        assert!(!is_ordered_subsequence(&["c", "a"], &["a", "b", "c"]));
+        assert!(!is_ordered_subsequence(&["d"], &["a", "b", "c"]));
     }
 
     /// `ALL` is in declaration order: the derived `Hash`/`Eq` give no order, so check the
