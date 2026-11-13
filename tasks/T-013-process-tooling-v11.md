@@ -490,7 +490,7 @@ Director's answers to the planner's questions of R-055 (run R-057).
   e. The over-budget line is the Interface (1) text; the wording in Pinned (g) is struck.
   f. `metrics report` formats: a line starting `acceptance-caught defects: <total>`; per-tier and per-arm integers on lines naming the tier or arm; the with-overhead figure on a line containing `overhead`; `T-NNN (from T-MMM)` lines; `extend to: <N>|none` and `within ceiling: yes|no` on a line naming the task.
   g. `publish` regenerates `docs/scorecard.md` with the command main's `xtask/generated.toml` lists for that path, run in the task worktree.
-  h. After a successful publish main's first-parent history after the pre-publish tip is exactly the five commits of AC-9, in order.
+  h. (replaced by D-040) `main`'s history is append-only: no tool resets, amends or rewrites a commit on `main`. A successful publish adds exactly six commits to main's first-parent history — the five of AC-9 plus `publish: T-NNN in progress` after the `ready` commit and before the gate; after a red gate the `ready` and `in progress` commits both remain.
   i. `hygiene` is never EMPTY.
 
 ## Questions and rulings
