@@ -735,6 +735,36 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   an `ERROR` parent holds `( ( )` as direct leaves (e.g. checked on `) ( ( )`, if that keeps
   all three under one `ERROR`), with its expected pairs; the test author then adds it to
   `bracket_worked_examples`.
+- 2026-11-13T22:44Z · R-175 · ready · acknowledged and accepted: the director's ruling D-104 on
+  my R-169 question ("Ruling on the test author's question of R-169", in the task file's
+  Questions and rulings, read in the primary checkout's copy), and the acceptance of my three
+  R-169 interpretations as stated. · did: added two worked examples to
+  `bracket_worked_examples`, each with one `ERROR` parent holding two openers before a closer
+  as direct leaves. Expected answers follow the Q-4 stack rule (the closer pairs with the
+  nearer opener; the other opener has no partner) and are checked from both ends:
+  `( ( | )` → 2 and 6 give `{open:2, close:6}`; 0, 4 (`|`) and 7 (`len`) give `null`; 8 is
+  `out_of_range`. `[ x [ ]` → 4 and 6 give `{open:4, close:6}`; 0, 2 (`x`) and 7 give `null`;
+  8 is `out_of_range`. The edited document's id moved from 6 to 8 (named constant
+  `EDIT_DOC`). Dump: from a scratch integration test in `crates/kiln-syntax/tests/` (removed,
+  never committed). It walked every node, anonymous leaves included, with the pinned
+  tree-sitter 0.27.1 / tree-sitter-rust 0.24.2 that `SyntaxTree` wraps, and printed
+  `SyntaxTree::parse(..).sexp()` beside it:
+  `( ( | )`: `source_file@0..7 > ERROR@0..7 > "("@0..1, "("@2..3, "|"@4..5, ")"@6..7`;
+  sexp `(source_file@0..7 (ERROR@0..7))`.
+  `[ x [ ]`: `source_file@0..7 > ERROR@0..7 > "["@0..1, identifier@2..3, "["@4..5,
+  "]"@6..7`; sexp `(source_file@0..7 (ERROR@0..7 (identifier@2..3)))`.
+  Spec-like inputs keep the openers under different parents: `( ( )`, `) ( ( )`,
+  `fn a() { ( ( ) }`, `fn a() { ( ( )`, `[ [ ]`, `{ { }`, `( ( ) )` and
+  `fn a() { x ( ( ) ; }` all wrap the inner pair in its own node (`unit_expression`,
+  `array_expression`, `block`). I found the two above by a brute-force search over sequences
+  of up to 5 short tokens, with and without a `fn a() { ` prefix. The search flagged every
+  parent where pairing with the nearest opener and with the first opener differ (3,967
+  hits), and I took two of the shortest. · gate attempts: 0 (only this target, as before) ·
+  checks: `bracket_worked_examples` still fails on base with `unknown_command`
+  (`syntax.tree`, id 7); `cargo fmt --check` clean; `cargo clippy -p kiln-cli --tests --
+  -D warnings` clean · not run: the new cases against a stub (the R-169 scratch stub was
+  deleted; the expected values come from the dump by the stack rule, not from running code),
+  `cargo xtask ci` · missing context: none · next: director (join).
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

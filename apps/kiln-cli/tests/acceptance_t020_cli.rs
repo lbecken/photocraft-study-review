@@ -1450,12 +1450,17 @@ fn brackets_agree_with_token_groups() {
 #[test]
 fn bracket_worked_examples() {
     let fx = Fixture::new("bracket-examples");
-    let files: [(&str, &str); 5] = [
+    let files: [(&str, &str); 7] = [
         ("e1.rs.txt", EX_HIGHLIGHT),
         ("e2.rs.txt", "fn a() { ("),
         ("e3.rs.txt", ") ( ( ) ] ["),
         ("e4.rs.txt", "fn a() { ( ) ("),
         ("e5.rs.txt", "fn g<T>(x: &str) { let s = \"(\"; } // )"),
+        // D-104: one `ERROR` parent holding two openers before a closer as direct leaves
+        // (node dump of the pinned grammar in the R-175 log entry): the closer pairs with
+        // the nearer opener, the other opener has no partner.
+        ("e6.rs.txt", "( ( | )"),
+        ("e7.rs.txt", "[ x [ ]"),
     ];
     for (name, text) in files {
         fx.write(name, text.as_bytes());
@@ -1477,6 +1482,8 @@ fn bracket_worked_examples() {
     }
     assert_eq!(e5.len(), 38);
 
+    // The document opened after `files` (ids follow open order).
+    const EDIT_DOC: u64 = 8;
     let pair = |o: usize, c: usize| json!({"open": o, "close": c});
     let null = Value::Null;
     // (doc, offset, expected bracket)
@@ -1509,6 +1516,16 @@ fn bracket_worked_examples() {
         (5, 28, null.clone()),
         (5, 37, null.clone()),
         (5, 38, null.clone()),
+        (6, 2, pair(2, 6)),
+        (6, 6, pair(2, 6)),
+        (6, 0, null.clone()),
+        (6, 4, null.clone()),
+        (6, 7, null.clone()),
+        (7, 4, pair(4, 6)),
+        (7, 6, pair(4, 6)),
+        (7, 0, null.clone()),
+        (7, 2, null.clone()),
+        (7, 7, null.clone()),
     ];
     let mut s = Script::default();
     for (name, _) in files {
@@ -1519,21 +1536,32 @@ fn bracket_worked_examples() {
         .iter()
         .map(|(d, o, _)| s.push("syntax.match-bracket", json!({"doc": d, "offset": o})))
         .collect();
-    let beyond: Vec<(usize, &str)> = [(1u64, 31usize), (2, 11), (3, 12), (4, 15), (5, 39)]
-        .iter()
-        .map(|(d, o)| {
-            (
-                s.push("syntax.match-bracket", json!({"doc": d, "offset": o})),
-                files[*d as usize - 1].0,
-            )
-        })
-        .collect();
+    let beyond: Vec<(usize, &str)> = [
+        (1u64, 31usize),
+        (2, 11),
+        (3, 12),
+        (4, 15),
+        (5, 39),
+        (6, 8),
+        (7, 8),
+    ]
+    .iter()
+    .map(|(d, o)| {
+        (
+            s.push("syntax.match-bracket", json!({"doc": d, "offset": o})),
+            files[*d as usize - 1].0,
+        )
+    })
+    .collect();
     let no_doc = s.push("syntax.match-bracket", json!({"doc": 0, "offset": 0}));
-    // Editing: doc 6 starts as `fn a() { (` and is turned into the other examples.
+    // Editing: doc EDIT_DOC starts as `fn a() { (` and is turned into the other examples.
     let mut edits: Vec<(usize, usize, Value)> = Vec::new(); // (response id, offset, expected)
     let mut probe = |s: &mut Script, list: &[(usize, Value)]| {
         for (o, v) in list {
-            let id = s.push("syntax.match-bracket", json!({"doc": 6, "offset": o}));
+            let id = s.push(
+                "syntax.match-bracket",
+                json!({"doc": EDIT_DOC, "offset": o}),
+            );
             edits.push((id, *o, v.clone()));
         }
     };
@@ -1542,7 +1570,7 @@ fn bracket_worked_examples() {
     probe(&mut s, &[(9, null.clone())]);
     edit_ids.push(s.push(
         "doc.insert",
-        json!({"doc": 6, "offset": 10, "text": " ) ("}),
+        json!({"doc": EDIT_DOC, "offset": 10, "text": " ) ("}),
     ));
     probe(
         &mut s,
@@ -1555,7 +1583,7 @@ fn bracket_worked_examples() {
     );
     edit_ids.push(s.push(
         "doc.replace",
-        json!({"doc": 6, "start": 0, "end": 14, "text": EX_HIGHLIGHT}),
+        json!({"doc": EDIT_DOC, "start": 0, "end": 14, "text": EX_HIGHLIGHT}),
     ));
     probe(
         &mut s,
@@ -1566,11 +1594,11 @@ fn bracket_worked_examples() {
             (0, null.clone()),
         ],
     );
-    edit_ids.push(s.push("doc.undo", json!({"doc": 6})));
+    edit_ids.push(s.push("doc.undo", json!({"doc": EDIT_DOC})));
     probe(&mut s, &[(9, pair(9, 11)), (13, null.clone())]);
-    edit_ids.push(s.push("doc.undo", json!({"doc": 6})));
+    edit_ids.push(s.push("doc.undo", json!({"doc": EDIT_DOC})));
     probe(&mut s, &[(9, null.clone()), (10, null.clone())]);
-    let edit_text = s.push("doc.text", json!({"doc": 6}));
+    let edit_text = s.push("doc.text", json!({"doc": EDIT_DOC}));
     let (r, _) = s.run(&fx, "bracket-examples");
 
     for i in 0..files.len() {
