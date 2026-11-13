@@ -2,7 +2,7 @@
 id: T-003
 title: "Open, edit, undo, save and close documents through schema-validated commands with a replayable command log"
 tier: high              # command schema; two layers' contracts meet here; Cargo.toml/Cargo.lock
-state: self_verified
+state: tests_joined
 owner_role: director
 scorecard_items: [ws.documents, ws.dirty-tracking, io.crlf, cmd.log-replay]
 depends_on: [T-001, T-002]
