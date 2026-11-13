@@ -171,40 +171,133 @@ impl Allowed<'_> {
     }
 }
 
-/// Whether `text` (a `docs/decisions.md`) has a table row whose Decision cell begins with
-/// `Approve <task>` (the id followed by a non-alphanumeric character or the cell's end).
-pub fn has_approval(text: &str, task: &str) -> bool {
-    let cells = |l: &str| -> Vec<String> {
-        let t = l.trim();
-        let t = t.strip_prefix('|').unwrap_or(t);
-        let t = t.strip_suffix('|').unwrap_or(t);
-        t.split('|').map(|c| c.trim().to_owned()).collect()
+/// The cells of a Markdown table line (`| a | b |`), split on unescaped `|`.
+fn table_cells(line: &str) -> Vec<String> {
+    let t = line.trim();
+    let t = t.strip_prefix('|').unwrap_or(t);
+    let t = if t.ends_with('|') && !t.ends_with("\\|") {
+        &t[..t.len() - 1]
+    } else {
+        t
     };
-    let want = format!("Approve {task}");
-    let mut col: Option<usize> = None;
-    let mut prev_table = false;
-    for line in text.lines() {
-        let is_row = line.trim_start().starts_with('|');
-        if !is_row {
-            col = None;
-            prev_table = false;
-            continue;
-        }
-        let c = cells(line);
-        if !prev_table {
-            col = c.iter().position(|x| x == "Decision");
-            prev_table = true;
-            continue;
-        }
-        let Some(i) = col else { continue };
-        if let Some(cell) = c.get(i)
-            && let Some(rest) = cell.strip_prefix(&want)
-            && !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric())
-        {
-            return true;
+    let mut cells = vec![String::new()];
+    let mut chars = t.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'|') => {
+                cells.last_mut().unwrap().push('|');
+                chars.next();
+            }
+            '|' => cells.push(String::new()),
+            c => cells.last_mut().unwrap().push(c),
         }
     }
-    false
+    cells.into_iter().map(|c| c.trim().to_owned()).collect()
+}
+
+/// Whether `line` is a table delimiter row (`|---|:--:|`).
+fn is_delimiter_row(line: &str) -> bool {
+    let cells = table_cells(line);
+    !cells.is_empty()
+        && cells.iter().all(|c| {
+            let c = c.strip_prefix(':').unwrap_or(c);
+            let c = c.strip_suffix(':').unwrap_or(c);
+            !c.is_empty() && c.chars().all(|ch| ch == '-')
+        })
+}
+
+/// The Decision cells of the Markdown table rows of `text` (a `docs/decisions.md`), D-026 R7.
+///
+/// Only real table rows count: a line that starts with `|` after at most three spaces, inside a
+/// table whose header row (with a `Decision` cell) is followed by a delimiter row. Lines inside
+/// fenced code blocks (```` ``` ```` or `~~~`), indented code (four spaces or a tab) and HTML
+/// comments are never rows.
+pub fn decision_cells(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut fence: Option<(char, usize)> = None;
+    let mut in_comment = false;
+    // (Decision column, whether the delimiter row has been seen) of the current table.
+    let mut table: Option<(Option<usize>, bool)> = None;
+    for line in text.lines() {
+        let indent = line.len() - line.trim_start_matches(' ').len();
+        let body = line.trim_start_matches(' ');
+        let code_indent = indent >= 4 || body.starts_with('\t');
+        if let Some((ch, n)) = fence {
+            let run = body.chars().take_while(|c| *c == ch).count();
+            if !code_indent && run >= n && body[run * ch.len_utf8()..].trim().is_empty() {
+                fence = None;
+            }
+            continue;
+        }
+        if in_comment {
+            if line.contains("-->") {
+                in_comment = false;
+            }
+            table = None;
+            continue;
+        }
+        if !code_indent {
+            for ch in ['`', '~'] {
+                let run = body.chars().take_while(|c| *c == ch).count();
+                if run >= 3 {
+                    fence = Some((ch, run));
+                }
+            }
+            if fence.is_some() {
+                table = None;
+                continue;
+            }
+            if body.starts_with("<!--") {
+                in_comment = !body.contains("-->");
+                table = None;
+                continue;
+            }
+        }
+        let is_row = !code_indent && body.starts_with('|');
+        if !is_row {
+            table = None;
+            continue;
+        }
+        match table {
+            None => {
+                let c = table_cells(line);
+                table = Some((c.iter().position(|x| x == "Decision"), false));
+            }
+            Some((col, false)) => {
+                if !is_delimiter_row(line) {
+                    // Not a table after all: treat this line as a new candidate header.
+                    let c = table_cells(line);
+                    table = Some((c.iter().position(|x| x == "Decision"), false));
+                } else {
+                    table = Some((col, true));
+                }
+            }
+            Some((Some(i), true)) => {
+                if let Some(cell) = table_cells(line).get(i) {
+                    out.push(cell.clone());
+                }
+            }
+            Some((None, true)) => {}
+        }
+    }
+    out
+}
+
+/// Whether Decision cell `cell` begins with `Approve <task>`: the id followed by the cell's end
+/// or a character that cannot continue an id (not alphanumeric, `-` or `_`).
+fn approves(cell: &str, task: &str) -> bool {
+    cell.strip_prefix(&format!("Approve {task}"))
+        .is_some_and(|rest| {
+            !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+        })
+}
+
+/// Whether `text` (a `docs/decisions.md`) has a table row whose Decision cell begins with
+/// `Approve <task>` and, if `gate_paths`, also contains the words `gate paths` (D-026 R3 (c)).
+pub fn has_approval(text: &str, task: &str, gate_paths: bool) -> bool {
+    decision_cells(text)
+        .iter()
+        .any(|c| approves(c, task) && (!gate_paths || c.contains("gate paths")))
 }
 
 /// The paths a commit changes against its first parent, with their status letter.
@@ -512,7 +605,7 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
 
     if tier == "high" {
         let d = or_refuse("approval", show(root, "main", "docs/decisions.md"))?;
-        if !d.is_some_and(|t| has_approval(&t, task)) {
+        if !d.is_some_and(|t| has_approval(&t, task, false)) {
             return refuse(
                 "approval",
                 format!(
@@ -644,18 +737,60 @@ mod tests {
 
     #[test]
     fn approval_rows() {
+        let has = |t: &str, task: &str| has_approval(t, task, false);
         let t = "# Log\n\n| # | Date | Decision | Why |\n|---|---|---|---|\n| D-1 | d | Approve T-005 for merge. | x |\n";
-        assert!(has_approval(t, "T-005"));
-        assert!(!has_approval(t, "T-00"));
-        assert!(!has_approval(t, "T-006"));
+        assert!(has(t, "T-005"));
+        assert!(!has(t, "T-00"));
+        assert!(!has(t, "T-006"));
         let wrong_col =
             "| # | Date | Decision | Why |\n|---|---|---|---|\n| D-1 | d | ok | Approve T-005 |\n";
-        assert!(!has_approval(wrong_col, "T-005"));
+        assert!(!has(wrong_col, "T-005"));
         let not_begin = "| # | Decision |\n|---|---|\n| D-1 | We Approve T-005 |\n";
-        assert!(!has_approval(not_begin, "T-005"));
+        assert!(!has(not_begin, "T-005"));
         let longer = "| # | Decision |\n|---|---|\n| D-1 | Approve T-0050 |\n";
-        assert!(!has_approval(longer, "T-005"));
-        assert!(!has_approval("Approve T-005\n", "T-005"));
+        assert!(!has(longer, "T-005"));
+        assert!(!has("Approve T-005\n", "T-005"));
+        // D-026 R7: only real table rows outside code blocks and comments.
+        let row = "| # | Decision |\n|:--|---:|\n| D-1 | Approve T-005 |\n";
+        assert!(has(row, "T-005"));
+        assert!(has(&format!("intro\n\n{row}"), "T-005"));
+        for fenced in [
+            format!("```\n{row}```\n"),
+            format!("~~~markdown\n{row}~~~\n"),
+            format!("````\n```\n{row}````\n"),
+            format!("<!--\n{row}-->\n"),
+            row.lines()
+                .map(|l| format!("    {l}\n"))
+                .collect::<String>(),
+            row.lines().map(|l| format!("\t{l}\n")).collect::<String>(),
+            row.lines().map(|l| format!("> {l}\n")).collect::<String>(),
+            "| # | Decision |\n| D-1 | Approve T-005 |\n".to_owned(), // no delimiter row
+        ] {
+            assert!(!has(&fenced, "T-005"), "{fenced}");
+        }
+        assert!(
+            has(&format!("```\ncode\n```\n\n{row}"), "T-005"),
+            "after a closed fence"
+        );
+        assert!(!has(
+            "| # | Decision |\n|---|---|\n| D-1 | Approve T-005-tests |\n",
+            "T-005"
+        ));
+        assert!(!has(
+            "| # | Decision |\n|---|---|\n| D-1 | Approve T-005_x |\n",
+            "T-005"
+        ));
+        assert!(has(
+            "| # | Decision |\n|---|---|\n| D-1 | Approve T-005, a \\| b |\n",
+            "T-005"
+        ));
+        // D-026 R3 (c): a gate-path task needs the words `gate paths` in the same cell.
+        let gp = "| # | Decision | Why |\n|---|---|---|\n| D-1 | Approve T-005 incl. gate paths. | x |\n";
+        assert!(has_approval(gp, "T-005", true));
+        assert!(!has_approval(row, "T-005", true));
+        let other_cell =
+            "| # | Decision | Why |\n|---|---|---|\n| D-1 | Approve T-005 | gate paths |\n";
+        assert!(!has_approval(other_cell, "T-005", true));
     }
 
     #[test]
