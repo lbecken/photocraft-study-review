@@ -181,6 +181,33 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   review.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T04:10Z · R-061 · ready · did: restated the ACs as: state R1-R6 in the named
+  rustdoc (no code, `DOC` or schema change) and pin each with one exact-value guard that passes
+  on main and fails under a seeded bug. Wrote the docs (`kiln-text` crate doc "Undo grouping" +
+  new "Edit validation" section, `EditError`, `insert`/`delete`/`replace`/`undo`/`redo`;
+  `doc.rs` module doc "Rulings callers can rely on"; `Command::MUTATING`) and
+  `crates/kiln-text/tests/guard_t006.rs` (AC-1..AC-3), `crates/kiln-commands/tests/guard_t006.rs`
+  (AC-4..AC-6). AC-8 seeded bugs, each run against its guard and restored with
+  `git checkout` (none committed): M1 `check_range` checks `start` before inversion → AC-1
+  fails (`delete(9..5)` gave `OutOfBounds`); M2 `redo` calls `break_group` before returning
+  `false` → AC-2 fails (text `"ab"` after one undo); M3 `insert` returns `Ok` for `""` before
+  `check_index` → AC-3 fails (`insert(9,"")` was `Ok`); M4 `Open::MUTATING = false` → AC-4
+  fails (`describe` says `mutating: false`); M5 `next_doc` bumped before `Document::open` and
+  not restored on failure → AC-5 fails (`a.txt` got doc 4); M6 save replaces the buffer with a
+  fresh one (history cleared) → AC-6 fails (`can_redo: false` after save). Each guard failed and
+  the other two in its file passed. · gate attempts: 2 (1: red clippy, `clippy::panic` in
+  guard helpers outside `#[cfg(test)]`; 2: green, schema step says `docs/commands.json`
+  current) · not run: `kiln-cli` probes (AC-4..AC-6 run only through the public API in-memory;
+  planner R-055 ran AC-5/AC-6 on disk); no extra kill for "re-open logged as non-mutating
+  while `describe` says true" (M4 trips the `describe` assertion first) · missing context:
+  (1) the `rejected` kinds `not_found`/`decode_error`/`invalid_path` are computed by
+  `kiln-control` from the message, not visible in `kiln-commands`' API, and a dev-dependency
+  on L4 would break the layers and `Cargo.toml` is not in `touches`; the AC-5 guard therefore
+  asserts `code: "rejected"` plus the exact messages that classifier maps to those kinds
+  (T-030 may change these messages and must update this guard). (2) the dispatch told me to
+  export `CARGO_TARGET_DIR=<worktree>/target`, which AGENTS.md forbids; it equals cargo's
+  default for this worktree, so the build is the same. · next: director checks AC-7 wording at
+  `self_verified`.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
