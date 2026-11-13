@@ -201,6 +201,11 @@ pub trait Command {
     type Output: Serialize + JsonSchema;
     /// True iff the command can change state (documents, buffer, files); false for read-only
     /// queries.
+    ///
+    /// This is a property of the command, not of one invocation: every successful run of a
+    /// mutating command is logged with `mutating: true`, even a run that happens to change
+    /// nothing. For example `doc.open` is mutating, also for a re-open of an open path that
+    /// returns `already_open: true`.
     const MUTATING: bool;
 
     /// At least one executable example.

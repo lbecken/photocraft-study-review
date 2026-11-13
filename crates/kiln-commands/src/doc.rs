@@ -3,6 +3,20 @@
 //! Documents are identified by a `u64` id assigned 1, 2, 3, … per [`Context`] as they are
 //! opened, never reused. Offsets are char indices. Domain failures are `rejected`; every
 //! command leaves the context unchanged when it fails.
+//!
+//! ## Rulings callers can rely on
+//! - **Ids.** An id is assigned only by a successful first open of a path. A `doc.open` that
+//!   fails (invalid path, missing file, file that does not decode) consumes no id, and
+//!   re-opening a path that is already open returns its existing id with
+//!   `already_open: true`. So after failed opens of `missing.txt`, an undecodable `bad.txt`
+//!   and `../x`, opening `a.txt` gives doc 1, opening it again gives doc 1 again, and
+//!   opening `b.txt` gives doc 2.
+//! - **Mutating flag.** `mutating` is a property of the command, not of one invocation:
+//!   `doc.open` is mutating, and its log entry says `mutating: true` also for a re-open that
+//!   returns `already_open: true` and changes nothing.
+//! - **Save and history.** `doc.save` touches undo/redo history only by ending the current
+//!   typing group. It does not clear redo: a step that could be redone before a save can
+//!   still be redone after it (the document is then dirty again).
 
 use kiln_text::{LineEnding, LineEndings};
 use kiln_workspace::{Document, Encoding, RelPath};
