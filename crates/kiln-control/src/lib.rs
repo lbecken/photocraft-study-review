@@ -116,14 +116,25 @@ impl Host {
             return None;
         }
         let (parsed, request) = parse_request(line);
-        let response = match request {
-            Err(failure) => failure.into_response(parsed.as_ref(), None),
-            Ok(request) => self.execute(request, parsed.as_ref()),
+        let mut response = match request {
+            Err(failure) => failure.into_response(),
+            Ok(request) => self.execute(request),
         };
+        // The one place every error response leaves the host: echoes of any input value of
+        // the session (this line, and every earlier successful request in the log) are clipped.
+        if let Some(error) = response.get_mut("error") {
+            let raw = match &parsed {
+                Some(_) => None,
+                None => Some(Value::String(String::from_utf8_lossy(line).into_owned())),
+            };
+            let mut sources: Vec<&Value> = parsed.iter().chain(raw.iter()).collect();
+            sources.extend(self.ctx.log().iter().map(|e| &e.params));
+            clip_error(error, &sources);
+        }
         Some(canonical(&response))
     }
 
-    fn execute(&mut self, request: Request, parsed: Option<&Value>) -> Value {
+    fn execute(&mut self, request: Request) -> Value {
         let Request {
             id,
             command,
@@ -154,8 +165,7 @@ impl Host {
                     .and_then(|d| self.doc_paths.get(&d))
                     .map(String::as_str);
                 let request_path = params.get("path").and_then(Value::as_str);
-                let failure = Failure::from_command(id, &command, &e, request_path.or(doc_path));
-                failure.into_response(parsed, doc_path)
+                Failure::from_command(id, &command, &e, request_path.or(doc_path)).into_response()
             }
         }
     }
@@ -213,13 +223,47 @@ fn root_error(root: &Path, e: &VfsError) -> String {
 /// from `sources` in `message` and in each `details` entry to at most 200 characters.
 /// `sources` are the input values the error may echo (requests, params, arguments).
 pub fn clip_error(error: &mut Value, sources: &[&Value]) {
-    let _ = (error, sources);
+    if let Some(Value::String(message)) = error.get_mut("message") {
+        *message = clip_text(message, sources);
+    }
+    if let Some(Value::Array(details)) = error.get_mut("details") {
+        for detail in details.iter_mut() {
+            if let Value::String(d) = detail {
+                *d = clip_detail(d, sources);
+            }
+        }
+    }
 }
 
 /// `text` with every echo of a value from `sources` clipped to at most 200 characters.
+///
+/// A value is recognised as is, JSON-escaped and Rust-escaped; any run of more than 200
+/// non-white-space characters that is left is clipped too. Text of at most 200 characters is
+/// returned unchanged (nothing in it can be a longer echo).
 pub fn clip_text(text: &str, sources: &[&Value]) -> String {
-    let _ = sources;
-    text.to_owned()
+    clip_with(text, sources, None)
+}
+
+/// As [`clip_text`], for a schema-validation detail: also the compact JSON of the value the
+/// detail's JSON pointer names in a source (or in its `params`), or of a whole source.
+fn clip_detail(detail: &str, sources: &[&Value]) -> String {
+    clip_with(detail, sources, Some(detail))
+}
+
+fn clip_with(text: &str, sources: &[&Value], detail: Option<&str>) -> String {
+    if text.chars().count() <= MAX_ECHO {
+        return text.to_owned();
+    }
+    let mut forms = Vec::new();
+    for source in sources {
+        collect_long_strings(source, &mut forms);
+        if let Some(d) = detail {
+            detail_value_forms(d, source, &mut forms);
+        }
+    }
+    forms.sort_by_key(|f| std::cmp::Reverse(f.len()));
+    forms.dedup();
+    clip_echoes(text, &forms)
 }
 
 /// The message of the `internal` error a panicking command produces (marks kind `panic`).
@@ -286,36 +330,14 @@ impl Failure {
         }
     }
 
-    /// The response, with long echoes of `request` values (and of `doc_path`) clipped.
-    fn into_response(self, request: Option<&Value>, doc_path: Option<&str>) -> Value {
-        let mut forms = Vec::new();
-        if let Some(request) = request {
-            collect_long_strings(request, &mut forms);
-        }
-        if let Some(path) = doc_path {
-            push_forms(path, &mut forms);
-        }
-        forms.sort_by_key(|f| std::cmp::Reverse(f.len()));
-        forms.dedup();
-        let params = request.and_then(|r| r.get("params"));
+    /// The response (echoes are clipped later, in [`Host::handle_line`]).
+    fn into_response(self) -> Value {
         let mut error = Map::new();
         error.insert("code".into(), Value::String(self.code));
         error.insert("kind".into(), Value::String(self.kind.to_owned()));
-        error.insert(
-            "message".into(),
-            Value::String(clip_echoes(&self.message, &forms)),
-        );
+        error.insert("message".into(), Value::String(self.message));
         if let Some(details) = self.details {
-            let details = details
-                .iter()
-                .map(|d| {
-                    let mut own = forms.clone();
-                    if let Some(form) = detail_value_form(d, params) {
-                        own.insert(0, form);
-                    }
-                    Value::String(clip_echoes(d, &own))
-                })
-                .collect();
+            let details = details.into_iter().map(Value::String).collect();
             error.insert("details".into(), Value::Array(details));
         }
         json!({"error": Value::Object(error), "id": self.id, "ok": false})
@@ -416,15 +438,27 @@ fn collect_long_strings(value: &Value, forms: &mut Vec<String>) {
 }
 
 /// A schema-validation detail reads `<pointer>: <value> <reason>` (or `<reason>` at the root,
-/// where the value is the whole params object): the compact JSON of that value if long.
-fn detail_value_form(detail: &str, params: Option<&Value>) -> Option<String> {
-    let params = params?;
-    let value = match detail.split_once(": ") {
-        Some((pointer, _)) if pointer.starts_with('/') => params.pointer(pointer)?,
-        _ => params,
-    };
-    let compact = value.to_string();
-    (compact.chars().count() > MAX_ECHO).then_some(compact)
+/// where the value is the whole params object): push the compact JSON of the value that
+/// pointer names in `source` (or in `source.params`), and of `source` and its `params`, when
+/// long.
+fn detail_value_forms(detail: &str, source: &Value, forms: &mut Vec<String>) {
+    let params = source.get("params");
+    let mut candidates: Vec<&Value> = vec![source];
+    candidates.extend(params);
+    if let Some((pointer, _)) = detail.split_once(": ")
+        && pointer.starts_with('/')
+    {
+        candidates.extend(source.pointer(pointer));
+        candidates.extend(params.and_then(|p| p.pointer(pointer)));
+    }
+    for value in candidates {
+        if value.is_array() || value.is_object() {
+            let compact = value.to_string();
+            if compact.chars().count() > MAX_ECHO {
+                forms.push(compact);
+            }
+        }
+    }
 }
 
 /// `text` with every occurrence of each of `forms` (longest first) clipped, then every run of
@@ -1040,6 +1074,127 @@ mod tests {
         // Short values are echoed in full.
         let v = call(&mut h, r#"{"command":"no.such"}"#);
         assert_eq!(v["error"]["message"], "unknown command `no.such`");
+    }
+
+    /// `text` holds no window of more than MAX_ECHO chars of the periodic `value`.
+    fn no_long_echo(text: &str, value: &str) -> bool {
+        let chars: Vec<char> = value.chars().collect();
+        (0..4).all(|start| {
+            let window: String = chars.iter().skip(start).take(MAX_ECHO + 1).collect();
+            window.chars().count() <= MAX_ECHO || !text.contains(&window)
+        })
+    }
+
+    fn error_texts(v: &Value) -> Vec<String> {
+        let mut t = vec![v["error"]["message"].as_str().unwrap().to_owned()];
+        if let Some(d) = v["error"]["details"].as_array() {
+            t.extend(d.iter().map(|d| d.as_str().unwrap().to_owned()));
+        }
+        t
+    }
+
+    #[test]
+    fn a_long_path_with_spaces_echoed_by_a_later_request_is_clipped() {
+        let dir = std::env::temp_dir().join(format!("kiln-control-later-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // Segments with spaces, each short enough for the file system, 300+ chars in all.
+        let segs: Vec<String> = (0..6).map(|i| format!("{i} a b c ").repeat(9)).collect();
+        let rel = format!("{}/f.txt", segs.join("/"));
+        assert!(rel.chars().count() > 300);
+        std::fs::create_dir_all(dir.join(segs.join("/"))).unwrap();
+        std::fs::write(dir.join(&rel), b"x").unwrap();
+        let mut h = Host::on_disk(&dir).unwrap();
+        let open = json!({"command": "doc.open", "params": {"path": rel}}).to_string();
+        assert_eq!(call(&mut h, &open)["ok"], true);
+        call(
+            &mut h,
+            r#"{"command":"doc.insert","params":{"doc":1,"offset":0,"text":"!"}}"#,
+        );
+        std::fs::remove_dir_all(dir.join(&segs[0])).unwrap();
+        // The save request itself holds no path; the echo comes from the earlier doc.open.
+        let v = call(&mut h, r#"{"command":"doc.save","params":{"doc":1}}"#);
+        assert_eq!(v["error"]["kind"], "not_found", "{v}");
+        let msg = v["error"]["message"].as_str().unwrap();
+        assert!(msg.starts_with("cannot save 0 a b c"), "{msg}");
+        assert!(msg.contains('…') && msg.ends_with(": not found"), "{msg}");
+        assert!(no_long_echo(msg, &rel), "{msg}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn values_with_and_without_spaces_are_clipped_in_message_and_details() {
+        for value in ["v".repeat(1000), "v w ".repeat(250), "\"q\" ".repeat(250)] {
+            let mut h = host();
+            let j = Value::String(value.clone());
+            let lines = [
+                // message: unknown command, invalid path, unknown key
+                format!(r#"{{"command":{j}}}"#),
+                format!(
+                    r#"{{"command":"doc.open","params":{{"path":{}}}}}"#,
+                    Value::String(format!("../{value}"))
+                ),
+                format!(r#"{{"command":"doc.list",{j}:1}}"#),
+                // details: a string where an integer is expected, an array of it, a key
+                format!(
+                    r#"{{"command":"doc.insert","params":{{"doc":{j},"offset":0,"text":"x"}}}}"#
+                ),
+                format!(
+                    r#"{{"command":"doc.insert","params":{{"doc":[{j},{j}],"offset":0,"text":"x"}}}}"#
+                ),
+                format!(
+                    r#"{{"command":"doc.insert","params":{{"doc":1,"offset":0,"text":"x",{j}:1}}}}"#
+                ),
+            ];
+            for line in &lines {
+                let v = call(&mut h, line);
+                assert_eq!(v["ok"], false, "{line:.80}");
+                let escaped = j.to_string();
+                let debug = format!("{value:?}");
+                for t in error_texts(&v) {
+                    for form in [&value, &escaped, &debug] {
+                        assert!(no_long_echo(&t, form), "{t}");
+                    }
+                }
+                assert!(v["error"].to_string().contains('…'), "{v}");
+            }
+        }
+    }
+
+    #[test]
+    fn clip_error_keeps_the_template_and_short_values() {
+        let long = "p q ".repeat(100);
+        let source = json!({"params": {"path": long}});
+        let mut e = json!({
+            "code": "rejected",
+            "kind": "not_found",
+            "message": format!("cannot open {long}: not found"),
+            "details": [format!("/path: {} is bad", Value::String(long.clone())), "short".to_owned()],
+        });
+        clip_error(&mut e, &[&source]);
+        let msg = e["message"].as_str().unwrap();
+        assert!(
+            msg.starts_with("cannot open p q ") && msg.ends_with("…: not found"),
+            "{msg}"
+        );
+        assert_eq!(
+            msg.chars().count(),
+            "cannot open ".len() + MAX_ECHO + ": not found".len()
+        );
+        let d0 = e["details"][0].as_str().unwrap();
+        assert!(
+            d0.starts_with("/path: \"p q") && d0.ends_with("…\" is bad"),
+            "{d0}"
+        );
+        assert_eq!(e["details"][1], "short");
+        assert_eq!(
+            (e["code"].clone(), e["kind"].clone()),
+            (json!("rejected"), json!("not_found"))
+        );
+        // Text that cannot hold a long echo is returned as is.
+        assert_eq!(
+            clip_text("cannot open a.txt: not found", &[&source]),
+            "cannot open a.txt: not found"
+        );
     }
 
     #[test]

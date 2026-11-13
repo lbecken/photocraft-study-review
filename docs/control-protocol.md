@@ -60,10 +60,14 @@ Failure:
   contain text from the operating system (for example `No such file or directory (os error 2)`
   or `File name too long (os error 36)`), which differs between platforms.
 - `error.details` (a list of strings) is present only for `invalid_params`.
-- A value from the session that a message or detail echoes back (a command name, a path, a
-  param value, a key) is cut to at most 200 characters: the first 199 followed by `…`. In
-  addition, any run of more than 200 non-white-space characters in a message or detail is cut
-  the same way. A valid `id` is always echoed in full.
+- An input value that a message or detail echoes back is cut to at most 200 characters: the
+  first 199 followed by `…`; the rest of the message is kept. This covers every value of the
+  current request and of every earlier successful request of the session (a `doc.save` error
+  naming a path opened earlier, say), whether or not it contains white space, and, for
+  `kiln-cli`, every command-line argument; it applies to every error the process reports, on
+  stdout (`run`, `control`) and on stderr (`exec` and the CLI's own messages). In addition, any
+  run of more than 200 non-white-space characters in a message or detail is cut the same way.
+  A valid `id` is always echoed in full.
 
 ### Error codes and kinds
 

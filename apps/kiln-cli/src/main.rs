@@ -30,7 +30,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use kiln_commands::{Context, Registry, standard_registry};
-use kiln_control::Host;
+use kiln_control::{Host, clip_error, clip_text};
 use kiln_workspace::{DiskFs, VfsError};
 use serde_json::{Value, json};
 
@@ -375,44 +375,82 @@ fn run(args: &[String]) -> Outcome {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().map(String::as_str) == Some("control") && !wants_help(&args) {
-        let rest: Vec<&str> = args[1..].iter().map(String::as_str).collect();
-        let opts = match parse_opts(&rest, &["--root"]) {
-            Some((pos, opts)) if pos.is_empty() => opts,
-            _ => return finish(Outcome::usage()),
-        };
-        let mut host = match host_for(&opts.fs()) {
-            Ok(h) => h,
-            Err(o) => return finish(o),
-        };
-        let stdin = std::io::stdin();
-        let stdout = std::io::stdout();
-        return match control(&mut host, &mut stdin.lock(), &mut stdout.lock()) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                let _ = writeln!(std::io::stderr(), "kiln-cli: control I/O error: {e}");
-                ExitCode::from(1)
-            }
-        };
-    }
-    finish(run(&args))
+    let outcome = if args.first().map(String::as_str) == Some("control") && !wants_help(&args) {
+        control_main(&args[1..])
+    } else {
+        run(&args)
+    };
+    finish(outcome, &args)
 }
 
-fn finish(outcome: Outcome) -> ExitCode {
+/// `kiln-cli control`: responses stream to stdout as they are produced (each already
+/// clipped by the host); the returned outcome carries only the exit code and stderr.
+fn control_main(rest: &[String]) -> Outcome {
+    let rest: Vec<&str> = rest.iter().map(String::as_str).collect();
+    let opts = match parse_opts(&rest, &["--root"]) {
+        Some((pos, opts)) if pos.is_empty() => opts,
+        _ => return Outcome::usage(),
+    };
+    let mut host = match host_for(&opts.fs()) {
+        Ok(h) => h,
+        Err(o) => return o,
+    };
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    match control(&mut host, &mut stdin.lock(), &mut stdout.lock()) {
+        Ok(()) => Outcome::ok(String::new()),
+        Err(e) => Outcome::err(1, format!("kiln-cli: control I/O error: {e}\n")),
+    }
+}
+
+/// Everything the process writes to stderr passes through here (D-028 (6)): each line that is
+/// a structured error object gets [`clip_error`], any other line [`clip_text`], with the
+/// command-line arguments (as given, and parsed when they are JSON) as the echo sources.
+/// Protocol responses on stdout were clipped by the host already.
+fn bound_stderr(stderr: &str, args: &[String]) -> String {
+    let parsed: Vec<Value> = args
+        .iter()
+        .flat_map(|a| {
+            let json = serde_json::from_str::<Value>(a).ok();
+            [Some(Value::String(a.clone())), json]
+        })
+        .flatten()
+        .collect();
+    let sources: Vec<&Value> = parsed.iter().collect();
+    let mut out = String::with_capacity(stderr.len().min(4096));
+    for line in stderr.split_inclusive('\n') {
+        let (body, end) = match line.strip_suffix('\n') {
+            Some(body) => (body, "\n"),
+            None => (line, ""),
+        };
+        match serde_json::from_str::<Value>(body) {
+            Ok(mut error @ Value::Object(_)) if error.get("code").is_some() => {
+                clip_error(&mut error, &sources);
+                out.push_str(&error.to_string());
+            }
+            _ => out.push_str(&clip_text(body, &sources)),
+        }
+        out.push_str(end);
+    }
+    out
+}
+
+fn finish(outcome: Outcome, args: &[String]) -> ExitCode {
     let mut stdout = std::io::stdout().lock();
     let written = stdout
         .write_all(outcome.stdout.as_bytes())
         .and_then(|()| stdout.flush());
-    let _ = std::io::stderr().write_all(outcome.stderr.as_bytes());
-    match written {
-        Ok(()) => ExitCode::from(outcome.code),
+    let (code, stderr) = match written {
+        Ok(()) => (outcome.code, outcome.stderr),
         // D-028 (3): output that did not reach stdout is a failure (exit 1), whatever the
         // responses were.
-        Err(e) => {
-            let _ = writeln!(std::io::stderr(), "kiln-cli: cannot write to stdout: {e}");
-            ExitCode::from(1)
-        }
-    }
+        Err(e) => (
+            1,
+            format!("{}kiln-cli: cannot write to stdout: {e}\n", outcome.stderr),
+        ),
+    };
+    let _ = std::io::stderr().write_all(bound_stderr(&stderr, args).as_bytes());
+    ExitCode::from(code)
 }
 
 #[cfg(test)]
@@ -570,6 +608,169 @@ mod tests {
         assert_eq!(
             out.stderr,
             "kiln-cli: bad --root: root `/no/such/kiln/dir`: not found\n"
+        );
+    }
+
+    /// Long values without and with white space (and with characters that get escaped).
+    fn long_values() -> [String; 3] {
+        ["x".repeat(5000), "x y ".repeat(1250), "\"x\" ".repeat(1000)]
+    }
+
+    /// `text` holds no window of more than 200 chars of the periodic `value` (as is, JSON- or
+    /// Rust-escaped).
+    fn no_long_echo(text: &str, value: &str) -> bool {
+        let json = Value::String(value.to_owned()).to_string();
+        let debug = format!("{value:?}");
+        [value, json.as_str(), debug.as_str()].iter().all(|form| {
+            let chars: Vec<char> = form.chars().collect();
+            (0..6).all(|start| {
+                let w: String = chars.iter().skip(start).take(201).collect();
+                w.chars().count() <= 200 || !text.contains(&w)
+            })
+        })
+    }
+
+    /// The decoded `message` and `details` strings of an error object.
+    fn texts(error: &Value) -> Vec<String> {
+        let mut t = vec![error["message"].as_str().unwrap().to_owned()];
+        if let Some(d) = error["details"].as_array() {
+            t.extend(d.iter().map(|d| d.as_str().unwrap().to_owned()));
+        }
+        t
+    }
+
+    /// What `kiln-cli` would print on stderr for `args`.
+    fn stderr_of(args: &[String]) -> String {
+        bound_stderr(&run(args).stderr, args)
+    }
+
+    #[test]
+    fn exec_errors_clip_echoes_in_message_and_details() {
+        for value in long_values() {
+            let j = Value::String(value.clone()).to_string();
+            let cases = [
+                // message: an unknown command name
+                vec![
+                    "exec".to_owned(),
+                    value.clone(),
+                    "{}".into(),
+                    "--memory".into(),
+                ],
+                // message: an invalid path
+                vec![
+                    "exec".into(),
+                    "doc.open".into(),
+                    format!(r#"{{"path":{}}}"#, Value::String(format!("../{value}"))),
+                    "--memory".into(),
+                ],
+                // details: a string where an integer is expected
+                vec![
+                    "exec".into(),
+                    "doc.insert".into(),
+                    format!(r#"{{"doc":{j},"offset":0,"text":"x"}}"#),
+                    "--memory".into(),
+                ],
+                // details: an array of it
+                vec![
+                    "exec".into(),
+                    "doc.insert".into(),
+                    format!(r#"{{"doc":[{j},{j}],"offset":0,"text":"x"}}"#),
+                    "--memory".into(),
+                ],
+            ];
+            for args in cases {
+                let err = stderr_of(&args);
+                let v: Value = serde_json::from_str(&err).unwrap();
+                assert!(v["code"].is_string(), "{err:.300}");
+                for t in texts(&v) {
+                    assert!(no_long_echo(&t, &value), "{t:.600}");
+                }
+                assert!(err.contains('…'), "{err:.300}");
+                assert!(err.ends_with('\n'));
+            }
+        }
+        // A short error is printed exactly as before.
+        let args: Vec<String> = ["exec", "no.such", "{}"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            stderr_of(&args),
+            "{\"code\":\"unknown_command\",\"message\":\"unknown command `no.such`\"}\n"
+        );
+    }
+
+    #[test]
+    fn run_and_control_responses_clip_echoes() {
+        let dir = std::env::temp_dir().join(format!("kiln-cli-unit-clip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (i, value) in long_values().iter().enumerate() {
+            let j = Value::String(value.clone()).to_string();
+            let script = [
+                format!(r#"{{"command":{j}}}"#),
+                format!(r#"{{"command":"doc.open","params":{{"path":{j}}}}}"#),
+                format!(
+                    r#"{{"command":"doc.insert","params":{{"doc":{j},"offset":0,"text":"x"}}}}"#
+                ),
+                format!(r#"{{"command":"doc.list",{j}:1}}"#),
+            ]
+            .join("\n");
+            let path = dir.join(format!("s{i}.jsonl"));
+            std::fs::write(&path, &script).unwrap();
+            let out = call(&["run", path.to_str().unwrap(), "--memory"]);
+            assert_eq!(out.code, 3);
+            let mut host = Host::in_memory(&[]).unwrap();
+            let mut controlled = Vec::new();
+            control(&mut host, &mut script.as_bytes(), &mut controlled).unwrap();
+            let controlled = String::from_utf8(controlled).unwrap();
+            assert_eq!(controlled, out.stdout, "run and control answer alike");
+            assert_eq!(out.stdout.lines().count(), 4);
+            for line in out.stdout.lines() {
+                let v: Value = serde_json::from_str(line).unwrap();
+                for t in texts(&v["error"]) {
+                    assert!(no_long_echo(&t, value), "{t:.600}");
+                }
+                assert!(line.contains('…'), "{line:.300}");
+            }
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn cli_text_errors_clip_echoed_arguments() {
+        for value in long_values() {
+            let script = format!("/no/such/{value}.jsonl");
+            for args in [
+                vec!["run".to_owned(), script.clone(), "--memory".into()],
+                vec![
+                    "run".into(),
+                    "s.jsonl".into(),
+                    "--root".into(),
+                    format!("/no/{value}"),
+                ],
+                vec![
+                    "exec".into(),
+                    "doc.list".into(),
+                    "{}".into(),
+                    "--root".into(),
+                    format!("/no/{value}"),
+                ],
+            ] {
+                let err = stderr_of(&args);
+                assert!(err.starts_with("kiln-cli: "), "{err:.300}");
+                assert!(no_long_echo(&err, &value), "{err:.600}");
+                assert!(err.contains('…'), "{err:.300}");
+            }
+        }
+        // Short arguments are named in full.
+        let args: Vec<String> = ["run", "s.jsonl", "--root", "/no/such/kiln"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            stderr_of(&args),
+            "kiln-cli: bad --root: root `/no/such/kiln`: not found\n"
         );
     }
 
