@@ -76,6 +76,13 @@ pub(crate) mod support {
         o.stdout.trim().to_owned()
     }
 
+    /// `git show <spec>` in `dir`, untrimmed (exact bytes as text); panics on failure.
+    pub fn git_show(dir: &Path, spec: &str) -> String {
+        let o = run(Command::new("git").args(["show", spec]).current_dir(dir));
+        assert_eq!(o.code, 0, "git show {spec}: {}", o.stderr);
+        o.stdout
+    }
+
     /// Raw `git status --porcelain` (untracked included), untrimmed.
     pub fn status(dir: &Path) -> String {
         let o = run(Command::new("git")
@@ -360,9 +367,74 @@ fn main() -> ExitCode {
         }
 
         pub fn worktree(&self, id: &str) -> PathBuf {
+            // T-013 ruling D-1: `worktree new` needs the task `ready` on main, so the toy task
+            // is made `ready` on main for the call and main's task files are put back after.
+            let restore = self.ready_on_main(id);
             let o = xtask(&self.root, &["worktree", "new", id, "--no-seed"]);
             assert_eq!(o.code, 0, "worktree new {id}: {}{}", o.stdout, o.stderr);
+            if let Some((tmp, originals)) = restore {
+                let mut files: Vec<(&str, Option<&str>)> = originals
+                    .iter()
+                    .map(|(p, c)| (p.as_str(), Some(c.as_str())))
+                    .collect();
+                if !originals.iter().any(|(p, _)| *p == tmp) {
+                    files.push((tmp.as_str(), None));
+                }
+                self.main_commit(&format!("director: {id} task file back"), &files);
+                // The branch starts at main's tip again, as without the state check.
+                git(&self.wt(id), &["merge", "-q", "--ff-only", "main"]);
+            }
             self.wt(id)
+        }
+
+        /// Unless main has exactly one `tasks/<id>-*.md` in state `ready` (or no `tasks/` at
+        /// all), commit one on main: the existing file with `state: ready`, or a minimal toy
+        /// task. Returns the path written and main's previous task files of `id`.
+        fn ready_on_main(&self, id: &str) -> Option<(String, Vec<(String, String)>)> {
+            let task = id.strip_suffix("-tests").unwrap_or(id);
+            let listed = git(&self.root, &["ls-tree", "--name-only", "main", "tasks/"]);
+            if listed.is_empty() {
+                return None;
+            }
+            let prefix = format!("tasks/{task}-");
+            let originals: Vec<(String, String)> = listed
+                .lines()
+                .filter(|p| p.starts_with(&prefix) && p.ends_with(".md"))
+                .map(|p| (p.to_owned(), git_show(&self.root, &format!("main:{p}"))))
+                .collect();
+            let is_ready = |c: &str| c.lines().any(|l| l.trim_end() == "state: ready");
+            if let [(_, c)] = originals.as_slice()
+                && is_ready(c)
+            {
+                return None;
+            }
+            let (tmp, text) = match originals.as_slice() {
+                [(p, c)] if c.lines().any(|l| l.starts_with("state: ")) => {
+                    let text: String = c
+                        .split_inclusive('\n')
+                        .map(|l| {
+                            if l.starts_with("state: ") {
+                                "state: ready\n"
+                            } else {
+                                l
+                            }
+                        })
+                        .collect();
+                    (p.clone(), text)
+                }
+                _ => (
+                    format!("tasks/{task}-toy.md"),
+                    task_md(task, "low", "ready", &["crates/a"], &[]),
+                ),
+            };
+            let mut files: Vec<(&str, Option<&str>)> = originals
+                .iter()
+                .filter(|(p, _)| *p != tmp)
+                .map(|(p, _)| (p.as_str(), None))
+                .collect();
+            files.push((tmp.as_str(), Some(text.as_str())));
+            self.main_commit(&format!("director: {task} ready"), &files);
+            Some((tmp, originals))
         }
 
         pub fn commit_wt(&self, id: &str, msg: &str, files: &[(&str, Option<&str>)]) -> String {
