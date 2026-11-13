@@ -681,4 +681,22 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   gate attempts: 0 (crate tests only) · not run: full gate, in-call races, macOS · missing
   context: none · next: director rules on D-1 (code fix vs. narrowed guarantee) and SG-1;
   implementer fixes D-1/D-2.
+- 2026-11-13T16:45Z · R-138 · tests_joined · did: round 2 delta review of `a9f2cf5` (previous
+  `be31cb7`) → `reviews/T-008-r2.md`, verdict request-changes. Delta inside `touches` (disk.rs,
+  paths.md, the two acceptance files, log entries). Round-1 D-1 resolved (v4/v8/v9): through
+  `control`, root swap, parent swap, root removed and replaced by a link or a new directory, and a
+  retargeted link root are all refused at open and at save of an earlier document, `work/`
+  byte-identical; link root, ancestor linked back and root moved back keep working. D-2 resolved
+  (v5), SG-1 ruled (v6), N-1 resolved (v7). New defect R2-D1: paths.md does not state v9's
+  limit and says between-request changes are "always caught"; reproduced as user `nobody` with a
+  0311 root: removed and replaced by a link to a new directory, inode reused 6/6, the session read
+  and wrote in the new directory. Documentation fix only; the limit itself acceptable for this
+  task (refusing such a root changes the pinned `DiskFs::new` contract). Mutants: 10 introduced,
+  7 killed (4 by acceptance), 1 equivalent, 2 survived (inode-only comparison; failed
+  re-resolution as success). Handle-removed mutant: each v9 test alone 10/10; in parallel target
+  runs API 6/10, CLI 10/10 (TG-1). Follow-ups: TG-1…TG-4, N-1 (`/.` link target). · gate
+  attempts: 0 (affected targets and `cargo xtask hygiene` PASS) · not run: full gate, in-call
+  races, ACL/LSM-unreadable roots, cross-device roots, macOS · missing context: none · next:
+  implementer fixes R2-D1 in paths.md and disk.rs module docs; round 3 confirms; director decides
+  the unreadable-root follow-up.
 <!-- end reviewer log -->
