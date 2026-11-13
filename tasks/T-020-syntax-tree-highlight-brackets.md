@@ -767,4 +767,30 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `cargo xtask ci` · missing context: none · next: director (join).
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13T23:59Z · R-179 · tests_joined · round 1 (full), reviewed `c0c12fc30d473ff1d0f5b71c8ce9d4a0b66e0c12`
+  · rulings acknowledged before acting, read in the primary checkout's copy of this file (this
+  worktree's copy lacks D-103 and D-104; I did not add them): D-044, D-056, D-097 Q-1 to Q-6,
+  D-103 (memory sentence, `doc.replace` script), D-104 (stack examples); all accepted. D-103's
+  sentence form is questioned with evidence in the review (spec gap 4).
+  · did: every AC (AC-1 to AC-10) through debug `kiln-cli control`/`run`/`exec`. Corpus sweep:
+  45 files, 8,464 requests, 0 violations. 906 random-edit steps against fresh sessions,
+  0 mismatches. Hostile inputs: empty, whitespace, CRLF, multibyte, BOM, the limit and one over,
+  the 50 MB `(` probe (refusals add nothing: 1.11 s / 169,368 KB without them, 1.09 s /
+  169,456 KB with them), deep valid and invalid nesting, `null`s, closed and unknown documents,
+  and refusals observed through the next `mode`. Every sentence of `docs/protocol/syntax.md`,
+  the three descriptions and the related `docs/control-protocol.md` sentences checked on the
+  binary. 18 mutants, each restored with `git checkout` and checked clean with `git status`:
+  16 killed (14 by the acceptance file; M3 and M14 only by kiln-commands unit tests) and
+  2 survived (M7: a closer of another kind pairs; M17: MISSING leaves pair). Both survivors give
+  wrong answers through the binary. Acceptance file: 31.28 s.
+  · verdict: request-changes. 1 defect: the memory sentence's "largest peak at the limit" is
+  untrue; `1;` repeated at 1,048,576 chars with D-103's script peaks at 2,129,076 KB on debug,
+  against 711,972 KB for `a;`. 2 test gaps (M7, M17), 2 spec gaps (memory sentence form; MISSING
+  leaves in the bracket rule), 2 nits.
+  · gate attempts: 0 (`cargo xtask hygiene` after the review commit)
+  · not run: `cargo xtask ci`; a release build (the figures were not re-measured); the full
+  suite for the killed mutants (acceptance file only); an independent proc-macro2/syn re-check
+  of AC-4 and AC-6
+  · missing context: D-103 and D-104 are absent from this worktree's copy
+  · next: director (rulings on the spec gaps; implementer and test author for findings 1–3)
 <!-- end reviewer log -->
