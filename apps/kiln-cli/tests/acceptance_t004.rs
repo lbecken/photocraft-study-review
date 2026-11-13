@@ -281,6 +281,49 @@ fn exec_opens_real_files_under_root() {
     assert_eq!(std::fs::read(root.join("a.txt")).unwrap(), b"hello\n");
 }
 
+/// D-023 ruling: `exec --text` seeds the legacy single buffer and combines with `--root` or
+/// `--memory`.
+#[test]
+fn exec_text_combines_with_root_and_memory() {
+    let work = fresh_dir("exec-text");
+    let root = work.join("root");
+    std::fs::create_dir(&root).unwrap();
+    write_files(&root, &[("a.txt", b"hello\n")]);
+    let r = root.to_str().unwrap();
+    let insert = r#"{"offset":3,"text":"!"}"#;
+    for extra in [vec!["--root", r], vec!["--memory"]] {
+        let mut args = vec!["exec", "buffer.insert", insert, "--text", "abc"];
+        args.extend(extra.iter().copied());
+        let out = kiln(&args, None);
+        assert_eq!(code(&out), 0, "{args:?}: {out:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            "{\"len_chars\":4}\n",
+            "{args:?}"
+        );
+    }
+    let out = kiln(
+        &[
+            "exec",
+            "doc.open",
+            r#"{"path":"a.txt"}"#,
+            "--text",
+            "abc",
+            "--root",
+            r,
+        ],
+        None,
+    );
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v: Value = serde_json::from_slice(&out.stdout).expect("JSON result");
+    assert_eq!(
+        v["len_chars"],
+        serde_json::json!(6),
+        "the file, not the --text buffer: {v}"
+    );
+    assert_eq!(std::fs::read(root.join("a.txt")).unwrap(), b"hello\n");
+}
+
 // ---------------------------------------------------------------- AC-2 (control.protocol)
 
 #[test]

@@ -294,6 +294,13 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   level; params omitted are logged as `{}`. · gate attempts: 1 (last: red clippy, scorecard,
   test — all only the kiln-control acceptance file not compiling, as expected for `compile`) ·
   not run: nothing else · missing context: none · next: join.
+- 2026-11-13 · R-029 · join round 1 · did: fixed my defect in control
+  `one_response_per_request_with_ids_echoed` (7 non-blank requests, not 8; last index is the
+  `doc.insert`); dropped the literal `b"x"` AC-9 variant (director ruling); added cli
+  `exec_text_combines_with_root_and_memory` (D-023 ruling on `exec --text`) → fails on base by
+  assertion. Fixed test passes against a throwaway id-echoing stub (not kept); control file is
+  still `compile` on base. `--log` test keeps exit 2 as in the Interface. · gate attempts: 0 ·
+  not run: gate (only test files changed) · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

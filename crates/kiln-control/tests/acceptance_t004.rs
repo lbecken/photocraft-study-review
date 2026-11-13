@@ -315,17 +315,7 @@ const AC1: [&[u8]; 5] = [
 
 #[test]
 fn memory_and_disk_hosts_give_same_responses() {
-    // The AC-9 wording, literally: a.txt = "x" (so the insert at offset 5 fails on both).
-    let mut mem = Host::in_memory(&[("a.txt", b"x")]).expect("in_memory host");
-    let (mut disk, root) = disk_host("ac9-x", &[("a.txt", b"x")]);
-    let m = feed(&mut mem, &AC1);
-    let d = feed(&mut disk, &AC1);
-    assert_eq!(m.len(), 5, "{m:?}");
-    assert_eq!(m, d, "memory and disk hosts differ");
-    assert!(ok_of(&m[0]) && !ok_of(&m[1]), "{m:?}");
-    assert_eq!(std::fs::read(root.join("a.txt")).unwrap(), b"x");
-
-    // The AC-1 file, where every request succeeds.
+    // AC-9 as corrected by the director: a.txt = "hello\n", where every request succeeds.
     let mut mem = Host::in_memory(&[("a.txt", b"hello\n")]).expect("in_memory host");
     let (mut disk, root) = disk_host("ac9-hello", &[("a.txt", b"hello\n")]);
     let m = feed(&mut mem, &AC1);
@@ -401,8 +391,9 @@ fn one_response_per_request_with_ids_echoed() {
             }
         }
     }
-    assert_eq!(got.len(), 8);
-    assert!(!ok_of(&got[2]) && ok_of(&got[7]), "{got:?}");
+    assert_eq!(got.len(), 7);
+    // got[2] answers `no.such`; got[6] answers the final `doc.insert`.
+    assert!(!ok_of(&got[2]) && ok_of(&got[6]), "{got:?}");
 }
 
 // ---------------------------------------------------------------- AC-5
