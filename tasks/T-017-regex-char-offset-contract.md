@@ -335,6 +335,19 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   871e28abb713d82f74cd3706fe33a99d5b264cd6. · gate attempts: 1 (last: green, 11 steps; fuzz and
   budgets EMPTY; test 506 passed) · not run: s3 tests (test author's, at re-join) · missing
   context: none · next: re-join, review round 2.
+- 2026-11-13T16:35Z · R-137 · round-2 fix (D-077 s8; review r2 findings 1 and 4) · did: rustdoc
+  only in `crates/kiln-search/src/regex.rs`. Module `# Limits` (lines 44–52) now pins exactly
+  s8: compiling any pattern, incl. 100 kB, answers or errors within 5 s; the three small probes
+  (`(a*)*b` on 100,000 `a`s, `\p{L}{1000}`, deep nesting) within 5 s; no time bound for
+  searching with a large pattern, matching or not, cost ∝ pattern size × text size, with 245 s
+  (non-matching, debug) and 30 s and more (matching 100–200 kB texts, debug), and callers with
+  untrusted patterns must bound pattern size. Cites D-077 s8 instead of D-070 s5. Memory figure
+  "2.40 GB" → "about 2.46 GB (2.29 GiB)" at lines 41 and 279–280. `git diff` shows only comment
+  lines in `regex.rs`; no code, API or test change. Base d3f8fbf9e9089c6da5508d61c9718bd8d0bb319a.
+  · gate attempts: 1 (last: green, 11 steps; fuzz and budgets EMPTY; test 507 passed) · not
+  run: `cargo test --doc` (the crate has no doc tests); the timings were not re-measured (taken
+  from r2 and r1) · missing context: s8/s9 are on main's task file only, not on this branch ·
+  next: review round 3 (confirm only).
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T12:34Z · R-105 · ready · did: wrote `crates/kiln-search/tests/acceptance_t017.rs`

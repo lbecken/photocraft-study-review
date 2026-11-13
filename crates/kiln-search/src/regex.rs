@@ -38,13 +38,18 @@
 //! The cap bounds the engine's working memory, not the result (D-070 s4): [`Regex::find_all`]
 //! returns every match with `group_count() + 1` slots, so its memory is proportional to
 //! matches × (groups + 1), about 2.4 kB per match at 100 groups; 100 empty groups on a 1 MB
-//! text peaked at 2.40 GB. A caller handling untrusted text or patterns must bound the search
-//! itself.
+//! text peaked at about 2.46 GB (2.29 GiB). A caller handling untrusted text or patterns must
+//! bound the search itself.
 //!
-//! Matching is linear in the text (the engine's guarantee). Pathological patterns (`(a*)*b` on
-//! 100,000 `a`s, `\p{L}{1000}`, deep nesting, a 100 kB pattern) answer or error within 5 s in a
-//! debug build, and searching a text the pattern does not match also stays within 5 s. On a
-//! text it does match, a 100 kB pattern takes longer, inside the engine (D-070 s5).
+//! Time (D-077 s8), in a debug build: compiling a pattern, including a 100 kB one, answers or
+//! errors within 5 s. Searching with the small pathological patterns `(a*)*b` on 100,000 `a`s,
+//! `\p{L}{1000}` and deeply nested groups also answers or errors within 5 s. For searching with
+//! a large pattern this crate promises no time bound, on matching or non-matching text: the
+//! engine's search is linear in the text only for a fixed pattern, and its cost grows with
+//! pattern size × text size. Measured in debug builds: 245 s for a 100 kB pattern (`[ab]`
+//! repeated 25,000 times, then `[^ab]`) on a 100,000-char text it does not match, and 30 s and
+//! more for 100 kB patterns on matching texts of 100–200 kB. A caller handling untrusted
+//! patterns must bound the pattern size itself.
 
 use std::fmt;
 
@@ -271,10 +276,10 @@ impl Regex {
     /// All matches, in the iteration order of the module documentation.
     ///
     /// Every match is returned with `group_count() + 1` slots, so memory is proportional to
-    /// matches × (groups + 1): about 2.4 kB per match at 100 groups, and 2.40 GB measured for
-    /// 100 empty groups on a 1 MB text. The 100-group cap bounds the engine's working memory,
-    /// not this result; a caller handling untrusted text or patterns must bound the search
-    /// itself (D-070 s4).
+    /// matches × (groups + 1): about 2.4 kB per match at 100 groups, and about 2.46 GB
+    /// (2.29 GiB) measured for 100 empty groups on a 1 MB text. The 100-group cap bounds the
+    /// engine's working memory, not this result; a caller handling untrusted text or patterns
+    /// must bound the search itself (D-070 s4).
     pub fn find_all(&self, text: &str) -> Vec<Captures> {
         let mut out = Vec::new();
         let mut cursor = CharCursor::new(text);
