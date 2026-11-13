@@ -213,9 +213,12 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    any other conflict: `git rebase --abort`, record `conflict`, `failed_step: "rebase"`);
 5. runs **main's gate**: main's xtask binary `ci --report <file>` with the rebased worktree as
    working directory and `CARGO_TARGET_DIR=.worktrees/T-NNN/target`. If the task changes a gate
-   path (anything under `xtask/` or `.cargo/`, `clippy.toml`, `rust-toolchain.toml`), the task's
-   own rebased gate (`cargo run -p xtask -- ci --report …`) runs afterwards too; both must pass,
-   there is no override (D-3);
+   path (below; the queue prints them: a stderr line `queue: T-NNN changes gate paths: …` and
+   `gate paths changed: …` in the summary), the task's own rebased gate
+   (`cargo run -p xtask -- ci --report …`) runs afterwards too; both must pass, there is no
+   override (D-3). Before the gate, the lock rule is applied once more to the rebased tree: if
+   its `Cargo.lock` changes the version of a package of main's lock, the run is refused at
+   `dependencies` and the branch is put back;
 6. fast-forwards `main` only if green (never pushes) and appends to `metrics/queue.jsonl`:
 
 ```json
@@ -239,7 +242,9 @@ JSON `{"passed": bool, "failed_step": string|null, …}`.
 | `touches` | every path of `git diff --name-only --no-renames <merge-base> <task head>` is allowed (below) |
 | `join` | medium/high: the primary checkout's `metrics/tasks.jsonl` has a `kind:"join"`, `result:"joined"` record of the task whose `joined_sha` is the task head or an ancestor of it. Read only from this record — the rebase flattens the join merge (D-6) |
 | `review` | medium/high: on the task head, `reviews/T-NNN-r<N>.md` with the highest N has `verdict: approve` and a `reviewed_sha` that is a full 40-hex lowercase commit id (no branch name, `HEAD`, abbreviation or other revision expression) naming a commit that is the head or an ancestor of it; every commit after `reviewed_sha` changes only `reviews/T-NNN-*`, the task file, generated paths and the task's acceptance/guard test files (allowed-path rule below); anything else is a stale review (D-026 R2) |
-| `approval` | high: main's `docs/decisions.md` has a table row whose Decision cell begins with `Approve T-NNN` (D-2) followed by the cell's end or a character that cannot continue an id (so `Approve T-005-tests` does not approve T-005). Only real Markdown table rows count: a header row with a `Decision` cell, then a delimiter row, then rows starting with `|` after at most three spaces — never lines in fenced code blocks, indented code, block quotes or HTML comments (D-026 R7) |
+| `gate-path` | a task whose changed paths include a **gate path** is tier high (D-026 R3). Gate paths: anything under `xtask/` or `.github/`; any path with a `.cargo` directory segment; any file named `build.rs`, `rust-toolchain.toml`, `rust-toolchain`, `clippy.toml`, `.clippy.toml`, `rustfmt.toml` or `.rustfmt.toml` (at any depth); and the root `Cargo.toml` when its `[workspace.lints]`, `[workspace.metadata]` or any `[profile.*]` table at the task head differs from main's or from the merge base's (an unparsable manifest counts as differing) |
+| `dependencies` | a task whose changed paths include a `Cargo.lock` or a `Cargo.toml` whose dependency tables differ between the merge base and the head (`[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `[target.*]` forms, `[workspace.dependencies]`, `[patch.*]`, `[replace]`; a new manifest with any of them counts) is tier high; and for every changed `Cargo.lock`, no registry or git package of main's lock has a different version at the task head (D-026 R4) |
+| `approval` | high: main's `docs/decisions.md` has a table row whose Decision cell begins with `Approve T-NNN` (D-2) followed by the cell's end or a character that cannot continue an id (so `Approve T-005-tests` does not approve T-005); for a task that changes gate paths, that same cell must also contain the words `gate paths` (D-026 R3). Only real Markdown table rows count: a header row with a `Decision` cell, then a delimiter row, then rows starting with `|` after at most three spaces — never lines in fenced code blocks, indented code, block quotes or HTML comments (D-026 R7) |
 | `main-history` | every commit on main's first-parent history after the newest `head_sha` of a `merged` record in `metrics/queue.jsonl` changes only ledger paths, respecting their mode; trivially true before the first merge |
 
 **Allowed paths** (`touches` check): `p` is allowed if `p == t` or `p` starts with `t/` for an

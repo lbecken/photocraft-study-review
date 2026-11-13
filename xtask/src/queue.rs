@@ -60,6 +60,9 @@ pub struct QueueRecord {
     pub gate_xtask_sha: String,
     /// Generated paths that were conflicted or changed by regeneration (file order).
     pub regenerated: Vec<String>,
+    /// The gate paths the task changes (D-026 R3); printed, not written to the record.
+    #[serde(skip)]
+    pub gate_paths: Vec<String>,
 }
 
 /// What a gate run reports to the queue.
@@ -228,14 +231,6 @@ pub fn build_main_xtask(root: &Path, sha: &str) -> Result<PathBuf> {
     Ok(bin)
 }
 
-/// Whether a changed path makes the task's own gate run too (gate-path exception).
-pub fn is_gate_path(p: &str) -> bool {
-    crate::policy::path_under(p, "xtask")
-        || crate::policy::path_under(p, ".cargo")
-        || p == "clippy.toml"
-        || p == "rust-toolchain.toml"
-}
-
 /// Exclusive queue lock, released on drop.
 pub struct Lock(PathBuf);
 
@@ -398,7 +393,8 @@ pub fn lock_version_changes(main_lock: &str, new_lock: &str) -> Result<Vec<Strin
     Ok(changes)
 }
 
-fn is_lock(path: &str) -> bool {
+/// Whether `path` is a `Cargo.lock` (at the root or below).
+pub fn is_lock(path: &str) -> bool {
     path == "Cargo.lock" || path.ends_with("/Cargo.lock")
 }
 
@@ -552,7 +548,14 @@ pub fn run(
     }
     let task_head = rev(&wt, "HEAD")?;
     let checked = crate::precheck::check(root, &spec.task, &spec.branch(), &task_head)?;
-    let both = checked.changed.iter().any(|p| is_gate_path(p));
+    let both = !checked.gate_paths.is_empty();
+    if both {
+        eprintln!(
+            "queue: {} changes gate paths: {} (main's gate, then its own)",
+            spec.task,
+            checked.gate_paths.join(", ")
+        );
+    }
     let main_xtask = gate.build_main_xtask(root, &base_sha)?;
 
     let metrics = root.join("metrics/queue.jsonl");
@@ -574,6 +577,7 @@ pub fn run(
         gate_xtask: if both { "main+task" } else { "main" }.into(),
         gate_xtask_sha: base_sha.clone(),
         regenerated: Vec::new(),
+        gate_paths: checked.gate_paths.clone(),
     };
 
     let restore = |wt: &Path| {
@@ -618,6 +622,35 @@ pub fn run(
         }
     }
     if ready {
+        // D-026 R4: the lock rule on every run, on the tree that would become main.
+        let mut locks: BTreeSet<&str> = BTreeSet::from(["Cargo.lock"]);
+        locks.extend(
+            checked
+                .changed
+                .iter()
+                .map(String::as_str)
+                .filter(|p| is_lock(p)),
+        );
+        for p in locks {
+            let (Some(main_lock), Some(new_lock)) = (
+                crate::precheck::show(root, &base_sha, p)?,
+                crate::precheck::show(&wt, "HEAD", p)?,
+            ) else {
+                continue;
+            };
+            let bumped = lock_version_changes(&main_lock, &new_lock)?;
+            if !bumped.is_empty() {
+                restore(&wt);
+                return Err(Refusal {
+                    check: "dependencies",
+                    reason: format!(
+                        "{p} after the rebase changes the version of package(s) already in main's lock: {}",
+                        bumped.join(", ")
+                    ),
+                }
+                .into());
+            }
+        }
         record.head_sha = rev(&wt, "HEAD")?;
         let g0 = clock.now_millis();
         let mut outcome = gate.run(&wt, GateXtask::Binary(&main_xtask))?;
@@ -823,15 +856,67 @@ mod tests {
         assert_eq!((r2.result.as_str(), r2.attempt), ("merged", 2));
     }
 
+    /// Commit a `joined` record for the worktree head on main and an approving review of it on
+    /// the branch (medium/high evidence). Returns the reviewed head.
+    fn evidence(root: &Path, wt: &Path) -> String {
+        let h = rev(wt, "HEAD").unwrap();
+        let mut text =
+            std::fs::read_to_string(root.join("metrics/tasks.jsonl")).unwrap_or_default();
+        text.push_str(&format!(
+            "{{\"kind\":\"join\",\"task\":\"T-001\",\"result\":\"joined\",\"joined_sha\":\"{h}\"}}\n"
+        ));
+        testrepo::commit(root, "join record", &[("metrics/tasks.jsonl", &text)]);
+        testrepo::commit(
+            wt,
+            "review",
+            &[(
+                "reviews/T-001-r1.md",
+                &format!("---\ntask: T-001\nround: 1\nreviewed_sha: {h}\nverdict: approve\n---\n"),
+            )],
+        );
+        h
+    }
+
+    fn approve(root: &Path, decision: &str) {
+        testrepo::commit(
+            root,
+            "approve",
+            &[(
+                "docs/decisions.md",
+                &format!("| # | Decision |\n|---|---|\n| D-1 | {decision} |\n"),
+            )],
+        );
+    }
+
     #[test]
-    fn gate_path_changes_run_both_gates() {
+    fn gate_path_changes_need_tier_high_and_run_both_gates() {
+        // D-026 R3 (a): a gate path in a low or medium task is refused at `gate-path`.
         let repo = setup_with(
-            "q-both",
+            "q-gp-low",
             &task_md("low", "self_verified", &["feature.txt", "xtask"]),
         );
         let root = repo.path();
         let wt = root.join(".worktrees/T-001");
         testrepo::commit(&wt, "weaken", &[("xtask/src/main.rs", "fn main() {}")]);
+        assert_refused(root, "gate-path", "xtask/src/main.rs");
+        assert_refused(root, "gate-path", "tier high");
+
+        // (b) + (c): a high task runs both gates and needs `gate paths` in its approval row.
+        let repo = setup_with(
+            "q-both",
+            &task_md("high", "reviewed", &["feature.txt", "xtask"]),
+        );
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "weaken", &[("xtask/src/main.rs", "fn main() {}")]);
+        evidence(root, &wt);
+        approve(root, "Approve T-001 for the queue.");
+        assert_refused(root, "approval", "gate paths");
+        approve(
+            root,
+            "Approve T-001 for the queue, including its gate paths.",
+        );
+        let head0 = rev(&wt, "HEAD").unwrap();
         let before = rev(root, "main").unwrap();
         let fake = gate(false, true);
         let r = run(root, "T-001", &clock(), &fake).unwrap();
@@ -843,32 +928,187 @@ mod tests {
             ),
             ("gate_failed", Some("main:test"), "main+task")
         );
+        assert_eq!(r.gate_paths, ["xtask/src/main.rs"]);
         assert_eq!(
             *fake.calls.borrow(),
             ["build", "main"],
             "own gate not reached"
         );
+        g(&wt, &["reset", "-q", "--hard", &head0]);
         let fake = gate(true, false);
         let r = run(root, "T-001", &clock(), &fake).unwrap();
         assert_eq!(r.failed_step.as_deref(), Some("task:test"));
         assert_eq!(*fake.calls.borrow(), ["build", "main", "own"]);
         assert_eq!(rev(root, "main").unwrap(), before);
+        g(&wt, &["reset", "-q", "--hard", &head0]);
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(
             (r.result.as_str(), r.gate_xtask.as_str()),
             ("merged", "main+task")
         );
+    }
+
+    #[test]
+    fn widened_gate_paths_are_refused_for_low_tasks() {
         for p in [
-            "xtask",
             ".cargo/config.toml",
-            "clippy.toml",
+            "app/.cargo/config.toml",
             "rust-toolchain.toml",
+            "clippy.toml",
+            "app/clippy.toml",
+            "rustfmt.toml",
+            ".rustfmt.toml",
+            ".github/workflows/ci.yml",
+            "app/build.rs",
+            "build.rs",
         ] {
-            assert!(is_gate_path(p), "{p}");
+            let top = p.split('/').next().unwrap();
+            let repo = setup_with(
+                "q-gp-wide",
+                &task_md("low", "self_verified", &["feature.txt", top]),
+            );
+            let root = repo.path();
+            testrepo::commit(&root.join(".worktrees/T-001"), "g", &[(p, "x")]);
+            assert_refused(root, "gate-path", p);
         }
-        for p in ["xtaskx/a", "docs/clippy.toml", "src/xtask/a.rs"] {
-            assert!(!is_gate_path(p), "{p}");
+        // The root Cargo.toml is a gate path only when a gate table changes.
+        let manifest = "[workspace]\nmembers = []\n\n[profile.dev]\nopt-level = 0\n";
+        for (changed, is_gate) in [
+            (
+                "[workspace]\nmembers = [\"a\"]\n\n[profile.dev]\nopt-level = 0\n",
+                false,
+            ),
+            (
+                "# comment\n[workspace]\nmembers = []\n\n[profile.dev]\nopt-level = 0\n",
+                false,
+            ),
+            (
+                "[workspace]\nmembers = []\n\n[profile.dev]\nopt-level = 1\n",
+                true,
+            ),
+            (
+                "[workspace]\nmembers = []\n[workspace.lints.rust]\nunsafe_code = \"allow\"\n\n[profile.dev]\nopt-level = 0\n",
+                true,
+            ),
+            (
+                "[workspace]\nmembers = []\n[workspace.metadata.x]\na = 1\n\n[profile.dev]\nopt-level = 0\n",
+                true,
+            ),
+            (
+                "[workspace]\nmembers = []\n\n[profile.dev]\nopt-level = 0\n[profile.test]\ndebug = 0\n",
+                true,
+            ),
+            ("not toml [", true),
+        ] {
+            let repo = testrepo::init(
+                "q-gp-root",
+                &[
+                    ("base.txt", "base\n"),
+                    (".gitignore", ".worktrees/\ntarget/\n"),
+                    (
+                        "tasks/T-001-thing.md",
+                        &task_md("low", "self_verified", &["Cargo.toml"]),
+                    ),
+                    ("xtask/generated.toml", GEN),
+                    ("xtask/ledger.toml", LED),
+                    ("Cargo.toml", manifest),
+                ],
+            );
+            let root = repo.path();
+            worktree::create(root, &Spec::parse("T-001", false).unwrap(), false).unwrap();
+            testrepo::commit(
+                &root.join(".worktrees/T-001"),
+                "m",
+                &[("Cargo.toml", changed)],
+            );
+            if is_gate {
+                assert_refused(root, "gate-path", "Cargo.toml");
+            } else {
+                let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+                assert_eq!(
+                    (r.result.as_str(), r.gate_xtask.as_str()),
+                    ("merged", "main"),
+                    "{changed}"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn dependency_changes_need_tier_high_and_keep_mains_versions() {
+        let reg = "registry+https://github.com/rust-lang/crates.io-index";
+        let lock = |v: &str| {
+            format!(
+                "version = 4\n\n[[package]]\nname = \"serde\"\nversion = \"{v}\"\nsource = \"{reg}\"\n"
+            )
+        };
+        let manifest =
+            |deps: &str| format!("[package]\nname = \"app\"\nversion = \"0.1.0\"\n{deps}");
+        let mk = |tag: &str, tier: &str, state: &str| {
+            let repo = testrepo::init(
+                tag,
+                &[
+                    ("base.txt", "base\n"),
+                    (".gitignore", ".worktrees/\ntarget/\n"),
+                    (
+                        "tasks/T-001-thing.md",
+                        &task_md(tier, state, &["app", "Cargo.lock"]),
+                    ),
+                    ("xtask/generated.toml", GEN),
+                    ("xtask/ledger.toml", LED),
+                    ("Cargo.lock", &lock("1.0.1")),
+                    ("app/Cargo.toml", &manifest("")),
+                ],
+            );
+            worktree::create(repo.path(), &Spec::parse("T-001", false).unwrap(), false).unwrap();
+            repo
+        };
+        // (R4) Cargo.lock or a dependency table in a low task: `dependencies`.
+        let repo = mk("q-dep-low", "low", "self_verified");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(
+            &wt,
+            "lock",
+            &[("Cargo.lock", &format!("{}\n", lock("1.0.1")))],
+        );
+        assert_refused(root, "dependencies", "Cargo.lock");
+        g(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+        for deps in [
+            "\n[dependencies]\nserde = \"1\"\n",
+            "\n[dev-dependencies]\nserde = \"1\"\n",
+            "\n[build-dependencies]\nserde = \"1\"\n",
+            "\n[target.'cfg(unix)'.dependencies]\nserde = \"1\"\n",
+            "\n[patch.crates-io]\nserde = { path = \"x\" }\n",
+        ] {
+            testrepo::commit(&wt, "deps", &[("app/Cargo.toml", &manifest(deps))]);
+            assert_refused(root, "dependencies", "dependency tables of app/Cargo.toml");
+            g(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+        }
+        // Non-dependency manifest edits and new manifests without dependencies pass.
+        testrepo::commit(
+            &wt,
+            "meta",
+            &[
+                ("app/Cargo.toml", &manifest("description = \"x\"\n")),
+                ("app/sub/Cargo.toml", &manifest("")),
+            ],
+        );
+        assert_eq!(
+            run(root, "T-001", &clock(), &gate(true, true))
+                .unwrap()
+                .result,
+            "merged"
+        );
+
+        // A high task may change the lock, but never the version of a package of main's lock.
+        let repo = mk("q-dep-high", "high", "reviewed");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "bump", &[("Cargo.lock", &lock("1.0.2"))]);
+        evidence(root, &wt);
+        approve(root, "Approve T-001.");
+        assert_refused(root, "dependencies", "serde 1.0.1 -> 1.0.2");
     }
 
     #[test]
@@ -1187,8 +1427,8 @@ mod tests {
             "after review",
             &[
                 ("gen.txt", "a\nz\n"),
-                ("xtask/tests/acceptance_t001.rs", "// t\n"),
-                ("xtask/tests/guard_t001_x.rs", "// g\n"),
+                ("crates/a/tests/acceptance_t001.rs", "// t\n"),
+                ("apps/b/tests/guard_t001_x.rs", "// g\n"),
             ],
         );
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();

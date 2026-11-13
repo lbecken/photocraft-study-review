@@ -1,5 +1,6 @@
 //! The queue's preconditions (T-005), checked before any rebase, in this order: `task-file`,
-//! `front-matter`, `state`, `config`, `touches`, `join`, `review`, `approval`, `main-history`.
+//! `front-matter`, `state`, `config`, `touches`, `join`, `review`, `gate-path`, `dependencies`,
+//! `approval`, `main-history` (the queue checks `ledger` before all of them).
 //!
 //! Every input is read from **main's** tree (task file, policy files, `docs/decisions.md`), from
 //! the task branch head (its task-file copy, review files, changed paths) or from the primary
@@ -59,6 +60,118 @@ pub struct Checked {
     pub policy: Policy,
     /// Paths changed by the task branch since its merge base with main.
     pub changed: Vec<String>,
+    /// The changed paths that are gate paths (D-026 R3), in `changed` order.
+    pub gate_paths: Vec<String>,
+}
+
+/// File names that configure a tool the gate runs, wherever they are (clippy and rustfmt read
+/// them per directory; the toolchain files are matched anywhere too, failing closed).
+const GATE_FILE_NAMES: &[&str] = &[
+    "rust-toolchain.toml",
+    "rust-toolchain",
+    "clippy.toml",
+    ".clippy.toml",
+    "rustfmt.toml",
+    ".rustfmt.toml",
+    "build.rs",
+];
+
+/// Whether changing `p` can change what the gate does, regardless of content (D-026 R3):
+/// anything under `xtask/` or `.github/`, any `.cargo/` directory, any build script and the tool
+/// configuration files above. The root `Cargo.toml` is a gate path only when certain tables
+/// change ([`root_manifest_gate_tables_differ`]).
+pub fn is_gate_path(p: &str) -> bool {
+    let file = p.rsplit('/').next().unwrap_or(p);
+    path_under(p, "xtask")
+        || path_under(p, ".github")
+        || p.split('/').any(|seg| seg == ".cargo")
+        || GATE_FILE_NAMES.contains(&file)
+}
+
+/// The tables of a root `Cargo.toml` that configure the gate (D-026 R3): `[workspace.lints]`,
+/// `[workspace.metadata]` and every `[profile.*]`. `None` if the text does not parse.
+fn gate_tables(text: Option<&str>) -> Option<toml::Value> {
+    let Some(text) = text else {
+        return Some(toml::Value::Table(Default::default()));
+    };
+    let v: toml::Value = toml::from_str(text).ok()?;
+    let mut out = toml::map::Map::new();
+    let ws = v.get("workspace");
+    for (k, x) in [
+        ("workspace.lints", ws.and_then(|w| w.get("lints"))),
+        ("workspace.metadata", ws.and_then(|w| w.get("metadata"))),
+        ("profile", v.get("profile")),
+    ] {
+        if let Some(x) = x {
+            out.insert(k.into(), x.clone());
+        }
+    }
+    Some(toml::Value::Table(out))
+}
+
+/// Whether the root `Cargo.toml` at `head` differs from main's, or from the merge base's, in a
+/// gate table; an unparsable manifest counts as differing (fail closed).
+fn root_manifest_gate_tables_differ(
+    head: Option<&str>,
+    main: Option<&str>,
+    base: Option<&str>,
+) -> bool {
+    let h = gate_tables(head);
+    h.is_none() || h != gate_tables(main) || h != gate_tables(base)
+}
+
+/// The dependency tables of a `Cargo.toml` (D-026 R4): `[dependencies]`, `[dev-dependencies]`,
+/// `[build-dependencies]` (either spelling), the same under every `[target.*]`,
+/// `[workspace.dependencies]`, `[patch.*]` and `[replace]`. `None` if the text does not parse.
+fn dependency_tables(text: Option<&str>) -> Option<toml::Value> {
+    const KINDS: &[&str] = &[
+        "dependencies",
+        "dev-dependencies",
+        "dev_dependencies",
+        "build-dependencies",
+        "build_dependencies",
+    ];
+    let Some(text) = text else {
+        return Some(toml::Value::Table(Default::default()));
+    };
+    let v: toml::Value = toml::from_str(text).ok()?;
+    let mut out = toml::map::Map::new();
+    for k in KINDS {
+        if let Some(x) = v.get(*k) {
+            out.insert((*k).into(), x.clone());
+        }
+    }
+    for (cfg, t) in v
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flatten()
+    {
+        for k in KINDS {
+            if let Some(x) = t.get(*k) {
+                out.insert(format!("target.{cfg}.{k}"), x.clone());
+            }
+        }
+    }
+    if let Some(x) = v.get("workspace").and_then(|w| w.get("dependencies")) {
+        out.insert("workspace.dependencies".into(), x.clone());
+    }
+    for k in ["patch", "replace"] {
+        if let Some(x) = v.get(k) {
+            out.insert(k.into(), x.clone());
+        }
+    }
+    Some(toml::Value::Table(out))
+}
+
+/// Whether two versions of a `Cargo.toml` differ in their dependency tables (unparsable: yes).
+fn dependency_tables_differ(a: Option<&str>, b: Option<&str>) -> bool {
+    let (a, b) = (dependency_tables(a), dependency_tables(b));
+    a.is_none() || b.is_none() || a != b
+}
+
+fn is_manifest(p: &str) -> bool {
+    p == "Cargo.toml" || p.ends_with("/Cargo.toml")
 }
 
 /// `git show <rev>:<path>`, or `None` if the path is not in that tree.
@@ -603,14 +716,93 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
         }
     }
 
+    // gate-path (D-026 R3)
+    const GP: &str = "gate-path";
+    let mut gate_paths = Vec::new();
+    for p in &changed {
+        let gate = if p == "Cargo.toml" {
+            let at = |r: &str| or_refuse(GP, show(root, r, p));
+            let (h, m, b) = (at(head)?, at("main")?, at(&base)?);
+            is_gate_path(p)
+                || root_manifest_gate_tables_differ(h.as_deref(), m.as_deref(), b.as_deref())
+        } else {
+            is_gate_path(p)
+        };
+        if gate {
+            gate_paths.push(p.clone());
+        }
+    }
+    if !gate_paths.is_empty() && tier != "high" {
+        return refuse(
+            GP,
+            format!(
+                "{branch} changes gate path(s) {}; such a task must be tier high (it is {tier})",
+                gate_paths.join(", ")
+            ),
+        );
+    }
+
+    // dependencies (D-026 R4)
+    const DP: &str = "dependencies";
+    let mut dep_changes = Vec::new();
+    for p in &changed {
+        if crate::queue::is_lock(p) {
+            dep_changes.push(p.clone());
+        } else if is_manifest(p) {
+            let at = |r: &str| or_refuse(DP, show(root, r, p));
+            if dependency_tables_differ(at(&base)?.as_deref(), at(head)?.as_deref()) {
+                dep_changes.push(format!("dependency tables of {p}"));
+            }
+        }
+    }
+    if !dep_changes.is_empty() && tier != "high" {
+        return refuse(
+            DP,
+            format!(
+                "{branch} changes dependencies ({}); such a task must be tier high (it is {tier})",
+                dep_changes.join(", ")
+            ),
+        );
+    }
+    for p in changed.iter().filter(|p| crate::queue::is_lock(p)) {
+        let (Some(main_lock), Some(head_lock)) = (
+            or_refuse(DP, show(root, "main", p))?,
+            or_refuse(DP, show(root, head, p))?,
+        ) else {
+            continue;
+        };
+        let bumped = or_refuse(
+            DP,
+            crate::queue::lock_version_changes(&main_lock, &head_lock),
+        )?;
+        if !bumped.is_empty() {
+            return refuse(
+                DP,
+                format!(
+                    "{p} on {branch} changes the version of package(s) already in main's lock: {}",
+                    bumped.join(", ")
+                ),
+            );
+        }
+    }
+
+    // approval (with D-026 R3 (c) for gate paths)
     if tier == "high" {
         let d = or_refuse("approval", show(root, "main", "docs/decisions.md"))?;
-        if !d.is_some_and(|t| has_approval(&t, task, false)) {
+        let need_gate = !gate_paths.is_empty();
+        if !d.is_some_and(|t| has_approval(&t, task, need_gate)) {
             return refuse(
                 "approval",
-                format!(
-                    "main's docs/decisions.md has no row whose Decision begins with `Approve {task}`"
-                ),
+                if need_gate {
+                    format!(
+                        "main's docs/decisions.md has no table row whose Decision begins with `Approve {task}` and contains `gate paths` (the task changes gate paths: {})",
+                        gate_paths.join(", ")
+                    )
+                } else {
+                    format!(
+                        "main's docs/decisions.md has no row whose Decision begins with `Approve {task}`"
+                    )
+                },
             );
         }
     }
@@ -659,7 +851,11 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
         }
     }
 
-    Ok(Checked { policy, changed })
+    Ok(Checked {
+        policy,
+        changed,
+        gate_paths,
+    })
 }
 
 #[cfg(test)]
@@ -827,6 +1023,65 @@ mod tests {
         ] {
             assert!(!is_full_sha(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn gate_path_predicate_and_tables() {
+        for p in [
+            "xtask",
+            "xtask/src/main.rs",
+            "xtask/layers.toml",
+            "xtask/tests/acceptance_t009.rs",
+            ".cargo/config.toml",
+            "crates/a/.cargo/config.toml",
+            ".github/workflows/ci.yml",
+            "rust-toolchain.toml",
+            "rust-toolchain",
+            "clippy.toml",
+            "crates/a/.clippy.toml",
+            "rustfmt.toml",
+            "crates/a/build.rs",
+        ] {
+            assert!(is_gate_path(p), "{p}");
+        }
+        for p in [
+            "xtaskx/a",
+            "docs/clippy.toml.md",
+            "src/xtask/a.rs",
+            "crates/a/src/build.rs.bak",
+            "Cargo.toml",
+            "Cargo.lock",
+            ".githubx/a",
+        ] {
+            assert!(!is_gate_path(p), "{p}");
+        }
+        let m = "[workspace]\nmembers = []\n[profile.release]\nlto = true\n";
+        assert!(!root_manifest_gate_tables_differ(Some(m), Some(m), Some(m)));
+        assert!(root_manifest_gate_tables_differ(
+            Some(m),
+            Some(m),
+            Some("[workspace]\n")
+        ));
+        assert!(root_manifest_gate_tables_differ(
+            Some("x ["),
+            Some(m),
+            Some(m)
+        ));
+        let d = "[package]\nname = \"a\"\n[dependencies]\nx = \"1\"\n";
+        assert!(!dependency_tables_differ(
+            Some(d),
+            Some(&format!("# c\n{d}"))
+        ));
+        assert!(dependency_tables_differ(None, Some(d)));
+        assert!(!dependency_tables_differ(
+            None,
+            Some("[package]\nname = \"a\"\n")
+        ));
+        assert!(dependency_tables_differ(
+            Some(d),
+            Some("[workspace.dependencies]\nx = \"1\"\n")
+        ));
+        assert!(dependency_tables_differ(Some(d), Some("broken [")));
     }
 
     #[test]

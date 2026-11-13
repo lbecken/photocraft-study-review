@@ -219,7 +219,7 @@ fn real_main() -> Result<bool> {
                 },
             };
             println!(
-                "queue {} attempt {}: {}{} (base {}, head {}, gate {:.1}s, gate xtask {} @ {}{})",
+                "queue {} attempt {}: {}{} (base {}, head {}, gate {:.1}s, gate xtask {} @ {}{}{})",
                 r.task,
                 r.attempt,
                 r.result,
@@ -236,6 +236,11 @@ fn real_main() -> Result<bool> {
                     String::new()
                 } else {
                     format!(", regenerated {}", r.regenerated.join(" "))
+                },
+                if r.gate_paths.is_empty() {
+                    String::new()
+                } else {
+                    format!(", gate paths changed: {}", r.gate_paths.join(" "))
                 }
             );
             if r.result == "merged" {
