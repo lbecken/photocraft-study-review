@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::path::RelPath;
-use crate::vfs::{Vfs, VfsError};
+use crate::vfs::{DirEntry, DirListing, EntryKind, Vfs, VfsError};
 
 /// In-memory VFS for deterministic tests. A directory exists iff some file lies below it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -87,6 +87,50 @@ impl Vfs for MemoryFs {
     fn is_file(&self, path: &RelPath) -> bool {
         self.files.contains_key(path)
     }
+
+    /// Kinds are only `File` and `Dir`, and `skipped` is always 0 (every stored name is a valid
+    /// `RelPath` segment). The root always exists; another directory exists iff a file lies
+    /// below it. A file → `NotAFile`; a missing path, or one below a file → `NotFound`.
+    fn list_dir(&self, dir: Option<&RelPath>) -> Result<DirListing, VfsError> {
+        let prefix = match dir {
+            None => String::new(),
+            Some(dir) => {
+                if self.files.contains_key(dir) {
+                    return Err(VfsError::NotAFile { path: dir.clone() });
+                }
+                if !self.is_dir(dir) {
+                    return Err(VfsError::NotFound { path: dir.clone() });
+                }
+                format!("{dir}/")
+            }
+        };
+        // Name → kind; a name stored both as a file and as a directory (possible only through
+        // `insert`) is listed once, as the file `read` returns.
+        let mut kinds: BTreeMap<&str, EntryKind> = BTreeMap::new();
+        for path in self.files.keys() {
+            let Some(rest) = path.as_str().strip_prefix(prefix.as_str()) else {
+                continue;
+            };
+            let (name, kind) = match rest.split_once('/') {
+                Some((name, _)) => (name, EntryKind::Dir),
+                None => (rest, EntryKind::File),
+            };
+            let slot = kinds.entry(name).or_insert(kind);
+            if kind == EntryKind::File {
+                *slot = EntryKind::File;
+            }
+        }
+        Ok(DirListing {
+            entries: kinds
+                .into_iter()
+                .map(|(name, kind)| DirEntry {
+                    name: name.to_owned(),
+                    kind,
+                })
+                .collect(),
+            skipped: 0,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +212,53 @@ mod tests {
         fs.set_fail_writes(false);
         fs.write_atomic(&p("a"), b"new").unwrap();
         assert_eq!(fs.get(&p("a")), Some(b"new".to_vec()));
+    }
+
+    fn entry(name: &str, kind: EntryKind) -> DirEntry {
+        DirEntry {
+            name: name.to_owned(),
+            kind,
+        }
+    }
+
+    #[test]
+    fn list_dir_lists_implied_directories_in_byte_order() {
+        let mut fs = MemoryFs::new();
+        assert_eq!(fs.list_dir(None), Ok(DirListing::default()));
+        fs.insert(&p("b.txt"), b"");
+        fs.insert(&p("B.txt"), b"");
+        fs.insert(&p("a/b.rs"), b"");
+        fs.insert(&p("a.rs"), b"");
+        fs.insert(&p("a/c/d"), b"");
+        fs.insert(&p("ab/x"), b"");
+        let root = fs.list_dir(None).unwrap();
+        assert_eq!(
+            root.entries,
+            vec![
+                entry("B.txt", EntryKind::File),
+                entry("a", EntryKind::Dir),
+                entry("a.rs", EntryKind::File),
+                entry("ab", EntryKind::Dir),
+                entry("b.txt", EntryKind::File),
+            ]
+        );
+        assert_eq!(root.skipped, 0);
+        assert_eq!(
+            fs.list_dir(Some(&p("a"))).unwrap().entries,
+            vec![entry("b.rs", EntryKind::File), entry("c", EntryKind::Dir)]
+        );
+        assert_eq!(
+            fs.list_dir(Some(&p("a.rs"))),
+            Err(VfsError::NotAFile { path: p("a.rs") })
+        );
+        assert_eq!(
+            fs.list_dir(Some(&p("a.rs/x"))),
+            Err(VfsError::NotFound { path: p("a.rs/x") })
+        );
+        assert_eq!(
+            fs.list_dir(Some(&p("nope"))),
+            Err(VfsError::NotFound { path: p("nope") })
+        );
     }
 
     #[test]

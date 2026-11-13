@@ -15,3 +15,4 @@ kiln-text.workspace = true
 kiln-search.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+ignore = "=0.4.34"

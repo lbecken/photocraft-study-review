@@ -58,7 +58,39 @@ impl fmt::Display for VfsError {
 
 impl std::error::Error for VfsError {}
 
-/// Files only; directories exist implicitly (MemoryFs) or on disk (DiskFs).
+/// The kind of a directory entry, taken from the entry itself (a symlink is never followed).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryKind {
+    /// A regular file.
+    File,
+    /// A directory.
+    Dir,
+    /// A symbolic link, whatever it points to.
+    Symlink,
+    /// Anything else: FIFO, socket, character or block device.
+    Other,
+}
+
+/// One entry of a directory listing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DirEntry {
+    /// The entry's name (one path segment).
+    pub name: String,
+    /// The entry's own kind.
+    pub kind: EntryKind,
+}
+
+/// A directory listing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DirListing {
+    /// The entries, sorted by the bytes of their names.
+    pub entries: Vec<DirEntry>,
+    /// How many names were omitted because they are not valid UTF-8 or not a valid `RelPath`
+    /// segment (for example a name containing `\`).
+    pub skipped: usize,
+}
+
+/// Files, and directory listings; directories exist implicitly (MemoryFs) or on disk (DiskFs).
 pub trait Vfs: std::fmt::Debug {
     /// The whole content of the file at `path`.
     fn read(&self, path: &RelPath) -> Result<Vec<u8>, VfsError>;
@@ -69,4 +101,11 @@ pub trait Vfs: std::fmt::Debug {
     /// True iff `path` names an existing regular file (for `DiskFs`: whose location is inside
     /// the root).
     fn is_file(&self, path: &RelPath) -> bool;
+    /// List `dir` (None = the root). `skipped` counts names that are not valid UTF-8 or not a
+    /// valid RelPath segment (for example a name containing `\`); those are omitted.
+    ///
+    /// Errors: `NotFound` for a missing directory (or one below a file), `NotAFile` when the
+    /// location is a file or another non-directory, and for `DiskFs` `OutsideRoot` and `Io` as
+    /// for `read`. An error about the root itself names the placeholder path `(root)`.
+    fn list_dir(&self, dir: Option<&RelPath>) -> Result<DirListing, VfsError>;
 }

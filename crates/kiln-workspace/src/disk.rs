@@ -32,7 +32,8 @@
 //!   reaches that same directory; if the root path or a directory above it has been
 //!   replaced since (for example by a symlink to another directory), or leads nowhere, the
 //!   call is refused with `OutsideRoot` before anything else is looked at.
-//! - Every `read`, `write_atomic` and `is_file` first computes the *location* of its path by
+//! - Every `read`, `write_atomic`, `is_file` and `list_dir` first computes the *location* of its
+//!   path (for `list_dir` of the root: the root itself) by
 //!   walking it from the root one component at a time, as the kernel does: each symlink is
 //!   read and its target's components are walked in its place (an absolute target from `/`),
 //!   and `..` pops the directory actually reached so far (physically, never lexically). The
@@ -48,6 +49,14 @@
 //!   for reading blocks until a writer appears). Only then is a regular file opened, through
 //!   the symlink-free location path; a save creates its temporary file in the location's
 //!   directory and renames it onto the location.
+//! - Directory listings (`list_dir`, T-019): the location must be a directory (a file, FIFO,
+//!   socket or device is `NotAFile`, and never opened); only that directory is opened and read.
+//!   Each entry's kind is taken from the entry itself, never followed: a symlink is `Symlink`
+//!   whatever it points to (a loop, the outside, nothing), a FIFO, socket or device is `Other`;
+//!   no entry is opened, read or followed. Names that are not UTF-8 or not a valid `RelPath`
+//!   segment (one containing `\`) are omitted and counted in `skipped`. Entries are sorted by
+//!   the bytes of their names. A directory whose location has a host path too long for the
+//!   system (`PATH_MAX`, 4,096 bytes on Linux) cannot be reached: `Io`.
 //! - Precedence: `OutsideRoot`, then `NotFound`, then `NotAFile`, then `Io`. Nothing is cached:
 //!   every call walks again, so what an earlier `read` saw does not authorise a later save.
 //! - Link targets ending in `/` require a directory, as the kernel does.
@@ -76,7 +85,7 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 
 use crate::path::RelPath;
-use crate::vfs::{Vfs, VfsError};
+use crate::vfs::{DirEntry, DirListing, EntryKind, Vfs, VfsError};
 
 /// Prefix of the deterministic temporary file names used by `write_atomic`.
 const TEMP_PREFIX: &str = ".kiln-tmp-";
@@ -203,6 +212,16 @@ impl DiskFs {
     /// Walk `rel` from the root to its location, following every symlink physically (module
     /// docs). `Err(OutsideRoot)` if the location is outside the root; nothing is opened.
     fn locate(&self, rel: &RelPath) -> Result<Location, VfsError> {
+        self.locate_steps(rel, rel.segments())
+    }
+
+    /// [`DiskFs::locate`] of the path made of `segments` (none: the root itself); errors name
+    /// `rel`.
+    fn locate_steps<'s>(
+        &self,
+        rel: &RelPath,
+        segments: impl Iterator<Item = &'s str>,
+    ) -> Result<Location, VfsError> {
         let root = self.current_root(rel)?;
         // Whether `location` (absolute, symlink-free) is the root or below it, component by
         // component.
@@ -216,10 +235,7 @@ impl DiskFs {
                 VfsError::OutsideRoot { path: rel.clone() }
             }
         };
-        let mut pending: VecDeque<Step> = rel
-            .segments()
-            .map(|s| Step::Name(OsString::from(s)))
-            .collect();
+        let mut pending: VecDeque<Step> = segments.map(|s| Step::Name(OsString::from(s))).collect();
         // The directory reached so far: absolute, without symlinks, `.` or `..`.
         let mut dir = root.clone();
         let mut hops = 0;
@@ -446,6 +462,55 @@ impl Vfs for DiskFs {
                 ..
             })
         )
+    }
+
+    fn list_dir(&self, dir: Option<&RelPath>) -> Result<DirListing, VfsError> {
+        let placeholder = RelPath::root_placeholder();
+        let (label, location) = match dir {
+            None => (&placeholder, self.locate_steps(&placeholder, std::iter::empty())?),
+            Some(dir) => (dir, self.locate(dir)?),
+        };
+        match location.found {
+            Found::Missing | Found::NoParent => {
+                return Err(VfsError::NotFound {
+                    path: label.clone(),
+                });
+            }
+            // Never opened: a FIFO, socket or device is not a directory.
+            Found::File(_) | Found::Special => {
+                return Err(VfsError::NotAFile {
+                    path: label.clone(),
+                });
+            }
+            Found::Dir => {}
+        }
+        let mut listing = DirListing::default();
+        for entry in fs::read_dir(&location.path).map_err(|e| lookup_error(label, &e))? {
+            let entry = entry.map_err(|e| io_error(label, &e))?;
+            // The entry's own type (`lstat` semantics): a symlink is never followed.
+            let file_type = entry.file_type().map_err(|e| io_error(label, &e))?;
+            let name = match entry.file_name().into_string() {
+                Ok(name) if RelPath::new(&name).is_ok() => name,
+                _ => {
+                    listing.skipped += 1;
+                    continue;
+                }
+            };
+            let kind = if file_type.is_symlink() {
+                EntryKind::Symlink
+            } else if file_type.is_dir() {
+                EntryKind::Dir
+            } else if file_type.is_file() {
+                EntryKind::File
+            } else {
+                EntryKind::Other
+            };
+            listing.entries.push(DirEntry { name, kind });
+        }
+        listing
+            .entries
+            .sort_unstable_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
+        Ok(listing)
     }
 }
 
