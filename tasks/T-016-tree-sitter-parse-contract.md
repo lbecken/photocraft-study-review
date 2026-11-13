@@ -2,7 +2,7 @@
 id: T-016
 title: "Parse Rust with tree-sitter in kiln-syntax: a syntax tree with error spans, a pinned S-expression form and incremental update, checked against a pinned compiling corpus"
 tier: high              # ADR-0002: adds external dependencies (tree-sitter, tree-sitter-rust) and dev-dependencies
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # library contract only; syntax.* items are claimed through commands by T-020 / T-023
 depends_on: []

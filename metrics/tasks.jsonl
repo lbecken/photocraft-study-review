@@ -183,3 +183,4 @@
 {"kind":"transition","task":"T-016","iteration":1,"at":"2026-11-13T07:04:13Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-017","iteration":1,"at":"2026-11-13T07:04:13Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-017","iteration":1,"at":"2026-11-13T07:04:13Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-016","iteration":1,"at":"2026-11-13T07:05:30Z","from":"ready","to":"in_progress"}
