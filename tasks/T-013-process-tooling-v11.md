@@ -790,6 +790,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   review's mutants: M5 → f6, M6 → f7, M21 → f8. · gate attempts: 0 (fmt check and clippy
   `-D warnings` clean; guard_t005/guard_t005_r2 pass; new tests run directly) · not run:
   `cargo xtask ci`, the full T-005 suites · missing context: none · next: re-join.
+- 2026-11-13T11:13:58Z R-092 test-author: ruling q applied: `an_input_changed_during_the_gate_is_not_handed_over` now requires exit exactly 1; `publish_without_an_input_is_refused_for_that_reason` states exit 1 + one stderr line `publish: refused: …` (via `assert_refusal`, prefix restated), generated-file-line exclusion kept. Base: both fail (exit 2, no `publish`). fmt check, clippy `-D warnings` clean; not run: `cargo xtask ci` · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13T08:00Z · R-081 · tests_joined · did: round-1 review (`reviews/T-013-r1.md`), replacing R-075 (cut off, D-045): AC check, adversarial toys (publish, metrics, report, worktree, hygiene), 26 mutants (23 killed, 21 by acceptance, 3 survived); verdict request-changes: 5 defects, 3 test gaps, 4 spec gaps, 1 nit · gate attempts: 0 (`cargo test -p xtask` green; `cargo xtask hygiene` PASS) · not run: full `cargo xtask ci` (disk), a timed queue/publish race · missing context: none · next: director rules on spec gaps 9–12; implementer fixes findings 1–8.

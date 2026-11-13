@@ -775,12 +775,11 @@ fn an_input_changed_during_the_gate_is_not_handed_over() {
     write(&r.root, item, body);
     let start = r.main_sha();
     let o = publish(&r, &[item]);
-    assert!(
-        o.code != 0 && o.code != 101,
-        "a step-7 stop exits non-zero without a panic; got {}\n{}\n{}",
-        o.code,
-        o.stdout,
-        o.stderr
+    // Ruling q: a stop in step 3, 4 or 7 exits 1 (exit 2 is for usage errors and commit failures).
+    assert_eq!(
+        o.code, 1,
+        "a step-7 stop exits 1; got {}\n{}\n{}",
+        o.code, o.stdout, o.stderr
     );
     let all = format!("{}\n{}", o.stdout, o.stderr);
     assert!(
@@ -844,7 +843,10 @@ fn publish_without_an_input_is_refused_for_that_reason() {
     // commit), and nothing changes.
     let r = publish_repo("t013-f8-noinput");
     assert_eq!(status(&r.root), "");
+    // Ruling q: pinned only as exit 1 and one stderr line starting `publish: refused: `
+    // (`assert_refusal` checks both; the prefix is restated here for the reader).
     let line = assert_publish_refused(&r, &[], "no input");
+    assert!(line.starts_with("publish: refused: "), "{line}");
     assert_ne!(
         line,
         "publish: refused: the inputs change no generated file; commit them on main as a ledger commit",
