@@ -70,3 +70,24 @@ Used so far: R-001 … R-073.
 - ~07:05 UTC: disk fell to 2 GB free (each worktree's build directory is 3–6 GB). Policy from now on: after a join, delete the tests worktree's `target/`; keep at most four worktrees with build directories; `rm -rf target/debug/incremental` on main when needed. The upstream PhotoCraft clone in the old scratch directory was deleted (the study is complete; re-clone if needed).
 - T-016 test author dispatched (R-080); its implementer follows when a compiling slot frees. T-017 is `ready`, not yet dispatched.
 - 07:09 UTC: container restarted (D-045); T-013 reviewer, T-015 reviewer and T-016 test author relaunched fresh (R-081, R-082, R-083).
+
+## Immediate next actions (as of 07:15 UTC; the directing session's context is ~88% full)
+Three fresh agents are running: T-013 reviewer (R-081), T-015 reviewer (R-082), T-016 test author (R-083).
+1. **When the T-013 review reports**: if approve → record reviewer metrics; write and verify the approval row in
+   `docs/decisions.md` beginning `Approve T-013` and containing `gate paths`; set state `queued`; commit the
+   ledger by path; `cargo xtask queue T-013`; mark merged, push, `cargo xtask worktree rm T-013` (and `--tests
+   --force`). If request-changes → fresh implementer and/or test author for the listed defects only; round 2 is
+   final (METHODOLOGY §7). After it merges: the tooling stamps times itself, `worktree new` requires `ready`,
+   the queue enforces budgets (`Extend T-NNN to <N>` rows), `cargo xtask publish` exists, overhead runs are
+   booked to `iter-1` (planner R-056/R-060/R-066: 519,319 tokens; spec checks R-062 286,583 — already booked
+   to T-015 —, R-067 294,896, R-069 59,214; planner edits R-074 86,957, R-077/R-079 203,222).
+2. **When the T-015 review reports**: same sequence (tier high, no gate paths; approval row `Approve T-015`).
+   T-015's recorded tokens include the first spec check (287k) and may exceed 850k once the queue enforces
+   budgets — add an explicit `Extend T-015 to <N>` row if so. After it merges: accept ADR-0004, make T-032
+   `ready`, dispatch its implementer and test author; publish the CHARTER §3 sentence as a low-tier task.
+3. **When the T-016 test author reports**: dispatch the T-016 implementer (worktree `.worktrees/T-016` exists),
+   then join, review, approve (tier high: adds a dependency; no `dependency versions` wording needed), queue.
+4. **T-017** is `ready`: dispatch implementer and test author when compiling slots and disk allow.
+5. Then T-009 (after T-013), and the rest of the plan above. One spec edit still owed: T-022 line ~65
+   (`replacement_for` now returns `Result`).
+Disk: check `df -h /home/user` before every dispatch; delete a tests worktree's `target/` after its join.
