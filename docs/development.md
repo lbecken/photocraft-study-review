@@ -443,11 +443,19 @@ An evaluation file or a new scorecard item is a ledger path, but it changes the 
 `docs/scorecard.md`, which reaches `main` only through the queue (D-034, T-012). `publish` does
 the whole low-tier publish task in one command, from the primary checkout with `main` checked
 out. Inputs: new `scorecard/items/<id>.toml` files (absent from main) and new or modified
-`evaluations/*.md` files of the working tree. Steps (each failure stops):
+`evaluations/*.md` files of the working tree. Publish takes the queue's lock
+(`<git-common-dir>/kiln-queue.lock`) before step 1 and holds it through step 7, so it never runs
+beside a queue or another publish; a lock held by a live process is refused (`publish: refused:
+another queue or publish run holds <lock path>`, exit 1, nothing changed). The lock is released
+just before step 8, where the queue takes it itself; a queue that starts in that gap makes step
+8 fail with its usual line, and nothing is damaged. Steps (each failure stops):
 
 1. checks, nothing changed (`publish: refused: <reason>`, exit 1): `main` checked out; a well
-   formed `T-NNN` with no task file on main or in the working tree, no `task/T-NNN` branch and
-   no `.worktrees/T-NNN`; at least one input, each of an allowed kind and different from main;
+   formed `T-NNN` with no task file on main or in the working tree, no `task/T-NNN` branch, no
+   `.worktrees/T-NNN` and no record of `T-NNN` in `metrics/tasks.jsonl` (`publish: refused:
+   T-NNN already has records in metrics/tasks.jsonl`: a number publish or anything else has used
+   is never reused); a title with a letter or digit (`publish: refused: the title has no letter
+   or digit`); at least one input, each of an allowed kind and different from main;
    apart from the inputs, the queue's working-tree rules (`ledger`, no other dirty path); the
    command main's `xtask/generated.toml` lists for `docs/scorecard.md` (`{xtask}` = main's
    xtask, built as the queue builds it), run in a private export of main plus the inputs
@@ -458,10 +466,14 @@ out. Inputs: new `scorecard/items/<id>.toml` files (absent from main) and new or
    `touches` = the inputs, `budget_tokens: 150000`, the three ACs of T-012), records draft →
    specified → ready and commits the file and `metrics/tasks.jsonl` on main (`publish: T-NNN
    ready`, `Task:`/`Role: director`, the repository's commit configuration, signing included).
-   A failed commit: exit 2 and a line with the command to commit by hand;
-3. creates the worktree as `worktree new` does; ready → in_progress, committed on main at once
-   (`publish: T-NNN in progress`, `metrics/tasks.jsonl` only), so main's ledger is committed
-   wherever the command stops;
+   If the write or a transition fails before the commit, the task file is removed and
+   `metrics/tasks.jsonl` restored, so main is as it was found (the failure's own message and
+   exit code). A failed commit, a failing `git add` included (in steps 2, 6 and 8 alike): exit 2
+   and one line `publish: commit failed: <git error>; commit by hand: git commit …`;
+3. creates the worktree as `worktree new` does; ready → in_progress and `state: in_progress`,
+   committed on main at once (`publish: T-NNN in progress`, the task file and
+   `metrics/tasks.jsonl`), so main's ledger is committed wherever the command stops and the
+   task file's `state:` equals the last recorded transition;
 4. copies the inputs into it, regenerates `docs/scorecard.md` there with that same command,
    and commits exactly those paths on `task/T-NNN` (anything else: stop, exit 1);
 5. runs the gate there; red: exit 1 and `publish: gate failed in .worktrees/T-NNN at <step>; …`
@@ -471,15 +483,42 @@ out. Inputs: new `scorecard/items/<id>.toml` files (absent from main) and new or
    a successful publish adds six first-parent commits — `ready`, `in progress`, `queued`, the
    content commit, the queue's record commit and `merged`; after a red gate `ready` and
    `in progress` stay;
-7. removes each input from the primary checkout once its bytes equal the branch copy (new files
-   deleted, modified files restored), printing `publish: <path> moved to task/T-NNN`;
+7. compares every input with its branch copy, then removes each from the primary checkout (new
+   files deleted, modified files restored), printing `publish: <path> moved to task/T-NNN`; if
+   any input differs, none is removed;
 8. runs `cargo xtask queue T-NNN` (output and exit code passed through). Merged: queued →
    merged, `state: merged`, commit `publish: T-NNN merged`, `worktree rm T-NNN`. Otherwise:
    `publish: queue did not merge T-NNN (exit c); …` and exit `c`.
 
+A stop in step 3, 4 or 7 that has no line of its own prints `publish: stopped at step <n>:
+<error>; T-NNN is <state>` (exit 1; 2 for a failed content commit in step 4).
+
 The helper records no `run`. The director still reserves the task number and title, has the
 input written by its author, books the session's own run to `iter-N`, acts on a stop message
 (re-run the gate, re-queue, or abandon), and files any defect tasks as separate ledger commits.
+
+### After a stop
+
+Publish is never resumed and a task number it has used is not reused: the director finishes or
+abandons the task by hand with the ordinary commands. Below, *ledger commit "<s>"* means
+`git add -- tasks/T-NNN-<slug>.md metrics/tasks.jsonl` and then
+`git commit -m "<s>" -m "Task: T-NNN" -m "Role: director" -- tasks/T-NNN-<slug>.md metrics/tasks.jsonl`
+on main; *set state X* means editing the task file's front-matter line to `state: X`.
+
+| Stopped at | Left behind on main | Finish by hand | Abandon |
+|---|---|---|---|
+| 1 (refused) | nothing | fix the cause, re-run `publish` | — |
+| 2, before the commit | nothing (task file removed, ledger restored) | fix the cause, re-run `publish` with the same number | — |
+| 2, commit failed | task file and two transitions (`ready`) uncommitted | repair (signing, index lock), ledger commit "publish: T-NNN ready"; then the row for 3 | `metrics transition --task T-NNN --to abandoned`, set state abandoned, ledger commit "publish: T-NNN abandoned" |
+| 3 | `ready` committed; maybe a worktree | `worktree new T-NNN` if missing; `metrics transition --task T-NNN --to in_progress`; set state in_progress; ledger commit "publish: T-NNN in progress"; then the row for 4 | as for 2, then `worktree rm T-NNN --force` if a worktree exists |
+| 4 | `in_progress` committed; worktree | in `.worktrees/T-NNN`: copy the inputs, run main's `docs/scorecard.md` command (`cargo xtask scorecard`), commit exactly the inputs and `docs/scorecard.md` (`Task: T-NNN`, `Role: director`); then the row for 5 | `metrics transition --task T-NNN --to abandoned`, set state abandoned, ledger commit "publish: T-NNN abandoned", `worktree rm T-NNN --force` |
+| 5 (gate red) | `in_progress` committed; content commit on `task/T-NNN` | fix the input (in the worktree and the primary checkout alike), commit it on the branch, `cargo xtask ci` there; green: `metrics transition --task T-NNN --to self_verified`, then `--to queued`; set state queued; ledger commit "publish: T-NNN queued"; then the row for 7 | as for 4 |
+| 6, commit failed | `in_progress` committed; `queued` uncommitted | repair, ledger commit "publish: T-NNN queued"; then the row for 7 | as for 4 (after the ledger commit) |
+| 7 | `queued` committed; inputs still in the primary checkout | make each input equal `git show task/T-NNN:<path>` (or fix the branch and re-run its gate), then remove it (`rm` a new file, `git checkout HEAD -- <path>` a modified one); `cargo xtask queue T-NNN`; then the row for 8 | as for 4 |
+| 8, queue refused | `queued` committed; inputs on `task/T-NNN` | act on the queue's refusal, `cargo xtask queue T-NNN`; merged: `metrics transition --task T-NNN --to merged`, set state merged, ledger commit "publish: T-NNN merged", `worktree rm T-NNN` | as for 4 |
+| 8, merged commit failed | merged by the queue; `merged` uncommitted | repair, ledger commit "publish: T-NNN merged", `worktree rm T-NNN` | — (merged is final) |
+
+After an abandon the inputs are still the director's: publish them again under a new task number.
 
 ## Other registries
 

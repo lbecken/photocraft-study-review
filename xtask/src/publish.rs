@@ -254,11 +254,17 @@ fn ledger_state(root: &Path, task: &str) -> String {
 /// `publish: stopped at step <n>: <error>; T-NNN is <state>`; exit `code`.
 fn stopped(root: &Path, step: u8, task: &str, error: &anyhow::Error, code: u8) -> anyhow::Error {
     eprintln!(
-        "publish: stopped at step {step}: {}; {task} is {}",
-        one_line(&format!("{error:#}")),
-        ledger_state(root, task)
+        "{}",
+        stop_line(step, task, error, &ledger_state(root, task))
     );
     Exit(code).into()
+}
+
+fn stop_line(step: u8, task: &str, error: &anyhow::Error, state: &str) -> String {
+    format!(
+        "publish: stopped at step {step}: {}; {task} is {state}",
+        one_line(&format!("{error:#}"))
+    )
 }
 
 /// Ruling D-047 (m): the queue's lock; held by a live process → the publish refusal.
@@ -1010,5 +1016,277 @@ mod tests {
             Some("queued")
         );
         assert_eq!(q.replace("state: queued", "state: ready"), t);
+    }
+
+    /// A gate whose run calls `during(worktree)` first; counts main-xtask builds.
+    struct HookGate<'a> {
+        pass: bool,
+        during: &'a dyn Fn(&Path),
+        builds: std::cell::Cell<u32>,
+    }
+    impl GateRunner for HookGate<'_> {
+        fn run(&self, wt: &Path, _: GateXtask<'_>) -> Result<crate::queue::GateOutcome> {
+            (self.during)(wt);
+            Ok(crate::queue::GateOutcome {
+                passed: self.pass,
+                failed_step: (!self.pass).then(|| "red".into()),
+            })
+        }
+        fn build_main_xtask(&self, _: &Path, _: &str) -> Result<PathBuf> {
+            self.builds.set(self.builds.get() + 1);
+            Ok(PathBuf::from("/fake/main-xtask"))
+        }
+    }
+
+    fn hook_gate(during: &dyn Fn(&Path)) -> HookGate<'_> {
+        HookGate {
+            pass: true,
+            during,
+            builds: std::cell::Cell::new(0),
+        }
+    }
+
+    fn no_queue(_: &Path, _: &str) -> Result<i32> {
+        panic!("the queue must not run")
+    }
+
+    /// Everything a refusal must leave unchanged: main's tip, branches, worktrees, status, ledger.
+    fn snapshot(root: &Path) -> (String, String, String, String, Option<Vec<u8>>) {
+        (
+            rev(root, "main").unwrap(),
+            git(root, &["branch", "--list"]).unwrap(),
+            git(root, &["worktree", "list", "--porcelain"]).unwrap(),
+            git(root, &["status", "--porcelain", "--ignored"]).unwrap(),
+            std::fs::read(root.join("metrics/tasks.jsonl")).ok(),
+        )
+    }
+
+    fn refusal(e: &anyhow::Error) -> String {
+        e.downcast_ref::<Refused>()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("not a refusal: {e:#}"))
+    }
+
+    /// main's committed task-file state and the last committed transition of T-050.
+    fn committed_state(root: &Path) -> (String, String) {
+        let file = git(root, &["ls-tree", "--name-only", "main", "--", "tasks/"])
+            .unwrap()
+            .lines()
+            .find(|l| l.starts_with("tasks/T-050-"))
+            .unwrap()
+            .to_owned();
+        let text = crate::precheck::show(root, "main", &file).unwrap().unwrap();
+        let fm = crate::frontmatter::parse(&text).unwrap().0;
+        let ledger = crate::precheck::show(root, "main", "metrics/tasks.jsonl")
+            .unwrap()
+            .unwrap_or_default();
+        let last = ledger
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|v| v["kind"] == "transition" && v["task"] == "T-050")
+            .last()
+            .map(|v| v["to"].as_str().unwrap().to_owned())
+            .unwrap();
+        (fm["state"].as_str().unwrap().to_owned(), last)
+    }
+
+    #[test]
+    fn step_one_refuses_a_used_task_number_and_a_title_without_letters() {
+        let repo = toy();
+        let root = repo.path();
+        // Ruling D-047 (k): an abandoned T-050 whose task file was deleted.
+        crate::git::testrepo::commit(
+            root,
+            "ledger",
+            &[(
+                "metrics/tasks.jsonl",
+                "{\"kind\":\"transition\",\"task\":\"T-050\",\"iteration\":1,\"at\":\"2026-11-13T01:00:00Z\",\"from\":\"draft\",\"to\":\"abandoned\"}\n",
+            )],
+        );
+        let before = snapshot(root);
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let gate = hook_gate(&|_| {});
+        let e = run_with(root, &args(), &clock, &gate, &no_queue).unwrap_err();
+        assert_eq!(
+            refusal(&e),
+            "publish: refused: T-050 already has records in metrics/tasks.jsonl"
+        );
+        assert_eq!(snapshot(root), before);
+        assert_eq!(gate.builds.get(), 0, "refused before main's xtask is built");
+        // Ruling D-047 (p).
+        for title in ["!!!", "---", " ? ", "Ü"] {
+            let a = Args {
+                task: "T-051".into(),
+                title: title.into(),
+                ..args()
+            };
+            let e = run_with(root, &a, &clock, &gate, &no_queue).unwrap_err();
+            assert_eq!(
+                refusal(&e),
+                "publish: refused: the title has no letter or digit",
+                "{title:?}"
+            );
+            assert_eq!(snapshot(root), before);
+        }
+    }
+
+    #[test]
+    fn a_held_queue_lock_refuses_publish_before_anything_is_built() {
+        let repo = toy();
+        let root = repo.path();
+        let lock = root.join(".git/kiln-queue.lock");
+        // Held by a live process (this one), as by a running queue.
+        let holder = format!("{} T-099\n", std::process::id());
+        std::fs::write(&lock, &holder).unwrap();
+        let before = snapshot(root);
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let gate = hook_gate(&|_| {});
+        let e = run_with(root, &args(), &clock, &gate, &no_queue).unwrap_err();
+        assert_eq!(
+            refusal(&e),
+            format!(
+                "publish: refused: another queue or publish run holds {}",
+                lock.display()
+            )
+        );
+        assert_eq!(snapshot(root), before);
+        assert_eq!(gate.builds.get(), 0);
+        assert!(!root.join(".git/kiln-publish").exists());
+        assert!(!root.join(".git/kiln-queue").exists());
+        assert_eq!(std::fs::read_to_string(&lock).unwrap(), holder);
+        std::fs::remove_file(&lock).unwrap();
+    }
+
+    #[test]
+    fn the_lock_is_held_through_step_seven_and_released_for_the_queue() {
+        let repo = toy();
+        let root = repo.path().to_path_buf();
+        let lock = root.join(".git/kiln-queue.lock");
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let seen = std::cell::Cell::new(false);
+        let during = |_: &Path| {
+            let held = std::fs::read_to_string(&lock).unwrap();
+            assert!(held.starts_with(&format!("{} T-050", std::process::id())), "{held}");
+            seen.set(true);
+        };
+        let gate = hook_gate(&during);
+        let queue = |r: &Path, _: &str| -> Result<i32> {
+            assert!(!r.join(".git/kiln-queue.lock").exists(), "released before step 8");
+            Ok(3)
+        };
+        let e = run_with(&root, &args(), &clock, &gate, &queue).unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(3)));
+        assert!(seen.get());
+        assert_eq!(committed_state(&root), ("queued".into(), "queued".into()));
+    }
+
+    #[test]
+    fn a_failed_step_two_before_its_commit_leaves_main_as_found() {
+        let repo = toy();
+        let root = repo.path();
+        let before = snapshot(root);
+        // A clock that runs backwards: the second transition is earlier than the first.
+        struct Back(std::cell::Cell<i64>);
+        impl Clock for Back {
+            fn now_millis(&self) -> i64 {
+                let t = self.0.get();
+                self.0.set(t - 1000);
+                t
+            }
+        }
+        let clock = Back(std::cell::Cell::new(1_793_000_000_000));
+        let gate = hook_gate(&|_| {});
+        let e = run_with(root, &args(), &clock, &gate, &no_queue).unwrap_err();
+        // The failure's own message is kept (the metrics refusal).
+        assert!(refusal(&e).starts_with("metrics: refused: "), "{e:#}");
+        assert_eq!(snapshot(root), before);
+        assert!(!root.join("metrics").exists());
+        assert!(
+            std::fs::read_dir(root.join("tasks"))
+                .unwrap()
+                .all(|e| !e.unwrap().file_name().to_string_lossy().starts_with("T-050"))
+        );
+    }
+
+    #[test]
+    fn a_failing_git_add_is_a_commit_failure() {
+        // Ruling D-047 (l), step 2: a locked index.
+        let repo = toy();
+        let root = repo.path();
+        let tip = rev(root, "main").unwrap();
+        std::fs::write(root.join(".git/index.lock"), "").unwrap();
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let e = run_with(root, &args(), &clock, &hook_gate(&|_| {}), &no_queue).unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(2)), "{e:#}");
+        assert_eq!(rev(root, "main").unwrap(), tip);
+        std::fs::remove_file(root.join(".git/index.lock")).unwrap();
+        // Step 6: the gate run locks the index.
+        let repo = toy();
+        let root = repo.path().to_path_buf();
+        let index_lock = root.join(".git/index.lock");
+        let during = |_: &Path| std::fs::write(&index_lock, "").unwrap();
+        let e = run_with(&root, &args(), &clock, &hook_gate(&during), &no_queue).unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(2)), "{e:#}");
+        std::fs::remove_file(&index_lock).unwrap();
+        assert_eq!(committed_state(&root), ("in_progress".into(), "in_progress".into()));
+    }
+
+    #[test]
+    fn state_follows_the_ledger_where_publish_stops() {
+        // Ruling D-047 (n), step 3: the worktree cannot be made (`.worktrees` is a file).
+        let repo = toy();
+        let root = repo.path().to_path_buf();
+        std::fs::write(root.join(".git/info/exclude"), ".worktrees\n").unwrap();
+        std::fs::write(root.join(".worktrees"), "not a directory\n").unwrap();
+        let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
+        let e = run_with(&root, &args(), &clock, &hook_gate(&|_| {}), &no_queue).unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(1)), "{e:#}");
+        assert_eq!(committed_state(&root), ("ready".into(), "ready".into()));
+        assert_eq!(ledger_state(&root, "T-050"), "ready");
+
+        // Step 4: the regeneration fails in the worktree only.
+        let repo = toy();
+        let root = repo.path().to_path_buf();
+        let gen_toml = "[[generated]]\npath = \"docs/scorecard.md\"\ncommand = [\"sh\", \"-c\", \"case \\\"$CARGO_TARGET_DIR\\\" in *.worktrees*) echo boom >&2; exit 1;; esac; cat scorecard/items/* evaluations/* > docs/scorecard.md\"]\n";
+        crate::git::testrepo::write(&root, "xtask/generated.toml", gen_toml);
+        crate::git::testrepo::g(&root, &["commit", "-q", "-m", "gen", "--", "xtask/generated.toml"]);
+        let e = run_with(&root, &args(), &clock, &hook_gate(&|_| panic!("no gate")), &no_queue)
+            .unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(1)), "{e:#}");
+        assert_eq!(committed_state(&root), ("in_progress".into(), "in_progress".into()));
+        let mut dirty = dirty_paths(&root, None).unwrap();
+        dirty.sort();
+        assert_eq!(
+            dirty,
+            [" M evaluations/iter-0.md", "?? scorecard/items/x.y.toml"]
+        );
+
+        // Step 7: an input changes during the gate; nothing is removed.
+        let repo = toy();
+        let root = repo.path().to_path_buf();
+        let during = |_: &Path| {
+            std::fs::write(root.join("scorecard/items/x.y.toml"), "edited\n").unwrap();
+        };
+        let e = run_with(&root, &args(), &clock, &hook_gate(&during), &no_queue).unwrap_err();
+        assert_eq!(e.downcast_ref::<Exit>(), Some(&Exit(1)), "{e:#}");
+        assert_eq!(committed_state(&root), ("queued".into(), "queued".into()));
+        // Neither input was removed (the unchanged one is compared before any removal).
+        assert_eq!(
+            std::fs::read_to_string(root.join("evaluations/iter-0.md")).unwrap(),
+            "new\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("scorecard/items/x.y.toml")).unwrap(),
+            "edited\n"
+        );
+    }
+
+    #[test]
+    fn stop_lines() {
+        let e = anyhow::anyhow!("x.toml differs\nfrom the branch");
+        assert_eq!(
+            stop_line(7, "T-050", &e, "queued"),
+            "publish: stopped at step 7: x.toml differs; from the branch; T-050 is queued"
+        );
     }
 }
