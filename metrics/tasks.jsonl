@@ -248,3 +248,4 @@
 {"kind":"run","task":"T-017","iteration":1,"run":"R-104","role":"implementer","tier":"high","started_at":"2026-11-13T12:17:02Z","ended_at":"2026-11-13T12:23:58Z","wall_s":416,"tokens":115630,"tool_calls":25,"gate_attempts":1,"outcome":"completed","missing_context":"none","note":"regex API as pinned on regex =1.13.1; own match loop with the spec's empty-match rule; gate green first attempt (11 steps, 485 tests); no deviations"}
 {"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T12:27:14Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T12:27:14Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-010","iteration":1,"at":"2026-11-13T12:27:18Z","from":"ready","to":"in_progress"}
