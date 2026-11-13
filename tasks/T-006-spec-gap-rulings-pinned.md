@@ -1,7 +1,7 @@
 ---
 id: T-006
 title: "State the D-013 and D-023 spec-gap rulings in the public docs and pin each with a regression guard"
-tier: low               # docs + guard tests only; see Q-1 (paths in two layers)
+tier: low               # docs + guard tests only (director ruling, Decisions D-1)
 state: draft
 owner_role: planner
 scorecard_items: []
@@ -14,16 +14,16 @@ touches:
   - crates/kiln-commands/src/registry.rs # doc comment of `Command::MUTATING` only
   - crates/kiln-commands/tests/guard_t006.rs
 budget_tokens: 150000
-iteration: 1            # see Q-3
+iteration: 1
 found_by: reviewer
-origin_task: T-001      # also T-003; see Q-3
+origin_task: T-001      # the D-023 rulings come from T-003
 ---
 
 # T-006 State the D-013 and D-023 spec-gap rulings in the public docs and pin each with a regression guard
 
 ## Goal
-Six rulings the director made after the code was written (D-013 for the text core, D-023 for
-the document commands) hold today only because the code happens to behave that way: no
+Six rulings the director made after the code was written (D-013 for the text core, from task
+T-001; D-023 for the document commands, from task T-003) hold today only because the code happens to behave that way: no
 document states them and no test would fail if they were broken. After this task, each ruling
 is stated where a caller reads the API (rustdoc of `kiln-text` and `kiln-commands`), and each
 has a named test that fails if the behaviour changes. No behaviour changes.
@@ -97,9 +97,9 @@ Oracle for every criterion: exact value.
 - Any behaviour change, including tightening `kiln-text`'s private `check_range` or any
   `acceptance_t001`/`acceptance_t003` file (another task's acceptance tests are not edited).
 - Changing a `Command::DOC` string (that changes `docs/commands.json`, a schema path).
-- The T-004 follow-ups that D-032 assigned to T-006 (4096-byte boundary test, `id` excluded
-  from the truncation decision, misplaced sentence in `docs/control-protocol.md`): proposed for
-  T-007, which already touches those files; see Q-2.
+- The T-004 follow-ups that D-032 first assigned to T-006 (test at the exact 4096-byte
+  boundary, a long `id` not counting toward the truncation decision, the misplaced sentence in
+  `docs/control-protocol.md`): task T-030 (Decisions D-2).
 - `docs/development.md` "Adding a command" — a separate docs follow-up.
 
 ## Implementer notes
@@ -108,17 +108,15 @@ Oracle for every criterion: exact value.
   `--write` (proves `docs/commands.json` did not change).
 - Determinism: no clock or randomness; fixed inputs only.
 
+## Decisions
+Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
+- D-1 (was Q-1): low tier stands. The CHARTER §4 "two or more layers" rule is about behaviour
+  changes; documentation and tests in existing crates are low.
+- D-2 (was Q-2): confirmed. The three T-004 follow-ups of D-032 leave T-006 and go to T-030.
+- D-3 (was Q-3): iteration 1; `origin_task: T-001`, and T-003 is named in the body.
+
 ## Questions
-- Q-1 (planner, R-049): CHARTER §4 lists "anything in two or more layers" as high; this task
-  touches L0 (`kiln-text`) and L3 (`kiln-commands`), but only rustdoc and guard tests, which is
-  the low row ("docs, tests"). I propose low. Alternatives: rule high, or split into two low
-  tasks (one per crate).
-- Q-2 (planner, R-049): D-032 sends three T-004 follow-ups to T-006. Two of them need a code
-  change in `kiln-control` and an edit to `docs/control-protocol.md`, which would make this task
-  medium/high, overlap T-007 and T-008, and remove its parallelism. I moved them to T-007 (part
-  e). Confirm, or tell me to move them back here and raise the tier.
-- Q-3 (planner, R-049): `iteration: 1` assumes these follow-ups belong to the next iteration
-  (iteration 0 is closing); `origin_task` takes one id, so T-001 is named and T-003 noted.
+None open.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -140,6 +138,10 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   Kept `Command::DOC` strings out so `docs/commands.json` does not change. · gate attempts: 0 ·
   not run: gate, the guard tests (no code written) · missing context: none · next: director
   answers Q-1, Q-2, Q-3.
+- 2026-11-13T03:05Z · R-051 · draft · did: applied the director's answers as Decisions D-1…D-3
+  (low tier stands; D-032 follow-ups go to T-030; iteration 1, origin T-001, T-003 named in the
+  Goal). No other change to the spec. · gate attempts: 0 · missing context: none · next:
+  director review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

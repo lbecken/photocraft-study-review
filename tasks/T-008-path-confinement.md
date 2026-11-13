@@ -4,7 +4,7 @@ title: "Confine every disk path to the workspace root and refuse non-regular fil
 tier: high              # persistence/save path; security; L2 + L4 (kiln-workspace, kiln-control)
 state: draft
 owner_role: planner
-scorecard_items: []     # no item covers this; see Q-4
+scorecard_items: [ws.path-confinement]   # director-authorized item (Decisions D-4)
 depends_on: [T-004]
 touches:
   - crates/kiln-workspace/src
@@ -12,7 +12,7 @@ touches:
   - crates/kiln-control/src/lib.rs               # kind mapping for the two new messages + the kinds list
   - docs/control-protocol.md                     # "Paths" section and the error-kinds table
 budget_tokens: 700000
-iteration: 1            # see Q-5
+iteration: 1
 found_by: reviewer
 origin_task: T-004
 ---
@@ -96,8 +96,8 @@ Every check is made again on every call: what `doc.open` saw does not authorise 
 - `cannot open <p>: not a regular file`, `cannot save <p>: not a regular file` →
   `{"code":"rejected","kind":"not_a_file",…}`.
 
-`outside_root` is a new `(rejected, outside_root)` pair in the specified kind set (D-031 (10),
-see Q-1). `not_a_file` keeps its name; its meaning widens to every non-regular file. A failed
+`outside_root` is a new `(rejected, outside_root)` pair in the specified kind set (D-031 (10);
+approved, Decisions D-1). `not_a_file` keeps its name; its meaning widens to every non-regular file. A failed
 `doc.save` leaves the document dirty and the session log unchanged (existing rule). `run`
 exits 3 when such a request is refused. `exec doc.open` exits 2 and prints the error object
 with that `kind` on stderr. No other exit code changes.
@@ -109,8 +109,8 @@ with that `kind` on stderr. No other exit code changes.
   stay inside are followed, and a save through one replaces its target and keeps the link;
   directories, FIFOs, sockets and devices are refused (`not_a_file`) without blocking; each
   request is checked again. List the residual limits: a hard link inside the root to a file
-  outside cannot be detected; the file system changing *during* one request is not guarded
-  against (Q-3).
+  outside cannot be detected; a path changed by another process *while* a request runs can
+  slip through (accepted limitation, Decisions D-3).
 - Error table: add the `outside_root` row; reword the `not_a_file` "When" cell. Every other row
   is unchanged.
 
@@ -182,7 +182,10 @@ type, link target, bytes. Oracle: exact value unless stated otherwise.
   reviewer checks the "Paths" text against AC-1…AC-8.
 
 ## Scorecard items and intended test names
-No item exists for confinement (Q-4). Tests (no item): `crates/kiln-workspace/tests/acceptance_t008.rs`
+Item `ws.path-confinement` (`scorecard/items/ws.path-confinement.toml`, created director-authorized
+with `tests = []`; the test author sets its `tests`). Proposed claim: the seven
+`kiln_workspace::acceptance_t008` tests below plus `kiln_cli::acceptance_t008::reviewer_exploit_is_refused_end_to_end`
+and `kiln_cli::acceptance_t008::fifo_and_socket_do_not_hang_run`. Tests: `crates/kiln-workspace/tests/acceptance_t008.rs`
 (`kiln_workspace::acceptance_t008::{open_through_escaping_symlinks_is_refused,
 save_through_escaping_symlinks_touches_nothing, link_swapped_in_after_open_is_refused_at_save,
 symlinks_inside_root_still_work, non_regular_files_are_refused_without_blocking,
@@ -192,9 +195,10 @@ fifo_and_socket_do_not_hang_run, swap_between_requests_is_refused_through_contro
 
 ## Out of scope
 - Atomic (race-free) confinement against a process that changes the file system *during* a
-  single call; it needs `openat`-style system calls and a new dependency (Q-3).
+  single call; it would need `openat`-style system calls and a new dependency, which the
+  director declined (Decisions D-3). It is documented as a limitation.
 - Hard links (undetectable by path); Windows (D-014 (5)); symlinks in `MemoryFs`.
-- Structured reasons in `CommandError` instead of message matching in `kiln-control`: T-007.
+- Structured reasons in `CommandError` instead of message matching in `kiln-control`: T-030.
   Here `kiln-control`'s existing message mapping only gains the two new message shapes.
 - Project tree, find-in-files and any future directory walk. They must apply the same rule when
   they are built; that is for their tasks.
@@ -214,23 +218,20 @@ fifo_and_socket_do_not_hang_run, swap_between_requests_is_refused_through_contro
   touched. Left to the implementer: how locations are resolved and compared, and how a
   non-regular file is detected without opening it.
 
+## Decisions
+Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
+- D-1 (was Q-1): the new kind `outside_root` (`rejected`) is approved.
+- D-2 (was Q-2): symlinks whose location resolves inside the root are followed (save replaces
+  the target and keeps the link).
+- D-3 (was Q-3): the remaining race within one call is accepted and documented as a limitation
+  in `docs/control-protocol.md` and the `DiskFs` docs; no new dependency.
+- D-4 (was Q-4): scorecard item `ws.path-confinement` is created (director-authorized) and this
+  task claims it. Because the task now has a scorecard item, the evaluator must confirm it.
+- D-5 (was Q-5): no; the iteration-0 evaluator runs against today's `main`. This task is
+  iteration 1.
+
 ## Questions
-- Q-1 (planner, R-049): a new kind `outside_root` adds a pair to the set D-031 (10) made
-  specified. Approve it, or choose `invalid_path` (it reads as a lexical error) or `io_error`.
-- Q-2 (planner, R-049): symlinks whose location stays inside the root are still followed, and
-  a save through them replaces the target and keeps the link. Existing T-002 acceptance tests
-  and the `io.save-atomic` item rely on this. The alternative is to refuse every symlink.
-- Q-3 (planner, R-049): with std only, the check and the use inside one call are not atomic, so
-  a concurrent process can still race them. This matches D-026's threat model (honest mistakes,
-  untrusted repo contents, no active attacker). Accept it as a documented residual risk, or
-  rule that race-free confinement is required: that needs a new dependency (gate path:
-  `dependencies`, tier high, an approval row that says so).
-- Q-4 (planner, R-049): no scorecard item covers path confinement or non-regular files. I
-  checked all 63 items: `io.save-atomic` claims only the in-root symlink save, and `ws.vfs`
-  claims only the VFS model. I did not create one. Should there be one (for example
-  `ws.path-confinement`, crate `kiln-workspace`, tier high) for the evaluator to confirm?
-- Q-5 (planner, R-049): T-004 r1 (SG-1) recommended confinement before the iteration-0
-  evaluator runs on the slice. Is this task iteration 0 (evaluator waits for it) or 1?
+None open.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -253,6 +254,12 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   only to classify the two new messages (T-007 replaces message matching). Tier high:
   save path, security, L2 + L4. No gate path, no dependency. · gate attempts: 0 · not run:
   gate (no code) · missing context: none · next: director answers Q-1…Q-5.
+- 2026-11-13T03:05Z · R-051 · draft · did: applied the director's answers as Decisions D-1…D-5;
+  wrote `scorecard/items/ws.path-confinement.toml` (tier high, crate kiln-workspace,
+  `tests = []`) and claimed it; the race is now a stated limitation. I did not regenerate
+  `docs/scorecard.md` (not in this run's paths): a new item makes it stale, so the item should
+  reach `main` on a task branch where `docs/scorecard.md` is regenerated (D-012), not as a
+  ledger commit. · gate attempts: 0 · missing context: none · next: director review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
