@@ -568,6 +568,78 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   missing context: none · next: director (state).
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T22:14Z · R-167 · ready · rulings acknowledged before acting: D-044 (`NoTree` →
+  `internal`/`other`) accept; D-056 (size limit before dispatch, T-016 nits here) accept;
+  D-097 Q-1 (refusal keeps the cache) accept; Q-2 (`mode` is the one cache-dependent field)
+  accept; Q-3 (limit bounds memory not time, figures only from my release measurements)
+  accept, but Pinned (i) 7 as written cannot be followed, see QUESTION; Q-4 (stack pairing of
+  the parent's direct bracket leaves) accept; Q-5 (AC-10, iterative walks) accept; Q-6 (append
+  `TooLarge` last, loosen the one assertion to presence) accept; generated `docs/commands.json`
+  not an overlap: accept. ACs restated: AC-1 corpus `has_error`/`errors` per set; AC-2 tree
+  after random edits equals a fresh session, `mode` per the cache rule; AC-3 spans partition
+  any range; AC-4 string∪number spans are proc-macro2's literal tokens, keywords in the list,
+  comments start `//`/`/*`; AC-5 syn fn names are `function` spans; AC-6/AC-7 brackets equal
+  proc-macro2 groups, worked and stack examples, `len_chars` → null, +1 → `out_of_range`;
+  AC-8 char-based limit, `too_large` before `out_of_range`, cache kept, `too_large` published;
+  AC-9 read-only incl. typing group; AC-10 deep nesting answered. · did: `kiln-syntax`:
+  `highlight.rs` (`HighlightKind`, `HighlightSpan`, `KEYWORDS`, `highlight(tree, range)`:
+  one cursor walk pruned to the range, per-byte kind = first rule, merged into char spans),
+  `brackets.rs` (`BracketPair`, `match_bracket(tree, offset)`: cursor descent with
+  `goto_first_child_for_byte`, then a stack over the parent's direct non-`MISSING` anonymous
+  leaves); `tree.rs` only the N2 unit case `common_affixes("é", "©") == (0, 0)`; `lib.rs`
+  Status paragraph only; `tests/highlight.rs` (corpus partition with 60 fixed-seed sub-ranges
+  per file agreeing with the full spans, keyword/comment/number checks, proc-macro2 groups and
+  literals on the `valid` set, 500,000-level nesting, CRLF/multibyte). `kiln-commands`:
+  `syntax.rs` (the three commands, `SyntaxState` = `BTreeMap<u64, SyntaxTree>`, checks in the
+  order of Pinned (a) before any parse, the cache written only on success and closed
+  documents dropped then, `start?`/`end?` per D-084 x1 with the `"default": null` removed as in
+  `cursor.rs`, 7 examples, 4 unit tests incl. the `TooLarge` row); `reason.rs`: row
+  `TooLarge = "too_large" => "the document is longer than the command accepts"` appended
+  after `OutsideRoot`. Golden rule 4 record (D-097 Q-6, as D-061): in
+  `outside_root_is_appended_and_not_a_file_is_widened` the first assertion
+  `assert_eq!(RejectReason::ALL.last(), Some(&RejectReason::OutsideRoot))` became
+  `assert!(RejectReason::ALL.contains(&RejectReason::OutsideRoot))`; its other assertions are
+  unchanged; its doc comment now says why. `docs/commands.json` regenerated;
+  `docs/protocol/syntax.md` new: Pinned (i) 1–5 copied verbatim, 6 fixed part verbatim plus
+  the measured sentence with my figures, 7 left out (QUESTION). Every sentence checked on the
+  built binary: AC-8 script through debug `kiln-cli run --root` (open 1,048,576 → tree `ok`
+  `full`, match-bracket 0 → null; insert → the four calls `rejected`/`too_large`; undo →
+  tree `unchanged`; `commands --schema` lists `too_large`); read-only script (`doc.info`,
+  `cursor.get` equal before/after three good and three refused calls; insert "a", three
+  commands, insert "b", one `doc.undo` restores the original text); bracket script on
+  `fn g() { let _ = ("(", '['); } // )` + `/* { */ fn h() { (`: brackets in the string, char,
+  comments and the unpartnered `{`/`(` give null, `len_chars` null, +1 `out_of_range`;
+  highlight partition through release `kiln-cli` on all 45 corpus files × 21 ranges: 945
+  calls, 0 violations. · gate attempts: 2 (1: red clippy `collapsible_if` in `brackets.rs`;
+  2: green: `GATE PASSED in 291.1s (11 steps; 2 step(s) EMPTY (nothing registered): fuzz,
+  budgets)`, test step `712 passed, 0 failed, 0 ignored in 87 suites`). · measurements (one
+  `cargo build --release -p kiln-cli` in the worktree at `8963a00`, inputs made under
+  `target/` and deleted afterwards, as is `target/release`; load average 3.9–4.9 on 4 cores
+  from other builders during the runs, so times are elapsed under contention):
+  time, `/usr/bin/time -f '%e s %M KB' target/release/kiln-cli run <script> --root <dir>` with
+  script `doc.open` + `syntax.tree`, file `#!` repeated: 16,384 chars `1.10 s 14336 KB`,
+  32,768 `4.49 s 18508 KB`, 65,536 `17.00 s 26820 KB` (each `syntax.tree` `ok`,
+  `has_error: true`, `mode: full`). Memory, the spec's script (`doc.open`, `syntax.tree`,
+  `doc.insert {doc:1, offset:0, text:" "}`, `syntax.tree`, `syntax.highlight {doc:1}`) on
+  1,048,576 chars: `;` repeated `2.71 s 525104 KB`, `a;` repeated `1.76 s 426856 KB`; in both
+  the insert makes `len_chars` 1,048,577, so ids 4 and 5 are `rejected`/`too_large` and the
+  peak is the first `syntax.tree` (exit 3). Supplementary, not in any document: the same with
+  `doc.replace {doc:1, start:0, end:1, text:" "}` instead of the insert (length stays at the
+  limit; tree 4 `incremental`, highlight 1 span): `;` `4.67 s 675488 KB`, `a;`
+  `3.93 s 705656 KB`. · not run: the acceptance tests (independent, not seen); AC-2's random
+  edit sequence through the CLI (covered only by `SyntaxTree::update`'s contract, the
+  examples and my unit tests); the reviewer's 50 MB `(` probe; no mutation check of my own
+  tests; T-007's audit (not merged). · missing context: none. · next: director rules the
+  QUESTION; test author; join.
+  QUESTION: Pinned (i) 7 cannot be written as pinned. Its script inserts one char into a
+  document of exactly 1,048,576 chars, so the document has 1,048,577 and the two calls "after
+  one edit" are refused with `too_large` (output above); the sentence "the largest peak at the
+  limit was about <N> MB (… after one edit)" would be untrue of the binary. I left the
+  sentence out of `syntax.md` rather than reword it. Options: (a) a length-keeping edit
+  (`doc.replace` of one char; measured above: about 706 MB for `a;`, 675 MB for `;`); (b) a
+  1,048,575-char document plus the insert; (c) drop "after one edit" and report the
+  first-parse peak (525 MB for `;`). Each is a director's choice; I will measure and copy
+  whichever is ruled.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
