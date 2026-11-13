@@ -308,6 +308,38 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (5) each lower-layer variant maps to its pinned reason, no catch-all arm; (6) a panic is
   internal/panic with `` command `<name>` panicked ``; (7) the two doc sentences replaced
   exactly.
+- 2026-11-13T11:23Z · R-094 · ready · did: `reason.rs` (`RejectReason` 21 variants,
+  `InternalReason` 3, `ALL`/`as_str`/`description`, four exhaustive `From` without catch-all);
+  `CommandError::{Rejected,Internal}` carry `reason`, `rejected(reason, message)`, `to_json`
+  gains `"reason"` for those two only (serde field); every site in doc.rs/buffer.rs/registry.rs
+  sets its reason, messages unchanged; `describe()` gains `error_kinds` in `ALL` order;
+  `docs/commands.json` regenerated (`cargo xtask schema --write`). kiln-control: kind =
+  `reason.as_str()`, panic by `InternalReason::Panic` with `` command `<name>` panicked ``;
+  `rejected_kind`, `is_decode_reason`, `doc_paths`/`track_paths` removed; crate docs rewritten;
+  `command_error_json` ignores `params` now (signature kept). `docs/control-protocol.md`: the
+  two sentences replaced with the spec text, each kept on one line (no hard wrap inside a
+  pinned sentence); table untouched. Golden rule 4 disclosures: the `rejected_kind` unit test
+  `rejected_kind_is_anchored_on_the_known_path` is removed with the function and replaced by
+  `kind_follows_the_reason_not_the_message` (every reason × six messages, plus internal) and
+  `table_kinds_are_reasons_and_in_the_description`; `command_error_json_has_kind_and_caps`
+  builds its error with `RejectReason::NotFound`. `every_error_has_a_stable_kind` and
+  `every_kind_is_documented` unchanged. Known nit fixed: the T-015 default-runner unit test
+  names its scratch dir by pid only (no clock) and removes it via a drop guard on failure.
+  Own tests: `crates/kiln-commands/tests/reasons.rs` (5), unit tests in `reason.rs` (3) and
+  kiln-control (2). Checked from outside: `kiln-cli exec doc.open '{"path":"x"}' --memory` →
+  `{"code":"rejected","kind":"not_found","message":"cannot open x: not found"}` exit 2;
+  `commands --schema` lists the 21 + 3 kinds. Commits: `eb90d60bc27288737ea8daf2e3c6fb21e20e8b3e`,
+  `e90139fbeea2239d96612b8b03e5ce2066a611a2`, `f3cb40d4a6ae920c88366c592d4c4e2d960757fd`,
+  `b0e20a3e24363e86512727d293eb43ec981fbeb3`, `6b47f5ae2343750efda79aa1b32ecef8176e049b`. ·
+  gate attempts: 2 (1: red clippy, `unwrap_used`/`panic` in reasons.rs without
+  `#![cfg(test)]`; 2: green, 10 steps, fuzz and budgets EMPTY) · not run: a byte differential
+  of kiln-cli against a base build (no second target dir, disk); I believe bytes are unchanged
+  for paths without `": "` because every base message→kind rule matches the new reason at its
+  source, and the existing T-004/T-015 CLI guards pass, but the AC-4 guard is the test
+  author's. Behaviour change by design: a path that itself contains `": not found"` etc. is
+  now classified by reason, not by text (AC-4 excludes such paths). Seen, not mine: four
+  `kiln-t015-default-runner-<pid>-<nanos>` dirs in the temp dir from 08:02–08:03 UTC (before
+  this run), left in place. · missing context: none · next: join with the T-032 tests.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
