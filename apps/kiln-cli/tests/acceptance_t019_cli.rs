@@ -1533,6 +1533,38 @@ fn deep_trees_stop_at_the_depth_bound() {
     ));
     assert_eq!(l, expected);
 
+    // D-100 y4, on disk and in memory. (ii) The depth rule comes before the limit rule
+    // (Pinned (c)): with `limit: 127` the directory at the bound is the entry that makes
+    // `truncated` true, and it is counted in `too_deep`; with `limit: 128` all 128 are listed
+    // and nothing lies beyond. (i) A `path` with 127 segments lists its 128-segment child and
+    // does not descend it; a `path` with 128 segments descends no directory.
+    for source in [["--root", "c130"], ["--memory-seed", "c130.json"]] {
+        let run = |params: Value| listing(&tree_ok(&w.dir, &params, &source, TIMEOUT));
+        assert_eq!(
+            run(json!({"limit": 127})),
+            Listing {
+                entries: expected.entries[..127].to_vec(),
+                truncated: true,
+                ..expected.clone()
+            },
+            "{source:?}"
+        );
+        assert_eq!(run(json!({"limit": 128})), expected, "{source:?}");
+        let l = run(json!({ "path": chain(127) }));
+        assert_eq!(
+            (l.entries, l.too_deep, l.truncated),
+            (vec![(chain(128), "dir".to_owned())], 1, false),
+            "{source:?}"
+        );
+        let l = run(json!({ "path": chain(128) }));
+        assert_eq!(
+            l.entries,
+            vec![(chain(129), "dir".to_owned())],
+            "{source:?}: a path at the bound descends no directory"
+        );
+        assert!(!l.truncated, "{source:?}");
+    }
+
     // 2,100 nested directories: longer than PATH_MAX on the host, built by `mkdir -p`.
     fs::create_dir(w.at("c2100")).unwrap();
     let mut mkdir = Command::new("mkdir");
@@ -1540,7 +1572,8 @@ fn deep_trees_stop_at_the_depth_bound() {
     let out = spawn_with_timeout(mkdir, None, TIMEOUT);
     assert!(out.status.success(), "mkdir -p of the 2,100-deep chain");
     let mut find = Command::new("find");
-    find.args(["d", "-mindepth", "2100", "-type", "d"])
+    // `find`'s start point `d` is depth 0: exactly one directory at depth 2,099 or more.
+    find.args(["d", "-mindepth", "2099", "-type", "d"])
         .current_dir(w.at("c2100"));
     let out = spawn_with_timeout(find, None, TIMEOUT);
     assert_eq!(
