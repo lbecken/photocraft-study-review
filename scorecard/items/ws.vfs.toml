@@ -2,4 +2,4 @@ id = "ws.vfs"
 title = "Virtual file system with an in-memory implementation for deterministic tests and a disk implementation"
 crate = "kiln-workspace"
 tier = "medium"
-tests = ["kiln_workspace::acceptance_t002::memory_and_disk_vfs_agree_on_random_operation_sequences", "kiln_workspace::acceptance_t002::relpath_accepts_and_rejects_exact_cases", "kiln_workspace::acceptance_t002::vfs_errors_name_relative_paths_only"]
+tests = ["kiln_workspace::acceptance_t002::memory_and_disk_vfs_agree_on_random_operation_sequences", "kiln_workspace::acceptance_t002::relpath_accepts_and_rejects_exact_cases", "kiln_workspace::acceptance_t002::vfs_errors_name_relative_paths_only", "kiln_cli::acceptance_t011::ac1_memory_seed_and_root_runs_print_identical_stdout", "kiln_cli::acceptance_t011::ac2_reopened_memory_files_equal_disk_files_after_the_run"]
