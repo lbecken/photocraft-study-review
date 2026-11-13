@@ -580,6 +580,20 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `assert_eq!` against the new pinned text (an exact text change, like `invalid_path`;
   disclosed under golden rule 4). Alternative: allow editing the one table cell to the new
   text.
+- 2026-11-13T13:53Z · R-124 · ready · did: applied ruling v3 (D-069) in commit
+  `7e90c4c46e5a3ae4ff4da917f47268ff3835b61a`. Golden rule 4 disclosure,
+  `crates/kiln-commands/tests/reasons.rs::table_rows_are_published_kinds_with_their_when_text`:
+  it asserted that each `rejected`/`internal` "When" cell of `docs/control-protocol.md` equals
+  its `error_kinds` description (`invalid_path` excepted). That contradicts the document it
+  reads, which says `error_kinds` governs where a cell differs and later tasks do not edit
+  table cells. It now asserts that every such row is a published kind of `error_kinds` with a
+  non-empty description, and that the table has 13 rows. I removed the comparison and the
+  `invalid_path` special case and updated the doc comment; nothing else changed. The exact
+  descriptions stay pinned by the T-032 acceptance tests (the `not_a_file` rows were edited
+  under D-061, R-122). · gate attempts: 1 in this run, 3 for the task (last: green, 11 steps:
+  fmt, clippy, layers, ui-commands, hygiene, schema, scorecard, test (551 passed), no-skip all
+  PASS; fuzz and budgets EMPTY) · not run: macOS; the test author's acceptance tests (not
+  visible) · missing context: none · next: join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
