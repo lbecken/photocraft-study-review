@@ -2,7 +2,7 @@
 id: T-004
 title: "Drive a headless session with JSON-lines requests: `kiln-cli run <script>` and `kiln-cli control`, deterministically"
 tier: high              # two layers (L4 + app); Cargo.toml/Cargo.lock; public CLI/protocol contract
-state: tests_joined
+state: in_progress
 owner_role: director
 scorecard_items: [control.protocol, control.errors, control.session, cli.run]
 depends_on: [T-003]
@@ -178,6 +178,12 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   6. A value echoed back in an error message is truncated to at most 200 characters.
   7. The bad-root error names the path.
   8. Tests that spawn `kiln-cli` have a timeout.
+- Director rulings after review r2 (2026-11-13, decision D-031) — part of the spec; last round of rulings for T-004:
+  9. Ruling 6 is replaced by size caps that do not depend on where a value came from: in an error response every string — `message` and every string anywhere inside `details` — is at most 200 characters (truncated with a trailing `…`), and the whole error line is at most 4096 bytes; if it would be longer, `details` is replaced by `{"truncated":true}`. The same caps apply to error text on stderr. No comparison against earlier requests or the session log.
+  10. The set of error kinds listed in `docs/control-protocol.md` is the specified set. Errors printed by `exec` carry a `kind` too.
+  11. `docs/control-protocol.md` states that offsets are character offsets, and that `--help` exits 0 when its output can be written.
+  12. A usage error names what was wrong (the unknown flag or the missing argument).
+  13. A command that hangs on a non-regular file (for example a FIFO) is out of scope here and goes to T-008 with symlink confinement. The panic-to-`internal` path stays untested through the public interface (accepted; a command fuzzer is planned).
 
 ## Questions
 None open.
