@@ -323,6 +323,58 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   the test author's branch, then review.
 <!-- end implementer log -->
 ### test author
+- 2026-11-13T06:48Z · R-073 · in_progress · did: tests from the spec (AC-1 per D-043) on
+  base d995caa. Criterion → tests → result on base:
+  - AC-1 → `apps/kiln-cli/tests/guard_t015_cli.rs` `cli_output_is_byte_identical_to_base`
+    (worked example via `run` + `--log` and via `control`, files after; 9 `exec` cases incl.
+    Pinned (g); a 320-request fixed-seed session via `run` (exit 3, stdout, `--log`, files) and
+    via `control`, plus a replay of its log), `session_script_meets_the_d043_constraints` →
+    **guard, passes on base**. Constants recorded on base; no `commands`/`--schema` output (D-043);
+    no path names a directory; ids ≤ 64 chars.
+  - AC-2 → `crates/kiln-commands/tests/acceptance_t015.rs` `contexts_start_without_tools` (new,
+    default, with_text, with_files, with_vfs memory/disk; still `NoTools` after every existing
+    command), `set_tools_replaces_the_runner` (Debug of R; replace again; back to NoTools;
+    buffer/docs/files/log/next id untouched) → **compile**. `crates/kiln-workspace/tests/
+    acceptance_t015_tools.rs` `no_tools_never_runs` (both tools, 8 requests, direct/dyn/Box;
+    re-runs itself with fake `cargo`/`rustfmt` first on PATH, shown to leave a marker first,
+    and checks no marker after) → **compile**.
+  - AC-3 → `tool_error_texts_are_exact` (all five texts, both tools, 0/u64::MAX seconds; `Error`
+    with no source; exhaustive matches; derives) → **compile**.
+  - AC-4 → `workspace_reexports_resolve` (all 16 root names + `tools::*` same types; glob items
+    still behave) → **compile**.
+  - AC-5 → `crates/kiln-commands/tests/acceptance_t015_layers.rs`
+    `the_five_new_dependency_edges_exist` (`cargo metadata --no-deps --offline`, presence only)
+    → **assertion**. `guard_t015.rs` `base_commands_are_still_registered`,
+    `document_ids_and_refusals_are_unchanged` (Docs delegation: ids, no reuse, exact
+    `no open document {id}` for every doc command, dirty-close text) → **guard, pass on base**.
+  Self-check: plausible scaffold in a scratch copy (tools.rs, globs, modules, edges, Context
+  tools/set_tools; it kept today's BTreeMap fields, so `Docs`/`Parts` were not built and their
+  bugs were seeded into the delegating helpers), lint-clean under `clippy --all-targets -D
+  warnings`. 18 seeded bugs, 17 killed: B1 Unavailable text, B2 as_str swapped, B3 `120s`,
+  B12 Failed drops message, B13 NoRecording text → tool_error_texts_are_exact; B4 NotFound for
+  rustfmt, B6 NoTools spawns then refuses → no_tools_never_runs; B5 constructors install a
+  spawning runner, B15 a wrapper runner → contexts_start_without_tools + set_tools_…; B7
+  set_tools ignored, B8 set_tools resets the session → set_tools_…; B9 ids = len+1, B17 save
+  refusal names id+1, B18 close gives back the newest id (first survived the Rust guard, killed
+  by the CLI guard; the guard then got a case) → guard_t015 + guard_t015_cli; B11 no
+  kiln-workspace→kiln-search, B16 no kiln-commands→kiln-syntax → layers test; B14 named instead
+  of glob re-export → acceptance_t015_tools (compile). Survivor B10 (remove_doc refusal
+  reworded) is unreachable: `doc.close` calls `doc()` before `remove_doc`, so no caller can see
+  it (equivalent mutant). Not exercisable by any test: `Parts`/`Docs` (crate-private), module
+  list/order in `lib.rs`, the `#[allow(dead_code)]` comments, that the four new
+  `kiln-workspace` modules are item-less (an item-less module cannot be named from a test
+  without an unused-import lint), that no other `ToolRunner` impl exists, `Host` never calling
+  `set_tools` (no accessor): reviewer reading, as the spec says. A newly registered command is
+  deliberately not caught by my tests (D-043); the `schema` step catches it at the join.
+  · gate attempts: 1 (last: red clippy, compile errors only in acceptance_t015.rs /
+  acceptance_t015_tools.rs, as expected on base; `layers`, `schema` and both guards pass when run
+  alone) · not run: gate steps after clippy (gate stops at the first failure) · missing context:
+  none · next: join.
+  QUESTION: AC-5 says `Registry::names()` is unchanged (exact value). A committed exact-list test
+  would break every later task that adds a command, as D-043 found for AC-1, so I committed only
+  "every base command is still registered" (guard). Proposed wording: "`Registry::names()` at
+  the join equals base, checked by the `schema` gate step (`docs/commands.json` byte-identical);
+  the committed guard requires only that every base command stays registered."
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
