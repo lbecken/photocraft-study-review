@@ -380,3 +380,4 @@
 {"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T17:52:08Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T17:52:08Z","from":"reviewed","to":"queued"}
 {"kind":"transition","task":"T-018","iteration":1,"at":"2026-11-13T17:57:00Z","from":"queued","to":"merged"}
+{"kind":"run","task":"iter-1","iteration":1,"run":"R-152","role":"evaluator","tier":null,"started_at":"2026-11-13T17:57:48Z","ended_at":"2026-11-13T18:14:22Z","wall_s":994,"tokens":237085,"tool_calls":66,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"evaluation of iteration 1 at main b3d9dd2 through kiln-cli exec, run and control only: 28 items confirmed (6 newly, 22 regression), 0 rejected, 0 not evaluated; 4 findings (filed as T-037, T-038, T-039), 4 questions answered in D-090"}
