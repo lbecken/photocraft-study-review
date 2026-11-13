@@ -264,6 +264,21 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `cli-memory-seed.md`, not probed) · missing context: none · next: director compares the
   diff with Interface (a), (b), (c) and queues; tasks/ is outside `touches`, only this log
   entry changed there.
+- 2026-11-13T21:37Z · R-161 · in_progress · ruling z2: ACCEPTED. My R-159 check missed that
+  `--log` writes to disk under `--memory-seed`; the copied clause "nothing is written to disk"
+  was wider than the binary. · did: replaced that clause in the `--memory-seed` bullet of
+  `docs/control-protocol.md` with "read once at start; saves change the in-memory files only."
+  and nothing else (two lines re-wrapped). Probed on the debug `kiln-cli` of this branch,
+  manifest `a.txt`=`0123456789`, cwd with no `a.txt`: `run s.jsonl --memory-seed m.json` with
+  open, insert `x`@0, `doc.save` (`bytes_written` 11), `doc.text` → exit 0 and no `a.txt` on disk;
+  `doc.close` then `doc.open` in the same session reads `x0123456789` (the save changed the
+  in-memory file); the same run with `--log out.log` creates `out.log` holding the 4 requests.
+  Not changed (outside this ruling and `touches`): `kiln-cli --help` and
+  `docs/protocol/cli-memory-seed.md` also say "nothing is written to disk". · gate attempts: 0
+  (by instruction: `cargo fmt --all --check` ok, `cargo xtask hygiene` PASS,
+  `cargo test -p kiln-cli --test acceptance_t039_cli --test guard_t039_cli` 4 passed) · not run:
+  `cargo xtask ci` (the queue runs it) · missing context: none · next: director re-checks the
+  bullet and queues.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

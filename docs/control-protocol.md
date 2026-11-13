@@ -172,8 +172,8 @@ kiln-cli --help | -h | <subcommand> --help
   names the path.
 - `--memory` (for tests) uses an empty in-memory file system instead.
 - `--memory-seed <manifest>` (`run` and `exec`) uses an in-memory file system holding exactly
-  the files of a JSON manifest, read once at start; nothing is written to disk. The manifest,
-  its refusals and the order of checks are in `docs/protocol/cli-memory-seed.md`.
+  the files of a JSON manifest, read once at start; saves change the in-memory files only. The
+  manifest, its refusals and the order of checks are in `docs/protocol/cli-memory-seed.md`.
 - `--root`, `--memory` and `--memory-seed` exclude each other: giving two of them is a usage
   error. `control` takes neither `--memory` nor `--memory-seed`.
 - `<script>` and `--log <file>` are paths on the host, resolved against the current
