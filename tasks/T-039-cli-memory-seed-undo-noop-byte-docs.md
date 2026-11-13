@@ -238,6 +238,32 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: Q-1 (DOC strings or a new page) — see "Questions and rulings".
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T21:35Z · R-159 · in_progress (primary checkout; worktree copy said ready, same
+  rulings) · ruling z1: ACCEPTED, and Q-1's ruling (D-092) accepted: AC-2, AC-6 and AC-4's
+  first half are no tests; AC-4's second half is the gate's `schema` step; guards assert exit
+  codes, empty stdout and exact `run` responses, never message or stderr text (so AC-3 drops
+  its "first stderr line"). Restated: AC-1 the `--` option sets of `run`, `exec`, `control`,
+  `commands` in the synopsis equal those of `kiln-cli --help`; AC-3 the three option pairs,
+  `control --memory`/`--memory-seed` and a bad manifest with `run` and `exec` exit 2 with empty
+  stdout; AC-5 the five undo/redo sessions of Pinned (g) (plus the same session without the
+  redo); AC-7 BOM and UTF-16 LE byte offsets. · did: wrote
+  `acceptance_t039_cli.rs::protocol_synopsis_matches_help` (fails on base: `run` lacks
+  `--memory-seed`) and `guard_t039_cli.rs::{memory_seed_conflicts_and_bad_manifest,
+  noop_undo_and_redo_change_nothing, byte_offsets_ignore_bom_and_encoding}` (pass on base and
+  after; with `pop_redo` temporarily made to end the group even on an empty stack,
+  `noop_undo_and_redo_change_nothing` fails, then restored); copied Interface (a), (b), (c)
+  into `docs/control-protocol.md`, `doc.rs` and `docs/protocol/doc-positions.md`;
+  `cargo xtask schema --write` (only the two `doc` texts of `docs/commands.json` differ).
+  Checked by script (whitespace-squashed) that the five sentences of (a), both DOC strings as
+  printed by `kiln-cli commands` and the paragraph of (c) equal the spec's. Ran every Pinned (g)
+  case through the debug `kiln-cli` on base `5615387be82037cb0d2b7ffe271401bec0c480af`: all
+  responses and exits as the spec states; no Interface sentence found untrue of the binary. ·
+  gate attempts: 2 (1 red `fmt` on my test files, fixed with `cargo fmt --all`; last green,
+  11 steps, 694 tests passed) · not run: release build; a no-op redo after a non-typing edit
+  (not a Pinned case); that `--memory-seed` reads the manifest "once" (taken from
+  `cli-memory-seed.md`, not probed) · missing context: none · next: director compares the
+  diff with Interface (a), (b), (c) and queues; tasks/ is outside `touches`, only this log
+  entry changed there.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
