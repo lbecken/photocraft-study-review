@@ -183,6 +183,42 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 - 2026-11-13 · R-060 · draft · did: checked against the contracts-first restructuring: T-011 adds no error kind and T-015 renders the kind list from a `kiln-control` binary, not from `kiln-cli`, so `depends_on` stays T-004 and T-011 can run before T-015. Still never in flight with T-007 or T-024 (both edit `apps/kiln-cli/src/main.rs`). · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13T13:10Z · R-114 · ready · did: restated ACs: (1) a fixed-seed generated script
+  gives byte-identical stdout and exit code with `--memory-seed m.json` and with `--root d`
+  on an equal tree; (2) the reopened text+encoding of every memory file, naively encoded,
+  equals the disk file after the disk run; (3) `exec … --memory-seed` = `exec … --root`;
+  (4) every bad manifest → exit 2, empty stdout, prefix `kiln-cli: bad --memory-seed
+  <manifest>: `, no request run; conflicts/twice → usage error; (5) `--memory` unchanged.
+  Step 0 (spec vs merged code, T-015/T-032/T-016/T-013): no mismatch that blocks;
+  `RelPath::new`, `Host::in_memory(&[(&str,&[u8])])`, `Context::with_files`, `doc.info`
+  `encoding`/`line_ending`, kind `decode_error` exist as named; T-032 reasons touch no CLI
+  usage error; gate has 11 steps incl. `hygiene`; `docs/protocol/` did not exist (created).
+  Drift only: exec's usage line now wraps to two lines in `--help`.
+  Tests first on `task/T-011-tests`: commit `76c7c83d720b60311d4ca2ad94c817f209ea29dd`
+  at 2026-11-13T12:57:42Z (amend, same minute, of `73e8fa88cfd5b15c46644ea33314080b5b898053`
+  at 12:57:34Z to drop trailers that AGENTS.md rule 8 forbids; no code existed yet). 9
+  acceptance tests in `apps/kiln-cli/tests/acceptance_t011.rs` all failed on base by
+  assertion (unknown option `--memory-seed`; AC-1/AC-2 after their generator self-checks
+  passed on the disk runs); 3 guards in `guard_t011.rs` passed on base; `ws.vfs` tests list
+  += AC-1, AC-2. No test changed after that commit. Then on `task/T-011`:
+  `ff5cc7f29acd36da616d50102874822af87af2f5` (option, manifest parser, usage),
+  `ca2be9fbde0eca13b67945b2bed37310d34ca01b` (unit tests incl. extended `parse_opts`
+  test — disclosed per Pinned (f), only additions; `tests/memory_seed.rs`),
+  `24254895558b1498d56f40944f37ded70a91977f` (`docs/protocol/cli-memory-seed.md`).
+  Self-check: throwaway merge of the tests branch → 9/9 acceptance + 3/3 guards pass
+  (branch deleted); 3 hand mutants (prefix check off, duplicate check off, long hex
+  refused) each killed by acceptance tests. · gate attempts: 1 (last: green, 11 steps:
+  fmt, clippy, layers, ui-commands, hygiene, schema, scorecard, test 531 passed, no-skip,
+  fuzz EMPTY, budgets EMPTY) · not run: gate on the joined branch (the join does it);
+  Windows paths · missing context: none · next: director join.
+  QUESTION: Pinned (a) puts "root/manifest check" before "requests"; for `exec` I kept the
+  existing order (`<json-params>` that are not JSON are reported before the root, and now
+  the manifest, is checked), so `exec x '{' --memory-seed bad.json` reports `invalid_json`.
+  Untested by the acceptance tests; documented. Should the manifest come first for `exec`?
+  QUESTION: I read `<manifest>` in `kiln-cli: bad --memory-seed <manifest>: ` as the argument
+  as given (like `<reason>`, a placeholder); the acceptance tests pin that reading.
+  QUESTION: "the same for `--memory`" implemented as ``options `--memory` and `--memory-seed`
+  cannot be combined``; tests assert only both option names and "cannot be combined".
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
