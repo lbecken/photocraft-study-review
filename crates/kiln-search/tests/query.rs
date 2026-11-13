@@ -1,4 +1,5 @@
 //! Integration tests of `kiln_search::query` (T-021, implementer's own tests).
+#![cfg(test)]
 
 use kiln_search::{CharMatch, Query, QueryError};
 
