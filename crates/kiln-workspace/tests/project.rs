@@ -467,3 +467,37 @@ fn walk_writes_nothing() {
     );
     fs::remove_dir_all(&work).unwrap();
 }
+
+/// Ruling y3: a `.gitignore` whose patterns cannot be compiled together (here: too many for
+/// the matcher's regex size limit) contributes no patterns, and the listing goes on; another
+/// `.gitignore` still applies.
+#[test]
+fn a_gitignore_that_cannot_be_compiled_contributes_no_patterns() {
+    let patterns = |n: usize| {
+        let mut text: String = (0..n).map(|i| format!("*a{i}*b*[c-x]?d*e\n")).collect();
+        text.push_str("*.log\n");
+        text
+    };
+    let fs_with = |n: usize| {
+        let mut mem = MemoryFs::new();
+        mem.insert(&p(".gitignore"), patterns(n).as_bytes());
+        mem.insert(&p("x.log"), b"");
+        mem.insert(&p("sub/.gitignore"), b"*.tmp\n");
+        mem.insert(&p("sub/y.tmp"), b"");
+        mem.insert(&p("sub/z"), b"");
+        mem
+    };
+    // A file of the same form that compiles: its `*.log` applies.
+    let small = tree(&fs_with(100), None, 100).unwrap();
+    assert_eq!(
+        paths(&small),
+        [".gitignore", "sub", "sub/.gitignore", "sub/z"]
+    );
+    // 20,000 such patterns exceed the size limit: none applies, nothing fails.
+    let big = tree(&fs_with(20_000), None, 100).unwrap();
+    assert_eq!(
+        paths(&big),
+        [".gitignore", "sub", "sub/.gitignore", "sub/z", "x.log"]
+    );
+    assert_eq!((big.ignored, big.truncated), (1, false));
+}

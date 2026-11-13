@@ -15,7 +15,8 @@
 //!    descended (so nothing below an ignored directory can be re-included). A `.gitignore` is
 //!    read through `Vfs::read` even when a pattern ignores it (ruling Q-8); one of another kind
 //!    is never read. A leading UTF-8 byte-order mark is dropped; lines that are not UTF-8 and
-//!    lines the matcher refuses are skipped. No other source is consulted.
+//!    lines the matcher refuses are skipped; a file whose patterns cannot be compiled together
+//!    contributes no patterns (ruling y3). No other source is consulted.
 //! 4. Symlinks and other special entries are listed with their kind and never descended.
 //! 5. A directory whose path has [`MAX_DEPTH`] segments (or more, when `under` is that deep) is
 //!    listed, not descended, and counted in `too_deep`.
@@ -131,7 +132,10 @@ impl Walk<'_> {
         }
         let path = child(dir.as_ref(), GITIGNORE)?;
         let bytes = self.vfs.read(&path)?;
-        let matcher = parse_gitignore(&path, &bytes)?;
+        // Patterns that cannot be compiled together contribute nothing (ruling y3).
+        let Some(matcher) = parse_gitignore(&bytes) else {
+            return Ok(false);
+        };
         self.layers.push(Layer { dir, matcher });
         Ok(true)
     }
@@ -218,10 +222,10 @@ impl Walk<'_> {
     }
 }
 
-/// The patterns of the `.gitignore` at `path`, matched relative to its directory: a leading
-/// UTF-8 byte-order mark is dropped, lines that are not UTF-8 and lines the matcher refuses are
-/// skipped. Nothing but `bytes` is read.
-fn parse_gitignore(path: &RelPath, bytes: &[u8]) -> Result<Gitignore, VfsError> {
+/// The patterns of a `.gitignore` whose content is `bytes`, matched relative to its directory:
+/// a leading UTF-8 byte-order mark is dropped, lines that are not UTF-8 and lines the matcher
+/// refuses are skipped. Nothing but `bytes` is read.
+fn parse_gitignore(bytes: &[u8]) -> Option<Gitignore> {
     let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
     // Paths are matched relative to the file's directory; a root of `.` strips nothing.
     let mut builder = GitignoreBuilder::new(".");
@@ -231,11 +235,9 @@ fn parse_gitignore(path: &RelPath, bytes: &[u8]) -> Result<Gitignore, VfsError> 
             let _ = builder.add_line(None, line);
         }
     }
-    builder.build().map_err(|e| VfsError::Io {
-        path: path.clone(),
-        kind: std::io::ErrorKind::InvalidData,
-        message: format!("the patterns cannot be used: {e}"),
-    })
+    // `None` when the patterns cannot be compiled together (for example too many for the
+    // regex size limit): the file then contributes no patterns (ruling y3).
+    builder.build().ok()
 }
 
 fn rel(path: &str) -> Result<RelPath, VfsError> {
