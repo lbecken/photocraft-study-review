@@ -16,6 +16,7 @@ touches:
   - crates/kiln-commands/src/reason.rs           # R-060: RejectReason::OutsideRoot + its description + the VfsError mapping row
   - crates/kiln-commands/tests/acceptance_t032.rs    # IMPLEMENTER ONLY: the one `not_a_file` description row (D-061, R-112)
   - apps/kiln-cli/tests/acceptance_t032_cli.rs       # IMPLEMENTER ONLY: the one `not_a_file` description row (D-061, R-112)
+  - crates/kiln-commands/tests/reasons.rs            # IMPLEMENTER ONLY: drop the description-equals-table-cell comparison (ruling v3, D-069)
   - docs/control-protocol.md                     # the one false "Paths" bullet only (D-037); no kind lines (R-060)
   # docs/commands.json also changes (error_kinds): a generated path, regenerated, exempt
   - docs/protocol/paths.md                       # NEW: the confinement rule in full (D-6)
@@ -413,6 +414,7 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
 Director rulings on the test author's two questions (2026-11-13, decision D-068; run R-120), given to both builders; the test author's tests already follow these readings:
 - v1 (AC-4, AC-7 texts). `Document::save` returns the `VfsError`, whose text is `<path>: …`; the words `cannot save ` are added by the `doc.save` command. Where AC-4 and AC-7 quote `cannot save a.txt: …` as the text of the Rust API error, read: the command's message is `cannot save ` followed by the API error's text. `document.rs` is not changed for this.
 - v2 (AC-8). The director's edit after re-check R-115 forbade the text `outside` in error texts, which the pinned message `resolves outside the root` itself contains. AC-8 reads: apart from the pinned phrase `resolves outside the root`, no error text contains the absolute work path, the fixture directory names `outside` or `rootx`, or a link's target.
+- v3 (implementer's blocker, R-122; decision D-069). `crates/kiln-commands/tests/reasons.rs::table_rows_are_published_kinds_with_their_when_text` requires every description to equal its table cell in `docs/control-protocol.md`, while that document says "Where a row's 'When' text differs from `error_kinds`, `error_kinds` governs; later tasks do not edit table cells." The test contradicts the document it reads. No table cell is edited. `reasons.rs` (the T-032 implementer's own test file) joins `touches`: the implementer removes the description-equals-cell comparison, including the `invalid_path` special case, and keeps the checks that every `rejected`/`internal` table row is a published kind with a non-empty description and that the table has its 13 rows. The exact description texts stay pinned by the T-032 acceptance tests. Logged under golden rule 4; the gate is green before the join.
 
 - Q-1 (planner, R-057): D-6 limits edits of `docs/control-protocol.md` to error-kind lines, but
   its "Paths" section has a bullet saying symlinks are followed out of the root, which becomes a
