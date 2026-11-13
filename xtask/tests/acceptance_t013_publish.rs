@@ -14,10 +14,8 @@ use std::process::Command;
 mod t13;
 use t13::*;
 
-const PUBLISH_TOY_MAIN: &str = r##"use std::path::Path;
-use std::process::ExitCode;
+const PUBLISH_TOY_MAIN: &str = r##"use std::process::ExitCode;
 
-#[cfg(test)]
 fn items() -> Result<Vec<(String, String)>, String> {
     let mut v = Vec::new();
     if let Ok(rd) = std::fs::read_dir("scorecard/items") {
@@ -34,7 +32,6 @@ fn items() -> Result<Vec<(String, String)>, String> {
     Ok(v)
 }
 
-#[cfg(test)]
 fn summary() -> Result<String, String> {
     let mut out = String::from("# Scorecard (publish toy)\n");
     for (n, b) in items()? {
@@ -43,7 +40,6 @@ fn summary() -> Result<String, String> {
     Ok(out)
 }
 
-#[cfg(test)]
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {

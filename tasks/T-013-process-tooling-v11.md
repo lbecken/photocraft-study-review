@@ -707,6 +707,13 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   requires main's first-parent log to be exactly ready, in progress. Fails on base (exit 2). ·
   gate attempts: 0 this run (clippy clean, publish tests run directly) · missing context: none ·
   next: join.
+- 2026-11-13T06:40Z · R-068 · in_progress · did: removed three `#[cfg(test)]` lines that my
+  lint fix (R-059, a script adding `cfg(test)` before every top-level `fn`) had wrongly put into
+  the toy source string `PUBLISH_TOY_MAIN`, and its unused `Path` import; built the toy `xtask`
+  as a binary with `-D warnings` and ran its `scorecard`, `scorecard --check` and `ci --report`
+  by hand (pass, red, malformed). My stub had no `publish`, so it never built this toy: a
+  self-check gap. · gate attempts: 0 this run (clippy clean) · missing context: none · next:
+  re-join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
