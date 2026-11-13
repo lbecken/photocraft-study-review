@@ -448,8 +448,9 @@ out. Inputs: new `scorecard/items/<id>.toml` files (absent from main) and new or
 1. checks, nothing changed (`publish: refused: <reason>`, exit 1): `main` checked out; a well
    formed `T-NNN` with no task file on main or in the working tree, no `task/T-NNN` branch and
    no `.worktrees/T-NNN`; at least one input, each of an allowed kind and different from main;
-   apart from the inputs, the queue's working-tree rules (`ledger`, no other dirty path); main's
-   xtask `scorecard`, run in a private export of main plus the inputs
+   apart from the inputs, the queue's working-tree rules (`ledger`, no other dirty path); the
+   command main's `xtask/generated.toml` lists for `docs/scorecard.md` (`{xtask}` = main's
+   xtask, built as the queue builds it), run in a private export of main plus the inputs
    (`.git/kiln-publish/`), must succeed (else its own error) and must change
    `docs/scorecard.md` (else `publish: refused: the inputs change no generated file; commit them
    on main as a ledger commit`). The primary checkout's `docs/scorecard.md` is not written;
@@ -458,12 +459,17 @@ out. Inputs: new `scorecard/items/<id>.toml` files (absent from main) and new or
    specified → ready and commits the file and `metrics/tasks.jsonl` on main (`publish: T-NNN
    ready`, `Task:`/`Role: director`, the repository's commit configuration, signing included).
    A failed commit: exit 2 and a line with the command to commit by hand;
-3. creates the worktree as `worktree new` does; ready → in_progress;
-4. copies the inputs into it, regenerates `docs/scorecard.md` with main's xtask `scorecard`,
+3. creates the worktree as `worktree new` does; ready → in_progress, committed on main at once
+   (`publish: T-NNN in_progress`, `metrics/tasks.jsonl` only), so main's ledger is committed
+   wherever the command stops;
+4. copies the inputs into it, regenerates `docs/scorecard.md` there with that same command,
    and commits exactly those paths on `task/T-NNN` (anything else: stop, exit 1);
 5. runs the gate there; red: exit 1 and `publish: gate failed in .worktrees/T-NNN at <step>; …`
    (the task stays in_progress, the inputs stay in the primary checkout);
-6. in_progress → self_verified → queued, `state: queued`, commit `publish: T-NNN queued`;
+6. in_progress → self_verified → queued, `state: queued`, commit `publish: T-NNN queued`; the
+   interim `in_progress` commit is folded into it (a soft reset, only while main still is that
+   commit), so a successful publish leaves exactly `ready`, `queued`, the content commit, the
+   queue's record commit and `merged` on main;
 7. removes each input from the primary checkout once its bytes equal the branch copy (new files
    deleted, modified files restored), printing `publish: <path> moved to task/T-NNN`;
 8. runs `cargo xtask queue T-NNN` (output and exit code passed through). Merged: queued →

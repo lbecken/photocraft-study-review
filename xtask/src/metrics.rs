@@ -1025,13 +1025,13 @@ pub fn report_text(
         };
         if cnt == 0 {
             out.push_str(&format!(
-                "  iteration {it}: no merged tasks (overhead {} tokens over {oruns} iter-{it} run(s){})\n",
+                "  iteration {it} with overhead: no merged tasks ({} overhead tokens over {oruns} iter-{it} run(s){})\n",
                 otok.known,
                 unknown.unknown_note("; ")
             ));
         } else {
             out.push_str(&format!(
-                "  iteration {it}: {:.0} (n={cnt}; tasks {} + overhead {} tokens over {oruns} iter-{it} run(s){})\n",
+                "  iteration {it} with overhead: {:.0} (n={cnt}; tasks {} + overhead {} tokens over {oruns} iter-{it} run(s){})\n",
                 (tok.known + otok.known) as f64 / cnt as f64,
                 tok.known,
                 otok.known,
@@ -1149,22 +1149,15 @@ pub fn report_text(
             k.join(", ")
         ));
     }
-    let list = |m: &BTreeMap<String, u64>| {
-        if m.is_empty() {
-            "none".to_owned()
-        } else {
-            m.iter()
-                .map(|(k, v)| format!("{k} {v}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        }
-    };
-    out.push_str(&format!("acceptance-caught defects: {caught}\n"));
     out.push_str(&format!(
-        "  over {green} join(s) with impl_tests_green; by tier: {}; by arm: {}\n",
-        list(&caught_tier),
-        list(&caught_arm)
+        "acceptance-caught defects: {caught} (over {green} join(s) with impl_tests_green)\n"
     ));
+    for (k, v) in &caught_tier {
+        out.push_str(&format!("  tier {k}: {v}\n"));
+    }
+    for (k, v) in &caught_arm {
+        out.push_str(&format!("  arm {k}: {v}\n"));
+    }
     for u in &unclassified {
         out.push_str(u);
         out.push('\n');
@@ -1677,14 +1670,17 @@ mod tests {
         assert!(r.contains("none           300 (n=1)"), "{r}");
         assert!(
             r.contains(
-                "iteration 0: 1000 (n=2; tasks 1800 + overhead 200 tokens over 1 iter-0 run(s)"
+                "iteration 0 with overhead: 1000 (n=2; tasks 1800 + overhead 200 tokens over 1 iter-0 run(s)"
             ),
             "{r}"
         );
         assert!(r.contains("first joins: 1 (base evidence: fails 1)"), "{r}");
-        assert!(r.contains("acceptance-caught defects: 3\n"), "{r}");
         assert!(
-            r.contains("by tier: medium 3; by arm: implementer 3"),
+            r.contains("\nacceptance-caught defects: 3 (over 2 join(s)"),
+            "{r}"
+        );
+        assert!(
+            r.contains("\n  tier medium: 3\n  arm implementer: 3\n"),
             "{r}"
         );
         assert!(

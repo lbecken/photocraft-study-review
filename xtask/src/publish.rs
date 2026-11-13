@@ -4,14 +4,16 @@
 //!
 //! Steps, in order; each step's failure stops the command:
 //! 1. checks (nothing changes; `publish: refused: …`, exit 1), including the would-be
-//!    `docs/scorecard.md`, computed by main's xtask `scorecard` in a private export of main's
+//!    `docs/scorecard.md`, computed by main's `xtask/generated.toml` command for it in a private export of main's
 //!    tree plus the inputs under `<git-common-dir>/kiln-publish/` (the primary checkout's
 //!    `docs/scorecard.md` is never written);
 //! 2. the task file on main (`publish: T-NNN ready`), transitions draft → specified → ready;
-//! 3. the worktree (`worktree new`), ready → in_progress;
+//! 3. the worktree (`worktree new`), ready → in_progress, committed on main at once
+//!    (`publish: T-NNN in_progress`, `metrics/` only) so every stop leaves main committed;
 //! 4. the inputs and the regenerated `docs/scorecard.md` committed on `task/T-NNN`;
 //! 5. the gate in the worktree;
-//! 6. in_progress → self_verified → queued, `state: queued` on main (`publish: T-NNN queued`);
+//! 6. in_progress → self_verified → queued, `state: queued` on main (`publish: T-NNN queued`;
+//!    the interim `in_progress` commit is folded into it, so a success leaves exactly five);
 //! 7. the inputs removed from the primary checkout (they come back with the fast-forward);
 //! 8. `cargo xtask queue T-NNN` (child process, exit code passed through); on exit 0
 //!    queued → merged, `state: merged` (`publish: T-NNN merged`) and `worktree rm T-NNN`.
@@ -100,7 +102,7 @@ pub fn slug(title: &str) -> String {
         }
     }
     let t: String = s.trim_matches('-').chars().take(40).collect();
-    format!("publish-{t}")
+    format!("publish-{}", t.trim_end_matches('-'))
 }
 
 /// The task file written in step 2 (with `state`).
@@ -226,10 +228,19 @@ fn commit(dir: &Path, subject: &str, task: &str, paths: &[String]) -> Result<Res
 
 /// Step 2/6/8 commit on main, or the exit-2 line with the hand command.
 fn ledger_commit(root: &Path, subject: &str, task: &str, task_file: &str) -> Result<()> {
-    let paths = [task_file.to_owned(), "metrics/tasks.jsonl".to_owned()];
-    if let Err(e) = commit(root, subject, task, &paths)? {
+    ledger_commit_paths(
+        root,
+        subject,
+        task,
+        &[task_file.to_owned(), "metrics/tasks.jsonl".to_owned()],
+    )
+}
+
+fn ledger_commit_paths(root: &Path, subject: &str, task: &str, paths: &[String]) -> Result<()> {
+    if let Err(e) = commit(root, subject, task, paths)? {
         eprintln!(
-            "publish: commit failed: {e}; commit by hand: git commit -m \"{subject}\" -m \"Task: {task}\" -m \"Role: director\" -- {task_file} metrics/tasks.jsonl"
+            "publish: commit failed: {e}; commit by hand: git commit -m \"{subject}\" -m \"Task: {task}\" -m \"Role: director\" -- {}",
+            paths.join(" ")
         );
         return Err(Exit(2).into());
     }
@@ -245,11 +256,39 @@ fn transition(root: &Path, task: &str, to: &str, clock: &dyn Clock) -> Result<()
     Ok(())
 }
 
-/// Run `{xtask} scorecard` in `dir`; `Err(the scorecard's own error)` on failure.
-fn scorecard_in(dir: &Path, xtask: &Path, target: &Path) -> Result<Result<(), String>> {
+/// The command main's `xtask/generated.toml` lists for `docs/scorecard.md`, with `{xtask}`
+/// replaced by main's xtask as the queue's regeneration does (T-013 ruling (3)).
+fn scorecard_command(root: &Path, xtask: &Path) -> Result<Vec<String>> {
+    let show = |p: &str| crate::precheck::show(root, "main", p);
+    let policy = crate::policy::Policy::parse(
+        show(crate::policy::GENERATED_FILE)?.as_deref(),
+        show(crate::policy::LEDGER_FILE)?.as_deref(),
+    )
+    .map_err(|e| refused(format_args!("{}: {e:#}", crate::policy::GENERATED_FILE)))?;
+    let Some(g) = policy
+        .generated
+        .iter()
+        .find(|g| g.path == "docs/scorecard.md")
+    else {
+        return Err(refused(format_args!(
+            "main's {} lists no command for docs/scorecard.md",
+            crate::policy::GENERATED_FILE
+        )));
+    };
+    Ok(g.command
+        .iter()
+        .map(|a| a.replace("{xtask}", &xtask.to_string_lossy()))
+        .collect())
+}
+
+/// Run the regeneration command `argv` in `dir`; `Err(the command's own error)` on failure.
+fn scorecard_in(dir: &Path, argv: &[String], target: &Path) -> Result<Result<(), String>> {
+    let Some((prog, rest)) = argv.split_first() else {
+        return Ok(Err("empty regeneration command".into()));
+    };
     let out = capture(
-        Command::new(xtask)
-            .arg("scorecard")
+        Command::new(prog)
+            .args(rest)
             .current_dir(dir)
             .env("CARGO_TARGET_DIR", target)
             .env_remove("RUSTUP_TOOLCHAIN"),
@@ -267,8 +306,9 @@ fn scorecard_in(dir: &Path, xtask: &Path, target: &Path) -> Result<Result<(), St
     Ok(Err(lines.join("; ")))
 }
 
-/// Step 1: the checks. Returns main's xtask binary and the inputs in byte order.
-fn checks(root: &Path, a: &Args) -> Result<(PathBuf, Vec<String>)> {
+/// Step 1: the checks. Returns main's xtask binary, the scorecard command and the inputs in
+/// byte order.
+fn checks(root: &Path, a: &Args) -> Result<(PathBuf, Vec<String>, Vec<String>)> {
     let head = git(root, &["symbolic-ref", "--quiet", "HEAD"]).unwrap_or_default();
     if head != "refs/heads/main" {
         return Err(refused(format_args!(
@@ -368,9 +408,11 @@ fn checks(root: &Path, a: &Args) -> Result<(PathBuf, Vec<String>)> {
             others.join(", ")
         )));
     }
-    // The would-be docs/scorecard.md: main's xtask in a private export of main + inputs.
+    // The would-be docs/scorecard.md: main's generated.toml command (with main's xtask, as the
+    // queue builds it) in a private export of main + inputs; the checkout is not written.
     let main_sha = rev(root, "main")?;
     let xtask = crate::queue::build_main_xtask(root, &main_sha)?;
+    let argv = scorecard_command(root, &xtask)?;
     let base = crate::queue::common_dir(root)?.join("kiln-publish");
     let (tree, target) = (base.join("tree"), base.join("target"));
     if tree.exists() {
@@ -387,25 +429,26 @@ fn checks(root: &Path, a: &Args) -> Result<(PathBuf, Vec<String>)> {
         }
         std::fs::copy(root.join(p), &dest)?;
     }
-    let result = scorecard_in(&tree, &xtask, &target)?;
+    let result = scorecard_in(&tree, &argv, &target)?;
     let regenerated = std::fs::read(tree.join("docs/scorecard.md")).ok();
     let _ = std::fs::remove_dir_all(&tree);
+    let named = inputs.join(", ");
     if let Err(e) = result {
-        return Err(refused(e));
+        return Err(refused(format_args!("{named}: {e}")));
     }
     if regenerated == blob(root, "main", "docs/scorecard.md")? {
-        return Err(refused(
-            "the inputs change no generated file; commit them on main as a ledger commit",
-        ));
+        return Err(refused(format_args!(
+            "the inputs change no generated file; commit them on main as a ledger commit ({named})"
+        )));
     }
-    Ok((xtask, inputs))
+    Ok((xtask, argv, inputs))
 }
 
 /// Run the publish helper; `Ok(())` is exit 0, other exits are [`Exit`] or [`Refused`].
 pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
     let task = a.task.clone();
     // 1.
-    let (xtask, inputs) = checks(root, a)?;
+    let (xtask, argv, inputs) = checks(root, a)?;
     let now = || format_utc(clock.now_millis().div_euclid(1000));
 
     // 2.
@@ -427,6 +470,15 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
         info.branch
     );
     transition(root, &task, "in_progress", clock)?;
+    // Ruling Q-b: main's ledger is committed wherever the command stops.
+    let ready_sha = rev(root, "main")?;
+    ledger_commit_paths(
+        root,
+        &format!("publish: {task} in_progress"),
+        &task,
+        &["metrics/tasks.jsonl".to_owned()],
+    )?;
+    let in_progress_sha = rev(root, "main")?;
 
     // 4.
     let wt = info.path.clone();
@@ -437,7 +489,7 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
         }
         std::fs::copy(root.join(p), &dest)?;
     }
-    if let Err(e) = scorecard_in(&wt, &xtask, &wt.join("target"))? {
+    if let Err(e) = scorecard_in(&wt, &argv, &wt.join("target"))? {
         eprintln!(
             "publish: regenerating docs/scorecard.md in .worktrees/{task} failed: {e}; {task} stays in_progress"
         );
@@ -485,7 +537,7 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
     let outcome = crate::queue::CargoGate.run(&wt, GateXtask::Binary(&xtask))?;
     if !outcome.passed {
         eprintln!(
-            "publish: gate failed in .worktrees/{task} at {}; {task} stays in_progress; fix the input and re-run the gate there, or abandon (metrics transition --to abandoned; worktree rm {task} --force)",
+            "publish: gate failed in .worktrees/{task} at {}; {task} stays in_progress (committed on main); fix the input and re-run the gate there, or abandon (metrics transition --to abandoned; worktree rm {task} --force)",
             outcome.failed_step.as_deref().unwrap_or("unknown")
         );
         return Err(Exit(1).into());
@@ -496,6 +548,12 @@ pub fn run(root: &Path, a: &Args, clock: &dyn Clock) -> Result<()> {
     transition(root, &task, "queued", clock)?;
     let current = std::fs::read_to_string(root.join(&task_file))?;
     std::fs::write(root.join(&task_file), with_state(&current, "queued"))?;
+    // Ruling (4): after a success, main shows exactly ready, queued, content, record, merged.
+    // The interim `in_progress` commit (made only so a stop leaves main committed) is folded
+    // into the `queued` commit, and only while main is still exactly that commit.
+    if rev(root, "main")? == in_progress_sha {
+        git(root, &["reset", "--quiet", "--soft", &ready_sha])?;
+    }
     ledger_commit(root, &format!("publish: {task} queued"), &task, &task_file)?;
 
     // 7.
@@ -555,6 +613,9 @@ mod tests {
         let long = slug(&"a".repeat(50));
         assert_eq!(long.len(), "publish-".len() + 40);
         assert_eq!(slug("Ünïcode"), "publish-n-code");
+        // Ruling Q-c: trailing `-` trimmed after the cut.
+        let cut = slug(&format!("{} tail", "b".repeat(39)));
+        assert_eq!(cut, format!("publish-{}", "b".repeat(39)));
     }
 
     #[test]
@@ -578,6 +639,37 @@ mod tests {
         ] {
             assert_eq!(kind(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn scorecard_command_comes_from_mains_generated_toml() {
+        use crate::git::testrepo;
+        let led = "[[ledger]]\npath = \"tasks/\"\nmode = \"any\"\n";
+        let gen_toml = "[[generated]]\npath = \"docs/scorecard.md\"\ncommand = [\"{xtask}\", \"scorecard\", \"--x\"]\n";
+        let repo = testrepo::init(
+            "pub-cmd",
+            &[
+                ("xtask/generated.toml", gen_toml),
+                ("xtask/ledger.toml", led),
+            ],
+        );
+        let argv = scorecard_command(repo.path(), Path::new("/bin/main-xtask")).unwrap();
+        assert_eq!(argv, ["/bin/main-xtask", "scorecard", "--x"]);
+        // The working copy is not read: only main's committed file.
+        testrepo::write(repo.path(), "xtask/generated.toml", "broken [");
+        assert!(scorecard_command(repo.path(), Path::new("x")).is_ok());
+        let other = gen_toml.replace("docs/scorecard.md", "docs/other.md");
+        testrepo::commit(repo.path(), "other", &[("xtask/generated.toml", &other)]);
+        let e = scorecard_command(repo.path(), Path::new("x")).unwrap_err();
+        assert!(e.to_string().starts_with("publish: refused: "), "{e}");
+        // A failing command reports its own error.
+        let d = crate::util::testutil::TempDir::new("pub-run");
+        let argv: Vec<String> = ["sh", "-c", "echo bad item >&2; exit 1"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        let r = scorecard_in(d.path(), &argv, d.path()).unwrap();
+        assert_eq!(r, Err("bad item".to_owned()));
     }
 
     #[test]
