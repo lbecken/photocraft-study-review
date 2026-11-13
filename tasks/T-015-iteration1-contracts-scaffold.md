@@ -313,6 +313,14 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   "every Docs method … reached only through them" rule leaves it open whether `get`/`get_mut`/
   `add`/`remove`/`map` need the attribute; I read "only through them" as "not otherwise
   used", so they do not.
+- 2026-11-13 · R-072 · ready (D-043 notice read: it binds the AC-1 guard only; no code change) ·
+  did: finished the scaffold above. `docs/commands.json` is unchanged against d995caa. The only
+  non-test `ToolRunner` impl is `NoTools`, and `kiln-control` was not edited, so `Host` has no
+  setter. · gate attempts: 3 (1 and 2: red clippy, both in my own tests: a unit-struct `default()`
+  call and an `expect` outside `#[test]`; last: green, 10 steps, 394 tests) · not run: the
+  control-protocol worked example and a long session against base (the test author's AC-1 guard
+  covers these); acceptance tests (not visible to me) · missing context: none · next: join with
+  the test author's branch, then review.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
