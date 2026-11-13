@@ -193,7 +193,7 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `false` → AC-2 fails (text `"ab"` after one undo); M3 `insert` returns `Ok` for `""` before
   `check_index` → AC-3 fails (`insert(9,"")` was `Ok`); M4 `Open::MUTATING = false` → AC-4
   fails (`describe` says `mutating: false`); M5 `next_doc` bumped before `Document::open` and
-  not restored on failure → AC-5 fails (`a.txt` got doc 4); M6 save replaces the buffer with a
+  not restored on failure → AC-5 fails (first successful open of `a.txt` was not doc 1); M6 save replaces the buffer with a
   fresh one (history cleared) → AC-6 fails (`can_redo: false` after save). Each guard failed and
   the other two in its file passed. · gate attempts: 2 (1: red clippy, `clippy::panic` in
   guard helpers outside `#[cfg(test)]`; 2: green, schema step says `docs/commands.json`
