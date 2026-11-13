@@ -1814,7 +1814,7 @@
       },
       {
         "kind": "not_a_file",
-        "when": "the path names a directory"
+        "when": "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed"
       },
       {
         "kind": "io_error",
@@ -1883,6 +1883,10 @@
       {
         "kind": "not_a_boundary",
         "when": "a position inside a character, a surrogate pair or a CRLF line break"
+      },
+      {
+        "kind": "outside_root",
+        "when": "the path resolves outside the root"
       }
     ]
   }

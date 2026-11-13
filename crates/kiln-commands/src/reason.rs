@@ -71,8 +71,10 @@ reasons! {
             "`doc.close` of a modified document without `discard`",
         /// The file (or, for a save, its directory) does not exist.
         NotFound = "not_found" => "the file (or, for a save, its directory) does not exist",
-        /// The path names a directory.
-        NotAFile = "not_a_file" => "the path names a directory",
+        /// The path names a directory or another non-regular file where a file is needed, or a
+        /// file where a directory is needed.
+        NotAFile = "not_a_file" =>
+            "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed",
         /// Any other file-system failure.
         IoError = "io_error" => "any other file-system failure (permissions, name too long, …)",
         /// The file is not valid UTF-8 / UTF-16 text.
@@ -114,6 +116,8 @@ reasons! {
         /// A position inside a character, a surrogate pair or a CRLF line break.
         NotABoundary = "not_a_boundary" =>
             "a position inside a character, a surrogate pair or a CRLF line break",
+        /// The path resolves (through symlinks) to a location outside the root.
+        OutsideRoot = "outside_root" => "the path resolves outside the root",
     }
 }
 
@@ -138,6 +142,7 @@ impl From<&VfsError> for RejectReason {
         match e {
             VfsError::NotFound { .. } => RejectReason::NotFound,
             VfsError::NotAFile { .. } => RejectReason::NotAFile,
+            VfsError::OutsideRoot { .. } => RejectReason::OutsideRoot,
             VfsError::Io { .. } => RejectReason::IoError,
         }
     }
@@ -284,6 +289,12 @@ mod tests {
         assert_eq!(RejectReason::from(&nf), RejectReason::NotFound);
         assert_eq!(RejectReason::from(&dir), RejectReason::NotAFile);
         assert_eq!(RejectReason::from(&io), RejectReason::IoError);
+        let outside = VfsError::OutsideRoot { path: p.clone() };
+        assert_eq!(RejectReason::from(&outside), RejectReason::OutsideRoot);
+        assert_eq!(
+            RejectReason::from(&OpenError::Vfs(outside)),
+            RejectReason::OutsideRoot
+        );
         assert_eq!(
             RejectReason::from(&OpenError::Vfs(nf)),
             RejectReason::NotFound
@@ -340,6 +351,21 @@ mod tests {
         ] {
             assert_eq!(RejectReason::from(&e), want, "{e:?}");
         }
+    }
+
+    /// T-008: `outside_root` is the last row, and `not_a_file` covers every non-regular file.
+    #[test]
+    fn outside_root_is_appended_and_not_a_file_is_widened() {
+        assert_eq!(RejectReason::ALL.last(), Some(&RejectReason::OutsideRoot));
+        assert_eq!(RejectReason::OutsideRoot.as_str(), "outside_root");
+        assert_eq!(
+            RejectReason::OutsideRoot.description(),
+            "the path resolves outside the root"
+        );
+        assert_eq!(
+            RejectReason::NotAFile.description(),
+            "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed"
+        );
     }
 
     #[test]

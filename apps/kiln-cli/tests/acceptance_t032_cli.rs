@@ -78,7 +78,10 @@ const REJECTED: &[(&str, &str)] = &[
         "not_found",
         "the file (or, for a save, its directory) does not exist",
     ),
-    ("not_a_file", "the path names a directory"),
+    (
+        "not_a_file",
+        "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed",
+    ),
     (
         "io_error",
         "any other file-system failure (permissions, name too long, …)",

@@ -742,7 +742,7 @@ const REJECTED: &[(RejectReason, &str, &str)] = &[
     (
         RejectReason::NotAFile,
         "not_a_file",
-        "the path names a directory",
+        "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed",
     ),
     (
         RejectReason::IoError,

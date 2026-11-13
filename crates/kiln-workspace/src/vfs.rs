@@ -12,8 +12,13 @@ pub enum VfsError {
         /// The path the operation was asked about.
         path: RelPath,
     },
-    /// The path is a directory.
+    /// The location of the path is not a regular file (a directory, FIFO, socket or device).
     NotAFile {
+        /// The path the operation was asked about.
+        path: RelPath,
+    },
+    /// The location of the path (after following every symlink on it) is outside the root.
+    OutsideRoot {
         /// The path the operation was asked about.
         path: RelPath,
     },
@@ -34,6 +39,7 @@ impl VfsError {
         match self {
             VfsError::NotFound { path }
             | VfsError::NotAFile { path }
+            | VfsError::OutsideRoot { path }
             | VfsError::Io { path, .. } => path,
         }
     }
@@ -43,7 +49,8 @@ impl fmt::Display for VfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VfsError::NotFound { path } => write!(f, "{path}: not found"),
-            VfsError::NotAFile { path } => write!(f, "{path}: is a directory, not a file"),
+            VfsError::NotAFile { path } => write!(f, "{path}: not a regular file"),
+            VfsError::OutsideRoot { path } => write!(f, "{path}: resolves outside the root"),
             VfsError::Io { path, message, .. } => write!(f, "{path}: I/O error: {message}"),
         }
     }
@@ -59,6 +66,7 @@ pub trait Vfs: std::fmt::Debug {
     /// or (on Err) exactly what it held before (or still does not exist). Creates the file if
     /// absent; never creates directories.
     fn write_atomic(&mut self, path: &RelPath, bytes: &[u8]) -> Result<(), VfsError>;
-    /// True iff `path` names an existing regular file.
+    /// True iff `path` names an existing regular file (for `DiskFs`: whose location is inside
+    /// the root).
     fn is_file(&self, path: &RelPath) -> bool;
 }

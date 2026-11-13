@@ -116,10 +116,8 @@ current directory). What is checked today:
 - Refused (`rejected` / `invalid_path`) by a purely lexical check: an empty path, an absolute
   path (leading `/`), a `..` or `.` segment, an empty segment (`a//b`, a trailing `/`), a
   backslash, a NUL character.
-- **Symbolic links are followed, including links that point outside the root.** A request path
-  that passes through a symlink inside the root can open, and a save can replace, a file
-  outside the root. Do not point `--root` at a directory whose symlinks you do not trust.
-  Confining paths to the root is tracked as task T-008.
+- A path whose location is outside the root is refused (`outside_root`); see
+  `docs/protocol/paths.md`.
 - A save replaces the file by writing a temporary file `.kiln-tmp-<n>` next to it and renaming
   it over the target (on Unix); through a symlink, the link's target is replaced and the link is
   kept.

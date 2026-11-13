@@ -19,6 +19,33 @@
 //!   untouched (D-014 (3)); the check opens it for writing without truncating or writing.
 //! - Symlinks: the destination path is resolved through any chain of symlinks first, so the
 //!   link's target file is replaced and the link itself stays in place.
+//!
+//! Confinement (T-008, `docs/protocol/paths.md`):
+//! - The root is resolved once, at construction (`fs::canonicalize`; a root given as a symlink
+//!   to a directory is that directory).
+//! - Every `read`, `write_atomic` and `is_file` first computes the *location* of its path by
+//!   walking it from the root one component at a time, as the kernel does: each symlink is
+//!   read and its target's components are walked in its place (an absolute target from `/`),
+//!   and `..` pops the directory actually reached so far (physically, never lexically). The
+//!   walk ends at an existing entry that is not a symlink, or at the first missing (or
+//!   non-directory) component.
+//! - The location is inside the root iff it equals the root or lies below it, compared
+//!   component by component (`Path::starts_with` on symlink-free absolute paths, so a sibling
+//!   `<root>x` is not inside). Only the final location decides. A location outside is refused
+//!   with `OutsideRoot` before anything there is opened, created or removed; a failure to walk
+//!   further once outside is also `OutsideRoot`, so nothing about the outside is reported.
+//! - The file type is taken from `lstat` of the location, without opening it, so a FIFO,
+//!   socket, device or directory is refused with `NotAFile` and never opened (opening a FIFO
+//!   for reading blocks until a writer appears). Only then is a regular file opened, through
+//!   the symlink-free location path; a save creates its temporary file in the location's
+//!   directory and renames it onto the location.
+//! - Precedence: `OutsideRoot`, then `NotFound`, then `NotAFile`, then `Io`. Nothing is cached:
+//!   every call walks again, so what an earlier `read` saw does not authorise a later save.
+//! - Accepted limitation (Decisions D-3 of T-008): the walk and the following open or rename
+//!   are separate system calls. Another process that changes the tree *during* one call (for
+//!   example swaps a component for a symlink, or the file for a FIFO, between the walk and the
+//!   open) can make that call reach outside the root or block. A hard link inside the root to a
+//!   file outside cannot be detected by path.
 //! - Documented limitations (D-014 (4)): because the content is swapped in as a new inode, a
 //!   hard link to the target keeps the old content (the link is split), the file's owner and
 //!   group become those of the saving process, and extended attributes and ACLs are not
@@ -31,10 +58,12 @@
 //! - Error messages are built from the `RelPath` and the OS error description only; the host
 //!   root never appears in them.
 
+use std::collections::VecDeque;
+use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Write};
 use std::os::unix::fs::OpenOptionsExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::path::RelPath;
 use crate::vfs::{Vfs, VfsError};
@@ -43,44 +72,177 @@ use crate::vfs::{Vfs, VfsError};
 const TEMP_PREFIX: &str = ".kiln-tmp-";
 /// How many temporary names `write_atomic` tries before giving up.
 const TEMP_ATTEMPTS: usize = 100;
-/// Upper bound on symlink hops when resolving a destination (as Linux `MAXSYMLINKS`).
+/// Upper bound on symlink hops when resolving a path (as Linux `MAXSYMLINKS`).
 const MAX_SYMLINK_HOPS: usize = 40;
 
-/// On-disk VFS rooted at a directory; RelPaths resolve below `root`.
+/// On-disk VFS rooted at a directory; RelPaths resolve below `root`, and every location they
+/// reach must stay inside it (module docs).
 #[derive(Debug)]
 pub struct DiskFs {
+    /// The root as resolved at construction: absolute, without symlinks, `.` or `..`.
     root: PathBuf,
+}
+
+/// One step of the walk to a location.
+#[derive(Debug)]
+enum Step {
+    /// Restart from `/` (an absolute symlink target).
+    Root,
+    /// `..`: the parent of the directory reached so far.
+    Parent,
+    /// An entry of the directory reached so far.
+    Name(OsString),
+}
+
+/// What the walk found at a location.
+#[derive(Debug)]
+enum Found {
+    /// A regular file.
+    File(fs::Metadata),
+    /// A directory.
+    Dir,
+    /// Another non-regular entry: FIFO, socket, character or block device.
+    Special,
+    /// Nothing exists there, but its parent directory does (a save may create it).
+    Missing,
+    /// A component before the last does not exist or is not a directory.
+    NoParent,
+}
+
+/// The location of a request path inside the root.
+#[derive(Debug)]
+struct Location {
+    /// The location: absolute, without symlinks (unless one was swapped in since the walk).
+    path: PathBuf,
+    /// The directory the location's entry lives in (`Missing` and `File`).
+    dir: PathBuf,
+    found: Found,
 }
 
 impl DiskFs {
     /// A VFS rooted at `root`. Err if root is not a directory.
     ///
     /// The error cannot name a `RelPath` of the root (none is valid), and must not name the
-    /// host path, so it uses the placeholder path `(root)`.
+    /// host path, so it uses the placeholder path `(root)`. The stored root is `root` fully
+    /// resolved (a symlink to a directory is replaced by that directory).
     pub fn new(root: &Path) -> Result<DiskFs, VfsError> {
         let placeholder = RelPath::root_placeholder;
+        let root_error = |e: io::Error| match e.kind() {
+            io::ErrorKind::NotFound => VfsError::NotFound {
+                path: placeholder(),
+            },
+            _ => io_error(&placeholder(), &e),
+        };
         match fs::metadata(root) {
             Ok(meta) if meta.is_dir() => Ok(DiskFs {
-                root: root.to_path_buf(),
+                root: fs::canonicalize(root).map_err(root_error)?,
             }),
             Ok(_) => Err(VfsError::Io {
                 path: placeholder(),
                 kind: io::ErrorKind::NotADirectory,
                 message: "the root is not a directory".to_owned(),
             }),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Err(VfsError::NotFound {
-                path: placeholder(),
-            }),
-            Err(e) => Err(io_error(&placeholder(), &e)),
+            Err(e) => Err(root_error(e)),
         }
     }
 
-    fn resolve(&self, path: &RelPath) -> PathBuf {
-        let mut full = self.root.clone();
-        for segment in path.segments() {
-            full.push(segment);
+    /// Whether `location` (absolute, symlink-free) is the root or below it, component by
+    /// component.
+    fn inside(&self, location: &Path) -> bool {
+        location.starts_with(&self.root)
+    }
+
+    /// An error met while walking from `dir`: `OutsideRoot` once the walk is outside the root
+    /// (so nothing about the outside is reported), otherwise `make()`.
+    fn walk_error(&self, rel: &RelPath, dir: &Path, make: impl FnOnce() -> VfsError) -> VfsError {
+        if self.inside(dir) {
+            make()
+        } else {
+            VfsError::OutsideRoot { path: rel.clone() }
         }
-        full
+    }
+
+    /// Walk `rel` from the root to its location, following every symlink physically (module
+    /// docs). `Err(OutsideRoot)` if the location is outside the root; nothing is opened.
+    fn locate(&self, rel: &RelPath) -> Result<Location, VfsError> {
+        let mut pending: VecDeque<Step> = rel
+            .segments()
+            .map(|s| Step::Name(OsString::from(s)))
+            .collect();
+        // The directory reached so far: absolute, without symlinks, `.` or `..`.
+        let mut dir = self.root.clone();
+        let mut hops = 0;
+        let (path, found) = loop {
+            let Some(step) = pending.pop_front() else {
+                // Every step consumed and the last one ended on a directory.
+                break (dir.clone(), Found::Dir);
+            };
+            let name = match step {
+                Step::Root => {
+                    dir = PathBuf::from("/");
+                    continue;
+                }
+                Step::Parent => {
+                    dir.pop();
+                    continue;
+                }
+                Step::Name(name) => name,
+            };
+            let candidate = dir.join(&name);
+            match fs::symlink_metadata(&candidate) {
+                Ok(meta) if meta.file_type().is_symlink() => {
+                    hops += 1;
+                    if hops > MAX_SYMLINK_HOPS {
+                        return Err(self.walk_error(rel, &dir, || VfsError::Io {
+                            path: rel.clone(),
+                            kind: io::ErrorKind::Other,
+                            message: "too many levels of symbolic links".to_owned(),
+                        }));
+                    }
+                    let target = fs::read_link(&candidate)
+                        .map_err(|e| self.walk_error(rel, &dir, || io_error(rel, &e)))?;
+                    for component in target.components().rev() {
+                        match component {
+                            Component::RootDir | Component::Prefix(_) => {
+                                pending.push_front(Step::Root)
+                            }
+                            Component::CurDir => {}
+                            Component::ParentDir => pending.push_front(Step::Parent),
+                            Component::Normal(n) => pending.push_front(Step::Name(n.to_owned())),
+                        }
+                    }
+                }
+                Ok(meta) if meta.is_dir() => dir = candidate,
+                Ok(meta) if pending.is_empty() => {
+                    let found = if meta.is_file() {
+                        Found::File(meta)
+                    } else {
+                        Found::Special
+                    };
+                    break (candidate, found);
+                }
+                // A non-directory before the last component.
+                Ok(_) => break (candidate, Found::NoParent),
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+                    ) =>
+                {
+                    let found = if pending.is_empty() {
+                        Found::Missing
+                    } else {
+                        Found::NoParent
+                    };
+                    break (candidate, found);
+                }
+                Err(e) => return Err(self.walk_error(rel, &dir, || io_error(rel, &e))),
+            }
+        };
+        if !self.inside(&path) {
+            return Err(VfsError::OutsideRoot { path: rel.clone() });
+        }
+        Ok(Location { path, dir, found })
     }
 }
 
@@ -101,32 +263,6 @@ fn lookup_error(path: &RelPath, e: &io::Error) -> VfsError {
         }
         _ => io_error(path, e),
     }
-}
-
-/// Follow `path` through symlinks to the path that is finally not a symlink (it may not
-/// exist). Fails on a symlink loop.
-fn resolve_symlinks(rel: &RelPath, mut path: PathBuf) -> Result<PathBuf, VfsError> {
-    for _ in 0..MAX_SYMLINK_HOPS {
-        match fs::symlink_metadata(&path) {
-            Ok(meta) if meta.file_type().is_symlink() => {
-                let target = fs::read_link(&path).map_err(|e| io_error(rel, &e))?;
-                path = match path.parent() {
-                    Some(dir) if target.is_relative() => dir.join(target),
-                    _ => target,
-                };
-            }
-            Ok(_) => return Ok(path),
-            Err(e) => match e.kind() {
-                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory => return Ok(path),
-                _ => return Err(io_error(rel, &e)),
-            },
-        }
-    }
-    Err(VfsError::Io {
-        path: rel.clone(),
-        kind: io::ErrorKind::Other,
-        message: "too many levels of symbolic links".to_owned(),
-    })
 }
 
 /// Create a new temporary file in `dir` exclusively, under the first free candidate name.
@@ -182,34 +318,27 @@ impl DiskFs {
         created: impl FnOnce(&Path) -> io::Result<()>,
         rename: impl FnOnce(&Path, &Path) -> io::Result<()>,
     ) -> Result<(), VfsError> {
-        let dest = resolve_symlinks(path, self.resolve(path))?;
-        let Some(dir) = dest.parent() else {
-            return Err(VfsError::Io {
-                path: path.clone(),
-                kind: io::ErrorKind::InvalidInput,
-                message: "the destination has no parent directory".to_owned(),
-            });
-        };
-        match fs::metadata(dir) {
-            Ok(meta) if meta.is_dir() => {}
-            Ok(_) => return Err(VfsError::NotFound { path: path.clone() }),
-            Err(e) => return Err(lookup_error(path, &e)),
-        }
-        let permissions = match fs::metadata(&dest) {
-            Ok(meta) if meta.is_dir() => return Err(VfsError::NotAFile { path: path.clone() }),
-            Ok(meta) => {
-                if meta.is_file() {
-                    // Respect write protection: rename alone would only need the directory to
-                    // be writable. Opening for write neither truncates nor writes.
-                    fs::OpenOptions::new()
-                        .write(true)
-                        .open(&dest)
-                        .map_err(|e| io_error(path, &e))?;
-                }
+        // Outside the root: refused before anything is created (`locate`).
+        let Location {
+            path: dest,
+            dir,
+            found,
+        } = self.locate(path)?;
+        let dir = dir.as_path();
+        let permissions = match found {
+            Found::NoParent => return Err(VfsError::NotFound { path: path.clone() }),
+            // Never opened: opening a FIFO for writing blocks until a reader appears.
+            Found::Dir | Found::Special => return Err(VfsError::NotAFile { path: path.clone() }),
+            Found::Missing => None,
+            Found::File(meta) => {
+                // Respect write protection: rename alone would only need the directory to be
+                // writable. Opening for write neither truncates nor writes.
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open(&dest)
+                    .map_err(|e| io_error(path, &e))?;
                 Some(meta.permissions())
             }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-            Err(e) => return Err(io_error(path, &e)),
         };
         // Owner-only until the target's bits are applied; a new file gets the default mode.
         let mode = if permissions.is_some() { 0o600 } else { 0o666 };
@@ -235,12 +364,13 @@ impl DiskFs {
 
 impl Vfs for DiskFs {
     fn read(&self, path: &RelPath) -> Result<Vec<u8>, VfsError> {
-        let full = self.resolve(path);
-        let meta = fs::metadata(&full).map_err(|e| lookup_error(path, &e))?;
-        if meta.is_dir() {
-            return Err(VfsError::NotAFile { path: path.clone() });
+        let location = self.locate(path)?;
+        match location.found {
+            Found::Missing | Found::NoParent => Err(VfsError::NotFound { path: path.clone() }),
+            // Never opened: opening a FIFO for reading blocks until a writer appears.
+            Found::Dir | Found::Special => Err(VfsError::NotAFile { path: path.clone() }),
+            Found::File(_) => fs::read(&location.path).map_err(|e| lookup_error(path, &e)),
         }
-        fs::read(&full).map_err(|e| lookup_error(path, &e))
     }
 
     fn write_atomic(&mut self, path: &RelPath, bytes: &[u8]) -> Result<(), VfsError> {
@@ -248,7 +378,13 @@ impl Vfs for DiskFs {
     }
 
     fn is_file(&self, path: &RelPath) -> bool {
-        fs::metadata(self.resolve(path)).is_ok_and(|m| m.is_file())
+        matches!(
+            self.locate(path),
+            Ok(Location {
+                found: Found::File(_),
+                ..
+            })
+        )
     }
 }
 
