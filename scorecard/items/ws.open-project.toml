@@ -2,4 +2,12 @@ id = "ws.open-project"
 title = "Open a directory as a project and list its files as a tree, honouring .gitignore and skipping target/"
 crate = "kiln-workspace"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t019_cli::tree_equals_git_ls_files",
+    "kiln_cli::acceptance_t019_cli::tree_order_and_counts",
+    "kiln_cli::acceptance_t019_cli::memory_and_disk_trees_agree",
+    "kiln_cli::acceptance_t019_cli::symlinks_are_listed_not_followed",
+    "kiln_cli::acceptance_t019_cli::limits_and_refusals",
+    "kiln_cli::acceptance_t019_cli::tree_under_a_path_applies_prefix_gitignores",
+    "kiln_cli::acceptance_t019_cli::deep_trees_stop_at_the_depth_bound",
+]
