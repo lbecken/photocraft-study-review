@@ -1,5 +1,6 @@
 //! T-032 implementer tests: every refusal carries its structured reason where it is raised, and
 //! `describe()` publishes the reasons as `error_kinds` (ADR-0004).
+#![cfg(test)]
 
 use kiln_commands::{
     CommandError, Context, InternalReason, Registry, RejectReason, standard_registry,
