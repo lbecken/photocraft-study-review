@@ -297,3 +297,5 @@
 {"kind":"run","task":"T-011","iteration":1,"run":"R-121","role":"implementer","tier":"medium","started_at":"2026-11-13T13:28:00Z","ended_at":"2026-11-13T13:42:27Z","wall_s":422,"tokens":33211,"tool_calls":26,"gate_attempts":1,"outcome":"completed","missing_context":"none","note":"rework after review r1 (rulings u1-u5): four test commits on the tests branch before the implementation commit (13:28:44Z to 13:30:40Z, then 2627f40 at 13:31:41Z); repeated JSON keys refused; the reviewer's surviving mutant is now killed by an acceptance test; start entered by the director from the dispatch, wall from the harness"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:42:28Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:42:28Z","from":"self_verified","to":"tests_joined"}
+{"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:46:10Z","from":"tests_joined","to":"reviewed"}
+{"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:46:10Z","from":"reviewed","to":"queued"}
