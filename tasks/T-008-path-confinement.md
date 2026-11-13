@@ -1,7 +1,7 @@
 ---
 id: T-008
 title: "Confine every disk path to the workspace root and refuse non-regular files at open and save, without blocking"
-tier: high              # persistence/save path; security; L2 + L4 (kiln-workspace, kiln-control)
+tier: high              # ADR-0002: persistence path (DiskFs read/write_atomic) and a confinement/security boundary the protocol document states
 state: draft
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # director-authorized item (Decisions D-4)
@@ -11,7 +11,7 @@ touches:
   - crates/kiln-workspace/tests/confinement.rs   # implementer's own integration tests
   - crates/kiln-control/src/lib.rs               # kind mapping for the two new messages + the kinds list
   - docs/control-protocol.md                     # "Paths" section and the error-kinds table
-budget_tokens: 700000
+budget_tokens: 850000   # high (v1.1)
 iteration: 1
 found_by: reviewer
 origin_task: T-004
@@ -114,6 +114,40 @@ with that `kind` on stderr. No other exit code changes.
 - Error table: add the `outside_root` row; reword the `not_a_file` "When" cell. Every other row
   is unchanged.
 
+## Pinned
+- (a) Errors, payloads, precedence: `VfsError::{OutsideRoot, NotAFile}` with exact `Display`;
+  precedence lexical → `OutsideRoot` → `NotFound` → `NotAFile` → `Io`; protocol pairs
+  `(rejected, outside_root)` (new, approved D-1) and `(rejected, not_a_file)` (widened); message
+  shapes `cannot open|save <p>: …`; `run` exit 3, `exec` exit 2 (Interface).
+- (b) Files: reads and writes only below the resolved root; temporary files `.kiln-tmp-*` next
+  to the target as today (T-002); no file is created on a refused save. Test files:
+  `crates/kiln-workspace/tests/acceptance_t008.rs` and `apps/kiln-cli/tests/acceptance_t008_cli.rs`
+  (distinct target names, so the join counts and runs both even before T-009 (6) lands), plus
+  the item file (see Scorecard items).
+- (c) Order of checks: per call, location resolution → outside test → existence → file type →
+  I/O; re-done on every call (no cache from `doc.open`).
+- (d) Path base, platform, file types: `RelPath` relative to the `DiskFs` root as resolved at
+  construction; Unix only (D-014 (5)); regular files only, every other type refused; symlinks
+  followed inside the root.
+- (e) Threat model: an honest user or a hostile repository (links planted in the project) with
+  no concurrent attacker: every request whose final location is outside the root is refused,
+  whatever links lie on the path or were swapped between requests. Accepted (D-3): a change by
+  another process *during* one call; hard links to outside files; `MemoryFs` (no links). The
+  reviewer probes adversarially (symlink chains, absolute links, dangling links, loops, links
+  swapped between requests, long names, FIFOs, sockets, devices).
+- (f) Tests pinning a snapshot this changes: `kiln-control` unit tests of `rejected_kind` that
+  pin the old directory message (implementer's, change with disclosure); the documented-kinds
+  test `every_kind_is_documented` (kept green by the doc table); `acceptance_t002*.rs` and
+  `acceptance_t004*.rs` stay unchanged and green (in-root symlinks and decoy temp names). The
+  `not_a_file` "When" cell and the "Paths" text of `docs/control-protocol.md` change by design.
+- (g) Worked examples: on today's `main` the reviewer's exploit succeeds (evaluation iter-0
+  "Hostile use": `out.txt -> ../outside/secret.txt` opened and a save replaced the outside file;
+  FIFO `doc.open` hung until `timeout 10`), so AC-1…AC-3 and AC-6 fail on base by assertion or
+  timeout. Expected outputs are the exact strings in the Interface; not executed on new code.
+- (h) Scorecard item `ws.path-confinement`: the evaluator runs AC-3's script through
+  `kiln-cli run --root <dir>` (refusals `outside_root`, the outside file unchanged) and AC-6's
+  FIFO/socket/directory script under a timeout (`not_a_file`, no hang).
+
 ## Acceptance criteria
 Every case uses real entries created by the test in a fresh temporary directory `work/` that
 holds the root `work/root/` and an outside directory `work/outside/` with
@@ -182,15 +216,20 @@ type, link target, bytes. Oracle: exact value unless stated otherwise.
   reviewer checks the "Paths" text against AC-1…AC-8.
 
 ## Scorecard items and intended test names
-Item `ws.path-confinement` (`scorecard/items/ws.path-confinement.toml`, created director-authorized
-with `tests = []`; the test author sets its `tests`). Proposed claim: the seven
-`kiln_workspace::acceptance_t008` tests below plus `kiln_cli::acceptance_t008::reviewer_exploit_is_refused_end_to_end`
-and `kiln_cli::acceptance_t008::fifo_and_socket_do_not_hang_run`. Tests: `crates/kiln-workspace/tests/acceptance_t008.rs`
+Item `ws.path-confinement`. The item file is **not** on `main` (R-051 wrote it in a checkout but
+it was never committed; committing it as a ledger commit would make `docs/scorecard.md` stale on
+`main`, D-034). The test author creates `scorecard/items/ws.path-confinement.toml` on
+`task/T-008-tests` (an allowed path for this task's own item) with `id = "ws.path-confinement"`,
+`title = "Disk paths are confined to the workspace root at open and save; non-regular files are refused without blocking"`,
+`crate = "kiln-workspace"`, `tier = "high"` and the `tests` below, and regenerates
+`docs/scorecard.md` (a generated path) on that branch. Proposed claim: the seven
+`kiln_workspace::acceptance_t008` tests below plus `kiln_cli::acceptance_t008_cli::reviewer_exploit_is_refused_end_to_end`
+and `kiln_cli::acceptance_t008_cli::fifo_and_socket_do_not_hang_run`. Tests: `crates/kiln-workspace/tests/acceptance_t008.rs`
 (`kiln_workspace::acceptance_t008::{open_through_escaping_symlinks_is_refused,
 save_through_escaping_symlinks_touches_nothing, link_swapped_in_after_open_is_refused_at_save,
 symlinks_inside_root_still_work, non_regular_files_are_refused_without_blocking,
 save_onto_non_regular_files_leaves_them_alone, outside_root_wins_over_not_found}`) and
-`apps/kiln-cli/tests/acceptance_t008.rs` (`kiln_cli::acceptance_t008::{reviewer_exploit_is_refused_end_to_end,
+`apps/kiln-cli/tests/acceptance_t008_cli.rs` (`kiln_cli::acceptance_t008_cli::{reviewer_exploit_is_refused_end_to_end,
 fifo_and_socket_do_not_hang_run, swap_between_requests_is_refused_through_control}`).
 
 ## Out of scope
@@ -229,6 +268,9 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
   task claims it. Because the task now has a scorecard item, the evaluator must confirm it.
 - D-5 (was Q-5): no; the iteration-0 evaluator runs against today's `main`. This task is
   iteration 1.
+- Dispatch note (R-055): `crates/kiln-control/src/lib.rs` overlaps T-010 and T-030;
+  `docs/control-protocol.md` overlaps T-007, T-010, T-011 and T-030. T-008 can run in parallel
+  with T-006, T-009 or T-013.
 
 ## Questions
 None open.
@@ -260,6 +302,15 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `docs/scorecard.md` (not in this run's paths): a new item makes it stale, so the item should
   reach `main` on a task branch where `docs/scorecard.md` is regenerated (D-012), not as a
   ledger commit. · gate attempts: 0 · missing context: none · next: director review.
+- 2026-11-13T03:50Z · R-055 · draft · did: brought the spec to v1.1: tier high under ADR-0002
+  (criteria: product code on the persistence path, `DiskFs::read`/`write_atomic`, and a
+  confinement boundary that `docs/control-protocol.md` states), budget 850k; added Pinned with
+  the threat model; renamed the CLI test file to `acceptance_t008_cli.rs` so the join does not
+  meet two `acceptance_t008` targets (T-009 (6) not yet merged); found that
+  `scorecard/items/ws.path-confinement.toml` is not on `main` (`ls scorecard/items`) and moved
+  its creation to the tests branch with a pinned title. AC-3 and AC-6 are the CLI criteria for
+  the item. Arm n/a (high). · gate attempts: 0 · not run: the exploit on new code · missing
+  context: none · next: director review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

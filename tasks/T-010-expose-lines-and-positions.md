@@ -1,76 +1,190 @@
 ---
 id: T-010
-title: "Expose line access and position conversion as registry commands"
-tier: medium
+title: "Expose line access and position conversion as read-only document commands"
+tier: medium            # ADR-0002: new commands in one command group, in-memory reads only; adding a command is not a contract change; no persistence, process, gate, security or dependency criterion
 state: draft
 owner_role: planner
 scorecard_items: [text.lines, text.positions]
-depends_on: []
+depends_on: [T-004]
 touches:
-  - crates/kiln-commands/src/doc.rs
-  - crates/kiln-commands/src/lib.rs
-  - docs/commands.json
-  - docs/control-protocol.md
-budget_tokens: 400000
-iteration: 0
+  - crates/kiln-commands/src/doc.rs           # doc.line, doc.position (doc command group)
+  - crates/kiln-commands/tests/positions.rs   # implementer's own integration tests
+  - crates/kiln-control/src/lib.rs            # kinds of the two new message shapes; ERROR_KINDS
+  - docs/commands.json                        # generated (schema --write)
+  - docs/control-protocol.md                  # error-kinds table: one new row, one widened "When"
+budget_tokens: 500000   # medium (v1.1, provisional)
+iteration: 1
 found_by: evaluator
 origin_task: T-001
 ---
 
-# T-010 Expose line access and position conversion as registry commands
+# T-010 Expose line access and position conversion as read-only document commands
 
 ## Goal
-A script driving `kiln-cli run` / `kiln-cli control` can read the text of line N, the char
-offset where line N starts, and convert a position between byte offset, char offset, UTF-16
-code unit offset and line/column for an open document. Today none of this is reachable from
-outside, so the scorecard items `text.lines` and `text.positions` (status `implemented`,
-built by T-001 according to their test names `kiln_text::acceptance_t001::*`) cannot be
-confirmed by an outside evaluator, and every script has to fetch the whole document with
-`doc.text` and compute offsets itself.
+A script driving `kiln-cli run` or `kiln-cli control` can read the text, start, end and line
+break of line N of an open document, and convert a position between char offset, byte offset,
+UTF-16 offset and line/column. Today no command takes or returns any of these
+(`evaluations/iter-0.md` "Not evaluated", R-050: `kiln-cli commands --schema` mentions only
+`doc.info.len_lines`), so the items `text.lines` and `text.positions`, implemented in
+`kiln-text` by T-001, could not be confirmed. The `kiln-text` functions exist
+(`Buffer::line`, `line_start`, `char_to_byte`, `byte_to_char`, `char_to_utf16`,
+`utf16_to_char`, `char_to_line_col`, `line_col_to_char`; `PositionError`), so this task adds two
+read-only commands over them and nothing in `kiln-text`.
 
-## Observed behaviour (evaluation R-050, main d3978dbf)
-- `kiln-cli commands` lists 13 commands: `buffer.insert`, `buffer.text`, `doc.close`,
-  `doc.delete`, `doc.info`, `doc.insert`, `doc.list`, `doc.open`, `doc.redo`, `doc.replace`,
-  `doc.save`, `doc.text`, `doc.undo`. None takes or returns a line number, a line text, a line
-  start offset, a byte offset, a UTF-16 offset or a column.
-- The only line-related output is `doc.info.len_lines`. I checked it against a naive count
-  (`len(re.findall(r"\r\n|\r|\n", s)) + 1`) on 31 random texts mixing LF, CRLF and CR: all
-  agree. Line text and line start offsets (the rest of `text.lines`) are not observable.
-- `text.positions` (byte/char/UTF-16/line-col conversions, exact inverses) has no public
-  surface at all.
+**Experiment arm (METHODOLOGY §6): even task number → independent test author** on
+`task/T-010-tests`; the implementer does not write acceptance tests.
 
-## Steps to reproduce
-1. `kiln-cli commands --schema` and search for `line`, `column`, `utf16`, `byte`: only
-   `len_lines` in the `doc.info` result.
-2. Try to ask for line 3 of a CRLF file: no command exists.
+Reading list: `evaluations/iter-0.md` (items `text.lines`, `text.positions`, "Not evaluated");
+`scorecard/items/text.lines.toml`, `text.positions.toml`; `crates/kiln-text/src/{buffer,position}.rs`
+(the functions above and `PositionError`'s `Display`); `crates/kiln-commands/src/doc.rs`
+(how a doc command is written, `no open document` refusals); `docs/development.md` "Adding a
+command"; `crates/kiln-control/src/lib.rs` `rejected_kind`, `ERROR_KINDS`;
+`docs/control-protocol.md` "Error codes and kinds".
 
 ## Interface
-For the planner. Suggested shape (not a ruling): `doc.line {doc, line}` →
-`{text, start, end, ending}`; `doc.position {doc, from: {char|byte|utf16|line_col}}` →
-all four forms; out-of-range and mid-character inputs rejected with `out_of_range` /
-a new documented kind.
+
+### `doc.line` (read-only, `mutating: false`)
+Params `{"doc": <integer ≥ 1>, "line": <integer ≥ 0>}`, no other keys. Result:
+```json
+{"line": 1, "text": "bé😀", "start": 3, "end": 6, "ending": "cr"}
+```
+- `text`: the line's content without its line break (`Buffer::line`);
+- `start`: char offset of the line's first char (`Buffer::line_start`); `end` = `start` +
+  chars in `text`;
+- `ending`: the line break after `text`: `"lf"`, `"crlf"`, `"cr"`, or `"none"` for the last line.
+  Lines are separated by `\r\n`, `\r` or `\n` (a `\r\n` is one break), so a text with k breaks
+  has k + 1 lines, as `doc.info.len_lines` reports; the last line may be empty.
+
+### `doc.position` (read-only)
+Params `{"doc": <integer ≥ 1>, "at": <position>}` where `<position>` is exactly one of
+`{"char": n}`, `{"byte": n}`, `{"utf16": n}`, `{"line_col": {"line": l, "col": c}}` (integers
+≥ 0; `col` counts chars). Result: every form of the same position:
+```json
+{"char": 5, "byte": 6, "utf16": 5, "line": 1, "col": 2}
+```
+A position is **valid** iff it is a char offset `0..=len_chars` that is not between the `\r` and
+`\n` of a CRLF; it is given in a unit that lands exactly on it (a byte offset on a char boundary,
+a UTF-16 offset not inside a surrogate pair, a column within the line's content). Conversions
+are exact inverses on valid positions.
+
+### Refusals (both commands; `rejected`, nothing changes, the session log is unchanged)
+Message `invalid position: <PositionError Display>` for `doc.position`, `invalid line: <PositionError Display>`
+for `doc.line`, where `<PositionError Display>` is `kiln-text`'s text exactly:
+
+| `PositionError` | kind | example message (text `"a\r\nbé😀\rc\n"`) |
+|---|---|---|
+| `OutOfBounds` | `out_of_range` | `invalid position: index 14 is out of bounds (length 13)` (`{"byte":14}`) |
+| `LineOutOfBounds` | `out_of_range` | `invalid line: line 4 is out of bounds (buffer has 4 lines)` |
+| `ColumnOutOfBounds` | `out_of_range` | `invalid position: column 4 is out of bounds for line 1 (3 chars)` |
+| `NotCharBoundary` | `not_a_boundary` | `invalid position: byte offset 5 is inside a multi-byte char` |
+| `InsideSurrogatePair` | `not_a_boundary` | `invalid position: UTF-16 offset 6 is inside a surrogate pair` |
+| `InsideLineBreak` | `not_a_boundary` | `invalid position: char index 2 is between the \r and \n of a CRLF` (literal backslashes) |
+
+`(rejected, not_a_boundary)` is a new pair in the specified kind set (needs the director's
+approval, Q-1); `out_of_range`'s "When" cell widens to "an offset, line or column beyond the end".
+An unknown `doc` id is `no_such_document` as for every doc command. Params that do not match the
+schema (two keys in `at`, a negative number, an unknown key) are `invalid_params`/`schema`.
+
+### `kiln-control`
+`rejected_kind` maps messages beginning `invalid position: ` or `invalid line: ` to
+`out_of_range` when the rest is one of the three out-of-bounds shapes and to `not_a_boundary`
+for the other three; `ERROR_KINDS` gains `("rejected", "not_a_boundary")`. No other mapping
+changes. (T-030 later replaces message matching by structured reasons; it maps these rows.)
+
+## Pinned
+- (a) Errors, payloads, precedence: params schema (`invalid_params`) → document id
+  (`no_such_document`) → position or line check (table above). Messages and kinds exact as in
+  the table.
+- (b) Files: none read or written by the commands (in-memory document); `docs/commands.json`
+  gains the two commands (≥ 1 example each, one of them on the CRLF/astral text above); the
+  protocol document gains one row and one widened cell. Acceptance tests in
+  `apps/kiln-cli/tests/acceptance_t010.rs` (CLI) and optionally
+  `crates/kiln-commands/tests/acceptance_t010_api.rs` (distinct target names).
+- (c) Order of checks: as (a). Both commands are read-only: they never end a typing group or
+  touch history (T-007's read-only property, if merged, checks this on their examples).
+- (d) Path base, platform, file types: n/a (no path parameter; text already decoded).
+- (e) Threat model: n/a (no gate, security or confinement path). Hostile input is huge integers:
+  any `u64` value is accepted by the schema and answered with `out_of_range`, never a panic.
+- (f) Tests pinning a snapshot this changes: `kiln-control` unit test `every_error_has_a_stable_kind`
+  and `every_kind_is_documented` (kept green by `ERROR_KINDS` and the table; implementer's
+  disclosure); no test pins the command count or list (searched `crates`, `apps` for name lists:
+  only `contains` checks); `docs/commands.json` is regenerated.
+- (g) Worked examples, executed against a naive Python model in R-055 (`re.finditer(r"\r\n|\r|\n")`
+  split; `len(t[:c].encode())`, `len(t[:c].encode('utf-16-le'))//2`) on `t = "a\r\nbé😀\rc\n"`
+  (len_chars 9, len_bytes 13, len_utf16 10, len_lines 4):
+  lines 0…3 = `{"text":"a","start":0,"end":1,"ending":"crlf"}`,
+  `{"text":"bé😀","start":3,"end":6,"ending":"cr"}`, `{"text":"c","start":7,"end":8,"ending":"lf"}`,
+  `{"text":"","start":9,"end":9,"ending":"none"}`;
+  positions char→(byte, utf16, line, col): 0→(0,0,0,0), 1→(1,1,0,1), 2→invalid (inside CRLF),
+  3→(3,3,1,0), 4→(4,4,1,1), 5→(6,5,1,2), 6→(10,7,1,3), 7→(11,8,2,0), 8→(12,9,2,1), 9→(13,10,3,0).
+  Invalid: byte 5 and 7 (inside `é`, `😀`), utf16 6 (inside the pair), byte 14, line 4,
+  `line_col {1,4}`.
+- (h) Per item, the evaluator's call: `text.lines` — `kiln-cli run` with `doc.open` of a
+  CRLF/CR/LF file and `doc.line` for every line `0..len_lines`, compared with a naive split;
+  `text.positions` — `kiln-cli run` with `doc.position` from each of the four forms for every
+  position, compared with a naive model, plus the six refusals.
 
 ## Acceptance criteria
-- AC-1: For random texts with LF, CRLF, CR, multi-byte and astral chars, `doc.line` for
-  every line agrees with a naive split. Oracle: naive model in the test.
-- AC-2: For every valid position, converting char → byte/UTF-16/line-col → char returns the
-  start position. Oracle: round trip plus naive model.
-- AC-3: An offset inside a UTF-8 sequence or a UTF-16 surrogate pair is rejected with a
-  structured error. Oracle: exact error code/kind.
-- AC-4: The commands appear in `docs/commands.json` with examples that `--audit` accepts.
+Through `kiln-cli run --root <dir>` (or `control`), on files the tests write. Oracle: a naive
+model in the test (split on `\r\n|\r|\n`; UTF-8 and UTF-16 lengths of prefixes) unless stated.
+- AC-1 (`text.lines`, CLI): for fixed-seed random texts (≥ 50) over `a é 😀 中 \n \r\n \r`
+  saved as UTF-8 files, a script opens each and asks `doc.line` for every line
+  `0..len_lines`; every result equals the naive split's `text`, `start`, `end`, `ending`, and
+  `doc.info.len_lines` equals the number of lines.
+- AC-2 (`text.positions`, CLI): for the same texts, `doc.position` from `{"char":c}` for every
+  valid `c` returns the naive model's five numbers; from each returned `byte`, `utf16` and
+  `line_col`, `doc.position` returns the same five numbers (round trip).
+- AC-3 (refusals, CLI): on the worked-example text, the six refusals of the table give exactly
+  the listed kind and message, `ok:false`, and a following `doc.text` shows the text unchanged;
+  `{"char":2}` (inside the CRLF) → `not_a_boundary`; `doc.line` on a closed or unknown id →
+  `no_such_document`; `{"at":{"char":1,"byte":1}}` and `{"line":-1}` → `invalid_params`.
+  Oracle: exact value.
+- AC-4 (read-only and logged): after `doc.line`/`doc.position` requests, `doc.info` shows the
+  same `can_undo`/`can_redo`, and a typing group open before them still joins the next
+  single-char insert (one `doc.undo` removes both chars); `run --log` lists the successful
+  `doc.line`/`doc.position` requests with `mutating: false`. Oracle: exact value.
+- AC-5 (schema): `kiln-cli commands --schema` lists both commands with params and result
+  schemas and ≥ 1 example each, and `kiln-cli commands --audit` exits 0. Oracle: exact value.
+- AC-6 (documented kind): `docs/control-protocol.md` lists `(rejected, not_a_boundary)`, and the
+  existing documented-kinds test stays green. Oracle: exact value.
 
-## Out of scope
-Cursor/selection (`edit.selection`), goto-line (`nav.goto-line`).
+## Out of scope and implementer notes
+- Cursor and selection (`edit.selection`), goto-line (`nav.goto-line`), any change in
+  `kiln-text` (if one is needed, stop and report), positions on the scratch buffer
+  (`buffer.*`).
+- Structured reasons instead of message matching: T-030.
+- Your tests: unit tests in `doc.rs`, integration tests in `crates/kiln-commands/tests/positions.rs`.
+  Determinism: pure functions of the document text.
+- Specified: names, params, results, refusals, kinds. Left to you: how params are typed, as long
+  as the published schema accepts exactly the forms above.
+- Dispatch: `crates/kiln-commands/src/doc.rs` overlaps T-006 and T-007 (and T-030's
+  `crates/kiln-commands/src`); `crates/kiln-control/src/lib.rs` overlaps T-008, T-030;
+  `docs/control-protocol.md` overlaps T-007, T-008, T-011, T-030. It can run in parallel with
+  T-009 or T-013. Lands before T-030 (T-030 depends on it).
 
-## Implementer notes
-Read-only commands; must be recorded in the log like other read-only commands.
-
-## Questions
+## Questions and rulings
+- Q-1 (planner, R-055): approve the new kind `(rejected, not_a_boundary)` for positions that fall
+  inside a UTF-8 sequence, a surrogate pair or a CRLF? The alternative without a new kind is
+  `other`, which the evaluator's report asked to avoid ("structured error").
 
 ## Log
+Append to your role's section only, above its end marker. One entry per run:
+`- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
+not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
+
 ### director
 <!-- end director log -->
 ### planner
+- 2026-11-13T03:50Z · R-055 · draft · did: turned the evaluator's defect report into a spec:
+  two read-only commands `doc.line` and `doc.position` over the existing `kiln-text` functions,
+  exact refusals from `PositionError`'s `Display`, one new kind `not_a_boundary` (Q-1). Worked
+  example computed with a naive Python model. Tier medium under ADR-0002 (criterion: a new
+  command inside one group, no boundary; "adding a command is not a contract change"); budget
+  500k; arm independent (even number). `depends_on` T-004 (merged) only; ordering with T-006,
+  T-007, T-008, T-030 is a dispatch constraint (shared files), and T-030 now depends on T-010.
+  Pinned (d), (e) n/a. Unsure: whether adding a kind to the protocol's specified set needs more
+  than the director's approval (T-008 D-1 set the precedent). · gate attempts: 0 · not run: the
+  commands (not built) · missing context: none · next: director answers Q-1.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

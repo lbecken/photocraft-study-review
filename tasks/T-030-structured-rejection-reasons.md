@@ -1,17 +1,17 @@
 ---
 id: T-030
 title: "Give every refusal a structured reason so the control protocol's error kinds never depend on message text; measure the error cap without the echoed id"
-tier: high              # command error contract (CommandError shape); L3 + L4; public protocol
+tier: high              # ADR-0002: changes how the registry reports refusals (CommandError, the registry's interface to every caller) = CHARTER §3 contract; ADR needed
 state: draft
 owner_role: planner
 scorecard_items: []
-depends_on: [T-004, T-007, T-008]
+depends_on: [T-004, T-007, T-008, T-010]
 touches:
   - crates/kiln-commands/src                  # CommandError, reasons at every refusal site
   - crates/kiln-control/src/lib.rs            # kinds from reasons; cap measured without id
   - crates/kiln-control/tests/reasons.rs      # implementer's own integration tests
   - docs/control-protocol.md                  # kind-derivation sentence; id/cap text; misplaced sentence
-budget_tokens: 700000
+budget_tokens: 850000   # high (v1.1)
 iteration: 1
 found_by: reviewer
 origin_task: T-004
@@ -38,7 +38,7 @@ rules. Split from T-007 (T-007 Decisions D-1).
 - `docs/control-protocol.md` "Response", "Error codes and kinds", "Request".
 - `tasks/T-008-path-confinement.md` Interface (`VfsError::OutsideRoot`, kind `outside_root`).
 - Tests that must stay green **unchanged**: every `acceptance_t003*`, `acceptance_t004*`,
-  `acceptance_t007*`, `acceptance_t008*` and guard file.
+  `acceptance_t007*`, `acceptance_t008*`, `acceptance_t010*` and guard file.
 
 ## Interface
 
@@ -49,7 +49,7 @@ rules. Split from T-007 (T-007 Decisions D-1).
 #[serde(rename_all = "snake_case")]
 pub enum RejectReason {
     InvalidPath, NoSuchDocument, UnsavedChanges, NotFound, NotAFile, OutsideRoot,
-    IoError, DecodeError, OutOfRange, InvertedRange, Other,
+    IoError, DecodeError, OutOfRange, InvertedRange, NotABoundary, Other,
 }
 impl RejectReason { pub fn as_str(self) -> &'static str; }   // "invalid_path", …, "other"
 
@@ -88,6 +88,8 @@ acceptance tests use them, keep compiling.
 | `OpenError::Decode` | `DecodeError` |
 | `EditError::OutOfBounds` (`doc.insert/delete/replace`, `buffer.insert`) | `OutOfRange` |
 | `EditError::InvertedRange` | `InvertedRange` |
+| `PositionError::{OutOfBounds, LineOutOfBounds, ColumnOutOfBounds}` (`doc.line`, `doc.position`, T-010) | `OutOfRange` |
+| `PositionError::{NotCharBoundary, InsideSurrogatePair, InsideLineBreak}` (T-010) | `NotABoundary` |
 | result fails its schema (T-007 rule (c)) | `InternalReason::ResultSchema` |
 | result does not serialize | `InternalReason::Other` |
 | a panic caught by the `kiln-control` host | `InternalReason::Panic` |
@@ -113,6 +115,28 @@ file in its `touches`).
 - Document: the sentence "Integer ids are any JSON integer …" moves from the character-offset
   paragraph to the id rules of "Request". The "Response" text on caps states the id rule above.
 
+## Pinned
+- (a) Errors, payloads, precedence: the reason table above is the specification; `kind` =
+  `reason.as_str()`; `to_json` adds `"reason"` for `rejected`/`internal` only; cap decision on
+  the id-null canonical response, `≤ 4096` keeps `details`. Precedence of codes unchanged.
+- (b) Files: `docs/control-protocol.md` three sentences (kind derivation, caps, moved id
+  sentence); no file system access changes.
+- (c) Order of checks: unchanged in every command; only the error value carries more.
+- (d) Path base, platform, file types: n/a (no path handling changes; `OutsideRoot` comes from
+  T-008).
+- (e) Threat model: n/a for the gate. Integrity property: no message text can change a `kind`;
+  the reviewer checks that no catch-all arm maps a lower-layer error variant.
+- (f) Tests pinning a snapshot this changes: `kiln-control` unit tests of `rejected_kind` (go
+  away with it; replaced, disclosed); `every_kind_is_documented` (kept); every T-003, T-004,
+  T-007, T-008, T-010 acceptance and guard test, unchanged (they match `Rejected { .. }`).
+- (g) Worked examples: the 4096-byte boundary is computed by the test from
+  `command_error_json`'s own output (AC-8), not from a hand-made number; AC-3's example messages
+  are today's: `"no open document 1"` maps to `no_such_document` by message on today's `main`
+  (`rejected_kind`, `crates/kiln-control/src/lib.rs:357`), so with `r = NotFound` it must become
+  `not_found`.
+- (h) Scorecard items: none (the test author may add a test to `control.errors`; if it does,
+  AC-3 and AC-7 are observable through `Host::handle_line`, the control protocol's host).
+
 ## Acceptance criteria
 - AC-1 (reasons at their sources): through `standard_registry().execute`, each refusal row of
   the table gives exactly that reason:
@@ -120,6 +144,8 @@ file in its `touches`).
   - `doc.open` of a missing file; of a directory (`MemoryFs` with `d/x`, open `d`); of
     `b"\xff"`;
   - `doc.insert` at offset 99; `doc.delete` 2..1; `buffer.insert` at offset 99;
+  - `doc.position {"at":{"byte":14}}` and `{"at":{"byte":5}}` on T-010's worked-example text
+    → `OutOfRange`, `NotABoundary`;
   - `doc.save` on a `MemoryFs` with `set_fail_writes(true)` → `IoError`;
   - on a `DiskFs` root holding `link -> ../outside/f` (a real file whose presence the test
     asserts), `doc.open link` → `OutsideRoot`.
@@ -137,7 +163,7 @@ file in its `touches`).
   `docs/control-protocol.md` are exactly the `as_str()` values of `RejectReason` and
   `InternalReason`, and each serde form equals `as_str()`. Oracle: exact value (the test parses
   the table).
-- AC-5 (protocol bytes unchanged): every T-004, T-007 and T-008 acceptance test passes
+- AC-5 (protocol bytes unchanged): every T-004, T-007, T-008 and T-010 acceptance test passes
   unmodified, and the worked example in `docs/control-protocol.md` still gives the documented
   output byte for byte. Oracle: regression + exact value.
 - AC-6 (panic kind): a panic in a command is still reported as `internal`/`panic` with message
@@ -160,7 +186,9 @@ file in its `touches`).
 ## Scorecard items and intended test names
 No new item. Tests (no item) in `crates/kiln-commands/tests/acceptance_t030.rs`
 (`refusals_carry_reasons_at_their_sources`, `internal_errors_carry_reasons`) and
-`crates/kiln-control/tests/acceptance_t030.rs` (`kinds_follow_reasons_not_messages`,
+`crates/kiln-control/tests/acceptance_t030_control.rs` (distinct target name: two
+`acceptance_t030` targets in two packages are miscounted by the join until T-009 (6) lands)
+(`kinds_follow_reasons_not_messages`,
 `documented_kinds_equal_reasons`, `echoed_id_does_not_count_toward_cap`,
 `cap_boundary_is_exactly_4096_bytes`). The test author may also add
 `kinds_follow_reasons_not_messages` to the `control.errors` item.
@@ -186,6 +214,11 @@ No new item. Tests (no item) in `crates/kiln-commands/tests/acceptance_t030.rs`
   rejection reasons with stable documented kind names, and part (e), the three D-032 follow-ups
   moved here from T-006. T-007 lands first (reasons in T-007 Decisions D-1). This task also
   needs T-008 merged for `VfsError::OutsideRoot`. `outside_root` is approved (T-008 Decisions D-1).
+- Dispatch note (R-055): now also depends on T-010, whose refusals (`PositionError`) it maps
+  (rows added above; `NotABoundary` exists only if T-010 Q-1 approves `not_a_boundary`, otherwise
+  those rows map to `Other`). Its `touches` overlap T-006, T-007, T-008, T-010 and T-011
+  (`docs/control-protocol.md`), so it runs last of these and in parallel only with T-009 or
+  T-013. As a CHARTER §3 contract change under ADR-0002, it needs an ADR before `ready`.
 
 ## Questions
 None open.
@@ -207,6 +240,12 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   (shared files, final `internal` path) and T-008 (`OutsideRoot`). Tier high: `CommandError`
   contract, L3 + L4. No gate path, no dependency. · gate attempts: 0 · missing context: none ·
   next: director review.
+- 2026-11-13T03:50Z · R-055 · draft · did: brought the spec to v1.1: tier high under ADR-0002
+  (criterion: it changes the registry's error contract `CommandError`, i.e. how the registry
+  works, a CHARTER §3 contract change; an ADR is due); budget 850k; Pinned; `depends_on` +T-010
+  with two reason rows and `NotABoundary` for its position refusals; renamed the control test
+  target to `acceptance_t030_control.rs`. Arm n/a (high). · gate attempts: 0 · missing context:
+  none · next: director review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

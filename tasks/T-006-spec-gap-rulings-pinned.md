@@ -1,7 +1,7 @@
 ---
 id: T-006
 title: "State the D-013 and D-023 spec-gap rulings in the public docs and pin each with a regression guard"
-tier: low               # docs + guard tests only (director ruling, Decisions D-1)
+tier: low               # ADR-0002: rustdoc + regression guards, no behaviour change; no boundary criterion applies (Decisions D-1)
 state: draft
 owner_role: planner
 scorecard_items: []
@@ -13,7 +13,7 @@ touches:
   - crates/kiln-commands/src/doc.rs      # module doc (`//!`) only; NOT the `DOC` constants
   - crates/kiln-commands/src/registry.rs # doc comment of `Command::MUTATING` only
   - crates/kiln-commands/tests/guard_t006.rs
-budget_tokens: 150000
+budget_tokens: 150000   # low (v1.1)
 iteration: 1
 found_by: reviewer
 origin_task: T-001      # the D-023 rulings come from T-003
@@ -49,6 +49,31 @@ The six rulings, each to be stated in the named doc and pinned by one guard test
 | R4 | `MUTATING` is a property of the command, not of one invocation: `doc.open` is mutating (`true`), also for a re-open that returns `already_open: true` and changes nothing. (D-023 SG-4) | `Command::MUTATING` doc comment; `doc.rs` module doc |
 | R5 | A document id is assigned only by a successful first open of a path. A failed `doc.open` (invalid path, missing file, undecodable file) consumes no id, and a re-open of an open path returns the existing id. (D-023 SG-5) | `doc.rs` module doc |
 | R6 | `doc.save` changes undo/redo history only by ending the current typing group: an available redo step stays available after a save. (D-023 SG-6) | `doc.rs` module doc |
+
+## Pinned
+- (a) Errors, payloads, precedence: no new error. The guards pin existing ones exactly: R1's
+  precedence (inverted range, then `start`, then `end`) and `EditError` payloads
+  (`InvertedRange{start,end}`, `OutOfBounds{index,len_chars}`); R3 (index checked before
+  emptiness); R5's `rejected` kinds as the CLI shows them (`not_found`, `decode_error`,
+  `invalid_path`).
+- (b) Files: writes only the six `touches` (four doc-comment edits, two new guard files). Reads
+  nothing on disk: `Context::with_files` uses the in-memory file system. `docs/commands.json`
+  must stay byte-identical (`cargo xtask schema` without `--write`).
+- (c) Order of checks: n/a (no behaviour change); the guards assert the existing order R1.
+- (d) Path base, platform, file types: n/a (in-memory file system only; no host path).
+- (e) Threat model: n/a (no gate, security or confinement path).
+- (f) Tests pinning a snapshot this changes: none; no behaviour, schema or doc string a test
+  compares changes. Another task's acceptance tests are not edited.
+- (g) Worked examples, executed: AC-5 and AC-6 were run through `kiln-cli run --root <dir>`
+  on today's `main` (planner R-055; same requests as the ACs, on disk instead of
+  `Context::with_files`): AC-5 gave `not_found`, `decode_error`, `invalid_path`, then doc 1
+  (`already_open:false`), doc 1 (`already_open:true`), doc 2 and `doc.list` with exactly docs 1
+  and 2; AC-6 gave `undone:true`, `can_redo:true`, `bytes_written:1`, `can_redo:true,
+  dirty:false`, `{"dirty":true,"len_chars":2,"redone":true}`, `doc.text` `"xa"`, and the file
+  still `x`. AC-1…AC-4 come from the T-001 r1 and T-003 r1 reviewers' probes on the product
+  (`reviews/T-001-r1.md`, `reviews/T-003-r1.md`); not re-executed in R-055.
+- (h) Scorecard items: none (low tier), so no CLI/control criterion is required; AC-4…AC-6 are
+  nevertheless observable through `kiln-cli run` as shown in (g).
 
 ## Acceptance criteria
 Low tier: the implementer writes these tests. They are **regression guards** (D-010): each
@@ -115,6 +140,10 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
 - D-2 (was Q-2): confirmed. The three T-004 follow-ups of D-032 leave T-006 and go to T-030.
 - D-3 (was Q-3): iteration 1; `origin_task: T-001`, and T-003 is named in the body.
 
+Dispatch note (R-055): `touches` overlap with T-007 (`crates/kiln-commands/src` is a prefix of
+`doc.rs` and `registry.rs`) and with T-010 (`crates/kiln-commands/src/doc.rs`); T-006 may run in
+parallel with T-008, T-009, T-011 or T-013, whose `touches` are disjoint from it.
+
 ## Questions
 None open.
 
@@ -142,6 +171,14 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   (low tier stands; D-032 follow-ups go to T-030; iteration 1, origin T-001, T-003 named in the
   Goal). No other change to the spec. · gate attempts: 0 · missing context: none · next:
   director review.
+- 2026-11-13T03:50Z · R-055 · draft · did: brought the spec to v1.1: tier low stands under
+  ADR-0002 (criterion: rustdoc and tests only, no behaviour change; none of the high criteria
+  applies, and the v1.0 "two layers" rule is gone); budget 150k (unchanged, v1.1 table); added
+  the Pinned section ((c)–(f) n/a with reasons) and executed AC-5/AC-6 through the built
+  `kiln-cli` on today's `main` (outputs in (g)); no scorecard items, so no experiment arm and no
+  CLI criterion required; added a dispatch note on overlapping `touches`. · gate attempts: 0 ·
+  not run: AC-1…AC-4 probes (taken from the reviews) · missing context: none · next: director
+  review.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

@@ -1,17 +1,17 @@
 ---
 id: T-007
 title: "Make replay detect divergence, enforce that read-only commands change nothing, and log every command that ran"
-tier: high              # command layer contract (log semantics, examples, docs/commands.json)
+tier: high              # ADR-0002: changes how the command log and the registry's audit work = CHARTER §3 contract (L3 "command log for replay"); ADR needed
 state: draft
 owner_role: planner
-scorecard_items: [cmd.log-replay]
+scorecard_items: []     # was [cmd.log-replay]: no CLI/control criterion is possible without a new CLI surface (Q-6)
 depends_on: [T-004, T-006]
 touches:
   - crates/kiln-commands/src
   - crates/kiln-commands/tests/integrity.rs   # implementer's own integration tests
   - docs/commands.json                        # generated: new read-only examples
   - docs/control-protocol.md                  # session-log paragraph only (rule (c))
-budget_tokens: 700000
+budget_tokens: 850000   # high (v1.1)
 iteration: 1
 found_by: reviewer
 origin_task: T-003
@@ -104,13 +104,15 @@ appends the command's own entry and result as for any command). "The context" me
 
 `audit()` checks this on every example of every read-only command. A violation is one problem
 line containing `` `<name>` example <i> (<description>): read-only command changed state ``.
-Every current read-only command (`doc.text`, `doc.info`, `doc.list`, `buffer.text`) gains at
-least one example whose setup leaves the context rich enough to expose a violation:
+Every read-only command registered on the `main` this task starts from (today `doc.text`,
+`doc.info`, `doc.list`, `buffer.text`; also `doc.line` and `doc.position` if T-010 has merged
+by then) gains at least one example whose setup leaves the context rich enough to expose a violation:
 - for `doc.*`: two open documents, one whose last edit is a single-char `doc.insert` (an open
   typing group), and one with an available redo step and unsaved changes;
 - for `buffer.text`: a setup whose last command is a single-char `buffer.insert`.
 
-Existing examples stay. Run `cargo xtask schema --write`.
+Existing examples stay, in their positions (new ones are appended: `guard_t003.rs` reads
+`examples[0]` of `buffer.insert` and `buffer.text`). Run `cargo xtask schema --write`.
 
 **(c) A command that ran is logged** (Decisions D-2). Suppose a command's `run` returned `Ok`,
 but its result does not serialize or fails the result schema. Then `execute` returns
@@ -123,6 +125,32 @@ error returned by `run`. The `LogEntry` and `Context::log` doc comments change f
 "successfully executed" to "ran to completion". In `docs/control-protocol.md`, the sentence
 saying a command that returns an error is not recorded gains this exception
 (`internal`/`result_schema` and the serialization case). Panics are not covered; see Out of scope.
+
+## Pinned
+- (a) Errors, payloads, precedence: `Divergence` variants and `VerifyError{index, divergence}`
+  as in the Interface; precedence inside one entry: unknown name → `MutatingMismatch` →
+  execution error (`Failed`) → `ResultMismatch`; `LengthMismatch` before any entry runs. The
+  audit problem line and the `Internal` message shapes are exact (Semantics (b), (c)).
+- (b) Files: `docs/commands.json` (regenerated: appended examples only); `docs/control-protocol.md`
+  one sentence (Semantics (c)); no file system access by the code beyond the existing VFS.
+- (c) Order of checks: Semantics (a) steps 1–4; `execute` keeps its order (lookup → params
+  schema → run → result serialization → result schema), and the log push moves after the
+  result checks only for the (c) cases.
+- (d) Path base, platform, file types: n/a (in-memory `Context::with_files`; no host path).
+- (e) Threat model: n/a for the gate; the property is integrity, not security. "Liar" commands
+  model future honest mistakes, not malicious code (a liar could still panic; out of scope).
+- (f) Tests pinning a snapshot this changes: `acceptance_t003*.rs`, `guard_t003.rs`,
+  `guard_t004.rs` pin `LogEntry`'s three fields, `ReplayError.error: CommandError` and
+  `examples[0]` of the buffer commands — all kept. `docs/commands.json` changes and is
+  regenerated (`cargo xtask schema --write`); `apps/kiln-cli/tests/cli.rs` compares the dump to
+  that file, so it stays green. No test pins the number of examples (grep `"examples"` in
+  `crates`, `apps`).
+- (g) Worked examples: AC-3's values follow from `doc.text`'s result shape
+  `{"len_chars":…,"text":…}` on today's `main` (planner R-055 ran `doc.text` through
+  `kiln-cli run`: `{"len_chars":2,"text":"xa"}` for a two-char document). AC-4…AC-9 are rules,
+  not computed values.
+- (h) Scorecard items: none claimed (see Q-6). The behaviour observable through the CLI is
+  AC-10.
 
 ## Acceptance criteria
 All through `kiln_commands` on `standard_registry()`. "Liar" commands are test-defined `Command`
@@ -188,17 +216,22 @@ public way. Those nested calls also append to the log, and tests must expect tha
 
   A liar whose `run` returns `Err(CommandError::rejected(…))` without changing anything appends
   nothing. Oracle: exact value.
+- AC-10 (through the CLI): `kiln-cli commands --schema` lists, for every command whose
+  `mutating` is `false`, at least one example whose `setup` opens two documents (one ending in a
+  single-char `doc.insert`, one with a redo step and unsaved changes; for `buffer.text`, a setup
+  ending in a single-char `buffer.insert`), and `kiln-cli commands --audit` exits 0. Fails on
+  base (no such examples). Oracle: exact value over the parsed JSON.
 
 ## Scorecard items and intended test names
 Tests in `crates/kiln-commands/tests/acceptance_t007.rs` (`kiln_commands::acceptance_t007::<fn>`).
 
-| Item | Tests |
-|---|---|
-| cmd.log-replay | add `verified_replay_round_trips`, `verified_replay_reports_first_divergence` (existing tests stay) |
-
-Also (no item): `results_are_recorded_for_every_logged_command`,
+No item (Q-6). Tests (no item): `verified_replay_round_trips`,
+`verified_replay_reports_first_divergence`, `results_are_recorded_for_every_logged_command`,
 `read_only_commands_change_nothing_but_the_log`, `audit_catches_read_only_liars`,
-`command_that_ran_is_logged_even_with_bad_result`.
+`command_that_ran_is_logged_even_with_bad_result`, and in
+`apps/kiln-cli/tests/acceptance_t007_cli.rs` `read_only_commands_publish_rich_examples` (AC-10;
+the distinct target name avoids two `acceptance_t007` targets in two packages, which the join
+miscounts until T-009 (6) lands).
 
 ## Out of scope
 - Structured reasons in `CommandError`, kind derivation in `kiln-control`, and the D-032 cap
@@ -234,9 +267,21 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
 - D-4 (was Q-5): `outside_root` is approved; it now concerns T-030, not this task.
 - Dispatch note: T-007 shares `docs/control-protocol.md` with T-008, so the two may not be in
   flight at the same time (METHODOLOGY §5.2). T-007 does not depend on T-008's code.
+- Dispatch note (R-055): `crates/kiln-commands/src` overlaps T-006, T-010 and T-030;
+  `docs/control-protocol.md` overlaps T-008, T-010, T-011 and T-030. T-007 can run in parallel
+  only with T-009 or T-013 (xtask) among the tasks of this file set.
+- Tier note (R-055): under ADR-0002 a change to how the command log or the registry's audit
+  works is a CHARTER §3 contract change, so the director writes an ADR before `ready`
+  (METHODOLOGY §4 table) and the task stays its own task (P1).
 
 ## Questions
-None open.
+- Q-6 (planner, R-055): T-007 claimed `cmd.log-replay`, but none of its new behaviour is reachable
+  through the CLI or control protocol (verified replay needs recorded results in the log
+  script, which T-007 puts out of scope as a protocol change; liar commands exist only in Rust
+  tests). v1.1 requires a CLI/control criterion per claimed item, so the claim is dropped and the
+  item keeps its existing CLI tests. Alternative: add `kiln-cli run --verify <results-file>` (or
+  results in `--log` output) to this task, which adds `apps/kiln-cli/src/main.rs` to `touches`
+  and a protocol change. Which?
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -267,6 +312,14 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   dispatch constraint, recorded); stated why T-007 lands before T-030. Still high: it changes
   the command layer's log contract and `docs/commands.json` examples. · gate attempts: 0 ·
   missing context: none · next: director review.
+- 2026-11-13T03:50Z · R-055 · draft · did: brought the spec to v1.1: tier high under ADR-0002
+  (criterion: it changes how the command log and the registry's audit work, which ADR-0002
+  names as a CHARTER §3 contract change; so an ADR is due), budget 850k; added Pinned; dropped
+  the `cmd.log-replay` claim for lack of any CLI/control-observable criterion (Q-6) and added
+  AC-10 through `kiln-cli commands`; made (b) cover `doc.line`/`doc.position` if T-010 merges
+  first; pinned that new examples are appended (`guard_t003.rs` reads `examples[0]`); named the
+  CLI test file `acceptance_t007_cli.rs`. Arm n/a (high: independent test author). · gate
+  attempts: 0 · missing context: none · next: director answers Q-6, writes the ADR.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
