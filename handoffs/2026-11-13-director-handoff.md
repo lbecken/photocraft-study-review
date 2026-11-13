@@ -15,10 +15,11 @@ repository; this note says where to look and what is in flight.
 ## In flight (builder agents on the owner-specified model; cap: three compiling at once)
 | Task | Role / run | State of the work |
 |---|---|---|
-| T-013 process tooling (high, gate paths) | reviewer R-081 done; rework: implementer R-089, test author R-090 (fresh agents, running since 08:03Z) | Review r1 request-changes (5 defects, 3 test gaps, 4 spec gaps). Rulings j–p in the task file (D-047). Next: both report → `cargo xtask join T-013` → metrics → round-2 review (delta, final; resume the R-081 reviewer) → approval row `Approve T-013 … gate paths` → queue. |
-| T-015 scaffold (high) | reviewer round 2, run R-088, running | Rework joined green at `306a71d` (runs R-084, R-085/R-086, R-087 booked). If approve: approval row `Approve T-015`, queue, mark merged, remove worktrees; then accept ADR-0004 and make T-032 ready. |
-| T-016 tree-sitter (high) | test author R-083 running | Then implementer, join, review. Spec check in `tasks/spec-checks/T-016.md`. |
-| T-017 regex (high), T-032 (high) | not dispatched | T-017 is `ready`; T-032 waits for T-015 and ADR-0004. |
+| T-013 process tooling (high, gate paths) | rework continuation: implementer R-091, test author R-092 (fresh agents after the 11:11Z restart) | Rulings j–q in the task file (D-047). R-089/R-090 were cut off by the usage limit with work committed. Next: both report → `cargo xtask join T-013` → metrics → round-2 review (delta, final; fresh reviewer, give it `reviews/T-013-r1.md`) → approval row `Approve T-013 … gate paths` → queue. |
+| T-015 scaffold (high) | merged `d90e542` (D-048, D-049) | Done. |
+| T-016 tree-sitter (high) | test author R-093 (fresh, finishing R-083) | Then implementer, join, review. |
+| T-032 refusal reasons (high) | `in_progress`, worktrees created, nobody dispatched yet | ADR-0004 accepted (D-050). Dispatch implementer and test author when a compile slot frees; ask both to report spec-vs-merged-T-015 mismatches first. |
+| T-017 regex (high) | `ready`, not dispatched | |
 
 ## Plan for the rest of iteration 1 (all specs are in `tasks/`, state `draft` unless noted)
 - Tooling track: T-013 → T-009 (queue follow-ups, gate paths) → T-028 (fuzz and budgets runners) → T-029 (command fuzz target).
