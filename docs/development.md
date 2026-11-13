@@ -68,6 +68,7 @@ queue). Every step can also run alone: `cargo xtask <step>`.
 | `clippy` | `cargo clippy --workspace --all-targets --locked -- -D warnings` | — |
 | `layers` | `cargo metadata` against `xtask/layers.toml`: no upward or same-layer dependency (normal, build or dev), testkit only as dev-dependency, apps not depended on, xtask depends on no workspace crate, no UI/GPU crate (`headless_forbidden`) in the normal/build closure of L0–L4, the testkit and headless apps | fails on a workspace crate missing from the table, a table entry that is not a crate, an empty workspace |
 | `ui-commands` | every path in `crates/kiln-ui/**/*.rs` that names a lower crate (`kiln_text::…`) must match `xtask/ui-allowlist.toml` (whole-segment prefix) | runs a self-test first: `xtask/fixtures/ui-commands/violation.rs` must yield exactly its 6 known violations and `clean.rs` none; fails if `kiln-ui/src/lib.rs` is missing |
+| `hygiene` | two text checks (ADR-0003). `reviews`: every `reviews/T-NNN-rN.md` whose task file has tier medium/high and `iteration ≥ 1` has front matter `task`/`round` matching the file name, `tier` and `arm` matching the task (arm: `independent` for high and even-numbered medium, `implementer` for odd-numbered medium), and `mutants` (flow map `{…}` as in the template, or an indented block) with the five non-negative integers `introduced`, `equivalent`, `killed`, `killed_by_acceptance`, `survived`, `equivalent + killed + survived = introduced`, `killed_by_acceptance ≤ killed`, and `introduced ≥ 10` in round 1. `session-paths`: no file listed by `git ls-files` contains a match of `/tmp/claude-[0-9]+/[^/[:space:]]+/<UUID>` (non-UTF-8 files skipped); a match is reported as `<path>:<line>`, never the text. Each FAIL line names its check | never EMPTY: `session-paths` always runs; a review without a task file fails; no allowlist |
 | `schema` | `kiln-cli commands --audit` (each example's params validate, the example runs on a fresh context and returns exactly its stated result, which validates against the result schema), then unique names, docs, both schemas, ≥1 example per command, and `docs/commands.json` byte-equal to the dump | zero commands fails |
 | `scorecard` | `scorecard --check` (below) | an empty `scorecard/items` fails; a listed test that does not exist fails |
 | `test` | `cargo test --workspace --locked` (unit, integration, doc tests) | zero passed tests fails |
@@ -133,22 +134,31 @@ Adding an item: create the file with `tests = []` (state `planned`), run
    buffer text, params and the exact result), `run` (leave the context unchanged on error).
 3. Register it in the module's `register`; a new group module is registered in
    `standard_registry()`.
-4. `cargo xtask schema --write` and commit `docs/commands.json`. Command schema changes are
-   high tier (CHARTER §4).
+4. `cargo xtask schema --write` and commit `docs/commands.json`. Adding a command is medium
+   tier unless a boundary of ADR-0002 applies; changing how the registry, schema validation or
+   the command log work is a CHARTER §3 contract change, tier high (ADR-0002).
 
 ## Task worktrees
 
 ```sh
 cargo xtask worktree new T-012            # .worktrees/T-012 on task/T-012 from main
 cargo xtask worktree new T-012 --tests    # .worktrees/T-012-tests on task/T-012-tests
-cargo xtask worktree new T-012-tests      # same as --tests (METHODOLOGY O-2)
+cargo xtask worktree new T-012-tests      # same as --tests (METHODOLOGY §3)
 cargo xtask worktree list                 # task worktrees, ahead/behind main
 cargo xtask worktree rm T-012 [--tests] [--force]   # deletes the branch only if merged
 ```
 
-`new` prints the `cd` and `export CARGO_TARGET_DIR=<worktree>/target` to use. Never point two
-checkouts at one target directory: cargo's mtime-based freshness can then reuse artifacts built
-from the other tree (bootstrap-verification §7 defect 4).
+`new` first reads the task's state from **main's committed** `tasks/T-NNN-*.md` (never the
+working copy) and refuses — exit 1, one stderr line, nothing created — unless it is `ready`
+(METHODOLOGY §5.1): `worktree: refused: T-NNN is <state> on main; worktree new needs ready` or
+`worktree: refused: no tasks/T-NNN-*.md on main`. The same holds for `--tests` and
+`T-NNN-tests`. A main without any `tasks/` directory (repositories that do not track tasks) is
+not checked.
+
+`new` prints the `cd` line; cargo then uses `<worktree>/target` by itself. Never set or export
+`CARGO_TARGET_DIR` (AGENTS.md, D-019): pointing two checkouts at one target directory lets
+cargo's mtime-based freshness reuse artifacts built from the other tree (bootstrap-verification
+§7 defect 4).
 
 **Seeding.** Unless `--no-seed` (which creates an empty `target/`), the new target directory is
 seeded from main's `target/` with **copies** (never hard links, symlinks or a shared directory)
@@ -203,7 +213,7 @@ Run from the primary checkout, with `main` checked out and clean. In order:
    `docs/decisions.md`, `tasks/`, `reviews/`, `xtask/generated.toml` or `xtask/ledger.toml`.
    Evidence is read only from main's committed tree, so commit the ledger on `main` first
    (D-026 R6, D-027);
-3. runs the **preconditions** below; the first that fails is a refusal: exit 1, one stderr line
+3. runs the **preconditions** below (`budget` sits between `approval` and `main-history`); the first that fails is a refusal: exit 1, one stderr line
    `queue: refused: <check>: <reason>`, nothing changed and no record written;
 4. builds main's xtask from `base_sha` (= `main`) in a private build tree
    `.git/kiln-queue/main-xtask/` (`src/` is a fresh export of `base_sha` through a private git
@@ -262,6 +272,7 @@ JSON `{"passed": bool, "failed_step": string|null, …}`.
 | `gate-path` | a task whose changed paths include a **gate path** is tier high (D-026 R3). Gate paths: anything under `xtask/` or `.github/`; any path with a `.cargo` directory segment; any file named `build.rs`, `rust-toolchain.toml`, `rust-toolchain`, `clippy.toml`, `.clippy.toml`, `rustfmt.toml` or `.rustfmt.toml` (at any depth); any `Cargo.toml` whose `[lints]` table (including `lints.workspace`) or package `build` key the task adds, removes or changes; any file that a package `build` key names in main's tree or at the task head (a build script need not be called `build.rs`, D-030 R10); and the root `Cargo.toml` when the task changes its `[workspace.lints]`, `[workspace.metadata]` or any `[profile.*]` table. "The task changes" a value relative to main when the head's value differs from main's **and** from the merge base's, so a value main changed after the branch was made is not blamed on the task (the rebase brings main's); an unparsable manifest at the head always counts |
 | `dependencies` | a task whose changed paths include a `Cargo.lock` or a `Cargo.toml` whose dependency tables differ between the merge base and the head (`[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `[target.*]` forms, `[workspace.dependencies]`, `[patch.*]`, `[replace]`; a new manifest with any of them counts) is tier high; and for every changed `Cargo.lock`, no registry or git package of main's lock has a version at the task head that the task's own diff changed (head differs from main's and from the merge base's; path packages are not compared, D-027). A version that is only stale because main moved is replaced by the rebase or regeneration, and the rule runs again on the rebased tree before the gate (D-026 R4). A version change is allowed only for a tier-high task whose approval row (as for `approval`) contains the words `dependency versions` (D-030 R11); then it merges. Regeneration of a conflicted `Cargo.lock` never changes such versions (`regenerate:Cargo.lock`) |
 | `approval` | high: main's `docs/decisions.md` has a table row whose Decision cell begins with `Approve T-NNN` (D-2) followed by the cell's end or a character that cannot continue an id (so `Approve T-005-tests` does not approve T-005); for a task that changes gate paths, that same cell must also contain the words `gate paths` (D-026 R3). Only real Markdown table rows count: a header row with a `Decision` cell, then a delimiter row, then rows starting with `|` after at most three spaces — never lines in fenced code blocks, indented code, block quotes or HTML comments (D-026 R7) |
+| `budget` | the sum `S` of known `tokens` over the task's `kind:"run"` records in main's **committed** `metrics/tasks.jsonl` is at most the task's ceiling: the `N` of the last (in table order) decision-table row of main's `docs/decisions.md` whose Decision cell begins with `Extend T-NNN to N` (decimal digits, then the cell's end or a character that is neither a digit nor an id character; rows recognised as for `approval`; `Extend T-NNN` without `to <digits>` is not an extension), else main's `budget_tokens` (a task file without it fails). Refusal: `queue: refused: budget: T-NNN has <S> recorded tokens, over its ceiling <ceiling> (<budget_tokens\|Extend row>); a docs/decisions.md row "Extend T-NNN to <N>" with N ≥ <S> is needed`. Runs with `tokens: null` count 0 and the summary line says how many (METHODOLOGY §11) |
 | `main-history` | every commit on main's first-parent history after the newest `head_sha` of a `merged` record in main's **committed** `metrics/queue.jsonl` (D-030 R12) changes only ledger paths, respecting their mode; trivially true before the first merge |
 
 **Allowed paths** (`touches` check): `p` is allowed if `p == t` or `p` starts with `t/` for an
@@ -323,7 +334,7 @@ These risks are accepted (D-030) and not defended against:
 This queue was introduced by T-005. T-005 itself was the last task queued by the old queue,
 which ran the task branch's own gate and checked none of the above.
 
-## Join: `cargo xtask join T-NNN` and `--revert-check`
+## Join: `cargo xtask join T-NNN` (and the optional `--revert-check`)
 
 Acceptance tests live in `crates/*/tests/acceptance_tNNN*.rs`, `apps/*/tests/…` or
 `xtask/tests/…` (directly in that `tests/` directory) on `task/T-NNN-tests`. Regression guards
@@ -334,22 +345,25 @@ branch: every guard must pass in both places, otherwise the record's `result` is
 `guard_total`, `guard_fail_base` and `guard_fail_join` (D-021). `join`:
 
 1. builds and runs them in `.worktrees/T-NNN-tests` (base + tests) → `base_fail_kind`:
-   `fails` (all compile and fail), `does_not_compile` (weak evidence), `mixed`, or `passes`
-   (refused: the merge is undone, nothing proven);
+   `fails` (all compile and fail), `does_not_compile` (weak evidence: join prints
+   ``join: base evidence is `<kind>` (weak); the reviewer's mutation spot-check must cover it
+   (METHODOLOGY §6)``), `mixed`, or `passes` (refused: the merge is undone, nothing proven);
 2. runs the implementer branch's `cargo test --workspace` → `impl_tests_green`;
 3. merges `task/T-NNN-tests` into `task/T-NNN` (`--no-ff`, `Task:`/`Role: director` lines);
 4. runs the acceptance tests on the joined branch → `acc_fail_first_join`; if all pass, the gate;
 5. appends a `join` record to `metrics/tasks.jsonl` (`--acc-defects N` records the director's
-   classification; otherwise `null`). Exit 0 only for `result: "joined"`.
+   classification; otherwise `null`, classified later with `metrics join-defects`). Exit 0
+   only for `result: "joined"`.
 
 `cargo xtask join --revert-check T-NNN [--revert <sha>]…` reverts the implementation commits
 (default: non-merge commits on `task/T-NNN` not on `main` or `task/T-NNN-tests`) in a temporary
 worktree `.worktrees/T-NNN-revert-check` with a private target seeded from the task worktree's
 target exactly like `worktree new` (copies of non-member artifacts only; the task's target is
 only read, so a later build there is never served the reverted tree), keeps the tests, and records a `revert_check` record with
-`result_kind`. Exit 0 only for `fails`. When the tests call a new API, revert only the logic
-commits (`--revert <sha>`) so the API stub remains and the tests compile — split such work into
-a stub commit and a logic commit.
+`result_kind`. Exit 0 only for `fails`. It is an optional diagnostic: the method does not
+require a revert check or a stub/logic commit split (v1.1); weak base evidence is covered by the
+reviewer's mutation spot-check (METHODOLOGY §6). `--revert <sha>` limits the revert to the
+given commits.
 
 Note: the queue's rebase flattens the join merge, so after queueing `task/T-NNN-tests` no longer
 looks merged (`worktree list` shows it ahead); remove it with `worktree rm --tests --force`. For
@@ -357,24 +371,108 @@ the same reason the queue's `join` check reads the `join` record, not history.
 
 ## Metrics: `cargo xtask metrics`
 
-Field names are the contract of METHODOLOGY §13. Timestamps are always passed in
-(`YYYY-MM-DDTHH:MM:SSZ` or with an offset; stored as UTC `Z`).
+Field names are the contract of METHODOLOGY §13. `<now>` is the system clock (UTC, seconds);
+there is no option or variable that replaces it or relaxes a refusal (D-026 R8). Refusals are
+one stderr line `metrics: refused: …`, exit 1, nothing appended; usage errors (unknown option,
+missing value, a value that is not a number or a timestamp) exit 2.
 
 ```sh
 cargo xtask metrics add --task T-012 --run R-001 --role implementer --tokens 12000 \
-  --tool-calls 9 --gate-attempts 1 --outcome completed \
-  --started-at 2026-11-12T22:00:00Z --ended-at 2026-11-12T22:20:00Z \
-  [--tier medium] [--iteration 0] [--wall-s N] [--missing-context "…"] [--note "…"]
-cargo xtask metrics transition --task T-012 --from specified --to ready --at 2026-11-12T21:50:00Z
+  --tool-calls 9 --gate-attempts 1 --outcome completed --started-at 2026-11-12T22:00:00Z \
+  [--ended-at <ts>] [--tier medium] [--iteration 1] [--wall-s N] [--missing-context "…"] [--note "…"]
+cargo xtask metrics add --task iter-1 --run R-002 --role evaluator --tokens-unknown ...
+cargo xtask metrics transition --task T-012 --to ready [--from specified] [--at <ts>]
+cargo xtask metrics join-defects --task T-012 --joined-sha <40-hex> --acc-defects 1
 cargo xtask metrics report
 ```
 
-`--tier` and `--iteration` default from `tasks/T-NNN-*.md` front matter; `wall_s` defaults to
-`ended_at − started_at`. Aliases: `--seconds` = `--wall-s`, `--tool-uses` = `--tool-calls`.
-Roles: director, planner, implementer, test-author, reviewer, integrator, evaluator,
-retrospective-analyst. `report` prints tokens by tier, first-pass queue success, tokens per
-merged task by tier, lead time (first `→ ready` transition to the first `merged` queue record),
-gate attempts per task, first-join base evidence, acceptance-caught defects and budget overruns.
+Rules, checked in this order (first failure wins): options → task id and task file / `iter-N`
+role rules → tokens → time → append.
+
+- **Task.** `T-NNN` needs exactly one `tasks/T-NNN-*.md` in the working tree (tier, iteration
+  and `budget_tokens` come from it; `--tier`/`--iteration` override). `iter-N` (N without
+  leading zeros) books iteration N's overhead: `task:"iter-N"`, `iteration: N` (`--iteration`,
+  if given, must equal N), `tier: null` (`--tier` is refused). Only `director`, `planner`,
+  `evaluator` and `retrospective-analyst` runs go to `iter-N`, and those roles never go to a
+  `T-NNN`. `transition` and `join-defects` refuse `iter-N`.
+- **Tokens.** Exactly one of `--tokens N` (N ≥ 1) or `--tokens-unknown` (`"tokens": null`).
+- **Time.** `--ended-at` (add) and `--at` (transition) default to `<now>`. A record's time is
+  `ended_at` for a run, `at` for any other record. Refused: a time later than `<now>`, a
+  `started_at` later than `<now>` or than `ended_at`, and a time earlier than the latest time
+  among the task's records in `metrics/tasks.jsonl` (equal is allowed).
+- **Transitions.** The current state is the `to` of the task's latest transition (`draft` if
+  none); `--from`, if given, must equal it. Allowed (METHODOLOGY §3): draft → specified;
+  specified → ready, draft; ready → in_progress; in_progress → self_verified; self_verified →
+  queued (low) or tests_joined, in_progress (medium/high); tests_joined → reviewed, in_progress
+  (medium/high); reviewed → queued (medium/high); queued → merged, in_progress; merged →
+  evaluated; every state but merged, evaluated and abandoned → blocked, abandoned; blocked → the
+  state it was entered from, or abandoned; evaluated and abandoned are terminal.
+- **Budget line.** After `add` for a task, stdout ends with `T-NNN: <sum> tokens of budget
+  <budget_tokens>` (sum of known tokens of all its runs), then, if the sum exceeds the ceiling
+  (`budget_tokens`, or the task's last `Extend T-NNN to <N>` row in the working tree's
+  `docs/decisions.md`), `T-NNN: over its ceiling <ceiling> by <d> tokens; the queue refuses it
+  without a docs/decisions.md row "Extend T-NNN to <N>" with N ≥ <sum>`, then, if some run has
+  unknown tokens, `T-NNN: <k> run(s) with unknown tokens not counted`. For `iter-N`:
+  `iter-N: <sum> tokens of overhead`.
+- **`join-defects`** appends `{"kind":"join_defects","task":…,"at":"<now>","joined_sha":…,
+  "acc_defects":N}`, the director's classification of a failing join; no record is ever edited
+  (T-013 D-3). Refused: no `join` record of the task with that `joined_sha`, more than one, its
+  own `acc_defects` already set, an earlier `join_defects` record for it, `acc_fail_first_join`
+  0, or N above it. A join's **classification** is its own `acc_defects`, else that record.
+  (The new record kind joins METHODOLOGY §13's list at retrospective 1.)
+
+`wall_s` defaults to `ended_at − started_at`. Aliases: `--seconds` = `--wall-s`, `--tool-uses`
+= `--tool-calls`. `report` prints tokens by tier (`iter-N` runs as tier `overhead`, never in a
+task's total), first-pass queue success, tokens per merged task (merged = a `merged` record in
+`metrics/queue.jsonl`) by tier and by arm without overhead and per iteration with `iter-N`
+overhead (unknown-token runs excluded and counted on the line), lead time, gate attempts per
+task, first-join base evidence, acceptance-caught defects (Σ classification over **every** join
+with `impl_tests_green: true`, by tier and arm), one `unclassified join: …` line per failing
+join of an iteration-≥1 task without a classification (the report is printed in full and exits
+1), known defects merged by decision (`found_by: reviewer` tasks whose `origin_task` is merged,
+as `T-NNN (from T-MMM)`), and budget overruns with `extend to: <N>|none` and
+`within ceiling: yes|no`.
+
+## Publishing a ledger input: `cargo xtask publish`
+
+```sh
+cargo xtask publish T-NNN --title "<title>" --iteration N <path>...
+```
+
+An evaluation file or a new scorecard item is a ledger path, but it changes the generated
+`docs/scorecard.md`, which reaches `main` only through the queue (D-034, T-012). `publish` does
+the whole low-tier publish task in one command, from the primary checkout with `main` checked
+out. Inputs: new `scorecard/items/<id>.toml` files (absent from main) and new or modified
+`evaluations/*.md` files of the working tree. Steps (each failure stops):
+
+1. checks, nothing changed (`publish: refused: <reason>`, exit 1): `main` checked out; a well
+   formed `T-NNN` with no task file on main or in the working tree, no `task/T-NNN` branch and
+   no `.worktrees/T-NNN`; at least one input, each of an allowed kind and different from main;
+   apart from the inputs, the queue's working-tree rules (`ledger`, no other dirty path); main's
+   xtask `scorecard`, run in a private export of main plus the inputs
+   (`.git/kiln-publish/`), must succeed (else its own error) and must change
+   `docs/scorecard.md` (else `publish: refused: the inputs change no generated file; commit them
+   on main as a ledger commit`). The primary checkout's `docs/scorecard.md` is not written;
+2. writes `tasks/T-NNN-publish-<slug>.md` (tier low, `state: ready`, `owner_role: director`,
+   `touches` = the inputs, `budget_tokens: 150000`, the three ACs of T-012), records draft →
+   specified → ready and commits the file and `metrics/tasks.jsonl` on main (`publish: T-NNN
+   ready`, `Task:`/`Role: director`, the repository's commit configuration, signing included).
+   A failed commit: exit 2 and a line with the command to commit by hand;
+3. creates the worktree as `worktree new` does; ready → in_progress;
+4. copies the inputs into it, regenerates `docs/scorecard.md` with main's xtask `scorecard`,
+   and commits exactly those paths on `task/T-NNN` (anything else: stop, exit 1);
+5. runs the gate there; red: exit 1 and `publish: gate failed in .worktrees/T-NNN at <step>; …`
+   (the task stays in_progress, the inputs stay in the primary checkout);
+6. in_progress → self_verified → queued, `state: queued`, commit `publish: T-NNN queued`;
+7. removes each input from the primary checkout once its bytes equal the branch copy (new files
+   deleted, modified files restored), printing `publish: <path> moved to task/T-NNN`;
+8. runs `cargo xtask queue T-NNN` (output and exit code passed through). Merged: queued →
+   merged, `state: merged`, commit `publish: T-NNN merged`, `worktree rm T-NNN`. Otherwise:
+   `publish: queue did not merge T-NNN (exit c); …` and exit `c`.
+
+The helper records no `run`. The director still reserves the task number and title, has the
+input written by its author, books the session's own run to `iter-N`, acts on a stop message
+(re-run the gate, re-queue, or abandon), and files any defect tasks as separate ledger commits.
 
 ## Other registries
 
