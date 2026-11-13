@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::frontmatter::{self, Value};
-use crate::git::{git, git_try, rev};
+use crate::git::{git, git_try};
 use crate::policy::{GENERATED_FILE, LEDGER_FILE, Policy, path_under};
 use crate::util::read_jsonl;
 
@@ -94,6 +94,13 @@ fn raw_front_matter(text: &str) -> Option<String> {
     None
 }
 
+/// Whether `s` is a full lowercase 40-hex commit id.
+pub fn is_full_sha(s: &str) -> bool {
+    s.len() == 40
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 /// The task's number as written in its id (`T-007` → `007`).
 fn number(task: &str) -> &str {
     task.strip_prefix("T-").unwrap_or(task)
@@ -117,6 +124,33 @@ pub struct Allowed<'a> {
 }
 
 impl Allowed<'_> {
+    /// Whether `p` is one of the task's acceptance tests or regression guards: an
+    /// `acceptance_tNNN*.rs` or `guard_tNNN*.rs` file directly in a `crates/*/tests/`,
+    /// `apps/*/tests/` or `xtask/tests/` directory (D-010, D-019 (d)).
+    pub fn is_test_file(&self, p: &str) -> bool {
+        let segs: Vec<&str> = p.split('/').collect();
+        let file = segs.last().copied().unwrap_or_default();
+        let in_tests_dir = match segs.as_slice() {
+            [top, _, "tests", _] => *top == "crates" || *top == "apps",
+            ["xtask", "tests", _] => true,
+            _ => false,
+        };
+        let n = number(self.task);
+        in_tests_dir
+            && (file.starts_with(&format!("acceptance_t{n}"))
+                || file.starts_with(&format!("guard_t{n}")))
+            && file.ends_with(".rs")
+    }
+
+    /// Whether a commit after `reviewed_sha` may change `p` (D-026 R2): review files, the task
+    /// file, generated paths and acceptance/guard test files.
+    pub fn allowed_after_review(&self, p: &str) -> bool {
+        p.starts_with(&format!("reviews/{}-", self.task))
+            || p == self.task_file
+            || self.policy.is_generated(p)
+            || self.is_test_file(p)
+    }
+
     /// Whether the task branch may change path `p`.
     pub fn allows(&self, p: &str) -> bool {
         if self.touches.iter().any(|t| path_under(p, t))
@@ -128,19 +162,7 @@ impl Allowed<'_> {
         if self.tier == "low" {
             return false;
         }
-        let segs: Vec<&str> = p.split('/').collect();
-        let file = segs.last().copied().unwrap_or_default();
-        let in_tests_dir = match segs.as_slice() {
-            [top, _, "tests", _] => *top == "crates" || *top == "apps",
-            ["xtask", "tests", _] => true,
-            _ => false,
-        };
-        // Acceptance tests and regression guards (D-010, D-019 (d)).
-        let n = number(self.task);
-        let acceptance = in_tests_dir
-            && (file.starts_with(&format!("acceptance_t{n}"))
-                || file.starts_with(&format!("guard_t{n}")))
-            && file.ends_with(".rs");
+        let acceptance = self.is_test_file(p);
         let item = self
             .scorecard_items
             .iter()
@@ -440,13 +462,26 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
             .get("reviewed_sha")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let Ok(reviewed) = rev(root, reviewed) else {
+        // A full commit id only (D-026 R2): a branch name or other revision expression would
+        // follow the head and make the stale-review rule vacuous.
+        if !is_full_sha(reviewed) {
+            return refuse(
+                R,
+                format!("{review_file}: reviewed_sha `{reviewed}` is not a full 40-hex commit id"),
+            );
+        }
+        let is_commit = or_refuse(
+            R,
+            git_try(root, &["cat-file", "-e", &format!("{reviewed}^{{commit}}")]),
+        )?
+        .0;
+        if !is_commit {
             return refuse(
                 R,
                 format!("{review_file}: reviewed_sha `{reviewed}` is not a commit"),
             );
-        };
-        if !or_refuse(R, is_ancestor(root, &reviewed, head))? {
+        }
+        if !or_refuse(R, is_ancestor(root, reviewed, head))? {
             return refuse(
                 R,
                 format!("{review_file}: reviewed_sha {reviewed} is not an ancestor of {head}"),
@@ -459,15 +494,15 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
                 &["rev-list", "--reverse", &format!("{reviewed}..{head}")],
             ),
         )?;
-        let review_prefix = format!("reviews/{task}-");
         for c in after.lines() {
             for (_, p) in or_refuse(R, commit_changes(root, c))? {
-                if !(p.starts_with(&review_prefix) || p == task_file) {
+                if !rule.allowed_after_review(&p) {
                     return refuse(
                         R,
                         format!(
-                            "commit {} after reviewed_sha changes `{p}` (only {review_prefix}* and {task_file} may change after review)",
-                            &c[..12.min(c.len())]
+                            "stale review: commit {} after reviewed_sha {} changes `{p}` (after review only reviews/{task}-*, {task_file}, generated paths and acceptance/guard tests may change)",
+                            &c[..12.min(c.len())],
+                            &reviewed[..12]
                         ),
                     );
                 }
@@ -621,6 +656,42 @@ mod tests {
         let longer = "| # | Decision |\n|---|---|\n| D-1 | Approve T-0050 |\n";
         assert!(!has_approval(longer, "T-005"));
         assert!(!has_approval("Approve T-005\n", "T-005"));
+    }
+
+    #[test]
+    fn after_review_paths_and_full_shas() {
+        let p = Policy::parse(Some(GEN), Some(LED)).unwrap();
+        let touches = vec!["crates/a".to_owned()];
+        let m = rule("medium", &touches, &[], &p);
+        for ok in [
+            "reviews/T-007-r2.md",
+            "tasks/T-007-x.md",
+            "Cargo.lock",
+            "crates/b/tests/acceptance_t007.rs",
+            "xtask/tests/guard_t007_r2.rs",
+        ] {
+            assert!(m.allowed_after_review(ok), "{ok}");
+        }
+        for bad in [
+            "crates/a/src/x.rs",
+            "crates/b/tests/acceptance_t008.rs",
+            "crates/b/tests/helper.rs",
+            "reviews/T-008-r1.md",
+            "tasks/T-007-y.md",
+        ] {
+            assert!(!m.allowed_after_review(bad), "{bad}");
+        }
+        assert!(is_full_sha("0123456789abcdef0123456789abcdef01234567"));
+        for bad in [
+            "0123456789ABCDEF0123456789abcdef01234567",
+            "0123456789abcdef0123456789abcdef0123456",
+            "0123456789abcdef0123456789abcdef012345678",
+            "task/T-007",
+            "HEAD",
+            "0123456789abcdef0123456789abcdef0123456g",
+        ] {
+            assert!(!is_full_sha(bad), "{bad}");
+        }
     }
 
     #[test]

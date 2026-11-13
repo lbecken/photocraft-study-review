@@ -1129,6 +1129,22 @@ mod tests {
             "r10",
             &[("reviews/T-001-r10.md", &review(10, "approve", "0123abcd"))],
         );
+        assert_refused(root, "review", "not a full 40-hex commit id");
+        // D-026 R2: a symbolic or abbreviated reviewed_sha is refused even though it resolves.
+        for symbolic in ["task/T-001", "HEAD", &joined[..12], &joined.to_uppercase()] {
+            testrepo::commit(
+                &wt,
+                "r10",
+                &[("reviews/T-001-r10.md", &review(10, "approve", symbolic))],
+            );
+            assert_refused(root, "review", "not a full 40-hex commit id");
+        }
+        let missing = "0123456789abcdef0123456789abcdef01234567";
+        testrepo::commit(
+            &wt,
+            "r10",
+            &[("reviews/T-001-r10.md", &review(10, "approve", missing))],
+        );
         assert_refused(root, "review", "not a commit");
         let side = g(
             root,
@@ -1162,7 +1178,19 @@ mod tests {
         );
         let late = testrepo::commit(&wt, "late fix", &[("feature.txt", "g")]);
         assert_refused(root, "review", &late[..12]);
+        assert_refused(root, "review", "stale review");
         g(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+        // After review: generated paths and the task's acceptance/guard tests may still change
+        // (D-026 R2).
+        testrepo::commit(
+            &wt,
+            "after review",
+            &[
+                ("gen.txt", "a\nz\n"),
+                ("xtask/tests/acceptance_t001.rs", "// t\n"),
+                ("xtask/tests/guard_t001_x.rs", "// g\n"),
+            ],
+        );
         let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
         assert_eq!(r.result, "merged");
     }

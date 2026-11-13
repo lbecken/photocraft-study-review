@@ -238,7 +238,7 @@ JSON `{"passed": bool, "failed_step": string|null, …}`.
 | `config` | main's `xtask/generated.toml` and `xtask/ledger.toml` exist and are valid (below) |
 | `touches` | every path of `git diff --name-only --no-renames <merge-base> <task head>` is allowed (below) |
 | `join` | medium/high: the primary checkout's `metrics/tasks.jsonl` has a `kind:"join"`, `result:"joined"` record of the task whose `joined_sha` is the task head or an ancestor of it. Read only from this record — the rebase flattens the join merge (D-6) |
-| `review` | medium/high: on the task head, `reviews/T-NNN-r<N>.md` with the highest N has `verdict: approve`, a `reviewed_sha` that is the head or an ancestor of it, and every commit after `reviewed_sha` changes only `reviews/T-NNN-*` and the task file |
+| `review` | medium/high: on the task head, `reviews/T-NNN-r<N>.md` with the highest N has `verdict: approve` and a `reviewed_sha` that is a full 40-hex lowercase commit id (no branch name, `HEAD`, abbreviation or other revision expression) naming a commit that is the head or an ancestor of it; every commit after `reviewed_sha` changes only `reviews/T-NNN-*`, the task file, generated paths and the task's acceptance/guard test files (allowed-path rule below); anything else is a stale review (D-026 R2) |
 | `approval` | high: main's `docs/decisions.md` has a table row whose Decision cell begins with `Approve T-NNN` (D-2) |
 | `main-history` | every commit on main's first-parent history after the newest `head_sha` of a `merged` record in `metrics/queue.jsonl` changes only ledger paths, respecting their mode; trivially true before the first merge |
 
