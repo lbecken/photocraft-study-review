@@ -156,9 +156,9 @@ origin = "written for kiln"
 [[file]]
 path = "rust/patterns.rs.txt"
 set = "valid"
-bytes = 3780
-lines = 123
-fnv1a64 = "e0a8953f9732d6c2"
+bytes = 3826
+lines = 126
+fnv1a64 = "3e554738487ac7f5"
 origin = "written for kiln"
 
 [[file]]

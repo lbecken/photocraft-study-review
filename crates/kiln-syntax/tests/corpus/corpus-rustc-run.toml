@@ -102,7 +102,7 @@ exit = 0
 
 [[file]]
 path = "rust/patterns.rs.txt"
-fnv1a64 = "e0a8953f9732d6c2"
+fnv1a64 = "3e554738487ac7f5"
 exit = 0
 
 [[file]]

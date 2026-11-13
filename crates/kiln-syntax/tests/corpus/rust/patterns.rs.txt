@@ -25,7 +25,10 @@ pub fn classify(n: i64) -> &'static str {
 
 /// Nested or-patterns inside an option, inside an outer or-pattern.
 pub fn is_vowel_or_none(c: Option<char>) -> bool {
-    matches!(c, Some('a' | 'e' | 'i' | 'o' | 'u') | None)
+    match c {
+        Some('a' | 'e' | 'i' | 'o' | 'u') | None => true,
+        Some(_) => false,
+    }
 }
 
 /// Bindings with `@` around a sub-pattern and nested alternatives.
