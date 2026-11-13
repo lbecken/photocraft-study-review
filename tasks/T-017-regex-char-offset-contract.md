@@ -2,7 +2,7 @@
 id: T-017
 title: "Compile and run regular expressions in kiln-search with char-offset matches, line-aware anchors, pinned empty-match iteration and replacement expansion"
 tier: high              # ADR-0002: dependency-table change (kiln-search gains `regex`)
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # library contract; search.* items are claimed by T-021 through commands
 depends_on: []
@@ -235,6 +235,9 @@ Director rulings after review round 1 (2026-11-13, decision D-070; review `revie
 - s5 (finding 3, spec gap). Pinned (e)'s 5 s bound holds for compiling a pattern and for searching a text the pattern does not match; on a matching text a 100 kB pattern takes longer inside the regex crate itself. Pinned (e) is read that way, the crate documentation says so, and no test asserts a time for a 100 kB pattern on a matching text. A pattern-size or time limit for searches is T-021's to specify with the bounded search.
 - s6 (nit 4; implementer). The truncation oracle in `crates/kiln-search/tests/regex.rs` builds the expected engine error with the same builder options as the code (ruling s2).
 - s7 (nit 5). The wall-clock assertions stay, as Pinned (e) requires them; no change.
+Director rulings after review round 2 (2026-11-13, decision D-077; review `reviews/T-017-r2.md`, run R-134: one defect in the delta, caused by ruling s5):
+- s8 (corrects s5; findings 1, 2 and 4 of round 2). s5 said the 5 s bound of Pinned (e) holds "for searching a text the pattern does not match". That is false: the engine's cost grows with pattern size × text size whether or not the text matches, and the round-2 reviewer measured 245 s in a debug build for a 100 kB pattern (`[ab]` 25,000 times, then `[^ab]`) on a 100,000-char text it does not match. s5 generalised from one short text in round 1; the implementer documented s5 faithfully. Now pinned, and only this: (1) compiling a pattern, including a 100 kB one, answers or errors within 5 s; (2) the three probes of Pinned (e) with small patterns (`(a*)*b` on 100,000 `a`s, `\p{L}{1000}`, deeply nested groups) answer or error within 5 s, as the acceptance test asserts; (3) for searching with a large pattern this crate promises no time bound, on matching or non-matching text. Pinned (e)'s "a 100 kB pattern" is read as (1). The implementer corrects the crate documentation to say exactly (1)–(3), with the two measured figures (245 s as above; 30 s and more on matching texts, round 1), and writes the memory figure as "about 2.46 GB (2.29 GiB)": round 1's figure was in KiB and was read as decimal GB. No code, API or test changes. The time bound for searches is T-021's (its pattern cap), and it must hold for non-matching texts too.
+- s9 (process). A defect found in round 2 is confirmed fixed in a round 3 that looks at nothing else (METHODOLOGY v1.1); the director authorises that round for this task. There is no round 4.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
