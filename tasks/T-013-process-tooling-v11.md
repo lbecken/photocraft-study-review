@@ -594,6 +594,23 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: (Q-f) `refusals_change_nothing` (T-005) needs a worktree for a task with no task
   file on main; with rule (3) that cannot be done through `worktree new` without changing the
   test beyond D-1 — the test author will meet it.
+- 2026-11-13T06:30Z · R-063 · in_progress · did: applied the round-2 rulings. Q-b: step 3
+  commits `publish: T-NNN in_progress` (`metrics/tasks.jsonl` only) before the gate; a red
+  step 5 leaves main committed with the task in_progress. To keep ruling (4)'s exactly-five
+  history on success, step 6 folds that interim commit into `publish: T-NNN queued` with a
+  `git reset --soft` to the `ready` commit, only while main still equals the interim commit
+  (reviewer: judge whether this is acceptable; the alternative is six commits). Q-c: trailing
+  `-` trimmed after the cut. Q-d: scorecard and no-change refusals now name the inputs (the
+  no-change text gains a ` (<paths>)` suffix). Ruling (3): the regeneration command is the
+  `docs/scorecard.md` entry of main's committed `xtask/generated.toml` (`{xtask}` = main's
+  xtask as the queue builds it), run in the task worktree in step 4; step 1's pre-check runs
+  the same command in the private export (nothing in the checkout changes before step 2).
+  Ruling (2): report prints `acceptance-caught defects: N (…)` then `  tier <t>: n` / `  arm
+  <a>: n` lines, `  iteration N with overhead: <avg> (…)`. Unit test added for the command
+  lookup; toy runs re-done through the binary (five commits after success; step-5 stop leaves
+  `ready`, `in_progress` committed and only the input untracked). · gate attempts: 2 (last:
+  red `test` only, the same 15 T-005 `worktree: refused` failures; all else PASS). · not run:
+  acceptance tests; publish on the real repository. · missing context: none · next: join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
