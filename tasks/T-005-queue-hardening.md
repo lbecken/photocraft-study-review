@@ -416,6 +416,60 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   suites; `acceptance_t005` 16/16, `acceptance_t005_r2` 4/4, guards pass) · not run: a real
   `cargo xtask join` on a scratch repo with a breaking guard beyond the r2 acceptance test,
   which does exactly that and passes · missing context: none · next: review.
+- 2026-11-13T01:50Z · R-032 · in_progress (round 4, after review r1) · did: implemented D-026
+  R1–R8 with the D-027 clarifications, one commit per ruling (8bf668c R8, c54957f R1, e4a7ef6
+  R2, 2787cc1 R7, be74759 R3+R4, 2e1d657 R5, f4ab84a R6, 0c4727d R4/R9 refinement) plus unit
+  tests per ruling (91 unit tests). R1: every run re-exports `base_sha` and prunes all
+  workspace-member artifacts, uplifted binaries, `incremental/` and unknown files from the
+  private target before `cargo build` (`seed::prune_to_non_members`); stamp-based reuse gone.
+  R2: `reviewed_sha` must match `[0-9a-f]{40}` and be a commit ancestor of the head; after it
+  only `reviews/T-NNN-*`, the task file, generated paths and the task's own
+  `acceptance_tNNN*`/`guard_tNNN*` files in a tests dir; else `review` "stale review". R3:
+  `gate-path` refusal for non-high tiers; approval cell must contain `gate paths`; gate paths
+  printed on stderr and in the summary line. R4: `dependencies` refusal for non-high tiers on
+  any `Cargo.lock` or changed dependency tables; lock rule before the rebase and again on the
+  rebased tree. R5: drop guard aborts the rebase, resets and cleans on every non-merged outcome
+  and on errors. R6: join records from `main:metrics/tasks.jsonl`; `ledger` refusal (first
+  refusal, right after the on-main check) for uncommitted evidence files; `queue.jsonl` exempt
+  and still read as is by `main-history`. R7: Decision cells only from header+delimiter tables
+  outside fenced/indented code, block quotes and HTML comments; `Approve T-005-tests` no longer
+  approves T-005. R8: `KILN_XTASK_RUN_IN` removed. R9: lock rule and leaky regeneration are
+  real (`dependencies` refusal / `conflict` `regenerate:<path>`, branch put back); unit-tested
+  only, end-to-end tests are the test author's. Checked from outside on a scratch toy repo:
+  a poisoned cached main xtask is rebuilt (attempt 2 `gate_failed`, not merged), branch left at
+  its head, untracked `metrics/tasks.jsonl` → `queue: refused: ledger: …` exit 1.
+  Readings chosen (fail closed; director please confirm): (1) check order `ledger`,
+  task-file, front-matter, state, config, touches, join, review, `gate-path`, `dependencies`,
+  approval, main-history — gate-path/dependencies after review so existing AC-16 still sees
+  `join`; (2) gate paths also match `rust-toolchain`, `.clippy.toml`, `.rustfmt.toml`, and
+  `clippy.toml`/`rustfmt.toml`/`build.rs`/`rust-toolchain*` and `.cargo/` at any depth;
+  `xtask/tests/**` counts as a gate path; (3) root `Cargo.toml` is a gate path if a gate table
+  differs from main's **or** the merge base's; an unparsable manifest counts as differing;
+  (4) dependency tables include `[target.*.…]`, `[workspace.dependencies]`, `[patch]`,
+  `[replace]`; compared merge base vs head; (5) `gate paths` is a case-sensitive substring of
+  the same Decision cell; (6) `reviewed_sha` lowercase only; (7) `ledger` covers all of
+  `metrics/` except `queue.jsonl` (wider than `metrics/tasks.jsonl`); (8) review files are read
+  from the task head commit (as the check table says), not main's tree; (9) pre-rebase lock
+  rule refuses only versions the task's own diff changed, so a lock that is merely stale is left
+  to rebase/regeneration and re-checked after the rebase; (10) a post-rebase lock violation is a
+  `dependencies` refusal (no record, branch restored). Not covered: a crate's custom
+  `build = "x.rs"` script path; tampering with cached registry-dependency artifacts (accepted
+  residual risk, documented).
+  QUESTION: `self_weakened_gate_fails_under_mains_gate` (AC-1) queues a **low** task changing
+  `xtask/src/main.rs` and expects `gate_failed`/`main+task`; R3 (a) makes that refusal
+  `gate-path` (observed: `queue: refused: gate-path: task/T-001 changes gate path(s)
+  xtask/src/main.rs; such a task must be tier high (it is low)`). The test contradicts R3.
+  QUESTION: `refuses_unaccepted_states`, `refuses_missing_or_failed_join`,
+  `refuses_missing_rejected_or_stale_review`, `refuses_high_without_approval_row`,
+  `refusals_change_nothing` plant join records in an uncommitted `metrics/tasks.jsonl`
+  (`support::Repo::set_tasks_jsonl`/`with_evidence`); R6/D-027 refuse exactly that at
+  `ledger` (observed in each). They need the fixture to commit the record on main.
+  · gate attempts: 1 (last: red test — 167 passed, 6 failed: exactly the six above; fmt,
+  clippy, layers, ui-commands, schema, scorecard green; 3 later steps not run) · not run: the
+  gate's steps after `test`; the new queue on the real repository (forbidden); `cargo update
+  --workspace` with registry dependencies (offline) · missing context: none · next: director
+  rules on the two QUESTIONs (fixture/test update by the test author), then join with the R1–R9
+  tests and re-gate.
 <!-- end implementer log -->
 ### test author
 - 2026-11-12 23:30 · R-010 · in_progress · did: 16 acceptance tests in
