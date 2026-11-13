@@ -383,4 +383,15 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   attempts: `cargo xtask no-skip` green · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13 · R-082 · tests_joined · did: round-1 review, continuing R-078's started file
+  (`reviews/T-015-r1.md`). Ran a 708-case base-vs-head CLI differential (0 differences),
+  `docs/commands.json` and `commands | sha256sum` identical, `xtask layers` PASS, a five-branch
+  merge experiment (clean), and 20 mutants (4 equivalent, 15 killed, 10 by acceptance/guards,
+  1 survivor). Verdict request-changes: 2 defects (guard_t015.rs exhaustive `Rejected` pattern
+  breaks T-032; guard_t015_cli pins `cursor.get` as unknown, which T-018 adds), 1 test gap
+  (disguised default runner, M06), 1 spec gap for the director (doc.rs T-003 test requires every
+  non-listed command to be mutating). · gate attempts: 0 (full workspace tests, clippy on the
+  two crates and `xtask layers` run; `cargo xtask ci` not re-run) · not run: Windows; real
+  implementations of the later tasks · missing context: none · next: director (finding 4),
+  then the implementer and test author fix findings 1–3.
 <!-- end reviewer log -->
