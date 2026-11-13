@@ -245,7 +245,7 @@ AC-5 is a **guard** (passes on base by design). No test asserts the number or th
 entries in `error_kinds`, nor the bytes of a whole document (D-043, D-051, D-052).
 
 - AC-1 (open escapes are refused): fixtures also `work/outside/d/` (a directory) and
-  `work/rootx/secret.txt`; links in the root `rel -> ../outside/secret.txt`,
+  `work/rootx/secret.txt` (bytes `b"s3cr3t-content\n"`); links in the root `rel -> ../outside/secret.txt`,
   `abs -> <absolute path of work/outside/secret.txt>`, `dlink -> ../outside` (a directory),
   `chain -> rel`, `s -> ../outside/d`, `t -> s/../secret.txt` and `px -> ../rootx/secret.txt`:
   `DiskFs::read` of `rel`, `abs`, `dlink/secret.txt`, `chain`, `t`, `px` each → an error whose
@@ -321,7 +321,7 @@ entries in `error_kinds`, nor the bytes of a whole document (D-043, D-051, D-052
   `read` `dn: resolves outside the root` and `is_file` false;
   `doc.open {"path":"../outside/secret.txt"}` still → `invalid_path` (lexical first); the
   `Display` of each error returned in AC-1…AC-7 is exactly the string in the Interface and
-  contains neither the absolute work path nor any link target.
+  contains neither the absolute work path nor the text `outside` or `rootx`.
 - AC-9 (contract documents; `kiln_cli::acceptance_t008_cli::documents_state_the_confinement_rule`):
   `kiln-cli commands --schema` has, in `error_kinds.rejected`, an entry `outside_root` with
   `when` "the path resolves outside the root" and the entry `not_a_file` with `when` equal to
