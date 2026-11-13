@@ -219,6 +219,8 @@ fn read_manifest(manifest: &std::path::Path) -> Result<Vec<(RelPath, Vec<u8>)>, 
 fn parse_manifest(bytes: &[u8]) -> Result<Vec<(RelPath, Vec<u8>)>, String> {
     // serde_json bounds nesting depth itself (an error, not a stack overflow).
     let value: Value = serde_json::from_slice(bytes).map_err(|e| format!("invalid JSON: {e}"))?;
+    // serde_json keeps the last of repeated keys; a repeat makes the manifest malformed (u2).
+    repeated_key(bytes)?;
     let Value::Object(top) = value else {
         return Err("not a JSON object".to_owned());
     };
@@ -279,6 +281,51 @@ fn parse_manifest(bytes: &[u8]) -> Result<Vec<(RelPath, Vec<u8>)>, String> {
         }
     }
     Ok(out)
+}
+
+/// Refuse `json` (already parsed as valid JSON, so well-formed and at most serde_json's
+/// nesting depth) if any object in it repeats a key; keys are compared after unescaping.
+fn repeated_key(json: &[u8]) -> Result<(), String> {
+    /// One open container: an object (its keys so far, whether a key comes next) or an array.
+    enum Open {
+        Object(std::collections::BTreeSet<String>, bool),
+        Array,
+    }
+    let mut stack: Vec<Open> = Vec::new();
+    let mut i = 0;
+    while i < json.len() {
+        match json[i] {
+            b'{' => stack.push(Open::Object(std::collections::BTreeSet::new(), true)),
+            b'[' => stack.push(Open::Array),
+            b'}' | b']' => {
+                stack.pop();
+            }
+            b',' => {
+                if let Some(Open::Object(_, key_next)) = stack.last_mut() {
+                    *key_next = true;
+                }
+            }
+            b'"' => {
+                let start = i;
+                i += 1;
+                while json[i] != b'"' {
+                    // Skip the escaped character (`\"` must not end the string).
+                    i += if json[i] == b'\\' { 2 } else { 1 };
+                }
+                if let Some(Open::Object(keys, key_next @ true)) = stack.last_mut() {
+                    *key_next = false;
+                    let key: String = serde_json::from_slice(&json[start..=i])
+                        .map_err(|e| format!("invalid JSON: {e}"))?;
+                    if !keys.insert(key.clone()) {
+                        return Err(format!("key `{key}` repeated in one object"));
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    Ok(())
 }
 
 /// Bytes from an even number of hex digits (either case); on failure, what was wrong.
@@ -1080,8 +1127,8 @@ mod tests {
     fn manifest_parses_text_and_hex_in_order() {
         let files = parse_manifest(
             br#"{"files":[{"path":"src/main.rs","text":"fn main() {}\r\n"},
-                {"path":"bom.txt","hex":"efBBbf6869"},{"path":"e","hex":""},{"path":"d/x","text":""},
-                {"path":"dx","text":"\u00e9"}]}"#,
+                {"path":"bom.txt","hex":"efBBbf6869"},{"path":"e","hex":""},{"path":"dx/y","text":""},
+                {"path":"d","text":"\u00e9"}]}"#,
         )
         .unwrap();
         let got: Vec<(&str, &[u8])> = as_file_refs(&files);
@@ -1091,8 +1138,9 @@ mod tests {
                 ("src/main.rs", &b"fn main() {}\r\n"[..]),
                 ("bom.txt", b"\xef\xbb\xbfhi"),
                 ("e", b""),
-                ("d/x", b""),
-                ("dx", "é".as_bytes()),
+                // `d` is a string prefix of `dx/y`, not a directory prefix: no conflict (u1).
+                ("dx/y", b""),
+                ("d", "é".as_bytes()),
             ]
         );
         assert!(parse_manifest(br#"{"files":[]}"#).unwrap().is_empty());
@@ -1151,6 +1199,24 @@ mod tests {
             let got = manifest_err(json);
             assert!(got.contains(want), "{json}: {got}");
         }
+        for json in [
+            r#"{"files":[{"path":"a","text":""}],"files":[]}"#,
+            r#"{"files":[{"path":"a","text":"x","text":"y"}]}"#,
+            r#"{"files":[{"path":"a","p\u0061th":"b","text":""}]}"#,
+            r#"{"files":[{"path":"a","text":""},{"hex":"","path":"b","hex":""}]}"#,
+        ] {
+            let got = manifest_err(json);
+            assert!(got.contains("repeated in one object"), "{json}: {got}");
+        }
+        // The same key in different objects, and key-like strings in values, are fine.
+        assert_eq!(
+            parse_manifest(
+                br#"{"files":[{"path":"a","text":"\"path\":"},{"path":"b,{\"","hex":""}]}"#
+            )
+            .unwrap()
+            .len(),
+            2
+        );
         // Keys are checked for every entry before any entry's path (Pinned (a)).
         let got = manifest_err(r#"{"files":[{"path":"/x","text":""},{"path":"a","oops":1}]}"#);
         assert!(got.starts_with("files[1]: unknown key"), "{got}");

@@ -67,24 +67,30 @@ stable contract). A `run` with a bad manifest therefore runs no request and does
 
 - the file cannot be read (missing, a directory, no permission);
 - it is not valid JSON (including nesting deeper than the JSON parser allows);
+- any JSON object in it repeats a key (keys compared after unescaping), for example
+  `{"files":[…],"files":[]}` or an entry with `text` twice;
 - the top level is not an object, has a key other than `files`, or lacks `files`; `files` is not
   an array; an entry is not an object or has a key other than `path`, `text`, `hex`;
 - an entry's `path` is missing, not a string or not a valid path;
 - an entry has both or neither of `text` and `hex`, a non-string value for one, or a `hex` with
   a non-hex character or an odd number of digits;
 - two entries have the same path;
-- a path is a strict prefix directory of another (`d` and `d/x`): a file cannot also be a
-  directory. `d` and `dx/y` are fine.
+- a path is a strict prefix directory of another at a `/` boundary (`d` and `d/x`): a file
+  cannot also be a directory. A string prefix alone is no conflict: `d` and `dx/y` are fine.
 
 ## Order of checks
 
 1. Option parsing (usage errors: exit 2 with usage text).
-2. The manifest (exit 2, `bad --memory-seed`), in this order: read, JSON, keys (top level and
-   every entry), then per entry in array order its `path`, its `text`/`hex` and duplicates, and
-   last the prefix conflicts over all paths. Only the first problem is reported.
-3. For `run`: reading the script, then opening `--log`; for `exec`: as with `--root`
-   (`<json-params>` that are not JSON are reported before the file system is set up).
+2. The manifest (exit 2, `bad --memory-seed`), in this order: read, JSON (including repeated
+   keys), keys (top level and every entry), then per entry in array order its `path`, its
+   `text`/`hex` and duplicates, and last the prefix conflicts over all paths. Only the first
+   problem is reported.
+3. For `run`: reading the script, then opening `--log`.
 4. Requests.
+
+For `exec`, `<json-params>` that are not JSON are reported first (`invalid_json`, exit 2),
+before the manifest is read, as they are before `--root` is checked: `exec doc.open '{'
+--memory-seed missing.json` reports `invalid_json`, not `bad --memory-seed`.
 
 ## Exit codes
 
