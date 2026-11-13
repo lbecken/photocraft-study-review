@@ -226,6 +226,9 @@ Do not add `fancy-regex` or any other engine. Your tests: `src/regex.rs` unit te
 `crates/kiln-search/tests/regex.rs`.
 
 ## Questions and rulings
+Director rulings on the test author's questions (2026-11-13, decision D-060; run R-105), given to both builders at once:
+- s1 (memory). Pinned (e) says a pathological pattern must "answer or error" — an aborted process is neither. The test author found that `(a)` repeated 34,000 times compiles and then makes `find_all` on a matching text try to allocate about 55 GB (capture slots × engine states). `Regex::new` therefore refuses a pattern with more than 100 explicit capture groups: `Err(PatternError { message })` with `message` exactly `the pattern has more than 100 capture groups`. The check runs after the crate has accepted the pattern (a pattern the crate rejects keeps the crate's error); exactly 100 groups is accepted. Acceptance tests: 100 groups accepted and usable, 101 refused with that message, the 34,000-group pattern refused within 5 s. The reviewer measures peak memory of `find_all` for adversarial patterns under the cap (group-heavy and state-heavy) and reports it; above about 1 GB is a finding.
+- s2 (error messages). A `PatternError` message for a pattern the crate rejects is the crate's message for the pattern text exactly as the caller gave it, built with builder options (multi-line, CRLF, case-insensitive) and no inline-flag prefix added to the pattern, then cut as Pinned says.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
