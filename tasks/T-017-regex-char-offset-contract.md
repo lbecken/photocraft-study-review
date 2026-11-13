@@ -392,4 +392,15 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13T14:05Z · R-117 · tests_joined · did: round-1 review of `43fae907bda9ee0abe2c21b3adb3419e09160dfb`
+  (`reviews/T-017-r1.md`), verdict request-changes. Findings: 1 test gap (no test pins
+  "all ASCII digits": dropping the check makes `${+1}` group 1; mutant 16 survived), 2 spec
+  gaps for the director (`find_all` under the cap peaks at 2.40 GB on 1 MB with `()`×100,
+  debug and release; the Pinned (e) 5 s bound for a 100 kB pattern holds only on a non-matching
+  text: 85 s in release, inside the crate), 2 nits. Mutants: 17 introduced, 3 equivalent, 13
+  killed (all by acceptance), 1 survived. Independent probes: 25,000 random match pairs and
+  15,150 expansions against my own models, 0 differences; lock diff, licences, build scripts,
+  layers checked. · gate attempts: 1 (last: green, 11 steps; fuzz and budgets EMPTY); `cargo xtask hygiene`
+  with the review staged: PASS (5 of 16 reviews checked) · not run: the implementer's exact 190 s probe (pattern not recorded) · missing context: none · next:
+  implementer adds the `+1` test; director rules on findings 2 and 3.
 <!-- end reviewer log -->
