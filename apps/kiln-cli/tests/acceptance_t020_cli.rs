@@ -1450,7 +1450,7 @@ fn brackets_agree_with_token_groups() {
 #[test]
 fn bracket_worked_examples() {
     let fx = Fixture::new("bracket-examples");
-    let files: [(&str, &str); 7] = [
+    let files: [(&str, &str); 9] = [
         ("e1.rs.txt", EX_HIGHLIGHT),
         ("e2.rs.txt", "fn a() { ("),
         ("e3.rs.txt", ") ( ( ) ] ["),
@@ -1461,6 +1461,10 @@ fn bracket_worked_examples() {
         // the nearer opener, the other opener has no partner.
         ("e6.rs.txt", "( ( | )"),
         ("e7.rs.txt", "[ x [ ]"),
+        // D-110 r2: a closer pairs only with an opener of its own kind, and a leaf the parser
+        // inserted (MISSING) is never a partner (dumps in the R-185 log entry).
+        ("e8.rs.txt", "( ]"),
+        ("e9.rs.txt", "fn f() { g(1; }"),
     ];
     for (name, text) in files {
         fx.write(name, text.as_bytes());
@@ -1483,7 +1487,7 @@ fn bracket_worked_examples() {
     assert_eq!(e5.len(), 38);
 
     // The document opened after `files` (ids follow open order).
-    const EDIT_DOC: u64 = 8;
+    const EDIT_DOC: u64 = 10;
     let pair = |o: usize, c: usize| json!({"open": o, "close": c});
     let null = Value::Null;
     // (doc, offset, expected bracket)
@@ -1526,6 +1530,14 @@ fn bracket_worked_examples() {
         (7, 0, null.clone()),
         (7, 2, null.clone()),
         (7, 7, null.clone()),
+        (8, 0, null.clone()),
+        (8, 2, null.clone()),
+        (9, 10, null.clone()),
+        (9, 12, null.clone()),
+        (9, 4, pair(4, 5)),
+        (9, 5, pair(4, 5)),
+        (9, 7, pair(7, 14)),
+        (9, 14, pair(7, 14)),
     ];
     let mut s = Script::default();
     for (name, _) in files {
@@ -1544,6 +1556,8 @@ fn bracket_worked_examples() {
         (5, 39),
         (6, 8),
         (7, 8),
+        (8, 4),
+        (9, 16),
     ]
     .iter()
     .map(|(d, o)| {
@@ -1725,6 +1739,92 @@ fn oversized_documents_are_refused() {
         rejected.iter().any(|e| e["kind"] == json!("too_large")),
         "error_kinds.rejected has no `too_large` entry"
     );
+}
+
+/// D-110 r3 (Pinned (a), D-097 Q-1): an `out_of_range` or `inverted_range` refusal of
+/// `syntax.highlight` and an `out_of_range` refusal of `syntax.match-bracket` leave the cache as
+/// it was. After an edit and the refused call, the next `syntax.tree` says `incremental` (the
+/// refusal did not cache the new text); after the edit, a successful call of the same command
+/// and the refused call, it says `unchanged` (the refusal did not drop the entry). The text and
+/// edit are those of Pinned (g)'s `fn f() {}` example, which gives `incremental`.
+/// Oracle: exact value.
+#[test]
+fn refusals_leave_the_cache_unchanged() {
+    let fx = Fixture::new("refusal-cache");
+    // After inserting " " at 8 the text has 10 chars, so 11 is beyond it.
+    let refusals: [(&str, Value, Value, &str); 3] = [
+        (
+            "syntax.highlight",
+            json!({"end": 11}),
+            json!({"start": 1, "end": 4}),
+            "out_of_range",
+        ),
+        (
+            "syntax.highlight",
+            json!({"start": 5, "end": 2}),
+            json!({"start": 2, "end": 5}),
+            "inverted_range",
+        ),
+        (
+            "syntax.match-bracket",
+            json!({"offset": 11}),
+            json!({"offset": 4}),
+            "out_of_range",
+        ),
+    ];
+    let with_doc = |params: &Value, doc: u64| -> Value {
+        let mut p = params.clone();
+        p["doc"] = json!(doc);
+        p
+    };
+    let mut s = Script::default();
+    // Per case: (description, ids that must be ok, refused id, kind, final tree id, mode).
+    let mut cases = Vec::new();
+    let mut doc = 0u64;
+    for (command, bad, good, kind) in &refusals {
+        for after_success in [false, true] {
+            doc += 1;
+            let name = format!("f{doc}.rs.txt");
+            fx.write(&name, b"fn f() {}");
+            let mut oks = vec![
+                s.push("doc.open", json!({ "path": name })),
+                s.push("syntax.tree", json!({ "doc": doc })),
+                s.push("doc.insert", json!({"doc": doc, "offset": 8, "text": " "})),
+            ];
+            if after_success {
+                oks.push(s.push(command, with_doc(good, doc)));
+            }
+            let refused_id = s.push(command, with_doc(bad, doc));
+            let tree = s.push("syntax.tree", json!({ "doc": doc }));
+            let what = format!(
+                "{command} {bad} refused{}",
+                if after_success {
+                    " after a successful call"
+                } else {
+                    " after an edit"
+                }
+            );
+            let mode = if after_success {
+                "unchanged"
+            } else {
+                "incremental"
+            };
+            cases.push((what, oks, refused_id, *kind, tree, mode));
+        }
+    }
+    let (r, _) = s.run(&fx, "refusal-cache");
+    for (what, oks, refused_id, kind, tree, mode) in cases {
+        for id in oks {
+            ok(&r[id], &what);
+        }
+        refused(&r[refused_id], "rejected", kind, &what);
+        let t = ok(&r[tree], &format!("syntax.tree after {what}"));
+        assert_eq!(
+            t["mode"],
+            json!(mode),
+            "{what}: the refusal changed the cache"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

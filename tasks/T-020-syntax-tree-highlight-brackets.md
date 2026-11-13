@@ -807,6 +807,46 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   -D warnings` clean · not run: the new cases against a stub (the R-169 scratch stub was
   deleted; the expected values come from the dump by the stack rule, not from running code),
   `cargo xtask ci` · missing context: none · next: director (join).
+- 2026-11-13T23:49Z · R-185 · in review (round 1: request-changes) · acknowledged and accepted
+  the director's rulings D-110 r2 and r3 (read in the primary checkout's copy of this file); r1
+  and r4 are the implementer's. · did: r2: added two cases to `bracket_worked_examples`, with
+  expected answers by the completed rule (only bracket leaves in the text are partners, so a
+  MISSING leaf never is; a closer pairs only with an opener of its own kind):
+  `( ]` → 0 and 2 (the other end) give `null`, 4 is `out_of_range`.
+  `fn f() { g(1; }` → 10 gives `null`; the MISSING `)` has no char of its own (12 is `;`,
+  checked: `null`), so there is no other end in the text; the real pairs 4/5 and 7/14 are
+  checked from both ends; 16 is `out_of_range`. The edited document is now doc 10.
+  Dumps: from a scratch integration test in `crates/kiln-syntax/tests/` (removed, never
+  committed). It walked every node, anonymous leaves included, with the pinned tree-sitter
+  0.27.1 / tree-sitter-rust 0.24.2 that `SyntaxTree` wraps, and printed
+  `SyntaxTree::parse(..).sexp()` beside it. The trees are as the ruling assumes:
+  `( ]`: `source_file@0..3 > ERROR@0..3 > "("@0..1, "]"@2..3`; sexp
+  `(source_file@0..3 (ERROR@0..3))`.
+  `fn f() { g(1; }`: `source_file@0..15 > function_item@0..15 > "fn"@0..2,
+  name:identifier@3..4, parameters:parameters@4..6 ("("@4..5, ")"@5..6), body:block@7..15 >
+  "{"@7..8, expression_statement@9..13 > call_expression@9..12 > function:identifier@9..10,
+  arguments:arguments@10..12 > "("@10..11, integer_literal@11..12, ")" MISSING@12..12; then
+  ";"@12..13; "}"@14..15`; sexp `(source_file@0..15 (function_item@0..15
+  name:(identifier@3..4) parameters:(parameters@4..6) body:(block@7..15
+  (expression_statement@9..13 (call_expression@9..12 function:(identifier@9..10)
+  arguments:(arguments@10..12 (integer_literal@11..12) (MISSING ")"@12..12)))))))`.
+  r3: new test `refusals_leave_the_cache_unchanged`, through one `kiln-cli run --root` on six
+  copies of `fn f() {}`. It covers three refusals: `syntax.highlight {end: 11}` →
+  `out_of_range`, `syntax.highlight {start: 5, end: 2}` → `inverted_range`,
+  `syntax.match-bracket {offset: 11}` → `out_of_range`. For each refusal there are two cases,
+  each starting with `syntax.tree` and inserting `" "` at 8 (Pinned (g)'s incremental edit):
+  (a) the refused call, then `syntax.tree` → `incremental`; (b) a successful call of the
+  same command, the refused call, then `syntax.tree` → `unchanged`. The refusals are checked
+  by `code`/`kind` only. Scorecard: this belongs to the size-limit/cache part of the spec
+  (Pinned (a), D-097 Q-1), so I propose `syntax.parse`, beside
+  `oversized_documents_are_refused`; the director decides. · gate attempts: 0 (only this
+  target): `cargo test -p kiln-cli --test acceptance_t020_cli` 11 failed on base, each at the
+  first `syntax.*` response (`unknown_command`), or for `syntax_commands_are_read_only` the
+  missing schema entry; `cargo fmt --check` clean; `cargo clippy -p kiln-cli --tests --
+  -D warnings` clean; `cargo xtask no-skip` PASS (139 files, 0 allowlisted) · not run: the new
+  cases against a stub or the implementation (the R-169 stub is gone; the expected values come
+  from the dumps and the spec), `cargo xtask ci` · missing context: none · next: director
+  (join, round 2).
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13T23:59Z · R-179 · tests_joined · round 1 (full), reviewed `c0c12fc30d473ff1d0f5b71c8ce9d4a0b66e0c12`
