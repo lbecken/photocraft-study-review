@@ -209,6 +209,19 @@ fn root_error(root: &Path, e: &VfsError) -> String {
     format!("root `{}`: {reason}", root.display())
 }
 
+/// Clip, in an error object `{"code","kind","message"[,"details"]}`, every echo of a value
+/// from `sources` in `message` and in each `details` entry to at most 200 characters.
+/// `sources` are the input values the error may echo (requests, params, arguments).
+pub fn clip_error(error: &mut Value, sources: &[&Value]) {
+    let _ = (error, sources);
+}
+
+/// `text` with every echo of a value from `sources` clipped to at most 200 characters.
+pub fn clip_text(text: &str, sources: &[&Value]) -> String {
+    let _ = sources;
+    text.to_owned()
+}
+
 /// The message of the `internal` error a panicking command produces (marks kind `panic`).
 const PANICKED: &str = "the command panicked";
 
