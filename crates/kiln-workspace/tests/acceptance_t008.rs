@@ -627,3 +627,116 @@ fn outside_root_wins_over_not_found() {
     assert_eq!(fs::read(w.at("outside/secret.txt")).unwrap(), SECRET);
     assert_no_temp(&w.dir);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Ruling v4 (D-072): the root path, or a parent directory of it, replaced by a symlink between
+// two requests. The root is the directory resolved at construction.
+
+/// A swap case: the root path given to `DiskFs::new`, the directory the swapped path leads to
+/// (holding `secret.txt` and `f.txt`), and the rename + symlink that performs the swap.
+struct Swap {
+    root: PathBuf,
+    target: PathBuf,
+    moved: PathBuf,
+    aside: PathBuf,
+    link_to: &'static str,
+}
+
+impl Swap {
+    /// `parent == false`: `work/root` becomes a link to `outside`. `parent == true`: the root
+    /// is `work/p/root` and `work/p` becomes a link to `evil`, which holds a `root/`.
+    fn new(w: &Work, parent: bool) -> Swap {
+        let s = if parent {
+            Swap {
+                root: w.at("p/root"),
+                target: w.at("evil/root"),
+                moved: w.at("p"),
+                aside: w.at("p.real"),
+                link_to: "evil",
+            }
+        } else {
+            Swap {
+                root: w.at("root"),
+                target: w.at("outside"),
+                moved: w.at("root"),
+                aside: w.at("root.real"),
+                link_to: "outside",
+            }
+        };
+        fs::create_dir_all(&s.root).unwrap();
+        fs::write(s.root.join("f.txt"), b"f original\n").unwrap();
+        fs::create_dir_all(&s.target).unwrap();
+        fs::write(s.target.join("secret.txt"), SECRET).unwrap();
+        fs::write(s.target.join("f.txt"), b"outside f\n").unwrap();
+        s
+    }
+
+    /// Replace the moved directory by a symlink; then show the outside files are reachable
+    /// through the root path with ordinary file-system calls.
+    fn swap(&self) {
+        fs::rename(&self.moved, &self.aside).unwrap();
+        symlink(self.link_to, &self.moved).unwrap();
+        assert_eq!(fs::read(self.root.join("secret.txt")).unwrap(), SECRET);
+        assert_eq!(fs::read(self.root.join("f.txt")).unwrap(), b"outside f\n");
+    }
+}
+
+fn swapped_root_is_refused(name: &str, parent: bool) {
+    let w = Work::new(name);
+    let s = Swap::new(&w, parent);
+    let mut fs_ = DiskFs::new(&s.root).unwrap();
+    let mut doc = Document::open(&fs_, &rp("f.txt")).unwrap();
+    doc.buffer_mut().insert(0, "EDIT ").unwrap();
+
+    s.swap();
+    // The whole work directory (the moved-aside original root included), links not followed.
+    let before = snapshot(&w.dir);
+
+    assert_refused(
+        "read",
+        fs_.read(&rp("secret.txt")),
+        "secret.txt",
+        OUTSIDE,
+        &w,
+    );
+    assert!(!fs_.is_file(&rp("secret.txt")));
+    match Document::open(&fs_, &rp("secret.txt")) {
+        Ok(_) => panic!("Document::open(secret.txt) succeeded after the swap"),
+        Err(e) => assert_eq!(
+            e.to_string(),
+            "cannot open secret.txt: resolves outside the root"
+        ),
+    }
+    assert_refused(
+        "write_atomic",
+        fs_.write_atomic(&rp("secret.txt"), b"PWNED"),
+        "secret.txt",
+        OUTSIDE,
+        &w,
+    );
+    match doc.save(&mut fs_) {
+        Ok(_) => panic!("save of f.txt (opened before the swap) succeeded after the swap"),
+        Err(e) => {
+            assert_eq!(
+                save_message(&e),
+                "cannot save f.txt: resolves outside the root"
+            );
+            assert_eq!(e.path().as_str(), "f.txt");
+        }
+    }
+    assert!(doc.is_dirty());
+    assert_eq!(snapshot(&w.dir), before);
+    assert_eq!(fs::read(s.target.join("secret.txt")).unwrap(), SECRET);
+    assert_eq!(fs::read(s.target.join("f.txt")).unwrap(), b"outside f\n");
+    assert_no_temp(&w.dir);
+}
+
+#[test]
+fn root_swapped_between_requests_is_refused() {
+    swapped_root_is_refused("rootswap", false);
+}
+
+#[test]
+fn parent_swapped_between_requests_is_refused() {
+    swapped_root_is_refused("parentswap", true);
+}

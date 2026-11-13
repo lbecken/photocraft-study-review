@@ -381,8 +381,15 @@ struct Session {
 
 impl Session {
     fn start(cwd: &Path) -> Session {
+        Session::start_at(cwd, Path::new("root"))
+    }
+
+    /// A session on `--root <root>`, run in `cwd`.
+    fn start_at(cwd: &Path, root: &Path) -> Session {
         let mut child = Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
-            .args(["control", "--root", "root"])
+            .arg("control")
+            .arg("--root")
+            .arg(root)
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -565,4 +572,90 @@ fn documents_state_the_confinement_rule() {
         fs::read_to_string(docs.join("protocol/paths.md")).expect("docs/protocol/paths.md exists");
     assert!(paths.contains("outside_root"));
     assert!(paths.contains("not_a_file"));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ruling v4 (D-072): the root, or a parent directory of it, replaced by a symlink between two
+// requests of one `control` session.
+
+fn swapped_root_is_refused_through_control(name: &str, parent: bool) {
+    let w = Work::new(name);
+    let (root, target, moved, aside, link_to) = if parent {
+        (
+            w.at("p/root"),
+            w.at("evil/root"),
+            w.at("p"),
+            w.at("p.real"),
+            "evil",
+        )
+    } else {
+        (
+            w.at("root"),
+            w.at("outside"),
+            w.at("root"),
+            w.at("root.real"),
+            "outside",
+        )
+    };
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("f.txt"), b"f original\n").unwrap();
+    fs::create_dir_all(&target).unwrap();
+    fs::write(target.join("secret.txt"), SECRET).unwrap();
+    fs::write(target.join("f.txt"), b"outside f\n").unwrap();
+
+    let mut s = Session::start_at(&w.dir, &root);
+    let r = s.ask(json!({"id":1,"command":"doc.open","params":{"path":"f.txt"}}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    let r = s.ask(json!({"id":2,"command":"doc.insert",
+                         "params":{"doc":1,"offset":0,"text":"PWNED "}}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+
+    // Between two requests, while the session runs: swap, then show the escape is real.
+    fs::rename(&moved, &aside).unwrap();
+    symlink(link_to, &moved).unwrap();
+    assert_eq!(fs::read(root.join("secret.txt")).unwrap(), SECRET);
+    assert_eq!(fs::read(root.join("f.txt")).unwrap(), b"outside f\n");
+    // The whole work directory (the moved-aside original root included), links not followed.
+    let before = snapshot(&w.dir);
+
+    let r = s.ask(json!({"id":3,"command":"doc.open","params":{"path":"secret.txt"}}));
+    assert_rejected(
+        &r,
+        3,
+        "outside_root",
+        Some("cannot open secret.txt: resolves outside the root"),
+    );
+    assert!(
+        !r.to_string().contains(&w.text()),
+        "names the work path: {r}"
+    );
+    let r = s.ask(json!({"id":4,"command":"doc.save","params":{"doc":1}}));
+    assert_rejected(
+        &r,
+        4,
+        "outside_root",
+        Some("cannot save f.txt: resolves outside the root"),
+    );
+    assert!(
+        !r.to_string().contains(&w.text()),
+        "names the work path: {r}"
+    );
+    let r = s.ask(json!({"id":5,"command":"doc.info","params":{"doc":1}}));
+    assert_eq!(r["result"]["dirty"], json!(true), "{r}");
+    assert_eq!(s.finish().code(), Some(0));
+
+    assert_eq!(snapshot(&w.dir), before);
+    assert_eq!(fs::read(target.join("secret.txt")).unwrap(), SECRET);
+    assert_eq!(fs::read(target.join("f.txt")).unwrap(), b"outside f\n");
+    assert_no_temp(&w.dir);
+}
+
+#[test]
+fn root_swap_between_requests_is_refused_through_control() {
+    swapped_root_is_refused_through_control("ctl-rootswap", false);
+}
+
+#[test]
+fn parent_swap_between_requests_is_refused_through_control() {
+    swapped_root_is_refused_through_control("ctl-parentswap", true);
 }
