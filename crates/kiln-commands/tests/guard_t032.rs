@@ -349,3 +349,27 @@ fn request_level_errors_keep_their_json() {
          \"text\" is a required property"
     );
 }
+
+/// A save whose directory was removed on disk keeps its base message.
+#[test]
+fn save_into_a_removed_directory_keeps_its_message() {
+    let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("guard_t032")
+        .join("removed-dir");
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("sub")).expect("mkdir");
+    std::fs::write(root.join("sub/a.txt"), b"abc").expect("write");
+    let fs = kiln_workspace::DiskFs::new(&root).expect("disk fs");
+    let mut ctx = Context::with_vfs(Box::new(fs));
+    let r = reg();
+    ok(&r, &mut ctx, "doc.open", json!({"path": "sub/a.txt"}));
+    std::fs::remove_dir_all(root.join("sub")).expect("remove sub");
+    match r.execute(&mut ctx, "doc.save", json!({"doc": 1})) {
+        Err(CommandError::Rejected { message, .. }) => {
+            assert_eq!(message, "cannot save sub/a.txt: not found");
+        }
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+    assert!(!root.join("sub").exists(), "the save created the directory");
+    let _ = std::fs::remove_dir_all(&root);
+}

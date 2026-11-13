@@ -449,3 +449,33 @@ fn internal_errors_serialize_their_reason() {
     );
     assert!(ctx.log().is_empty(), "a failed command was logged");
 }
+
+/// A save whose directory was removed on disk after the open is `not_found` (the save site maps
+/// the VFS error, it does not assume `io_error`).
+#[test]
+fn save_into_a_removed_directory_is_not_found() {
+    let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("acceptance_t032_json")
+        .join("removed-dir");
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("sub")).expect("mkdir");
+    std::fs::write(root.join("sub/a.txt"), b"abc").expect("write");
+    let fs = kiln_workspace::DiskFs::new(&root).expect("disk fs");
+    let mut ctx = Context::with_vfs(Box::new(fs));
+    let r = reg();
+    ok(&r, &mut ctx, "doc.open", json!({"path": "sub/a.txt"}));
+    std::fs::remove_dir_all(root.join("sub")).expect("remove sub");
+    assert!(
+        !root.join("sub").exists(),
+        "precondition: directory removed"
+    );
+    let err = r
+        .execute(&mut ctx, "doc.save", json!({"doc": 1}))
+        .expect_err("save into a removed directory");
+    assert_eq!(
+        err.to_json(),
+        json!({"code": "rejected", "message": "cannot save sub/a.txt: not found", "reason": "not_found"})
+    );
+    assert!(!root.join("sub").exists(), "the save created the directory");
+    let _ = std::fs::remove_dir_all(&root);
+}

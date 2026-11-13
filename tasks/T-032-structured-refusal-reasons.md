@@ -342,6 +342,80 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   this run), left in place. · missing context: none · next: join with the T-032 tests.
 <!-- end implementer log -->
 ### test author
+- 2026-11-13T11:35Z · R-095 · ready · did: wrote the independent T-032 tests from the spec
+  text on `task/T-032-tests` (base `21d95470546bf513610a2c4f11b18a0a5d0d44f5`, which contains
+  T-015 `d90e542a3b7cb4b91913884a56912803ccdc60cf`).
+  - Drift check against T-015, all minor, no pinned behaviour changed: the refusal sites
+    doc.rs:167, 177, 247, 316, 378, 434, 483 and buffer.rs:68 are as listed. The
+    no-open-document refusal is now `no_such_doc` (registry.rs:232–234), used by T-015's
+    `Docs::get/get_mut/remove`, not registry.rs:124–126. The `Internal` sites are now
+    registry.rs:489 (does not serialize) and :545 (result schema). In kiln-control the panic is
+    at lib.rs:133–140 and `rejected_kind` at :347. `ToolError` has exactly the five variants
+    the spec maps. The two old sentences of `docs/control-protocol.md` are present verbatim.
+  - Criterion → tests → result on base:
+    - AC-1: `kiln-commands/tests/acceptance_t032.rs::refusals_carry_reasons_at_their_sources`
+      (compile) and `acceptance_t032_json.rs::refusals_serialize_their_reason` (assertion: no
+      `"reason"` in `to_json`) cover the 10 listed refusals, 8 more sites (precedence of the
+      document check included) and 4 hostile file names whose message reads like another kind.
+      Also `acceptance_t032_json.rs::save_into_a_removed_directory_is_not_found` (assertion,
+      DiskFs) and `acceptance_t032.rs::rejected_constructor_keeps_reason_and_message`
+      (compile).
+    - Internal reasons: `acceptance_t032.rs::internal_errors_carry_reasons` (compile; custom
+      commands for result schema, does not serialize and reason pass-through) and
+      `acceptance_t032_json.rs::internal_errors_serialize_their_reason` (assertion).
+    - AC-2 and AC-6: `kiln-control/tests/acceptance_t032_control.rs::kinds_follow_reasons_not_messages`
+      (compile). It covers every reason × 15 messages × 4 params × 2 commands, Pinned (g), the
+      panic message for `Internal{Panic}` whatever the message, no `reason` key, and caps. AC-6
+      is checked through `command_error_json`, not with a real panic: no public way to inject a
+      panicking command into `Host`.
+    - AC-3: `acceptance_t032_control.rs::generated_kind_list_matches_reasons_and_table`
+      (compile); `apps/kiln-cli/tests/acceptance_t032_cli.rs::schema_dump_publishes_the_generated_kind_list`
+      (assertion: no `error_kinds`); `acceptance_t032.rs::reasons_have_pinned_names_order_and_descriptions`
+      and `::describe_publishes_error_kinds_from_all` (compile).
+    - AC-5: `acceptance_t032.rs::lower_layer_errors_map_to_pinned_reasons` (compile). Catch-all
+      arms are left to the reviewer.
+    - AC-7: `acceptance_t032_cli.rs::protocol_doc_states_kinds_come_from_reasons` (assertion;
+      whitespace-normalized, any wrapping).
+    - Guards, which pass on base: `apps/kiln-cli/tests/guard_t032_cli.rs::protocol_bytes_are_unchanged`
+      (AC-4: worked example via run and control, 12 exec cases incl. Pinned (g), a 320-request
+      session with seed 0x7032_2026_1113 via run, control and replay; constants recorded on
+      base). `::protocol_doc_is_unchanged_outside_the_kinds_paragraph` covers the 23-row table
+      verbatim and FNV-1a of the file before and after the paragraph. `::session_script_meets_the_d043_constraints`.
+      `kiln-commands/tests/guard_t032.rs` covers 22 refusal messages, code, `Display` and an
+      unchanged context, request-level `to_json` without `reason`, and the DiskFs save message.
+  - Interpretations (no QUESTION):
+    - "today's 'When' cells word for word" is read as the raw Markdown cell text, backticks
+      included, as the pinned `invalid_path` text has them.
+    - Pinned kinds are checked as an ordered subsequence of `ALL` and of `error_kinds`, so the
+      variants T-008/T-010 add later do not break these tests. Equality with `ALL` is checked
+      in kiln-control.
+  - Self-check: a throwaway stub (reason.rs, CommandError, describe, kiln-control kind, docs,
+    regenerated commands.json) passed every T-032 target and the t003/t004/t015 acceptance and
+    guard targets of the three crates. 16 seeded bugs, 16 killed:
+    - M1 VfsError NotFound→NotAFile: From, AC-1 ×2, guard_cli, DiskFs save;
+    - M2 Decode→IoError: From, AC-1 ×2, guard_cli;
+    - M3 ToolError Failed→ToolTimeout: From;
+    - M4 dirty close→Other: AC-1 ×2, guard_cli;
+    - M5 no_such_doc→NotFound: AC-1 ×2, guard_cli;
+    - M6 does-not-serialize→ResultSchema: internal ×2;
+    - M7 control classifies "no open document" by message: kinds_follow;
+    - M8 control detects panic by message: kinds_follow;
+    - M9 ALL drops InvalidKeymap: reasons, generated list, CLI dump;
+    - M10 save always IoError: DiskFs save;
+    - M11 description reworded: reasons, generated list, CLI dump;
+    - M12 internal list reversed: describe, generated list, CLI dump;
+    - M13 protocol object carries reason: kinds_follow, guard_cli;
+    - M14 buffer.insert→Other: AC-1 ×2, guard_cli;
+    - M15 OutOfBounds→InvertedRange: From, AC-1 ×2, guard_cli;
+    - M16 to_json skips the internal reason: internal_json, constructor.
+
+    The stub was removed; `git status` was clean apart from the test files. Clippy
+    `-D warnings` was clean on the T-032 targets with the stub, and on base on kiln-cli
+    `--all-targets` and the base-compiling kiln-commands targets. `cargo fmt --all -- --check`
+    is clean. · gate attempts: 1 (last: red clippy, which cannot compile `acceptance_t032` /
+    `acceptance_t032_control` on base: expected, R-030) · not run: the gate with the
+    implementation; a real host panic (AC-6, by reading) · missing context: none · next:
+    join with `task/T-032`.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
