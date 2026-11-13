@@ -306,6 +306,57 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   slice or a char index. Not a T-017 contract change.
 <!-- end implementer log -->
 ### test author
+- 2026-11-13T12:34Z · R-105 · ready · did: wrote `crates/kiln-search/tests/acceptance_t017.rs`
+  (14 tests) from the spec alone, base main f36b83e2f1fbd434c35b459cda5685177f852ce0. No guard
+  file: the crate is empty on base, so there is no existing literal search to protect.
+  Oracles: a naive backtracking matcher of the AC-1 subset (program of Split/Save/assert
+  instructions, the spec's iteration, CRLF anchor and capture rules; case folding by the AC-1
+  predicate, classes folded before negation via a brute-force fold set over all scalar values);
+  a naive expansion rule; a naive literal search vs a fully escaped pattern; prefix char counts.
+  Criterion → tests → result on base (all: compile, E0432/E0433, new API and `regex`):
+  AC-1 → `matches_equal_naive_backtracker`, `case_insensitive_matches_equal_naive_model` (20,000
+  fixed-seed pairs each, groups and `group_count` included, generator restriction asserted,
+  non-degeneracy counts asserted), `naive_model_self_check` (model sanity, passes on its own
+  logic but shares the file, so it also does not compile on base);
+  AC-2 → `expansion_equals_naive_model` (5 patterns × 4,000 random templates/captures, `Err`
+  reference and `Display`, error status independent of caps/text),
+  `expansion_ignores_ranges_that_do_not_fit`;
+  AC-3 → `offsets_are_chars` (2 × 3,000 model pairs over `a b é É 中 😀 \r \n` space `B`, char
+  slicing, planted needles after multi-byte/CRLF prefixes, empty pattern at every char),
+  `escaped_literal_matches_literal_search` (3,000 needles incl. all metacharacters, both modes);
+  AC-4 → `invalid_patterns_are_errors` (the five patterns, both modes; 300-nested and long
+  `(`+300 `a`/`é`/`😀` messages = engine `Display` cut to 199 chars + `…`; nest 250 ok, 251 err),
+  `error_message_cut_boundary` (engine messages of exactly 200 and 201 chars found by search),
+  `pathological_patterns_within_five_seconds` (Pinned (e) probes);
+  AC-5 → `worked_examples_hold` (every Pinned (g) example incl. all expansion rows and `$12x`),
+  `api_contract` (derives, default, `len == group_count()+1`), `line_model_and_inline_flags`;
+  AC-6 → `nullable_quantifier_examples_hold` (all five rows, both modes).
+  The AC-4 oracle calls `regex::RegexBuilder` (multi_line, crlf, case_insensitive) directly: a
+  normal dependency of kiln-search after the task, no dev-dependency added.
+  Self-check: a throwaway stub over regex 1.13.1 passed all 14 (suite 49 s in debug, mostly
+  AC-1); 16 seeded mutants, 16 killed: crlf off (AC-1, AC-3, AC-5, flags), no empty-match
+  discard (AC-1, AC-3, AC-5, AC-6), byte offsets (AC-1, AC-3, escaped, AC-5, AC-6), last match
+  dropped (8 tests), no message cut (both AC-4 cut tests, Pinned (e)), cut by bytes
+  (`invalid_patterns_are_errors`), last group dropped (6), missing group expands to nothing
+  instead of `Err` (both AC-2, AC-5), `Display` without quotes (AC-2, AC-5), `$1a` read as `$1`+`a`
+  (AC-2, AC-5), group exists iff `< caps.len()` (both AC-2), option `case_insensitive` ignored
+  (AC-1 ci, AC-3, escaped, AC-5, flags), groups 1/2 swapped (5), None group filled with `0..0`
+  (5), `$$` not an escape (AC-2, AC-5), out-of-range ranges clamped instead of dropped (both
+  AC-2). Clippy `-D warnings` clean with the stub; `cargo fmt --all -- --check` clean; stub,
+  `Cargo.toml` and `Cargo.lock` changes removed. · gate attempts: 1 (last: red clippy, only
+  `acceptance_t017.rs` failing to compile, as expected on base) · not run: the gate with the
+  implementation (join) · missing context: none · next: join.
+  QUESTION: Pinned (e) "a 100 kB pattern … must answer or error within 5 s". With
+  `(a)`×34,000 (the spec check's probe) compiling is fast, but `find_all` on a text that
+  matches makes regex 1.13.1 try to allocate about 55 GB and abort the process (observed in the
+  stub, `captures_iter`). My test therefore probes only a non-matching text. Proposed wording:
+  "compiles (or errors) and `find_all` on a text without a match answers within 5 s"; or should
+  the implementation refuse patterns with more than N groups (a `PatternError`), which T-021
+  would then inherit?
+  QUESTION: AC-4's "exactly its first 199 chars" assumes the engine is built with
+  `RegexBuilder` options; an implementation that prefixes inline flags to the pattern (e.g.
+  `(?mR)`) gets a different engine message. My test compares with
+  `RegexBuilder::new(p).multi_line(true).crlf(true).case_insensitive(ci)`. Please confirm.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
