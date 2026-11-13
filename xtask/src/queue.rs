@@ -1089,6 +1089,97 @@ mod tests {
     }
 
     #[test]
+    fn member_lints_and_custom_build_scripts_are_gate_paths() {
+        // D-030 R10.
+        let app = "[package]\nname = \"app\"\nversion = \"0.1.0\"\nbuild = \"gen/make.rs\"\n\n[lints]\nworkspace = true\n";
+        let mk = || {
+            let repo = testrepo::init(
+                "q-gp-r10",
+                &[
+                    ("base.txt", "base\n"),
+                    (".gitignore", ".worktrees/\ntarget/\n"),
+                    (
+                        "tasks/T-001-thing.md",
+                        &task_md("low", "self_verified", &["app", "lib"]),
+                    ),
+                    ("xtask/generated.toml", GEN),
+                    ("xtask/ledger.toml", LED),
+                    ("app/Cargo.toml", app),
+                    ("app/gen/make.rs", "fn main() {}\n"),
+                    ("lib/Cargo.toml", "[package]\nname = \"lib\"\n"),
+                ],
+            );
+            worktree::create(repo.path(), &Spec::parse("T-001", false).unwrap(), false).unwrap();
+            repo
+        };
+        for (path, content) in [
+            (
+                "app/Cargo.toml",
+                app.replace("[lints]\nworkspace = true\n", ""),
+            ),
+            (
+                "app/Cargo.toml",
+                app.replace("workspace = true", "workspace = false"),
+            ),
+            (
+                "app/Cargo.toml",
+                format!("{app}\n[lints.rust]\nunsafe_code = \"allow\"\n")
+                    .replace("[lints]\nworkspace = true\n", ""),
+            ),
+            ("app/Cargo.toml", app.replace("gen/make.rs", "gen/other.rs")),
+            (
+                "app/gen/make.rs",
+                "fn main() { /* weakened */ }\n".to_owned(),
+            ),
+            (
+                "lib/Cargo.toml",
+                "[package]\nname = \"lib\"\nbuild = \"../lib/src/b.rs\"\n".to_owned(),
+            ),
+            (
+                "lib/Cargo.toml",
+                "[package]\nname = \"lib\"\n[lints]\nworkspace = true\n".to_owned(),
+            ),
+        ] {
+            let repo = mk();
+            let root = repo.path();
+            testrepo::commit(&root.join(".worktrees/T-001"), "w", &[(path, &content)]);
+            assert_refused(root, "gate-path", path);
+        }
+        // A file that some package's build key names on the head (new key) is a gate path too.
+        let repo = mk();
+        let root = repo.path();
+        testrepo::commit(
+            &root.join(".worktrees/T-001"),
+            "w",
+            &[
+                (
+                    "lib/Cargo.toml",
+                    "[package]\nname = \"lib\"\nbuild = \"src/b.rs\"\n",
+                ),
+                ("lib/src/b.rs", ""),
+            ],
+        );
+        let reason = refusal(run(root, "T-001", &clock(), &gate(true, true))).reason;
+        assert!(reason.contains("lib/Cargo.toml, lib/src/b.rs"), "{reason}");
+        // Other manifest and source edits stay ordinary.
+        let repo = mk();
+        let root = repo.path();
+        testrepo::commit(
+            &root.join(".worktrees/T-001"),
+            "ok",
+            &[
+                ("app/Cargo.toml", &app.replace("0.1.0", "0.2.0")),
+                ("app/src/lib.rs", ""),
+            ],
+        );
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(
+            (r.result.as_str(), r.gate_xtask.as_str()),
+            ("merged", "main")
+        );
+    }
+
+    #[test]
     fn dependency_changes_need_tier_high_and_keep_mains_versions() {
         let reg = "registry+https://github.com/rust-lang/crates.io-index";
         let lock = |v: &str| {

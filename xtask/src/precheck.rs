@@ -110,15 +110,76 @@ fn gate_tables(text: Option<&str>) -> Option<toml::Value> {
     Some(toml::Value::Table(out))
 }
 
-/// Whether the root `Cargo.toml` at `head` differs from main's, or from the merge base's, in a
-/// gate table; an unparsable manifest counts as differing (fail closed).
+/// Whether the task changed a value relative to main: the head's value differs from main's
+/// **and** from the merge base's (a value the task did not touch, but main changed meanwhile, is
+/// replaced by main's on the rebase: review F18). A manifest that does not parse at the head
+/// counts as changed (fail closed).
+fn task_changed<T: PartialEq>(h: Option<T>, m: Option<T>, b: Option<T>) -> bool {
+    h.is_none() || (h != m && h != b)
+}
+
+/// Whether the root `Cargo.toml` changes a gate table relative to main (D-026 R3).
 fn root_manifest_gate_tables_differ(
     head: Option<&str>,
     main: Option<&str>,
     base: Option<&str>,
 ) -> bool {
-    let h = gate_tables(head);
-    h.is_none() || h != gate_tables(main) || h != gate_tables(base)
+    task_changed(gate_tables(head), gate_tables(main), gate_tables(base))
+}
+
+/// The gate keys of any `Cargo.toml` (D-030 R10): its `[lints]` table (including
+/// `lints.workspace`) and its package `build` key. `None` if the text does not parse.
+fn manifest_gate_keys(text: Option<&str>) -> Option<toml::Value> {
+    let Some(text) = text else {
+        return Some(toml::Value::Table(Default::default()));
+    };
+    let v: toml::Value = toml::from_str(text).ok()?;
+    let mut out = toml::map::Map::new();
+    if let Some(x) = v.get("lints") {
+        out.insert("lints".into(), x.clone());
+    }
+    if let Some(x) = v.get("package").and_then(|p| p.get("build")) {
+        out.insert("package.build".into(), x.clone());
+    }
+    Some(toml::Value::Table(out))
+}
+
+/// The repository paths that a package `build` key names, in every `Cargo.toml` of tree `rev`
+/// (D-030 R10). `build = true/false` names nothing beyond `build.rs`, already a gate path.
+fn build_script_paths(
+    root: &Path,
+    rev: &str,
+) -> anyhow::Result<std::collections::BTreeSet<String>> {
+    let mut out = std::collections::BTreeSet::new();
+    let files = git(root, &["ls-tree", "-r", "--name-only", rev])?;
+    for m in files.lines().filter(|p| is_manifest(p)) {
+        let Some(text) = show(root, rev, m)? else {
+            continue;
+        };
+        let Ok(v) = toml::from_str::<toml::Value>(&text) else {
+            continue;
+        };
+        let Some(b) = v
+            .get("package")
+            .and_then(|p| p.get("build"))
+            .and_then(|b| b.as_str())
+        else {
+            continue;
+        };
+        let dir = m.strip_suffix("Cargo.toml").unwrap_or_default();
+        let mut parts: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+        for seg in b.split('/') {
+            match seg {
+                "" | "." => {}
+                ".." => {
+                    parts.pop();
+                }
+                s => parts.push(s),
+            }
+        }
+        out.insert(parts.join("/"));
+    }
+    Ok(out)
 }
 
 /// The dependency tables of a `Cargo.toml` (D-026 R4): `[dependencies]`, `[dev-dependencies]`,
@@ -736,15 +797,23 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
     // gate-path (D-026 R3)
     const GP: &str = "gate-path";
     let mut gate_paths = Vec::new();
+    let mut build_scripts = or_refuse(GP, build_script_paths(root, head))?;
+    build_scripts.extend(or_refuse(GP, build_script_paths(root, "main"))?);
     for p in &changed {
-        let gate = if p == "Cargo.toml" {
+        let mut gate = is_gate_path(p) || build_scripts.contains(p);
+        if is_manifest(p) {
             let at = |r: &str| or_refuse(GP, show(root, r, p));
             let (h, m, b) = (at(head)?, at("main")?, at(&base)?);
-            is_gate_path(p)
-                || root_manifest_gate_tables_differ(h.as_deref(), m.as_deref(), b.as_deref())
-        } else {
-            is_gate_path(p)
-        };
+            let (h, m, b) = (h.as_deref(), m.as_deref(), b.as_deref());
+            gate |= task_changed(
+                manifest_gate_keys(h),
+                manifest_gate_keys(m),
+                manifest_gate_keys(b),
+            );
+            if p == "Cargo.toml" {
+                gate |= root_manifest_gate_tables_differ(h, m, b);
+            }
+        }
         if gate {
             gate_paths.push(p.clone());
         }
@@ -1093,15 +1162,39 @@ mod tests {
         }
         let m = "[workspace]\nmembers = []\n[profile.release]\nlto = true\n";
         assert!(!root_manifest_gate_tables_differ(Some(m), Some(m), Some(m)));
-        assert!(root_manifest_gate_tables_differ(
-            Some(m),
-            Some(m),
-            Some("[workspace]\n")
-        ));
+        let w = "[workspace]\n";
+        assert!(
+            root_manifest_gate_tables_differ(Some(m), Some(w), Some(w)),
+            "task changed it"
+        );
+        // F18: changed on main only (head = base), or changed to main's value: not the task's.
+        assert!(!root_manifest_gate_tables_differ(Some(w), Some(m), Some(w)));
+        assert!(!root_manifest_gate_tables_differ(Some(m), Some(m), Some(w)));
         assert!(root_manifest_gate_tables_differ(
             Some("x ["),
             Some(m),
             Some(m)
+        ));
+        // D-030 R10: member [lints] and package build keys.
+        let lw = "[package]\nname = \"a\"\n[lints]\nworkspace = true\n";
+        let plain = "[package]\nname = \"a\"\n";
+        let k = |t: &str| manifest_gate_keys(Some(t));
+        assert!(task_changed(k(plain), k(lw), k(lw)), "lints removed");
+        assert!(task_changed(k(lw), k(plain), k(plain)), "lints added");
+        assert!(task_changed(
+            k("[package]\nname = \"a\"\n[lints.rust]\nunsafe_code = \"allow\"\n"),
+            k(lw),
+            k(lw)
+        ));
+        assert!(task_changed(
+            k("[package]\nname = \"a\"\nbuild = \"gen.rs\"\n"),
+            k(plain),
+            k(plain)
+        ));
+        assert!(!task_changed(
+            k(&format!("{plain}version = \"1\"\n")),
+            k(plain),
+            k(plain)
         ));
         let d = "[package]\nname = \"a\"\n[dependencies]\nx = \"1\"\n";
         assert!(!dependency_tables_differ(
