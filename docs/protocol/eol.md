@@ -44,12 +44,22 @@ applies the normalisation again.
   selection, not the undo/redo history, and not an open typing group (typing after it still
   joins the typing before it).
 - **The selection follows.** Each rewritten break is an edit of its own for the selection
-  (see the mapping rule in `cursor.md`), applied from the last break to the first. A caret
-  just after a CRLF that becomes an LF stays just after the new LF; a caret just before it
-  stays before it. The text as a whole is not replaced, so a selection elsewhere in the text
-  keeps its place relative to the surrounding text.
+  (see the mapping rule in `cursor.md`), applied from the last break to the first, and the
+  CRLF snap of the mapping rule is applied after each of these edits, to the text as it is at
+  that moment. A position just before a rewritten break stays before it; a position just
+  after one ends just after its new text. The text as a whole is not replaced.
+- **One exception, when normalising to LF.** Because the snap looks at each intermediate
+  text, it can act on a `\r\n` that exists only there. This happens to a position directly
+  between a lone CR and a following `\r` (another lone CR, or the `\r` of a CRLF): it ends
+  just before the lone CR's new LF, at the end of the line before, not after it. In `x\r\r\ny`
+  normalised to LF, a caret at 2 (the start of the empty line between the lone CR and the
+  CRLF) ends at 1 in `x\n\ny`, the end of the first line. The result is always a valid
+  position. Undo and redo map the selection through the edits they apply in the same way
+  (from the highest position to the lowest), so they do not necessarily put a selection back
+  where it was.
 
 ### Refusals
 
 `doc` must be an open document's id, else `rejected` / `no_such_document` (also for `doc: 0`).
-A `to` other than the three names fails the params schema (`invalid_params`).
+A `to` other than the three names fails the params schema (`invalid_params`). An absent `to`
+means the default; `"to": null` is not a value and also fails the params schema.

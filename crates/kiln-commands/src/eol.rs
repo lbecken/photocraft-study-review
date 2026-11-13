@@ -22,6 +22,16 @@ pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
     Ok(())
 }
 
+/// Deserialize an optional parameter that is present: `null` is not a value for it (an absent
+/// parameter is `None` through `#[serde(default)]`). Ruling x1 (D-084).
+fn present<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(d).map(Some)
+}
+
 /// As `doc.info.line_ending`: the dominant kind (ties to LF, then CRLF, then CR), or `none`.
 fn line_ending_name(buffer: &Buffer) -> LineEndingName {
     match buffer.dominant_line_ending() {
@@ -119,8 +129,9 @@ pub(crate) struct NormalizeParams {
     /// Id of an open document.
     doc: u64,
     /// The line ending every break is rewritten to; defaults to the document's dominant one
-    /// (`doc.info.line_ending`).
-    #[serde(default)]
+    /// (`doc.info.line_ending`). Omit it for the default; `null` is refused.
+    #[serde(default, deserialize_with = "present")]
+    #[schemars(with = "Target")]
     to: Option<Target>,
 }
 
@@ -300,6 +311,53 @@ mod tests {
         assert_eq!(
             (c["anchor"].as_u64(), c["head"].as_u64()),
             (Some(3), Some(7))
+        );
+    }
+
+    /// x1: `to: null` is refused (`invalid_params`) and changes nothing; absent `to` is the
+    /// dominant line ending.
+    #[test]
+    fn null_target_is_invalid_params() {
+        let (r, mut ctx) = setup("a\r\nb\r\nc\n");
+        let e = r
+            .execute(&mut ctx, "eol.normalize", json!({"doc": 1, "to": null}))
+            .unwrap_err()
+            .to_json();
+        assert_eq!(e["code"], "invalid_params");
+        assert_eq!(text(&r, &mut ctx), "a\r\nb\r\nc\n");
+        let info = ok(&r, &mut ctx, "doc.info", json!({"doc": 1}));
+        assert_eq!(info["can_undo"], false);
+        let v = ok(&r, &mut ctx, "eol.normalize", json!({"doc": 1}));
+        assert_eq!(v["changed"], 1);
+        assert_eq!(text(&r, &mut ctx), "a\r\nb\r\nc\r\n");
+        let described = r.describe();
+        let schema = &described["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "eol.normalize")
+            .unwrap()["params_schema"]["properties"]["to"];
+        assert_eq!(schema["$ref"], "#/$defs/Target");
+        assert!(schema.get("anyOf").is_none());
+    }
+
+    /// The exception documented in `docs/protocol/eol.md` (ruling x2): the CRLF snap after
+    /// each edit acts on a `\r\n` of an intermediate text.
+    #[test]
+    fn snap_on_intermediate_text_when_normalising_to_lf() {
+        let (r, mut ctx) = setup("x\r\r\ny");
+        ok(
+            &r,
+            &mut ctx,
+            "cursor.set",
+            json!({"doc": 1, "anchor": 4, "head": 2}),
+        );
+        ok(&r, &mut ctx, "eol.normalize", json!({"doc": 1, "to": "lf"}));
+        assert_eq!(text(&r, &mut ctx), "x\n\ny");
+        let c = ok(&r, &mut ctx, "cursor.get", json!({"doc": 1}));
+        assert_eq!(
+            (c["anchor"].as_u64(), c["head"].as_u64()),
+            (Some(3), Some(1))
         );
     }
 

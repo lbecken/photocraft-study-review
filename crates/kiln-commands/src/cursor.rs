@@ -23,6 +23,22 @@ pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
     Ok(())
 }
 
+/// Deserialize an optional parameter that is present: `null` is not a value for it (an absent
+/// parameter is `None` through `#[serde(default)]`). Ruling x1 (D-084).
+fn present<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(d).map(Some)
+}
+
+/// Drop the `"default": null` that `#[serde(default)]` adds to the schema: an absent `head`
+/// defaults to `anchor`, and `null` is not a value of the bare type.
+fn no_default(schema: &mut schemars::Schema) {
+    schema.remove("default");
+}
+
 /// A `u64` from the params as a `usize`; a value that does not fit saturates, which is beyond
 /// every buffer length and so is refused with `out_of_range`.
 fn index(n: u64) -> usize {
@@ -122,8 +138,10 @@ pub(crate) struct SetParams {
     doc: u64,
     /// Char offset of the anchor (`0..=len_chars`, not between `\r` and `\n`).
     anchor: u64,
-    /// Char offset of the head; defaults to `anchor` (a caret).
-    #[serde(default)]
+    /// Char offset of the head; defaults to `anchor` (a caret). Omit it for a caret; `null`
+    /// is refused.
+    #[serde(default, deserialize_with = "present")]
+    #[schemars(with = "u64", transform = no_default)]
     head: Option<u64>,
 }
 
@@ -462,6 +480,47 @@ mod tests {
         ok(&r, &mut ctx, "doc.undo", json!({"doc": 1}));
         let text = ok(&r, &mut ctx, "doc.text", json!({"doc": 1}));
         assert_eq!(text["text"], "");
+    }
+
+    /// x1: `null` is not a value of an optional parameter; absent `head` still means a caret.
+    #[test]
+    fn null_head_is_invalid_params() {
+        let (r, mut ctx) = setup("abc");
+        ok(
+            &r,
+            &mut ctx,
+            "cursor.set",
+            json!({"doc": 1, "anchor": 1, "head": 2}),
+        );
+        let e = refusal(
+            &r,
+            &mut ctx,
+            "cursor.set",
+            json!({"doc": 1, "anchor": 3, "head": null}),
+        );
+        assert_eq!(e[0], "invalid_params");
+        assert_eq!(
+            ends(&ok(&r, &mut ctx, "cursor.get", json!({"doc": 1}))),
+            (1, 2)
+        );
+        let e = refusal(
+            &r,
+            &mut ctx,
+            "cursor.move",
+            json!({"doc": 1, "by": "char", "forward": true, "extend": null}),
+        );
+        assert_eq!(e[0], "invalid_params");
+        let v = ok(&r, &mut ctx, "cursor.set", json!({"doc": 1, "anchor": 3}));
+        assert_eq!(ends(&v), (3, 3));
+        let described = r.describe();
+        let schema = &described["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "cursor.set")
+            .unwrap()["params_schema"]["properties"]["head"];
+        assert_eq!(schema["type"], "integer");
+        assert!(schema.get("default").is_none());
     }
 
     #[test]

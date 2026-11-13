@@ -537,14 +537,10 @@
             "type": "integer"
           },
           "head": {
-            "default": null,
-            "description": "Char offset of the head; defaults to `anchor` (a caret).",
+            "description": "Char offset of the head; defaults to `anchor` (a caret). Omit it for a caret; `null`\nis refused.",
             "format": "uint64",
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           }
         },
         "required": [
@@ -2489,15 +2485,8 @@
             "type": "integer"
           },
           "to": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/Target"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The line ending every break is rewritten to; defaults to the document's dominant one\n(`doc.info.line_ending`)."
+            "$ref": "#/$defs/Target",
+            "description": "The line ending every break is rewritten to; defaults to the document's dominant one\n(`doc.info.line_ending`). Omit it for the default; `null` is refused."
           }
         },
         "required": [

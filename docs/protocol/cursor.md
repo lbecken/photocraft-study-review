@@ -10,10 +10,9 @@ The selection follows every edit of the document by itself: `doc.insert`, `doc.d
 below, without being told about it. The machine-readable schemas and examples are in
 `docs/commands.json` (`kiln-cli commands --schema`).
 
-Offsets are chars (Unicode scalar values), as everywhere in the `doc` group. A **valid
-position** is an offset `0..=len_chars` that does not lie between the `\r` and `\n` of a CRLF
-(the same validity as `doc.position`, see `doc-positions.md`). Lines split on `\r\n`, a lone
-`\r` and `\n`.
+Offsets are chars (Unicode scalar values). A **valid position** is an offset `0..=len_chars`
+that does not lie between the `\r` and `\n` of a CRLF (the same validity as `doc.position`,
+see `doc-positions.md`). Lines split on `\r\n`, a lone `\r` and `\n`.
 
 ## Commands
 
@@ -33,7 +32,8 @@ where `start`/`end` are the smaller/larger of `anchor` and `head`, and `line`/`c
 head's zero-based line and column (column in chars), as `doc.position` reports them.
 
 - `cursor.get` changes nothing (read-only).
-- `cursor.set` sets the selection; `head` defaults to `anchor` (a caret).
+- `cursor.set` sets the selection; an absent `head` defaults to `anchor` (a caret).
+  `"head": null` is not a value: it fails the params schema (`invalid_params`).
 - `cursor.move` moves the head one step: `by` is `"char"`, `"word"` or `"line"`, `forward` is
   `true` (towards the end; down for lines) or `false`. The step is computed from the head
   before the move. Without `extend` (or with `extend: false`) the selection collapses at the
@@ -47,7 +47,8 @@ nothing, the typing group included.
 
 Checked in this order; the first failure is reported and nothing changes:
 
-1. the params schema (`invalid_params`);
+1. the params schema (`invalid_params`), which also refuses `null` for an optional
+   parameter (`head`, `extend`): omit it instead;
 2. the document: `doc` must be an open document's id, else `rejected` / `no_such_document`
    (also for `doc: 0`);
 3. for `cursor.set`, `anchor` and then `head`: an offset beyond the text is `rejected` /
@@ -71,11 +72,14 @@ moves to:
   the caret after the typed text).
 
 Then, if the result lies between the `\r` and `\n` of a CRLF (for example because a `\r` was
-inserted just before a `\n`), it moves to just before the `\r`.
+inserted just before a `\n`), it moves to just before the `\r`. This snap is applied after
+each primitive edit, to the text as it is after that edit; in a step of several edits that text
+can hold a `\r\n` the final text does not (see the exception in `eol.md`).
 
 `doc.undo` and `doc.redo` move the selection through the edits they apply, in the order they
 apply them. A step made of several edits (`eol.normalize`) is applied from its last edit (the
-highest position) to its first, and so is its undo. Rejected requests and no-op edits (inserting
+highest position) to its first, and so is its undo. An undo therefore maps the selection like
+any edit; it does not necessarily restore the selection of before the step. Rejected requests and no-op edits (inserting
 `""`, deleting an empty range) move nothing.
 
 ### Worked example
