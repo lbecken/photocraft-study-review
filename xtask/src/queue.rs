@@ -1320,6 +1320,34 @@ mod tests {
         assert!(dirty_paths(&wt, None).unwrap().is_empty());
     }
 
+    #[test]
+    fn leaky_regeneration_is_a_failed_regeneration() {
+        // D-026 R9 / D-027: a regeneration command that changes a non-generated path gives the
+        // failed-regeneration result; nothing is merged and the branch is put back (R5).
+        let repo = setup("q-gen-leak");
+        let root = repo.path();
+        let wt = root.join(".worktrees/T-001");
+        testrepo::commit(&wt, "b", &[("gen.txt", "a\nb\n"), ("items/b", "")]);
+        let leaky = GEN.replace(
+            "ls items | sort > gen.txt",
+            "ls items | sort > gen.txt; echo x > base.txt",
+        );
+        testrepo::commit(
+            root,
+            "c",
+            &[("gen.txt", "a\nc\n"), ("xtask/generated.toml", &leaky)],
+        );
+        let (main0, head0) = (rev(root, "main").unwrap(), rev(&wt, "HEAD").unwrap());
+        let r = run(root, "T-001", &clock(), &gate(true, true)).unwrap();
+        assert_eq!(
+            (r.result.as_str(), r.failed_step.as_deref()),
+            ("conflict", Some("regenerate:gen.txt"))
+        );
+        assert_eq!(rev(root, "main").unwrap(), main0);
+        assert_eq!(rev(&wt, "HEAD").unwrap(), head0);
+        assert!(dirty_paths(&wt, None).unwrap().is_empty());
+    }
+
     /// Snapshot of everything a refusal must leave alone.
     fn snapshot(root: &Path) -> Vec<String> {
         let wt = root.join(".worktrees/T-001");

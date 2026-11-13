@@ -306,18 +306,20 @@ fn table_cells(line: &str) -> Vec<String> {
     } else {
         t
     };
-    let mut cells = vec![String::new()];
+    let mut cells = Vec::new();
+    let mut cur = String::new();
     let mut chars = t.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
             '\\' if chars.peek() == Some(&'|') => {
-                cells.last_mut().unwrap().push('|');
+                cur.push('|');
                 chars.next();
             }
-            '|' => cells.push(String::new()),
-            c => cells.last_mut().unwrap().push(c),
+            '|' => cells.push(std::mem::take(&mut cur)),
+            c => cur.push(c),
         }
     }
+    cells.push(cur);
     cells.into_iter().map(|c| c.trim().to_owned()).collect()
 }
 
@@ -786,10 +788,25 @@ pub fn check(root: &Path, task: &str, branch: &str, head: &str) -> Result<Checke
         ) else {
             continue;
         };
-        let bumped = or_refuse(
+        // A version the task's own diff changed (head differs from the merge base too); a
+        // version that is merely stale because main moved is replaced by main's on the rebase
+        // or regeneration and checked again on the rebased tree before the gate.
+        let own: Vec<String> = match or_refuse(DP, show(root, &base, p))? {
+            Some(base_lock) => or_refuse(
+                DP,
+                crate::queue::lock_version_changes(&base_lock, &head_lock),
+            )?,
+            None => Vec::new(),
+        };
+        let pkg = |c: &String| c.split(' ').next().unwrap_or_default().to_owned();
+        let own: std::collections::BTreeSet<String> = own.iter().map(pkg).collect();
+        let bumped: Vec<String> = or_refuse(
             DP,
             crate::queue::lock_version_changes(&main_lock, &head_lock),
-        )?;
+        )?
+        .into_iter()
+        .filter(|c| own.contains(&pkg(c)))
+        .collect();
         if !bumped.is_empty() {
             return refuse(
                 DP,
