@@ -340,6 +340,28 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   now classified by reason, not by text (AC-4 excludes such paths). Seen, not mine: four
   `kiln-t015-default-runner-<pid>-<nanos>` dirs in the temp dir from 08:02–08:03 UTC (before
   this run), left in place. · missing context: none · next: join with the T-032 tests.
+- 2026-11-13T12:01Z · R-100 · review r1 request-changes (`reviews/T-032-r1.md`, rulings
+  D-051) · did: r1: `reason.rs` declares `RejectReason` and `InternalReason` each through one
+  `macro_rules! reasons` table, one row per variant (`/// doc` `Variant = "kind" =>
+  "description",`); the macro emits the enum with the pinned derives and
+  `serde(rename_all = "snake_case")` in row order, `ALL` in row order, `as_str` and
+  `description`. Public API unchanged, no new dependency, `docs/commands.json` bytes unchanged
+  (`cargo xtask schema` current without `--write`). My `ALL.len() == 21` assertion is replaced
+  by a check that the 21 / 3 pinned kinds are an ordered subsequence of `ALL` (helper tested);
+  `as_str` = serde form stays tested over `ALL`. No count is hard-coded in the test author's
+  `acceptance_t032*`/`guard_t032*` files (grep). r2: unit test
+  `a_panicking_command_is_internal_panic_and_the_host_continues` in kiln-control lib.rs:
+  a registry with a test command `test.boom` that panics, the host answers
+  `internal`/`panic`/`` command `test.boom` panicked `` with the request id, then answers
+  `buffer.text` normally and logs only it. Mutants re-seeded and reverted (`git status`
+  clean after each): M12 (host panic site `Panic` → `Other`) killed by the new test; M11 can no
+  longer be written: a variant named outside the table does not compile (E0599 "no variant
+  `OutsideRoot`"), and a variant added as a row is in `ALL`, so `kiln-cli commands --schema`
+  lists `outside_root` and `cargo xtask schema` fails stale until regenerated. Commits:
+  `f1f043d178fe618ca40024a89a771642b6d7ef95`, `943eb3db3b5aa9c99edc28ffaff8441301db9695`. ·
+  gate attempts: 1 (green, 10 steps, 434 tests; fuzz and budgets EMPTY) · not run: nothing
+  new beyond R-094's note (no base byte differential) · missing context: none · next:
+  reviewer round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T11:35Z · R-095 · ready · did: wrote the independent T-032 tests from the spec
