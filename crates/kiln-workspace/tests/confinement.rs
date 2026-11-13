@@ -3,6 +3,7 @@
 //! files assert `Display` and `path()` only). Every call that could block on a FIFO runs under
 //! a hard timeout, so a regression fails instead of hanging the suite.
 
+use kiln_workspace::{DiskFs, Document, RelPath, Vfs, VfsError};
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, symlink};
 use std::os::unix::net::UnixListener;
@@ -11,112 +12,117 @@ use std::process::Command;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use kiln_workspace::{DiskFs, Document, RelPath, Vfs, VfsError};
+use support::*;
 
-const SECRET: &[u8] = b"s3cr3t-content\n";
-const TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(test)]
+mod support {
+    use super::*;
 
-fn p(s: &str) -> RelPath {
-    RelPath::new(s).unwrap()
-}
+    pub const SECRET: &[u8] = b"s3cr3t-content\n";
+    pub const TIMEOUT: Duration = Duration::from_secs(5);
 
-/// `work/` with `root/`, `outside/secret.txt`, `outside/d/`, `rootx/secret.txt`, under the
-/// system temp dir with a short name (socket paths are limited to 108 bytes).
-fn work(name: &str) -> PathBuf {
-    let work = std::env::temp_dir().join(format!("k8i-{}-{name}", std::process::id()));
-    let _ = fs::remove_dir_all(&work);
-    fs::create_dir_all(work.join("root")).unwrap();
-    fs::create_dir_all(work.join("outside/d")).unwrap();
-    fs::create_dir_all(work.join("rootx")).unwrap();
-    fs::write(work.join("outside/secret.txt"), SECRET).unwrap();
-    fs::write(work.join("rootx/secret.txt"), SECRET).unwrap();
-    assert_eq!(fs::read(work.join("outside/secret.txt")).unwrap(), SECRET);
-    assert_eq!(fs::read(work.join("rootx/secret.txt")).unwrap(), SECRET);
-    work
-}
+    pub fn p(s: &str) -> RelPath {
+        RelPath::new(s).unwrap()
+    }
 
-/// Every entry under `dir`, recursively, symlinks not followed: (relative path, type, link
-/// target or bytes).
-fn snapshot(dir: &Path) -> Vec<(String, String, Vec<u8>)> {
-    fn walk(base: &Path, dir: &Path, out: &mut Vec<(String, String, Vec<u8>)>) {
-        let mut entries: Vec<_> = fs::read_dir(dir).unwrap().map(|e| e.unwrap()).collect();
-        entries.sort_by_key(|e| e.file_name());
-        for e in entries {
-            let path = e.path();
-            let rel = path
-                .strip_prefix(base)
-                .unwrap()
-                .to_string_lossy()
-                .into_owned();
-            let ft = fs::symlink_metadata(&path).unwrap().file_type();
-            if ft.is_symlink() {
-                let t = fs::read_link(&path).unwrap();
-                out.push((rel, "link".into(), t.to_string_lossy().as_bytes().to_vec()));
-            } else if ft.is_dir() {
-                out.push((rel, "dir".into(), Vec::new()));
-                walk(base, &path, out);
-            } else if ft.is_file() {
-                out.push((rel, "file".into(), fs::read(&path).unwrap()));
-            } else {
-                out.push((rel, format!("{ft:?}"), Vec::new()));
+    /// `work/` with `root/`, `outside/secret.txt`, `outside/d/`, `rootx/secret.txt`, under the
+    /// system temp dir with a short name (socket paths are limited to 108 bytes).
+    pub fn work(name: &str) -> PathBuf {
+        let work = std::env::temp_dir().join(format!("k8i-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&work);
+        fs::create_dir_all(work.join("root")).unwrap();
+        fs::create_dir_all(work.join("outside/d")).unwrap();
+        fs::create_dir_all(work.join("rootx")).unwrap();
+        fs::write(work.join("outside/secret.txt"), SECRET).unwrap();
+        fs::write(work.join("rootx/secret.txt"), SECRET).unwrap();
+        assert_eq!(fs::read(work.join("outside/secret.txt")).unwrap(), SECRET);
+        assert_eq!(fs::read(work.join("rootx/secret.txt")).unwrap(), SECRET);
+        work
+    }
+
+    /// Every entry under `dir`, recursively, symlinks not followed: (relative path, type, link
+    /// target or bytes).
+    pub fn snapshot(dir: &Path) -> Vec<(String, String, Vec<u8>)> {
+        fn walk(base: &Path, dir: &Path, out: &mut Vec<(String, String, Vec<u8>)>) {
+            let mut entries: Vec<_> = fs::read_dir(dir).unwrap().map(|e| e.unwrap()).collect();
+            entries.sort_by_key(|e| e.file_name());
+            for e in entries {
+                let path = e.path();
+                let rel = path
+                    .strip_prefix(base)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                let ft = fs::symlink_metadata(&path).unwrap().file_type();
+                if ft.is_symlink() {
+                    let t = fs::read_link(&path).unwrap();
+                    out.push((rel, "link".into(), t.to_string_lossy().as_bytes().to_vec()));
+                } else if ft.is_dir() {
+                    out.push((rel, "dir".into(), Vec::new()));
+                    walk(base, &path, out);
+                } else if ft.is_file() {
+                    out.push((rel, "file".into(), fs::read(&path).unwrap()));
+                } else {
+                    out.push((rel, format!("{ft:?}"), Vec::new()));
+                }
             }
         }
+        let mut out = Vec::new();
+        walk(dir, dir, &mut out);
+        out
     }
-    let mut out = Vec::new();
-    walk(dir, dir, &mut out);
-    out
-}
 
-fn no_temp_files(dir: &Path) {
-    for (rel, _, _) in snapshot(dir) {
-        assert!(!rel.contains(".kiln-tmp-"), "temporary file left: {rel}");
-    }
-}
-
-/// Run `f` on another thread; fail (never hang) if it takes longer than `TIMEOUT`.
-fn bounded<T: Send + 'static>(what: &str, f: impl FnOnce() -> T + Send + 'static) -> T {
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(f());
-    });
-    rx.recv_timeout(TIMEOUT)
-        .unwrap_or_else(|_| panic!("{what} blocked for more than {TIMEOUT:?}"))
-}
-
-/// `mkfifo <path>` under a timeout.
-fn mkfifo(path: &Path) {
-    let mut child = Command::new("mkfifo").arg(path).spawn().unwrap();
-    let deadline = Instant::now() + TIMEOUT;
-    loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            assert!(status.success());
-            break;
+    pub fn no_temp_files(dir: &Path) {
+        for (rel, _, _) in snapshot(dir) {
+            assert!(!rel.contains(".kiln-tmp-"), "temporary file left: {rel}");
         }
-        if Instant::now() > deadline {
-            let _ = child.kill();
-            panic!("mkfifo timed out");
-        }
-        std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(fs::symlink_metadata(path).unwrap().file_type().is_fifo());
-}
 
-fn outside(path: &str) -> VfsError {
-    VfsError::OutsideRoot { path: p(path) }
-}
+    /// Run `f` on another thread; fail (never hang) if it takes longer than `TIMEOUT`.
+    pub fn bounded<T: Send + 'static>(what: &str, f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(TIMEOUT)
+            .unwrap_or_else(|_| panic!("{what} blocked for more than {TIMEOUT:?}"))
+    }
 
-fn not_a_file(path: &str) -> VfsError {
-    VfsError::NotAFile { path: p(path) }
-}
+    /// `mkfifo <path>` under a timeout.
+    pub fn mkfifo(path: &Path) {
+        let mut child = Command::new("mkfifo").arg(path).spawn().unwrap();
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            if Instant::now() > deadline {
+                let _ = child.kill();
+                panic!("mkfifo timed out");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(fs::symlink_metadata(path).unwrap().file_type().is_fifo());
+    }
 
-fn check_text(e: &VfsError, work: &Path) {
-    let text = e.to_string();
-    let without = text.replace("resolves outside the root", "");
-    assert!(!text.contains(work.to_string_lossy().as_ref()), "{text}");
-    assert!(
-        !without.contains("outside") && !without.contains("rootx"),
-        "{text}"
-    );
+    pub fn outside(path: &str) -> VfsError {
+        VfsError::OutsideRoot { path: p(path) }
+    }
+
+    pub fn not_a_file(path: &str) -> VfsError {
+        VfsError::NotAFile { path: p(path) }
+    }
+
+    pub fn check_text(e: &VfsError, work: &Path) {
+        let text = e.to_string();
+        let without = text.replace("resolves outside the root", "");
+        assert!(!text.contains(work.to_string_lossy().as_ref()), "{text}");
+        assert!(
+            !without.contains("outside") && !without.contains("rootx"),
+            "{text}"
+        );
+    }
 }
 
 #[test]
