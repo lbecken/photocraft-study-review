@@ -228,7 +228,11 @@ pub fn highlight(tree: &SyntaxTree, range: Range<usize>) -> Vec<HighlightSpan> {
     let mut paint = |node: Node<'_>, kind: HighlightKind| {
         let s = node.start_byte().max(start_byte);
         let e = node.end_byte().min(end_byte);
-        for k in kinds.iter_mut().take(e.saturating_sub(start_byte)).skip(s - start_byte) {
+        for k in kinds
+            .iter_mut()
+            .take(e.saturating_sub(start_byte))
+            .skip(s - start_byte)
+        {
             if kind < *k {
                 *k = kind;
             }
@@ -325,7 +329,10 @@ mod tests {
     #[test]
     fn ranges_are_clipped_and_empty_ranges_give_nothing() {
         let src = "fn f() { let s: u8 = 1; } // c";
-        assert_eq!(spans(src, 1..4), vec![(1, 2, "keyword"), (2, 3, "plain"), (3, 4, "function")]);
+        assert_eq!(
+            spans(src, 1..4),
+            vec![(1, 2, "keyword"), (2, 3, "plain"), (3, 4, "function")]
+        );
         assert_eq!(spans(src, 27..29), vec![(27, 29, "comment")]);
         assert!(spans(src, 5..5).is_empty());
         assert!(spans("", 0..0).is_empty());
@@ -358,7 +365,10 @@ mod tests {
             .collect();
         assert_eq!(fns, ["g", "a", "b", "c", "d", "new"]);
         let self_at = src.find("Self").expect("Self");
-        assert!(got.iter().any(|s| s.0 <= self_at && self_at < s.1 && s.2 == "plain"));
+        assert!(
+            got.iter()
+                .any(|s| s.0 <= self_at && self_at < s.1 && s.2 == "plain")
+        );
     }
 
     #[test]

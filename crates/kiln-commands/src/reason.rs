@@ -118,6 +118,8 @@ reasons! {
             "a position inside a character, a surrogate pair or a CRLF line break",
         /// The path resolves (through symlinks) to a location outside the root.
         OutsideRoot = "outside_root" => "the path resolves outside the root",
+        /// The document is longer than the command accepts.
+        TooLarge = "too_large" => "the document is longer than the command accepts",
     }
 }
 
@@ -353,10 +355,11 @@ mod tests {
         }
     }
 
-    /// T-008: `outside_root` is the last row, and `not_a_file` covers every non-regular file.
+    /// T-008: `outside_root` is appended (T-020 appended `too_large` after it, so the row is
+    /// checked for presence, D-097 Q-6), and `not_a_file` covers every non-regular file.
     #[test]
     fn outside_root_is_appended_and_not_a_file_is_widened() {
-        assert_eq!(RejectReason::ALL.last(), Some(&RejectReason::OutsideRoot));
+        assert!(RejectReason::ALL.contains(&RejectReason::OutsideRoot));
         assert_eq!(RejectReason::OutsideRoot.as_str(), "outside_root");
         assert_eq!(
             RejectReason::OutsideRoot.description(),

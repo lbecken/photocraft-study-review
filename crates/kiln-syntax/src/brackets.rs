@@ -43,8 +43,7 @@ pub fn match_bracket(tree: &SyntaxTree, offset: usize) -> Option<BracketPair> {
     // Descend to the smallest node holding the byte.
     let mut cursor = tree.root().walk();
     while cursor.node().child_count() > 0 {
-        if cursor.goto_first_child_for_byte(byte).is_none() || cursor.node().start_byte() > byte
-        {
+        if cursor.goto_first_child_for_byte(byte).is_none() || cursor.node().start_byte() > byte {
             // The byte lies in no child (hidden content of the node, e.g. a comment's text).
             return None;
         }
