@@ -69,19 +69,22 @@ impl Host {
         }
         let response = match parse_request(line) {
             Err(failure) => failure,
-            Ok(Request { id, command, params }) => {
+            Ok(Request {
+                id,
+                command,
+                params,
+            }) => {
                 let registry = &self.registry;
                 let ctx = &mut self.ctx;
                 // A panicking command must not take the host down (the context may be left
                 // partly changed; that is a bug in the command, reported as `internal`).
-                let outcome = catch_unwind(AssertUnwindSafe(|| {
-                    registry.execute(ctx, &command, params)
-                }))
-                .unwrap_or_else(|_| {
-                    Err(kiln_commands::CommandError::Internal {
-                        message: format!("command `{command}` panicked"),
-                    })
-                });
+                let outcome =
+                    catch_unwind(AssertUnwindSafe(|| registry.execute(ctx, &command, params)))
+                        .unwrap_or_else(|_| {
+                            Err(kiln_commands::CommandError::Internal {
+                                message: format!("command `{command}` panicked"),
+                            })
+                        });
                 match outcome {
                     Ok(result) => json!({"id": id, "ok": true, "result": result}),
                     Err(e) => json!({"error": e.to_json(), "id": id, "ok": false}),
@@ -291,7 +294,10 @@ mod tests {
         let list = |id: &str| format!(r#"{{"id":{id},"command":"doc.list"}}"#);
         assert_eq!(call(&mut h, &list("\"x\""))["id"], "x");
         assert_eq!(call(&mut h, &list("-3"))["id"], -3);
-        assert_eq!(call(&mut h, &list("18446744073709551615"))["id"], json!(u64::MAX));
+        assert_eq!(
+            call(&mut h, &list("18446744073709551615"))["id"],
+            json!(u64::MAX)
+        );
         let v = call(&mut h, r#"{"command":"doc.list"}"#);
         assert_eq!(v["id"], Value::Null);
         assert_eq!(v["ok"], true);
@@ -301,7 +307,10 @@ mod tests {
         let v: Value = serde_json::from_str(&h.handle_line(line).unwrap()).unwrap();
         assert_eq!(v["ok"], false, "{v}");
         assert!(v["error"]["message"].is_string(), "{v}");
-        (v["error"]["code"].as_str().unwrap().to_owned(), v["id"].clone())
+        (
+            v["error"]["code"].as_str().unwrap().to_owned(),
+            v["id"].clone(),
+        )
     }
 
     #[test]
@@ -313,15 +322,43 @@ mod tests {
             (b"[1,2]", "invalid_request", Value::Null),
             (b"\"s\"", "invalid_request", Value::Null),
             (br#"{"id":7}"#, "invalid_request", json!(7)),
-            (br#"{"id":1.5,"command":"doc.list"}"#, "invalid_request", Value::Null),
-            (br#"{"id":null,"command":"doc.list"}"#, "invalid_request", Value::Null),
+            (
+                br#"{"id":1.5,"command":"doc.list"}"#,
+                "invalid_request",
+                Value::Null,
+            ),
+            (
+                br#"{"id":null,"command":"doc.list"}"#,
+                "invalid_request",
+                Value::Null,
+            ),
             (br#"{"id":"q","command":3}"#, "invalid_request", json!("q")),
-            (br#"{"command":"doc.list","params":[]}"#, "invalid_request", Value::Null),
-            (br#"{"command":"doc.list","params":null}"#, "invalid_request", Value::Null),
-            (br#"{"id":2,"command":"doc.list","extra":1}"#, "invalid_request", json!(2)),
+            (
+                br#"{"command":"doc.list","params":[]}"#,
+                "invalid_request",
+                Value::Null,
+            ),
+            (
+                br#"{"command":"doc.list","params":null}"#,
+                "invalid_request",
+                Value::Null,
+            ),
+            (
+                br#"{"id":2,"command":"doc.list","extra":1}"#,
+                "invalid_request",
+                json!(2),
+            ),
             (br#"{"command":"no.such"}"#, "unknown_command", Value::Null),
-            (br#"{"command":"doc.insert","params":{"doc":1}}"#, "invalid_params", Value::Null),
-            (br#"{"command":"doc.close","params":{"doc":9}}"#, "rejected", Value::Null),
+            (
+                br#"{"command":"doc.insert","params":{"doc":1}}"#,
+                "invalid_params",
+                Value::Null,
+            ),
+            (
+                br#"{"command":"doc.close","params":{"doc":9}}"#,
+                "rejected",
+                Value::Null,
+            ),
         ];
         for (line, code, id) in cases {
             assert_eq!(
@@ -341,7 +378,11 @@ mod tests {
     fn invalid_params_carry_details() {
         let mut h = host();
         let v = call(&mut h, r#"{"command":"doc.insert","params":{"doc":1}}"#);
-        assert!(v["error"]["details"].as_array().is_some_and(|d| !d.is_empty()));
+        assert!(
+            v["error"]["details"]
+                .as_array()
+                .is_some_and(|d| !d.is_empty())
+        );
     }
 
     #[test]
@@ -382,7 +423,10 @@ mod tests {
             lines[0],
             r#"{"command":"doc.open","id":1,"params":{"path":"a.txt"}}"#
         );
-        assert_eq!(lines[4], r#"{"command":"doc.save","id":5,"params":{"doc":1}}"#);
+        assert_eq!(
+            lines[4],
+            r#"{"command":"doc.save","id":5,"params":{"doc":1}}"#
+        );
 
         let mut again = host();
         for l in &lines {
@@ -409,9 +453,11 @@ mod tests {
         std::fs::write(dir.join("a.txt"), b"hello\n").unwrap();
         let mut disk = Host::on_disk(&dir).unwrap();
         let mut mem = host();
-        for l in SESSION.iter().copied().chain([
-            r#"{"command":"doc.open","params":{"path":"missing.txt"}}"#,
-        ]) {
+        for l in SESSION
+            .iter()
+            .copied()
+            .chain([r#"{"command":"doc.open","params":{"path":"missing.txt"}}"#])
+        {
             let d = disk.handle_line(l.as_bytes()).unwrap();
             assert_eq!(d, mem.handle_line(l.as_bytes()).unwrap());
             assert!(!d.contains(&*dir.to_string_lossy()));
