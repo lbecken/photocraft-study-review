@@ -326,3 +326,95 @@ fn join_defects_appends_one_record_and_classifies_the_join() {
         1
     );
 }
+
+#[test]
+fn report_reads_malformed_extend_ceilings_as_no_extension() {
+    // Ruling j (D-047): one parser for the queue and the report; `1,200,000`, `5000.5` and
+    // `1_200_000` are not extensions, and a malformed later row leaves an earlier ceiling.
+    let l = Lite::new("j-report");
+    l.task(&TaskSpec {
+        budget: Some(500_000),
+        ..TaskSpec::new("T-038", "medium", 1)
+    });
+    l.seed(&[run_rec(
+        "T-038",
+        Some("medium"),
+        1,
+        Some(999_999),
+        &ts(now_s() - 3600),
+    )]);
+    let report = |cells: &[&str]| {
+        let mut d = DECISIONS.to_owned();
+        for (i, c) in cells.iter().enumerate() {
+            d.push_str(&format!(
+                "| D-{:03} | 2026-11-13 | {c} | x | yes |\n",
+                i + 2
+            ));
+        }
+        write(&l.root, "docs/decisions.md", &d);
+        let o = l.x(&["metrics", "report"]);
+        assert_ok(&o, "metrics report");
+        lines(&o.stdout)
+            .into_iter()
+            .find(|x| x.contains("T-038") && x.contains("extend to:"))
+            .unwrap_or_else(|| panic!("no budget-overrun line for T-038:\n{}", o.stdout))
+    };
+    for row in [
+        "Extend T-038 to 1,200,000",
+        "Extend T-038 to 5000.5",
+        "Extend T-038 to 1_200_000",
+    ] {
+        let line = report(&[row]);
+        assert!(
+            line.contains("extend to: none") && line.contains("within ceiling: no"),
+            "row `{row}`: {line}"
+        );
+    }
+    let line = report(&["Extend T-038 to 2000000", "Extend T-038 to 1,200,000"]);
+    assert!(
+        line.contains("extend to: 2000000") && line.contains("within ceiling: yes"),
+        "{line}"
+    );
+}
+
+#[test]
+fn report_does_not_panic_on_a_malformed_task_id() {
+    // Ruling o (D-047): no command panics on a malformed `task` value; the arm of an id that does
+    // not end in an ASCII digit is none (reported under neither arm).
+    let l = Lite::new("o-report");
+    l.task(&TaskSpec::new("T-021", "medium", 1));
+    let t = now_s() - 3600;
+    l.seed(&[
+        run_rec("T-021 ", Some("medium"), 1, Some(777), &ts(t)),
+        join_rec13("T-021", &ts(t + 1), &sha(21), 2, Some(2), true),
+        join_rec13("T-021 ", &ts(t + 2), &sha(22), 1, Some(1), true),
+    ]);
+    l.queue_merged(&["T-021 "]);
+    let o = l.x(&["metrics", "report"]);
+    assert!(
+        o.code != 101 && !o.stderr.contains("panicked"),
+        "metrics report panicked (exit {}):\n{}",
+        o.code,
+        o.stderr
+    );
+    assert!(
+        caught_total(&o.stdout).is_some(),
+        "the report is printed:\n{}\n{}",
+        o.stdout,
+        o.stderr
+    );
+    // The implementer arm (T-021, medium, odd) counts T-021's 2, not the malformed id's 1.
+    let ls = lines(&o.stdout);
+    assert!(
+        ls.iter()
+            .any(|x| x.contains("implementer") && has_num(x, 2)),
+        "implementer arm: 2\n{}",
+        o.stdout
+    );
+    assert!(
+        !ls.iter()
+            .any(|x| x.contains("implementer") && has_num(x, 3)),
+        "the malformed id is under no arm\n{}",
+        o.stdout
+    );
+}

@@ -759,6 +759,37 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   refusal first. Now each case starts from a clean checkout (`checkout -- .`, `clean -fd`,
   status asserted empty) and dirties only its own files. No assertion weakened. · gate
   attempts: 0 (clippy clean; fails on base, exit 2) · missing context: none · next: re-join.
+- 2026-11-13T08:09Z · R-090 · in_progress · did: tests owed by D-047 p, from main's task file
+  (rulings j–p) and review r1 findings 6–8 only. New, all in `acceptance_t013_*`: f6
+  `publish_refuses_a_checkout_dirty_outside_the_inputs_and_ledger_paths` (modified
+  `other/keep.txt`, untracked `stray.txt`; line names the path, nothing changed); f7
+  `an_input_changed_during_the_gate_is_not_handed_over` (toy gate edits the primary checkout's
+  item marked `edit-primary`; expects `publish: stopped at step 7: …; T-050 is queued`, edited
+  bytes kept, branch holds step-4 copy, main ready/in progress/queued, committed `state:
+  queued`, no queue run); f8 `publish_without_an_input_is_refused_for_that_reason`; j
+  `malformed_extend_ceilings_are_not_extensions` (queue) and
+  `report_reads_malformed_extend_ceilings_as_no_extension`; k
+  `publish_refuses_an_id_that_already_has_ledger_records`; l
+  `a_failing_git_add_in_step_2_is_a_commit_failure` (`.git/index.lock`); m
+  `publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue` (own pid in the
+  lock; build tree snapshot unchanged; then a normal publish merges, no live lock left); n:
+  `committed_state == in_progress` added to `publish_stops_when_the_gate_fails_and_keeps_the_inputs`
+  (and `queued` in the f7 test); o `session_paths_checks_a_tracked_symlinks_target`,
+  `report_does_not_panic_on_a_malformed_task_id` (no exit 101/`panicked`; implementer arm counts
+  T-021's 2, not the malformed id's 1); p `publish_refuses_a_title_without_a_letter_or_digit`.
+  Base results: all 12 fail — publish ones by command error (exit 2, no `publish`), queue j by
+  assertion (merges: no `budget`), report j/o by assertion (no overrun/arm lines), symlink by
+  command error (no `hygiene`). Toy xtask with `edit_primary` built by hand with
+  `rustc -D warnings` and run in a toy worktree: edits the primary copy, gate passes.
+  Not testable through the CLI as ruled: k's second sentence (step-2 rollback when a write or
+  transition fails before the commit): step 1 now refuses every id with records, so no
+  transition can fail, and a write failure cannot be provoked as root. f8's oracle is partial:
+  "at least one input" has no pinned text, so the test only excludes the later
+  generated-file line. Exit code of a step-7 stop is unpinned; the test requires non-zero, not
+  101. Self-check: no publish stub written this run (too large); kills argued from the
+  review's mutants: M5 → f6, M6 → f7, M21 → f8. · gate attempts: 0 (fmt check and clippy
+  `-D warnings` clean; guard_t005/guard_t005_r2 pass; new tests run directly) · not run:
+  `cargo xtask ci`, the full T-005 suites · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13T08:00Z · R-081 · tests_joined · did: round-1 review (`reviews/T-013-r1.md`), replacing R-075 (cut off, D-045): AC check, adversarial toys (publish, metrics, report, worktree, hygiene), 26 mutants (23 killed, 21 by acceptance, 3 survived); verdict request-changes: 5 defects, 3 test gaps, 4 spec gaps, 1 nit · gate attempts: 0 (`cargo test -p xtask` green; `cargo xtask hygiene` PASS) · not run: full `cargo xtask ci` (disk), a timed queue/publish race · missing context: none · next: director rules on spec gaps 9–12; implementer fixes findings 1–8.

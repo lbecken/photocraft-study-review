@@ -294,3 +294,34 @@ fn worktree_new_checks_no_state_without_a_tasks_directory_on_main() {
     assert_wt_created(&r, &["T-001"], "T-001");
     assert_wt_created(&r, &["T-002-tests"], "T-002-tests");
 }
+
+#[test]
+fn malformed_extend_ceilings_are_not_extensions() {
+    // Ruling j (D-047): a digit run directly followed by `,`, `.` or `_` and another digit is
+    // malformed; the row is not an extension (as `Extend T-NNN` without a ceiling).
+    let r = Repo::new("t013-j-budget");
+    r.add_task("T-001", "high", "reviewed", &["crates/a"], &[]);
+    r.with_evidence("T-001", "high", &[("crates/a/src/lib.rs", Some(LIB_V2))]);
+    commit_runs(&r, "T-001", "high", &[Some(700), Some(400)]);
+    let approve = "Approve T-001 for merge.";
+    for row in [
+        "Extend T-001 to 1,200,000",
+        "Extend T-001 to 5000.5",
+        "Extend T-001 to 1_200_000",
+    ] {
+        commit_decisions(&r, &[approve, row]);
+        let reason = r.assert_refused("T-001", "budget", None);
+        assert_eq!(
+            reason,
+            over("T-001", 1100, 1000, "budget_tokens"),
+            "row `{row}` is not an extension"
+        );
+    }
+    // A malformed later row does not override an earlier well-formed one.
+    commit_decisions(
+        &r,
+        &[approve, "Extend T-001 to 1050", "Extend T-001 to 5000.5"],
+    );
+    let reason = r.assert_refused("T-001", "budget", None);
+    assert_eq!(reason, over("T-001", 1100, 1050, "Extend row"));
+}

@@ -468,3 +468,44 @@ fn ci_and_charter_list_hygiene_between_ui_commands_and_schema() {
     assert!(pos("`hygiene`") < pos("`schema`"), "{line}");
     assert_eq!(line.matches("hygiene").count(), 1, "{line}");
 }
+
+#[test]
+fn session_paths_checks_a_tracked_symlinks_target() {
+    // Ruling o (D-047): `session-paths` checks a tracked symlink's target text as it checks a
+    // file's content (`<path>:<line>`, never the matched text).
+    let l = Lite::new("o-symlink");
+    let (p, uuid) = session_path();
+    std::fs::create_dir_all(l.root.join("links")).unwrap();
+    std::os::unix::fs::symlink("/tmp/elsewhere/m.py", l.root.join("links/plain")).unwrap();
+    commit(&l, "plain link");
+    let (ok, out) = hygiene_step(&l.root);
+    assert!(ok, "a link to an ordinary path passes:\n{out}");
+
+    std::os::unix::fs::symlink(&p, l.root.join("links/session")).unwrap();
+    commit(&l, "session link");
+    assert!(
+        git(&l.root, &["ls-files"])
+            .lines()
+            .any(|f| f == "links/session"),
+        "the link is tracked"
+    );
+    assert_eq!(
+        git(&l.root, &["cat-file", "-p", "HEAD:links/session"]),
+        p,
+        "git stores the link's target text"
+    );
+    let (ok, out) = hygiene_step(&l.root);
+    assert!(!ok, "a tracked link to a session path must FAIL:\n{out}");
+    assert!(
+        out.contains("session-paths:") && out.contains("links/session:1"),
+        "names links/session:1 under session-paths\n{out}"
+    );
+    assert!(
+        !out.contains("links/plain"),
+        "the ordinary link is not named\n{out}"
+    );
+    assert!(
+        !out.contains(&uuid) && !out.contains("/tmp/claude"),
+        "never prints the matched text:\n{out}"
+    );
+}
