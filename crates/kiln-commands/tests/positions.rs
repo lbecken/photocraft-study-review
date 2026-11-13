@@ -14,7 +14,10 @@ fn reg() -> Registry {
 fn ctx_with(text: &str) -> Context {
     let mut ctx = Context::with_files(&[("a.txt", text.as_bytes())]).expect("ctx");
     let r = reg();
-    assert_eq!(ok(&r, &mut ctx, "doc.open", json!({"path": "a.txt"}))["doc"], 1);
+    assert_eq!(
+        ok(&r, &mut ctx, "doc.open", json!({"path": "a.txt"}))["doc"],
+        1
+    );
     ctx
 }
 
@@ -115,7 +118,10 @@ fn worked_example_lines_and_positions() {
         json!({"line": 3, "text": "", "start": 9, "end": 9, "ending": "none"}),
     ];
     for (i, w) in want.iter().enumerate() {
-        assert_eq!(&ok(&r, &mut ctx, "doc.line", json!({"doc": 1, "line": i})), w);
+        assert_eq!(
+            &ok(&r, &mut ctx, "doc.line", json!({"doc": 1, "line": i})),
+            w
+        );
     }
     let pos = [
         (0, 0, 0, 0, 0),
@@ -161,7 +167,11 @@ fn lines_and_positions_match_the_naive_model_and_round_trip() {
             );
         }
         for c in 0..=t.chars().count() {
-            let got = r.execute(&mut ctx, "doc.position", json!({"doc": 1, "at": {"char": c}}));
+            let got = r.execute(
+                &mut ctx,
+                "doc.position",
+                json!({"doc": 1, "at": {"char": c}}),
+            );
             match naive_position(&t, c) {
                 None => {
                     let (reason, _) = refusal(&got.unwrap_err());
@@ -303,10 +313,16 @@ fn precedence_params_then_document_then_position() {
     let mut ctx = ctx_with(T);
     let code = |e: CommandError| e.to_json()["code"].as_str().unwrap().to_owned();
     for (name, params) in [
-        ("doc.position", json!({"doc": 1, "at": {"char": 1, "byte": 1}})),
+        (
+            "doc.position",
+            json!({"doc": 1, "at": {"char": 1, "byte": 1}}),
+        ),
         ("doc.position", json!({"doc": 1, "at": {}})),
         ("doc.position", json!({"doc": 1, "at": {"char": -1}})),
-        ("doc.position", json!({"doc": 1, "at": {"line_col": {"line": 0}}})),
+        (
+            "doc.position",
+            json!({"doc": 1, "at": {"line_col": {"line": 0}}}),
+        ),
         (
             "doc.position",
             json!({"doc": 1, "at": {"line_col": {"line": 0, "col": 0, "x": 1}}}),
@@ -317,7 +333,11 @@ fn precedence_params_then_document_then_position() {
         ("doc.line", json!({"doc": 9, "line": -1})),
         ("doc.line", json!({"doc": 1, "line": 0, "extra": true})),
     ] {
-        assert_eq!(code(err(&r, &mut ctx, name, params.clone())), "invalid_params", "{params}");
+        assert_eq!(
+            code(err(&r, &mut ctx, name, params.clone())),
+            "invalid_params",
+            "{params}"
+        );
     }
     for (name, params) in [
         ("doc.line", json!({"doc": 9, "line": 99})),
@@ -336,10 +356,20 @@ fn precedence_params_then_document_then_position() {
 fn read_only_logged_and_typing_group_kept() {
     let r = reg();
     let mut ctx = ctx_with("xy");
-    ok(&r, &mut ctx, "doc.insert", json!({"doc": 1, "offset": 2, "text": "a"}));
+    ok(
+        &r,
+        &mut ctx,
+        "doc.insert",
+        json!({"doc": 1, "offset": 2, "text": "a"}),
+    );
     let info = ok(&r, &mut ctx, "doc.info", json!({"doc": 1}));
     ok(&r, &mut ctx, "doc.line", json!({"doc": 1, "line": 0}));
-    ok(&r, &mut ctx, "doc.position", json!({"doc": 1, "at": {"char": 1}}));
+    ok(
+        &r,
+        &mut ctx,
+        "doc.position",
+        json!({"doc": 1, "at": {"char": 1}}),
+    );
     assert_eq!(ok(&r, &mut ctx, "doc.info", json!({"doc": 1})), info);
     let tail: Vec<(String, bool)> = ctx
         .log()
@@ -357,9 +387,17 @@ fn read_only_logged_and_typing_group_kept() {
         ]
     );
     // The open typing group still joins the next one-char insert: one undo removes both.
-    ok(&r, &mut ctx, "doc.insert", json!({"doc": 1, "offset": 3, "text": "b"}));
+    ok(
+        &r,
+        &mut ctx,
+        "doc.insert",
+        json!({"doc": 1, "offset": 3, "text": "b"}),
+    );
     ok(&r, &mut ctx, "doc.undo", json!({"doc": 1}));
-    assert_eq!(ok(&r, &mut ctx, "doc.text", json!({"doc": 1}))["text"], "xy");
+    assert_eq!(
+        ok(&r, &mut ctx, "doc.text", json!({"doc": 1}))["text"],
+        "xy"
+    );
 }
 
 #[test]
