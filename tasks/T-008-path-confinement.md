@@ -2,7 +2,7 @@
 id: T-008
 title: "Confine every disk path to the workspace root and refuse non-regular files at open and save, without blocking"
 tier: high              # ADR-0002: persistence path (DiskFs read/write_atomic) and a confinement/security boundary the protocol document states
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # director-authorized item (Decisions D-4)
 depends_on: [T-032]     # D-041: reason enum + generated kind list (T-015 transitively); merged
