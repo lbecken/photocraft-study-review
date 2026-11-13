@@ -418,4 +418,17 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
     join with `task/T-032`.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13T11:58Z · R-099 · tests_joined · did: round 1 full review of
+  `6828f5488fc845b61b52ce9a075c0fa83980b4cc` (`reviews/T-032-r1.md`). Verdict
+  request-changes: 2 test gaps, 1 spec gap, 2 nits, 0 defects.
+  - Test gaps: `ALL` is not tied to the variants (M11: a new variant without its `ALL` entry
+    passes everything, gate included); the host's `InternalReason::Panic` site has no test
+    (M12).
+  - Mutants: 16 introduced, 14 killed (13 by acceptance), 2 survived, 0 equivalent.
+  - `join --revert-check`: mixed, 5/5 targets fail (record left uncommitted in the primary
+    checkout's `metrics/tasks.jsonl`).
+
+  · gate attempts: 1 (last: green, 10 steps) · not run: base `kiln-cli` byte comparison
+  (disk), a real host panic · missing context: none · next: implementer (findings 1–2),
+  director (finding 3).
 <!-- end reviewer log -->
