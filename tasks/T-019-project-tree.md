@@ -2,7 +2,7 @@
 id: T-019
 title: "List the project as a tree through the VFS, honouring .gitignore files and skipping target/ and .git, without following symlinks"
 tier: high              # ADR-0002: reads directories on disk (paths that reach disk) inside the T-008 confinement boundary; adds the `ignore` dependency
-state: queued
+state: merged
 owner_role: planner
 scorecard_items: [ws.open-project]
 depends_on: [T-015, T-008]   # both merged (T-008 at d4915606f9a789b42b99a1eea053554f1f9dd8a7); project.rs slots; T-008 confinement (vfs.rs, disk.rs)
