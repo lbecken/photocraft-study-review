@@ -278,6 +278,7 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   R7 (F10). An approval row is a Markdown table row in `docs/decisions.md` outside any code block.
   R8 (F9). `KILN_XTASK_RUN_IN` must either be what makes the queue's main-gate run possible, with a test that fails if it is ignored, or be removed. No dead bypass variable.
   R9 (F5, F6). End-to-end tests are required for the lock version rule and for "regeneration changed a non-generated path".
+  Clarifications (2026-11-13, D-027): R6 — `ledger` applies to uncommitted changes in evidence files (`metrics/tasks.jsonl`, `docs/decisions.md`, `tasks/`, `reviews/`, the policy files); `metrics/queue.jsonl` is the queue's own output log and is exempt. R2 — after `reviewed_sha` the only test files that may change are the task's own `acceptance_tNNN*.rs`, `guard_tNNN*.rs` and `acceptance_tNNN_support.rs`. R7 — a table row is a `|`-delimited line under a header separator line, outside code. R9 — a leaky regeneration has the same result kind as a failed regeneration. R4 — the lock rule compares registry and git packages only.
 
 ## Questions
 None open.
