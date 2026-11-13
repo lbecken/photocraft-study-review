@@ -24,8 +24,9 @@
 //! - The root is resolved once, at construction (`fs::canonicalize`; a root given as a symlink
 //!   to a directory is that directory), and that *directory* is the root: its device and inode
 //!   are kept, and it is held open for the life of the `DiskFs` (so the inode number cannot be
-//!   reused by another directory after the root is removed). Every call resolves the stored root path again and walks from there only if it
-//!   still reaches that same directory; if the root path or a directory above it has been
+//!   reused by another directory after the root is removed; nothing is looked up through it).
+//!   Every call resolves the root path *as given* again and walks from there only if it still
+//!   reaches that same directory; if the root path or a directory above it has been
 //!   replaced since (for example by a symlink to another directory), or leads nowhere, the
 //!   call is refused with `OutsideRoot` before anything else is looked at.
 //! - Every `read`, `write_atomic` and `is_file` first computes the *location* of its path by
@@ -85,17 +86,19 @@ const MAX_SYMLINK_HOPS: usize = 40;
 /// reach must stay inside it (module docs).
 #[derive(Debug)]
 pub struct DiskFs {
-    /// The root as resolved at construction: absolute, without symlinks, `.` or `..`. Each
-    /// call resolves it again ([`DiskFs::current_root`]).
-    root: PathBuf,
+    /// The root path as given at construction, made absolute (lexically: a symlink in it is
+    /// kept as a symlink). Each call resolves it again ([`DiskFs::current_root`]) and goes on
+    /// only if it still leads to the directory recorded at construction (ruling v8).
+    given: PathBuf,
     /// Device and inode of the root directory at construction: the root *is* this directory,
     /// whatever later happens to the path that led to it.
     root_id: (u64, u64),
     /// The root directory, held open (read-only, never read through) for as long as this
     /// `DiskFs` lives, so that its inode cannot be freed and given to another directory: a
     /// root removed and replaced by a link to a new directory that reused the inode number
-    /// would otherwise pass the `root_id` check. `None` only if the root cannot be opened
-    /// (no read permission); then that reuse is not excluded.
+    /// would otherwise pass the `root_id` check. It is only an identity anchor: nothing is
+    /// ever looked up through it, every walk starts from `given` resolved again. `None` only
+    /// if the root cannot be opened (no read permission); then that reuse is not excluded.
     _root_handle: Option<fs::File>,
 }
 
@@ -142,8 +145,8 @@ impl DiskFs {
     /// A VFS rooted at `root`. Err if root is not a directory.
     ///
     /// The error cannot name a `RelPath` of the root (none is valid), and must not name the
-    /// host path, so it uses the placeholder path `(root)`. The stored root is `root` fully
-    /// resolved (a symlink to a directory is replaced by that directory).
+    /// host path, so it uses the placeholder path `(root)`. The root is the directory `root`
+    /// leads to now; `root` itself is kept (made absolute) and resolved again on every call.
     pub fn new(root: &Path) -> Result<DiskFs, VfsError> {
         let placeholder = RelPath::root_placeholder;
         let root_error = |e: io::Error| match e.kind() {
@@ -162,7 +165,7 @@ impl DiskFs {
                     .as_ref()
                     .map_or((meta.dev(), meta.ino()), |m| (m.dev(), m.ino()));
                 Ok(DiskFs {
-                    root: resolved,
+                    given: std::path::absolute(root).map_err(root_error)?,
                     root_id: id,
                     _root_handle: handle,
                 })
@@ -176,16 +179,16 @@ impl DiskFs {
         }
     }
 
-    /// The path at which the root directory is reached now: the stored root resolved again
-    /// (`fs::canonicalize`), which must still be the directory found at construction (same
-    /// device and inode; the held handle keeps that inode from being reused). If the root
-    /// path, or a directory above it, has since been replaced
-    /// (for example by a symlink to another directory), or no longer leads anywhere, every
-    /// location is outside the root: `OutsideRoot`. If the root directory itself was only
-    /// reached through a new path (an ancestor renamed and linked back), that path is used.
+    /// The path at which the root directory is reached now: the root path as given resolved
+    /// again (`fs::canonicalize`), which must still be the directory found at construction
+    /// (same device and inode; the held handle keeps that inode from being reused). If the
+    /// root path, or a directory above it, has since been replaced (for example by a symlink
+    /// to another directory), or no longer leads anywhere, every location is outside the
+    /// root: `OutsideRoot`. If the given path still leads to the root directory through other
+    /// directories (an ancestor renamed and linked back), the path reached now is used.
     fn current_root(&self, rel: &RelPath) -> Result<PathBuf, VfsError> {
         let outside = || VfsError::OutsideRoot { path: rel.clone() };
-        let root = fs::canonicalize(&self.root).map_err(|_| outside())?;
+        let root = fs::canonicalize(&self.given).map_err(|_| outside())?;
         let meta = fs::symlink_metadata(&root).map_err(|_| outside())?;
         if meta.is_dir() && (meta.dev(), meta.ino()) == self.root_id {
             Ok(root)
@@ -1055,6 +1058,60 @@ mod tests {
         );
         assert_eq!(listing(&work.join("outside")), before);
         assert_eq!(listing(&work.join("outside/x0")), ["secret.txt"]);
+    }
+
+    /// Ruling v8: a root given through a symlink keeps working while the link leads to the
+    /// root directory (also after the directory moved and the link followed it), and is
+    /// outside once the link is pointed at another directory, including for a document opened
+    /// before.
+    #[test]
+    fn root_given_through_a_link_that_is_retargeted() {
+        use std::os::unix::fs::symlink;
+        let work = swap_fixture("root-retarget");
+        let link = work.join("rootlink");
+        symlink("parent/root", &link).unwrap();
+        let mut fs_ = DiskFs::new(&link).unwrap();
+        assert_eq!(fs_.read(&p("f.txt")).unwrap(), b"in\n");
+        let mut doc = crate::Document::open(&fs_, &p("f.txt")).unwrap();
+        doc.buffer_mut().insert(0, "PWNED ").unwrap();
+        // The directory moves and the link follows it: still the root.
+        fs::rename(work.join("parent/root"), work.join("parent/moved")).unwrap();
+        fs::remove_file(&link).unwrap();
+        symlink("parent/moved", &link).unwrap();
+        assert_eq!(fs_.read(&p("f.txt")).unwrap(), b"in\n");
+        // The link now leads to another directory: outside, at open and at save.
+        fs::write(work.join("outside/f.txt"), b"outside f\n").unwrap();
+        fs::remove_file(&link).unwrap();
+        symlink("outside", &link).unwrap();
+        assert_eq!(
+            fs::read(link.join("secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        let before = listing(&work.join("outside"));
+        for path in ["secret.txt", "f.txt", "new.txt"] {
+            let want = VfsError::OutsideRoot { path: p(path) };
+            assert_eq!(fs_.read(&p(path)), Err(want.clone()), "read {path}");
+            assert_eq!(
+                fs_.write_atomic(&p(path), b"PWNED"),
+                Err(want),
+                "write {path}"
+            );
+        }
+        assert_eq!(
+            doc.save(&mut fs_),
+            Err(VfsError::OutsideRoot { path: p("f.txt") })
+        );
+        assert!(doc.is_dirty());
+        assert_eq!(listing(&work.join("outside")), before);
+        assert_eq!(
+            fs::read(work.join("outside/f.txt")).unwrap(),
+            b"outside f\n"
+        );
+        assert_eq!(
+            fs::read(work.join("outside/secret.txt")).unwrap(),
+            b"s3cr3t-content\n"
+        );
+        assert_eq!(fs::read(work.join("parent/moved/f.txt")).unwrap(), b"in\n");
     }
 
     /// Review r1 N-1 (ruling v7): a link target ending in `/` requires a directory.

@@ -11,14 +11,16 @@ The root is resolved once, when the session starts: if `--root` is a symlink to 
 that directory is the root. A root that does not exist, or is not a directory, is refused as
 before (the messages end in `: not found` and `: not a directory`).
 
-The root is that directory, not its path; Kiln keeps it open while the session runs. Before
-each request Kiln resolves the root's path
-again and goes on only if it still leads to the same directory. If the root, or a directory
-above it, has since been replaced (for example by a symlink to another directory), every path
-of the request is outside the root and refused as `outside_root`; files in the other directory
-are neither read nor written. The same refusal is given while the root's path leads nowhere
-(the root renamed or removed with nothing in its place); if the directory comes back to that
-path, the session works there again.
+The root is that directory, not its path; Kiln keeps it open while the session runs, only so
+that no other directory can take its identity. Before each request Kiln resolves `--root` again,
+as it was given, and goes on only if it still leads to that same directory. Once the root path
+stops leading to the root directory (the root, or a directory above it, was replaced, for
+example by a symlink to another directory), the session refuses every path with
+`outside_root`, at open and at save, including the save of a document opened before; nothing
+is read or written in the other directory. The same refusal is given while the root path leads
+nowhere (the root renamed or removed with nothing in its place). If the path leads to the root
+directory again (moved back, or a link at that path pointed at it), the session works there
+again.
 
 ## Lexical refusals (unchanged)
 
