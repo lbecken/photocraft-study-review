@@ -8,21 +8,23 @@
 //! kiln-cli commands              list command names and docs
 //! kiln-cli commands --schema     print every command with params/result schemas and examples
 //! kiln-cli commands --audit      check every command's examples against its schemas
-//! kiln-cli exec <name> <json> [--text <initial buffer text>] [--root <dir> | --memory]
-//! kiln-cli run <script> [--root <dir> | --memory] [--log <file>]
+//! kiln-cli exec <name> <json> [--text <initial buffer text>] [--root <dir> | --memory | --memory-seed <manifest>]
+//! kiln-cli run <script> [--root <dir> | --memory | --memory-seed <manifest>] [--log <file>]
 //! kiln-cli control [--root <dir>]
 //! kiln-cli --help | -h | <subcommand> --help
 //! ```
 //!
 //! `--root` (default: the current directory) is the root of the disk file system the commands
 //! act on; paths inside commands are relative to it. `--memory` selects an empty in-memory
-//! file system instead (for tests). `<script>` and `--log <file>` are host paths, resolved
-//! against the current directory, not against `--root`. `exec` is one command in a fresh
+//! file system instead (for tests); `--memory-seed <manifest>` an in-memory file system holding
+//! exactly the files of a JSON manifest (`docs/protocol/cli-memory-seed.md`). `<script>`,
+//! `<manifest>` and `--log <file>` are host paths, resolved against the current directory, not
+//! against `--root`. `exec` is one command in a fresh
 //! session: it can read files, but an edit made with it is never saved (use `run`/`control`).
 //!
 //! Exit codes: `--help`: 0. `commands`/`exec`: 0 success, 1 audit problems or internal error, 2 usage or
 //! command error. `run`: 0 every response ok, 3 at least one failed request, 2 usage error,
-//! unreadable script, bad root or unwritable log (nothing on stdout), 1 if writing stdout fails. `control`: 0 at end of
+//! unreadable script, bad root, bad manifest or unwritable log (nothing on stdout), 1 if writing stdout fails. `control`: 0 at end of
 //! input, 2 usage error or bad root, 1 if reading stdin or writing stdout fails.
 
 use std::io::{BufRead, Write};
@@ -31,13 +33,14 @@ use std::process::ExitCode;
 
 use kiln_commands::{Context, Registry, standard_registry};
 use kiln_control::{Host, cap_error, cap_text, command_error_json};
-use kiln_workspace::{DiskFs, VfsError};
+use kiln_workspace::{DiskFs, RelPath, VfsError};
 use serde_json::{Value, json};
 
 const USAGE: &str = "usage:
   kiln-cli commands [--schema | --audit]
-  kiln-cli exec <name> <json-params> [--text <initial-text>] [--root <dir> | --memory]
-  kiln-cli run <script> [--root <dir> | --memory] [--log <file>]
+  kiln-cli exec <name> <json-params> [--text <initial-text>]
+               [--root <dir> | --memory | --memory-seed <manifest>]
+  kiln-cli run <script> [--root <dir> | --memory | --memory-seed <manifest>] [--log <file>]
   kiln-cli control [--root <dir>]
   kiln-cli --help | -h | <subcommand> --help
 
@@ -49,6 +52,10 @@ const USAGE: &str = "usage:
 
   --root <dir>  root of the files the commands act on (default: current directory)
   --memory      an empty in-memory file system instead (for tests)
+  --memory-seed <manifest>
+                an in-memory file system holding exactly the files of a JSON manifest
+                (`files`: entries of `path` and one of `text` or `hex`);
+                see docs/protocol/cli-memory-seed.md; nothing is written to disk
   --log <file>  after the script, write the successful requests as a replayable script
 
 The protocol is described in docs/control-protocol.md.";
@@ -91,6 +98,8 @@ fn pretty(v: &Value) -> String {
 enum Fs {
     Disk(PathBuf),
     Memory,
+    /// An in-memory file system seeded from the manifest at this host path.
+    MemorySeed(PathBuf),
 }
 
 /// Options after the positional arguments of a subcommand.
@@ -98,6 +107,7 @@ enum Fs {
 struct Opts {
     root: Option<String>,
     memory: bool,
+    memory_seed: Option<String>,
     log: Option<String>,
     text: Option<String>,
 }
@@ -106,6 +116,8 @@ impl Opts {
     fn fs(&self) -> Fs {
         if self.memory {
             Fs::Memory
+        } else if let Some(manifest) = &self.memory_seed {
+            Fs::MemorySeed(PathBuf::from(manifest))
         } else {
             Fs::Disk(PathBuf::from(self.root.as_deref().unwrap_or(".")))
         }
@@ -114,8 +126,8 @@ impl Opts {
 
 /// Split `args` (of subcommand `sub`) into positional arguments and options: `--memory`, or
 /// `--flag value` for the other flags; `allowed` names the flags `sub` takes, options may come
-/// before, between or after positionals. Each flag at most once; `--root` and `--memory`
-/// exclude each other. On a usage error, what was wrong.
+/// before, between or after positionals. Each flag at most once; `--root`, `--memory` and
+/// `--memory-seed` exclude each other. On a usage error, what was wrong.
 fn parse_opts<'a>(
     sub: &str,
     args: &[&'a str],
@@ -146,6 +158,7 @@ fn parse_opts<'a>(
         rest = tail;
         let slot = match *arg {
             "--root" => &mut opts.root,
+            "--memory-seed" => &mut opts.memory_seed,
             "--log" => &mut opts.log,
             "--text" => &mut opts.text,
             _ => return Err(format!("unknown option `{arg}` for `{sub}`")),
@@ -156,6 +169,14 @@ fn parse_opts<'a>(
     }
     if opts.memory && opts.root.is_some() {
         return Err("options `--root` and `--memory` cannot be combined".to_owned());
+    }
+    if opts.memory_seed.is_some() {
+        if opts.root.is_some() {
+            return Err("options `--root` and `--memory-seed` cannot be combined".to_owned());
+        }
+        if opts.memory {
+            return Err("options `--memory` and `--memory-seed` cannot be combined".to_owned());
+        }
     }
     Ok((positional, opts))
 }
@@ -175,6 +196,125 @@ fn bad_root(e: impl std::fmt::Display) -> Outcome {
     Outcome::err(2, format!("kiln-cli: bad --root: {e}\n"))
 }
 
+fn bad_manifest(manifest: &std::path::Path, reason: impl std::fmt::Display) -> Outcome {
+    Outcome::err(
+        2,
+        format!(
+            "kiln-cli: bad --memory-seed {}: {reason}\n",
+            manifest.display()
+        ),
+    )
+}
+
+/// The files of a `--memory-seed` manifest (`docs/protocol/cli-memory-seed.md`), read once
+/// from the host file `manifest`. Checks in this order (T-011 Pinned (a)): readable, JSON, keys
+/// (top level and every entry), then per entry in array order the `path`, `text`/`hex` and
+/// duplicates, and last prefix conflicts. On a refusal, the reason.
+fn read_manifest(manifest: &std::path::Path) -> Result<Vec<(RelPath, Vec<u8>)>, String> {
+    let bytes = std::fs::read(manifest).map_err(|e| format!("cannot read: {e}"))?;
+    parse_manifest(&bytes)
+}
+
+/// [`read_manifest`] after the read.
+fn parse_manifest(bytes: &[u8]) -> Result<Vec<(RelPath, Vec<u8>)>, String> {
+    // serde_json bounds nesting depth itself (an error, not a stack overflow).
+    let value: Value = serde_json::from_slice(bytes).map_err(|e| format!("invalid JSON: {e}"))?;
+    let Value::Object(top) = value else {
+        return Err("not a JSON object".to_owned());
+    };
+    if let Some(key) = top.keys().find(|k| k.as_str() != "files") {
+        return Err(format!("unknown key `{key}` (only `files`)"));
+    }
+    let Some(files) = top.get("files") else {
+        return Err("missing key `files`".to_owned());
+    };
+    let Value::Array(entries) = files else {
+        return Err("`files` is not an array".to_owned());
+    };
+    let mut objects = Vec::with_capacity(entries.len());
+    for (i, entry) in entries.iter().enumerate() {
+        let Value::Object(entry) = entry else {
+            return Err(format!("files[{i}] is not an object"));
+        };
+        if let Some(key) = entry
+            .keys()
+            .find(|k| !["path", "text", "hex"].contains(&k.as_str()))
+        {
+            return Err(format!(
+                "files[{i}]: unknown key `{key}` (only `path`, `text`, `hex`)"
+            ));
+        }
+        objects.push(entry);
+    }
+    let mut out = Vec::with_capacity(objects.len());
+    let mut seen = std::collections::BTreeSet::new();
+    for (i, entry) in objects.into_iter().enumerate() {
+        let path = match entry.get("path") {
+            None => return Err(format!("files[{i}]: missing `path`")),
+            Some(Value::String(p)) => RelPath::new(p).map_err(|e| format!("files[{i}]: {e}"))?,
+            Some(_) => return Err(format!("files[{i}]: `path` is not a string")),
+        };
+        let content = match (entry.get("text"), entry.get("hex")) {
+            (Some(Value::String(text)), None) => text.as_bytes().to_vec(),
+            (None, Some(Value::String(hex))) => {
+                decode_hex(hex).map_err(|e| format!("files[{i}]: `hex` {e}"))?
+            }
+            (Some(_), None) => return Err(format!("files[{i}]: `text` is not a string")),
+            (None, Some(_)) => return Err(format!("files[{i}]: `hex` is not a string")),
+            _ => return Err(format!("files[{i}]: needs exactly one of `text` and `hex`")),
+        };
+        if !seen.insert(path.as_str().to_owned()) {
+            return Err(format!("files[{i}]: path `{path}` given twice"));
+        }
+        out.push((path, content));
+    }
+    // A file cannot also be a directory: no path may be a strict prefix directory of another.
+    // In sorted order, the first path at or after "p/" starts with "p/" iff any path does.
+    for p in &seen {
+        let dir = format!("{p}/");
+        if let Some(below) = seen.range(dir.clone()..).next()
+            && below.starts_with(&dir)
+        {
+            return Err(format!("path `{p}` is a file and a directory (`{below}`)"));
+        }
+    }
+    Ok(out)
+}
+
+/// Bytes from an even number of hex digits (either case); on failure, what was wrong.
+fn decode_hex(hex: &str) -> Result<Vec<u8>, String> {
+    let digits = hex.as_bytes();
+    if digits.len() % 2 == 1 {
+        return Err("has an odd number of digits".to_owned());
+    }
+    let digit = |b: u8| match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    };
+    digits
+        .chunks_exact(2)
+        .enumerate()
+        .map(|(i, pair)| match (digit(pair[0]), digit(pair[1])) {
+            (Some(hi), Some(lo)) => Ok(hi << 4 | lo),
+            _ => Err(format!(
+                "has a non-hex character in digits {}..{}",
+                2 * i,
+                2 * i + 2
+            )),
+        })
+        .collect()
+}
+
+/// The seeded files as [`Host::in_memory`] / [`Context::with_files`] take them.
+fn as_file_refs(files: &[(RelPath, Vec<u8>)]) -> Vec<(&str, &[u8])> {
+    files
+        .iter()
+        .map(|(p, b)| (p.as_str(), b.as_slice()))
+        .collect()
+}
+
 /// "root `<root>`: <reason>", as `kiln_control::Host::on_disk` reports it.
 fn root_error(root: &std::path::Path, e: &VfsError) -> String {
     let reason = match e {
@@ -192,7 +332,7 @@ fn root_error(root: &std::path::Path, e: &VfsError) -> String {
 }
 
 /// Help is asked for: `--help`/`-h` as the first argument, or in an option position of a
-/// subcommand (not as the value of `--root`, `--log` or `--text`).
+/// subcommand (not as the value of `--root`, `--memory-seed`, `--log` or `--text`).
 fn wants_help(args: &[String]) -> bool {
     let is_help = |a: &str| a == "--help" || a == "-h";
     let Some(first) = args.first() else {
@@ -211,7 +351,7 @@ fn wants_help(args: &[String]) -> bool {
         } else if is_help(a) {
             return true;
         } else {
-            takes_value = matches!(a.as_str(), "--root" | "--log" | "--text");
+            takes_value = matches!(a.as_str(), "--root" | "--memory-seed" | "--log" | "--text");
         }
     }
     false
@@ -229,12 +369,24 @@ fn exec(registry: &Registry, name: &str, params: &str, opts: &Opts) -> Outcome {
     let text = opts.text.as_deref().unwrap_or("");
     let mut ctx = match opts.fs() {
         Fs::Memory => Context::with_text(text),
-        Fs::Disk(root) => {
-            let fs = match DiskFs::new(&root) {
-                Ok(fs) => fs,
-                Err(e) => return bad_root(root_error(&root, &e)),
+        fs @ (Fs::Disk(_) | Fs::MemorySeed(_)) => {
+            let mut ctx = match fs {
+                Fs::Disk(root) => match DiskFs::new(&root) {
+                    Ok(fs) => Context::with_vfs(Box::new(fs)),
+                    Err(e) => return bad_root(root_error(&root, &e)),
+                },
+                Fs::MemorySeed(manifest) => {
+                    let files = match read_manifest(&manifest) {
+                        Ok(files) => files,
+                        Err(reason) => return bad_manifest(&manifest, reason),
+                    };
+                    match Context::with_files(&as_file_refs(&files)) {
+                        Ok(ctx) => ctx,
+                        Err(e) => return Outcome::err(1, format!("kiln-cli: {e}\n")),
+                    }
+                }
+                Fs::Memory => unreachable!("handled above"),
             };
-            let mut ctx = Context::with_vfs(Box::new(fs));
             // The initial scratch text enters through the registry like any other change.
             if !text.is_empty()
                 && let Err(e) = registry.execute(
@@ -260,6 +412,11 @@ fn host_for(fs: &Fs) -> Result<Host, Outcome> {
     match fs {
         Fs::Memory => Host::in_memory(&[]).map_err(|e| Outcome::err(1, format!("kiln-cli: {e}\n"))),
         Fs::Disk(root) => Host::on_disk(root).map_err(bad_root),
+        Fs::MemorySeed(manifest) => {
+            let files = read_manifest(manifest).map_err(|reason| bad_manifest(manifest, reason))?;
+            Host::in_memory(&as_file_refs(&files))
+                .map_err(|e| Outcome::err(1, format!("kiln-cli: {e}\n")))
+        }
     }
 }
 
@@ -374,17 +531,22 @@ fn run(args: &[String]) -> Outcome {
         }
         ["commands", arg, ..] => Outcome::usage(format!("unexpected argument `{arg}`")),
         ["exec", rest @ ..] => {
-            let parsed = parse_opts("exec", rest, &["--text", "--root", "--memory"]).and_then(
-                |(pos, opts)| Ok((positionals(&pos, &["<name>", "<json-params>"])?, opts)),
-            );
+            let allowed = ["--text", "--root", "--memory", "--memory-seed"];
+            let parsed = parse_opts("exec", rest, &allowed).and_then(|(pos, opts)| {
+                Ok((positionals(&pos, &["<name>", "<json-params>"])?, opts))
+            });
             match parsed {
                 Ok((pos, opts)) => exec(&registry, pos[0], pos[1], &opts),
                 Err(reason) => Outcome::usage(reason),
             }
         }
         ["run", rest @ ..] => {
-            let parsed = parse_opts("run", rest, &["--root", "--memory", "--log"])
-                .and_then(|(pos, opts)| Ok((positionals(&pos, &["<script>"])?, opts)));
+            let parsed = parse_opts(
+                "run",
+                rest,
+                &["--root", "--memory", "--memory-seed", "--log"],
+            )
+            .and_then(|(pos, opts)| Ok((positionals(&pos, &["<script>"])?, opts)));
             match parsed {
                 Ok((pos, opts)) => run_script(pos[0], &opts),
                 Err(reason) => Outcome::usage(reason),
