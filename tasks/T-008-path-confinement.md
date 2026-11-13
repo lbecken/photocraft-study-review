@@ -648,6 +648,23 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   non-root permission cases (root without read permission → no handle) · missing context: v8
   arrived on main during the run (read it) · next: director; join with the test author's
   branch, review round 2.
+- 2026-11-13T16:57Z · R-142 · in_progress (review r2 R2-D1; rulings v10–v13, D-081, read in main's copy) ·
+  did: documentation and comments only, in `bcf1044d732ccf8bfd1e494f584f6f617f4eacbf`.
+  `docs/protocol/paths.md`: (a) :14–16 the root is kept open only when it can be opened for
+  reading; (b) :20–22 "nothing is read or written in the other directory" excepts the
+  unreadable root; (c) :95–96 "always caught" excepts it; (d) new Residual-limits bullet :97–101
+  (traverse but no read permission → a root removed and replaced by another directory between
+  two requests may go undetected; the session may then read and write in the replacement).
+  Re-read every other guarantee sentence against the code; two more claimed more and were
+  qualified the same way: :52–54 ("nothing outside the root is read … no temporary file", now
+  also "or an unreadable root is replaced between requests") and :71–73 ("Each request is
+  checked again": a save after the root was replaced is refused, now with the pointer).
+  `disk.rs` `//!` lines 26–30 now match the `_root_handle` field comment. `git diff` touches
+  no non-comment code line (checked: every changed `disk.rs` line starts with `//!`). The
+  unreadable-root case is not closed (v11, follow-up v12). · gate attempts: 1 (last: green, 11
+  steps: fmt, clippy, layers, ui-commands, hygiene, schema, scorecard, test 576 passed, no-skip,
+  fuzz EMPTY, budgets EMPTY) · not run: nothing beyond the gate (no behaviour change) · missing
+  context: none · next: director; review round 3 (confirmation only, v13).
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T13:36Z · R-120 · ready · did: wrote the tests from the spec alone against base `ba35ac03cf3e7bba99340628042fa75453083d9b` (implementer branch not read). Files: `crates/kiln-workspace/tests/acceptance_t008.rs` (6), `crates/kiln-workspace/tests/guard_t008.rs` (1), `apps/kiln-cli/tests/acceptance_t008_cli.rs` (5); item `scorecard/items/ws.path-confinement.toml` with the spec's 10 claimed tests, `docs/scorecard.md` regenerated. Fixtures: fresh `work/` under `std::env::temp_dir()` per test (root, outside, rootx, the spec's links), each escape first read through `std::fs` to show the outside bytes are reachable, whole-`work/` snapshot (type, link target, bytes) compared after every refusal; every FIFO/socket/device call runs on a thread with a 5 s limit (the FIFO is then released), every `kiln-cli` process is killed after 10 s. Criterion → tests → result on base:
