@@ -3,7 +3,7 @@ id: ADR-0005             # file docs/adr/0005-iteration-2-in-two-stages.md
 title: "Iteration 2 runs in two stages: first the 60 % line, then the UI"
 status: accepted
 date: 2026-11-13
-task: null               # the CHARTER §5 text follows through a low-tier task, not yet filed
+task: T-042              # the CHARTER §5 text follows through this low-tier task
 charter_section: "§5 iterations (iteration 2)"
 approval: D-091          # retro-1 change 16
 supersedes: null
