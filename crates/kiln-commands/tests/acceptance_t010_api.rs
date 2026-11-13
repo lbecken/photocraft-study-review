@@ -127,7 +127,7 @@ impl Model {
         )
     }
 
-    fn from_char(&self, c: usize) -> Want {
+    fn at_char(&self, c: usize) -> Want {
         let n = self.chars.len();
         if c > n {
             return Self::oob(c, n);
@@ -135,7 +135,7 @@ impl Model {
         self.five(c)
     }
 
-    fn from_byte(&self, b: usize) -> Want {
+    fn at_byte(&self, b: usize) -> Want {
         let n = *self.byte_of.last().unwrap();
         if b > n {
             return Self::oob(b, n);
@@ -149,7 +149,7 @@ impl Model {
         }
     }
 
-    fn from_utf16(&self, u: usize) -> Want {
+    fn at_utf16(&self, u: usize) -> Want {
         let n = *self.utf16_of.last().unwrap();
         if u > n {
             return Self::oob(u, n);
@@ -173,7 +173,7 @@ impl Model {
         )
     }
 
-    fn from_line_col(&self, line: usize, col: usize) -> Want {
+    fn at_line_col(&self, line: usize, col: usize) -> Want {
         let Some(&(start, end, _)) = self.lines.get(line) else {
             return self.line_oob("invalid position", line);
         };
@@ -251,7 +251,7 @@ fn exhaustive_lines_and_positions_on_small_texts() {
                 &mut ctx,
                 "doc.position",
                 pos(json!({"char": c})),
-                &m.from_char(c),
+                &m.at_char(c),
             );
         }
         for b in 0..=*m.byte_of.last().unwrap() + 1 {
@@ -260,7 +260,7 @@ fn exhaustive_lines_and_positions_on_small_texts() {
                 &mut ctx,
                 "doc.position",
                 pos(json!({"byte": b})),
-                &m.from_byte(b),
+                &m.at_byte(b),
             );
         }
         for u in 0..=*m.utf16_of.last().unwrap() + 1 {
@@ -269,7 +269,7 @@ fn exhaustive_lines_and_positions_on_small_texts() {
                 &mut ctx,
                 "doc.position",
                 pos(json!({"utf16": u})),
-                &m.from_utf16(u),
+                &m.at_utf16(u),
             );
         }
         for line in 0..=m.lines.len() {
@@ -280,7 +280,7 @@ fn exhaustive_lines_and_positions_on_small_texts() {
                     &mut ctx,
                     "doc.position",
                     pos(json!({"line_col": {"line": line, "col": col}})),
-                    &m.from_line_col(line, col),
+                    &m.at_line_col(line, col),
                 );
             }
         }
