@@ -299,3 +299,4 @@
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:42:28Z","from":"self_verified","to":"tests_joined"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:46:10Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:46:10Z","from":"reviewed","to":"queued"}
+{"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:49:29Z","from":"queued","to":"merged"}

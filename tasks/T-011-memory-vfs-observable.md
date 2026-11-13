@@ -2,7 +2,7 @@
 id: T-011
 title: "Let kiln-cli seed the in-memory file system from a manifest, so memory and disk sessions can be compared"
 tier: medium            # ADR-0002: a CLI option that fills the in-memory VFS; reads one host file given on the command line (as `run` reads its script), writes nothing to disk, spawns nothing, no boundary or dependency
-state: queued
+state: merged
 owner_role: planner
 scorecard_items: [ws.vfs]
 depends_on: [T-004]
