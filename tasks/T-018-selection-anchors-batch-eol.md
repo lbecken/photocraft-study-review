@@ -2,7 +2,7 @@
 id: T-018
 title: "Give each document a selection and anchors that follow every edit, apply multi-range edits as one undo step, move the cursor by char, word and line, and normalise line endings on request"
 tier: medium            # ADR-0002 default: in-memory behaviour in kiln-text plus two command groups; no persistence, process, gate, security or dependency criterion
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: [edit.selection, io.mixed-eol]
 depends_on: [T-015, T-010]   # module slots cursor.rs / eol.rs; T-010's `not_a_boundary` reason and PositionError mapping
@@ -215,6 +215,7 @@ Director rulings after review round 1 (2026-11-13, decision D-084; review `revie
 - x4 (finding 5). `Buffer::line_break_count(LineEnding) -> usize` is part of this task's Interface (the number of line breaks of that kind); the reviewer judged it acceptable and later tasks may rely on it.
 - x5 (finding 7, nit; implementer). `docs/protocol/cursor.md:13` says "Offsets are chars (Unicode scalar values)." without "as everywhere in the `doc` group".
 - x6 (tooling; test author). `xtask/src/join.rs` identifies acceptance targets by file stem, so the two files named `acceptance_t018.rs` in `kiln-cli` and `kiln-text` count as one and the join record and the revert-check saw only the `kiln-cli` target. Until the tool is fixed (T-033), acceptance and guard test files have names that are unique across crates: the test author renames `crates/kiln-text/tests/acceptance_t018.rs` to `acceptance_t018_text.rs`, with no change to its tests. The scorecard items name only `kiln_cli::acceptance_t018` tests and are not affected.
+- x7 (documentation; implementer; round-2 finding 1, R-149). The exception sentence in `docs/protocol/eol.md` ("it ends just before the lone CR's new LF, at the end of the line before") is true only when the CR before the position is the first `\r` of its run. Observed by the reviewer through `kiln-cli run`: `x\r\r\r\ry`, caret 4, `eol.normalize {to:"lf"}` gives head 1, line 0. The sentence must be true for a run of consecutive `\r` of any length, and the document gains `x\r\r\r\ry` (caret 4 ends at 1) as a second example. The behaviour does not change (x2). The implementer runs each example it writes through `kiln-cli` before committing. Round 3 confirms only this fix, and checks the new sentence against the round-2 exhaustive data (all texts up to length 6 over `x`, `\r`, `\n`).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
