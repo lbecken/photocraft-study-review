@@ -227,7 +227,8 @@ impl Model {
             }
             i += w;
         }
-        self.batch(&edits).unwrap();
+        let applied = self.batch(&edits);
+        assert_eq!(applied, Ok(()), "line-break edits form a valid batch");
         edits.len()
     }
 }
@@ -533,13 +534,16 @@ fn noop_batch_changes_nothing() {
     assert!(!b.can_undo());
 }
 
+/// An edit list and the error it must give.
+type Case = (Vec<(Range<usize>, &'static str)>, BatchError);
+
 /// w4 and Pinned (a): per index, own validity before order; first failing index.
 #[test]
 #[allow(clippy::reversed_empty_ranges)]
 fn batch_error_precedence() {
     let mut b = Buffer::from_text("abc");
     b.set_selection(sel(1, 2)).unwrap();
-    let cases: Vec<(Vec<(Range<usize>, &str)>, BatchError)> = vec![
+    let cases: Vec<Case> = vec![
         // out of bounds and not after its predecessor: the range error wins
         (
             vec![(0..1, "x"), (0..9, "y")],
