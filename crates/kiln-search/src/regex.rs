@@ -14,7 +14,8 @@
 //! a match ending at `e` it resumes at `e`; if the leftmost-first match found from `e` is empty
 //! and starts at `e` (the previous match's end), it is discarded and the search restarts at
 //! `e + 1`, without trying another match at `e`. After a reported empty match at `s` the search
-//! resumes at `s + 1`. Anchors and `\b` always see the whole text. A group inside a repetition
+//! resumes at `s + 1`. [`Regex::for_each_match`] visits the same matches in the same order,
+//! one at a time (T-021). Anchors and `\b` always see the whole text. A group inside a repetition
 //! holds its range from the last iteration in which it took part. Quantified sub-patterns that
 //! can match the empty string (`(a*)*`, `(|a)+`, …) give the engine's results.
 //!
@@ -39,7 +40,8 @@
 //! returns every match with `group_count() + 1` slots, so its memory is proportional to
 //! matches × (groups + 1), about 2.4 kB per match at 100 groups; 100 empty groups on a 1 MB
 //! text peaked at about 2.46 GB (2.29 GiB). A caller handling untrusted text or patterns must
-//! bound the search itself.
+//! bound the search itself: [`Regex::for_each_match`] (T-021) holds the slots of one match at a
+//! time.
 //!
 //! Time (D-077 s8), in a debug build: compiling a pattern, including a 100 kB one, answers or
 //! errors within 5 s. Searching with the small pathological patterns `(a*)*b` on 100,000 `a`s,
@@ -52,6 +54,7 @@
 //! patterns must bound the pattern size itself.
 
 use std::fmt;
+use std::ops::ControlFlow;
 
 /// Most explicit capture groups a pattern may have (D-060 s1).
 const MAX_GROUPS: usize = 100;
@@ -236,6 +239,53 @@ fn scan(replacement: &str) -> Vec<Piece<'_>> {
     pieces
 }
 
+/// A replacement template with every reference resolved to a group index (T-021).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Template {
+    parts: Vec<Part>,
+}
+
+/// One part of a [`Template`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Part {
+    /// Text copied as is.
+    Literal(String),
+    /// The text of this group, or nothing if it did not take part.
+    Group(usize),
+}
+
+impl Template {
+    /// A template that inserts `text` verbatim (literal mode).
+    pub(crate) fn verbatim(text: &str) -> Template {
+        Template {
+            parts: vec![Part::Literal(text.to_owned())],
+        }
+    }
+
+    /// The expansion for one match whose group byte ranges in `text` are `bytes` (as passed
+    /// by [`Regex::for_each_match_bytes`]). Costs the length of the output, never a walk of
+    /// `text`.
+    pub(crate) fn expand_bytes(&self, text: &str, bytes: &[Option<(usize, usize)>]) -> String {
+        if let [Part::Literal(s)] = self.parts.as_slice() {
+            return s.clone();
+        }
+        let mut out = String::new();
+        for part in &self.parts {
+            match part {
+                Part::Literal(s) => out.push_str(s),
+                Part::Group(i) => {
+                    if let Some(Some((s, e))) = bytes.get(*i)
+                        && let Some(t) = text.get(*s..*e)
+                    {
+                        out.push_str(t);
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
 impl Regex {
     /// Compiles `pattern` with multi-line and CRLF mode on and the given options.
     ///
@@ -363,6 +413,92 @@ impl Regex {
             }
         }
         Ok(out)
+    }
+
+    /// Calls `f` once per match, in `find_all`'s order, with a `Captures` equal to the one
+    /// `find_all(text)` holds at that position; stops after a call that returns
+    /// `ControlFlow::Break(())`. Memory beyond the engine is O(group_count()), whatever the
+    /// number of matches: the value passed to `f` is reused, so `f` copies what it keeps.
+    pub fn for_each_match(&self, text: &str, f: &mut dyn FnMut(&Captures) -> ControlFlow<()>) {
+        self.for_each_match_bytes(text, &mut |caps, _| f(caps));
+    }
+
+    /// [`Self::for_each_match`], also passing each group's byte range in `text` (`None` if it
+    /// did not take part; index as in `Captures::groups`). Both values are reused.
+    pub(crate) fn for_each_match_bytes(
+        &self,
+        text: &str,
+        f: &mut dyn FnMut(&Captures, &[Option<(usize, usize)>]) -> ControlFlow<()>,
+    ) {
+        let mut cursor = CharCursor::new(text);
+        let mut locs = self.engine.capture_locations();
+        let mut caps = Captures {
+            groups: vec![None; locs.len()],
+        };
+        let mut bytes: Vec<Option<(usize, usize)>> = vec![None; locs.len()];
+        // The same loop as `find_all`: byte position the next search starts at, and the end
+        // of the last reported match.
+        let mut at = 0;
+        let mut last_end: Option<usize> = None;
+        while at <= text.len() {
+            let Some(whole) = self.engine.captures_read_at(&mut locs, text, at) else {
+                break;
+            };
+            let (start, end) = (whole.start(), whole.end());
+            if start == end && last_end == Some(start) {
+                // Empty match at the previous match's end: discard, restart one char later.
+                match next_char_boundary(text, start) {
+                    Some(next) => at = next,
+                    None => break,
+                }
+                continue;
+            }
+            cursor.advance_to(start);
+            for (i, (slot, byte)) in caps.groups.iter_mut().zip(bytes.iter_mut()).enumerate() {
+                *byte = locs.get(i);
+                *slot = byte.map(|(s, e)| CharMatch {
+                    start: cursor.chars_at(s),
+                    end: cursor.chars_at(e),
+                });
+            }
+            if f(&caps, &bytes).is_break() {
+                return;
+            }
+            last_end = Some(end);
+            if start == end {
+                // After a reported empty match at `s`, resume at `s + 1`.
+                match next_char_boundary(text, end) {
+                    Some(next) => at = next,
+                    None => break,
+                }
+            } else {
+                at = end;
+            }
+        }
+    }
+
+    /// `replacement` with every reference resolved, by the expansion rule.
+    ///
+    /// # Errors
+    /// The same [`TemplateError`] as [`Self::expand`] gives for `replacement`: the first
+    /// reference, from the left, to a group the pattern does not have.
+    pub(crate) fn template(&self, replacement: &str) -> Result<Template, TemplateError> {
+        let mut parts = Vec::new();
+        for piece in scan(replacement) {
+            match piece {
+                Piece::Literal(s) => match parts.last_mut() {
+                    Some(Part::Literal(prev)) => prev.push_str(s),
+                    _ => parts.push(Part::Literal(s.to_owned())),
+                },
+                Piece::Reference(name) => {
+                    let index = self.group_index(name).ok_or_else(|| TemplateError {
+                        reference: name.to_owned(),
+                    })?;
+                    parts.push(Part::Group(index));
+                }
+            }
+        }
+        Ok(Template { parts })
     }
 }
 
@@ -504,6 +640,52 @@ mod tests {
         );
         assert_eq!(byte_range("é中", CharMatch { start: 1, end: 3 }), None);
         assert_eq!(byte_range("é中", CharMatch { start: 2, end: 1 }), None);
+    }
+
+    #[test]
+    fn for_each_match_reuses_one_value_and_stops_on_break() {
+        let r = re("(a)|(b)");
+        let mut seen = Vec::new();
+        r.for_each_match("abxa", &mut |c| {
+            seen.push(c.clone());
+            ControlFlow::Continue(())
+        });
+        assert_eq!(seen, r.find_all("abxa"));
+        let mut n = 0;
+        r.for_each_match("abxa", &mut |_| {
+            n += 1;
+            if n == 2 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+        assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn template_expands_like_expand() {
+        let r = re("(?<w>é)(x)?😀");
+        let text = "aé😀bé😀";
+        for t in ["$w-$2-$0", "$$1${1}", "", "plain", "$!${"] {
+            let template = r.template(t).unwrap();
+            let mut got = Vec::new();
+            r.for_each_match_bytes(text, &mut |c, b| {
+                got.push((template.expand_bytes(text, b), r.expand(c, text, t).unwrap()));
+                ControlFlow::Continue(())
+            });
+            assert_eq!(got.len(), 2);
+            for (a, b) in got {
+                assert_eq!(a, b, "{t:?}");
+            }
+        }
+        for t in ["$3", "$x", "a${1}${w2}"] {
+            assert_eq!(
+                r.template(t).unwrap_err(),
+                r.expand(&Captures { groups: Vec::new() }, "", t).unwrap_err()
+            );
+        }
+        assert_eq!(Template::verbatim("$1").expand_bytes("", &[]), "$1");
     }
 
     #[test]
