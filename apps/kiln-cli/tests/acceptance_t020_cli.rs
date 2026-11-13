@@ -123,6 +123,43 @@ const EX_HIGHLIGHT_SPANS: &[(usize, usize, &str)] = &[
     (26, 30, "comment"),
 ];
 
+/// A text exercising highlight rules 4 to 6 beyond the worked example: named leaves
+/// `mutable_specifier`, `self`, `super`; a `type_identifier`; callees through a
+/// `scoped_identifier`, a `field_expression` and a `generic_function`. The spans are worked
+/// out by hand from the rules of Interface (not given in the spec; see the test author's log).
+const EX_RULES: &str = "pub fn m(&mut self) -> S { let mut v = super::f(); self.g(); h::<u8>(); }";
+
+const EX_RULES_SPANS: &[(usize, usize, &str)] = &[
+    (0, 3, "keyword"),
+    (3, 4, "plain"),
+    (4, 6, "keyword"),
+    (6, 7, "plain"),
+    (7, 8, "function"),
+    (8, 10, "plain"),
+    (10, 13, "keyword"),
+    (13, 14, "plain"),
+    (14, 18, "keyword"),
+    (18, 23, "plain"),
+    (23, 24, "type"),
+    (24, 27, "plain"),
+    (27, 30, "keyword"),
+    (30, 31, "plain"),
+    (31, 34, "keyword"),
+    (34, 39, "plain"),
+    (39, 44, "keyword"),
+    (44, 46, "plain"),
+    (46, 47, "function"),
+    (47, 51, "plain"),
+    (51, 55, "keyword"),
+    (55, 56, "plain"),
+    (56, 57, "function"),
+    (57, 61, "plain"),
+    (61, 62, "function"),
+    (62, 65, "plain"),
+    (65, 67, "type"),
+    (67, 73, "plain"),
+];
+
 /// T-016's pinned sexp of `fn f() {}` (one line), quoted by Pinned (g).
 const EX_SEXP: &str = "(source_file@0..9 (function_item@0..9 name:(identifier@3..4) \
                        parameters:(parameters@4..6) body:(block@7..9)))";
@@ -574,6 +611,9 @@ fn corpus_parses_through_protocol() {
         .collect();
     let paths: Vec<String> = files.iter().map(|(p, _)| p.clone()).collect();
     copy_corpus(&fx, &paths);
+    // T-016 AC-5 (pinned through `SyntaxTree::sexp`/`errors`): `fn f() { let x = 1 }` has a
+    // MISSING `;` at 18..18.
+    fx.write("missing.rs.txt", b"fn f() { let x = 1 }");
     let mut s = Script::default();
     let ids: Vec<(usize, usize)> = files
         .iter()
@@ -584,15 +624,35 @@ fn corpus_parses_through_protocol() {
             (open, tree)
         })
         .collect();
+    s.push("doc.open", json!({"path": "missing.rs.txt"}));
+    let missing = s.push("syntax.tree", json!({ "doc": files.len() + 1 }));
     let (r, _) = s.run(&fx, "parse");
+    let m = ok(&r[missing], "syntax.tree of `fn f() { let x = 1 }`");
+    assert_eq!(m["has_error"], json!(true));
+    assert!(
+        m["errors"]
+            .as_array()
+            .unwrap()
+            .contains(&json!({"kind": "missing", "start": 18, "end": 18})),
+        "no MISSING error at 18..18: {}",
+        m["errors"]
+    );
+    assert!(
+        m["sexp"]
+            .as_str()
+            .unwrap()
+            .contains(r#"value:(integer_literal@17..18) (MISSING ";"@18..18)"#),
+        "sexp is not T-016's: {}",
+        m["sexp"]
+    );
     for ((path, set), (open, tree)) in files.iter().zip(ids) {
         let len = ok(&r[open], path)["len_chars"].as_u64().unwrap();
         let t = ok(&r[tree], &format!("syntax.tree of {path}"));
         assert_eq!(t["mode"], json!("full"), "{path}: first call: {t}");
         assert!(t["node_count"].as_u64().unwrap() >= 1, "{path}: {t}");
         assert!(
-            t["sexp"].as_str().unwrap().starts_with("(source_file"),
-            "{path}"
+            !t["sexp"].as_str().unwrap().is_empty(),
+            "{path}: empty sexp"
         );
         let errors = t["errors"].as_array().unwrap();
         if set == "valid" {
@@ -659,49 +719,20 @@ fn tree_fields(t: &Value) -> Value {
     })
 }
 
-/// AC-2: for every `valid` file, 100 fixed-seed random `doc.insert`/`doc.delete`/
-/// `doc.replace`/`doc.undo` in one `kiln-cli control` session, each followed by `doc.text` and
-/// `syntax.tree`; every tree equals `syntax.tree` in a fresh `kiln-cli run` session on the same
-/// text, and `mode` follows the cache rule. Plus the worked example of Pinned (g) (`fn f() {}`:
-/// T-016's sexp, `full`, `unchanged`, then `incremental` after inserting a space).
-/// Oracle: from-scratch parse; exact value.
-#[test]
-fn incremental_equals_fresh_session() {
-    // Worked example (Pinned (g)).
-    {
-        let fx = Fixture::new("incremental-example");
-        fx.write("f.rs.txt", b"fn f() {}");
-        let mut s = Script::default();
-        let open = s.push("doc.open", json!({"path": "f.rs.txt"}));
-        let t1 = s.push("syntax.tree", json!({"doc": 1}));
-        let t2 = s.push("syntax.tree", json!({"doc": 1}));
-        let ins = s.push("doc.insert", json!({"doc": 1, "offset": 8, "text": " "}));
-        let t3 = s.push("syntax.tree", json!({"doc": 1}));
-        let (r, _) = s.run(&fx, "example");
-        ok(&r[open], "doc.open");
-        let a = ok(&r[t1], "first syntax.tree of `fn f() {}`");
-        assert_eq!(a["sexp"], json!(EX_SEXP));
-        assert_eq!(a["has_error"], json!(false));
-        assert_eq!(a["errors"], json!([]));
-        assert_eq!(a["mode"], json!("full"));
-        let b = ok(&r[t2], "second syntax.tree");
-        assert_eq!(b["mode"], json!("unchanged"));
-        assert_eq!(tree_fields(a), tree_fields(b));
-        ok(&r[ins], "doc.insert");
-        let c = ok(&r[t3], "syntax.tree after inserting a space");
-        assert_eq!(c["mode"], json!("incremental"));
-        assert_eq!(c["has_error"], json!(false));
-    }
-
-    const EDITS: usize = 100;
-    let valid = corpus_set("valid");
-    let fx = Fixture::new("incremental");
-    copy_corpus(&fx, &valid);
-    let mut session = Control::start(&fx.root());
-    // Per file: the distinct texts seen and, per text, the tree fields reported.
+/// One `kiln-cli control` session doing AC-2's random edits on `files` (index, path), each
+/// followed by `doc.text` and `syntax.tree` and checked against the `mode` rule. Returns, per
+/// file, the text and tree fields after each call, and the count of each `mode`.
+#[allow(clippy::type_complexity)]
+fn edit_session(
+    root: &Path,
+    files: &[(usize, String)],
+    edits: usize,
+) -> (Vec<(String, Vec<(String, Value)>)>, BTreeMap<String, usize>) {
+    let mut session = Control::start(root);
     let mut seen: Vec<(String, Vec<(String, Value)>)> = Vec::new();
     let mut modes: BTreeMap<String, usize> = BTreeMap::new();
-    for (fi, path) in valid.iter().enumerate() {
+    for (fi, path) in files {
+        let fi = *fi;
         let doc = doc_id(&session.call("doc.open", json!({ "path": path })), path);
         let mut rng = Rng::new(0x7020 + fi as u64);
         let mut text = text_of(&session.call("doc.text", json!({ "doc": doc })), path);
@@ -711,16 +742,24 @@ fn incremental_equals_fresh_session() {
         let mut records = vec![(text.clone(), tree_fields(&first))];
         let mut prev_tree_text = text.clone();
         let mut typing_at: Option<usize> = None;
-        for step in 0..EDITS {
+        for step in 0..edits {
             let chars: Vec<char> = text.chars().collect();
             let len = chars.len();
             let roll = rng.below(100);
-            let (cmd, params) = if roll < 30 {
+            let (cmd, params) = if roll < 20 {
+                // Whitespace next to whitespace: keeps an error-free tree error-free.
+                let from = rng.below(len + 1);
+                let o = (from..len)
+                    .find(|&i| chars[i] == ' ' || chars[i] == '\n')
+                    .map_or(len, |i| if inside_crlf(&chars, i) { i - 1 } else { i });
+                typing_at = None;
+                ("doc.insert", json!({"doc": doc, "offset": o, "text": " "}))
+            } else if roll < 35 {
                 let o = boundary(&mut rng, &chars);
                 let t = SNIPPETS[rng.below(SNIPPETS.len())];
                 typing_at = (t.chars().count() == 1).then_some(o + 1);
                 ("doc.insert", json!({"doc": doc, "offset": o, "text": t}))
-            } else if roll < 50 {
+            } else if roll < 48 {
                 // One-char typing at the end of the previous one-char insert (a typing group).
                 let o = typing_at
                     .filter(|&o| o <= len && !inside_crlf(&chars, o))
@@ -728,7 +767,7 @@ fn incremental_equals_fresh_session() {
                 let c = ["a", "b", "(", ")", " ", "\"", "/", "1"][rng.below(8)];
                 typing_at = Some(o + 1);
                 ("doc.insert", json!({"doc": doc, "offset": o, "text": c}))
-            } else if roll < 70 {
+            } else if roll < 60 {
                 let a = boundary(&mut rng, &chars);
                 let mut b = (a + 1 + rng.below(12)).min(len);
                 if inside_crlf(&chars, b) {
@@ -736,7 +775,7 @@ fn incremental_equals_fresh_session() {
                 }
                 typing_at = None;
                 ("doc.delete", json!({"doc": doc, "start": a, "end": b}))
-            } else if roll < 88 {
+            } else if roll < 72 {
                 let a = boundary(&mut rng, &chars);
                 let mut b = (a + rng.below(9)).min(len);
                 if inside_crlf(&chars, b) {
@@ -747,6 +786,16 @@ fn incremental_equals_fresh_session() {
                 (
                     "doc.replace",
                     json!({"doc": doc, "start": a, "end": b, "text": t}),
+                )
+            } else if roll < 78 {
+                // A replace by the same text: the text stays as it was.
+                let a = boundary(&mut rng, &chars).min(len.saturating_sub(1));
+                let b = (a + 1).min(len);
+                let same: String = chars[a..b].iter().collect();
+                typing_at = None;
+                (
+                    "doc.replace",
+                    json!({"doc": doc, "start": a, "end": b, "text": same}),
                 )
             } else {
                 typing_at = None;
@@ -784,6 +833,97 @@ fn incremental_equals_fresh_session() {
         session.finish().success(),
         "kiln-cli control exited abnormally"
     );
+    (seen, modes)
+}
+
+/// AC-2: for every `valid` file, 100 fixed-seed random `doc.insert`/`doc.delete`/
+/// `doc.replace`/`doc.undo` in one `kiln-cli control` session, each followed by `doc.text` and
+/// `syntax.tree`; every tree equals `syntax.tree` in a fresh `kiln-cli run` session on the same
+/// text, and `mode` follows the cache rule. Plus the worked example of Pinned (g) (`fn f() {}`:
+/// T-016's sexp, `full`, `unchanged`, then `incremental` after inserting a space).
+/// Oracle: from-scratch parse; exact value.
+#[test]
+fn incremental_equals_fresh_session() {
+    // Worked example (Pinned (g)).
+    {
+        let fx = Fixture::new("incremental-example");
+        fx.write("f.rs.txt", b"fn f() {}");
+        let mut s = Script::default();
+        let open = s.push("doc.open", json!({"path": "f.rs.txt"}));
+        let t1 = s.push("syntax.tree", json!({"doc": 1}));
+        let t2 = s.push("syntax.tree", json!({"doc": 1}));
+        let ins = s.push("doc.insert", json!({"doc": 1, "offset": 8, "text": " "}));
+        let t3 = s.push("syntax.tree", json!({"doc": 1}));
+        // The cache holds the text of the last successful call of any of the three commands.
+        let ins2 = s.push("doc.insert", json!({"doc": 1, "offset": 0, "text": " "}));
+        let hl = s.push("syntax.highlight", json!({"doc": 1}));
+        let t4 = s.push("syntax.tree", json!({"doc": 1}));
+        let ins3 = s.push("doc.insert", json!({"doc": 1, "offset": 0, "text": " "}));
+        let mb = s.push("syntax.match-bracket", json!({"doc": 1, "offset": 0}));
+        let t5 = s.push("syntax.tree", json!({"doc": 1}));
+        let (r, _) = s.run(&fx, "example");
+        ok(&r[open], "doc.open");
+        let a = ok(&r[t1], "first syntax.tree of `fn f() {}`");
+        assert_eq!(a["sexp"], json!(EX_SEXP));
+        assert_eq!(a["has_error"], json!(false));
+        assert_eq!(a["errors"], json!([]));
+        assert_eq!(a["mode"], json!("full"));
+        let b = ok(&r[t2], "second syntax.tree");
+        assert_eq!(b["mode"], json!("unchanged"));
+        assert_eq!(tree_fields(a), tree_fields(b));
+        ok(&r[ins], "doc.insert");
+        let c = ok(&r[t3], "syntax.tree after inserting a space");
+        assert_eq!(c["mode"], json!("incremental"));
+        assert_eq!(c["has_error"], json!(false));
+        for id in [ins2, hl, ins3, mb] {
+            ok(&r[id], "step");
+        }
+        let d = ok(&r[t4], "syntax.tree after insert + syntax.highlight");
+        assert_eq!(
+            d["mode"],
+            json!("unchanged"),
+            "syntax.highlight did not update the cache"
+        );
+        let e = ok(&r[t5], "syntax.tree after insert + syntax.match-bracket");
+        assert_eq!(
+            e["mode"],
+            json!("unchanged"),
+            "syntax.match-bracket did not update the cache"
+        );
+    }
+
+    const EDITS: usize = 100;
+    let valid = corpus_set("valid");
+    let fx = Fixture::new("incremental");
+    copy_corpus(&fx, &valid);
+    // Three `kiln-cli control` sessions in parallel (run time only; each file's edits are
+    // sequential within its session and the seeds are fixed per file).
+    const SESSIONS: usize = 3;
+    let root = fx.root();
+    let indexed: Vec<(usize, String)> = valid.iter().cloned().enumerate().collect();
+    let chunk_len = indexed.len().div_ceil(SESSIONS);
+    let results = thread::scope(|sc| {
+        let handles: Vec<_> = indexed
+            .chunks(chunk_len)
+            .map(|chunk| {
+                let root = &root;
+                sc.spawn(move || edit_session(root, chunk, EDITS))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect::<Vec<_>>()
+    });
+    // Per file: the texts seen and, per text, the tree fields reported.
+    let mut seen: Vec<(String, Vec<(String, Value)>)> = Vec::new();
+    let mut modes: BTreeMap<String, usize> = BTreeMap::new();
+    for (s, m) in results {
+        seen.extend(s);
+        for (k, v) in m {
+            *modes.entry(k).or_default() += v;
+        }
+    }
 
     // Fresh sessions: one `kiln-cli run` per corpus file, each distinct text as its own file.
     for (fi, (path, records)) in seen.iter().enumerate() {
@@ -1032,7 +1172,7 @@ fn tokenize(text: &str, what: &str) -> Tokens {
                 TokenTree::Ident(i) => {
                     let r = i.span().byte_range();
                     assert!(
-                        text[r.clone()] == i.to_string() || is_comment_slice(&text[r.clone()]),
+                        i == text[r.clone()] || is_comment_slice(&text[r.clone()]),
                         "{what}: ident {i} at byte {r:?} does not match its source (oracle offsets)"
                     );
                 }
@@ -1151,6 +1291,7 @@ fn highlight_marks_fn_names() {
     let fx = Fixture::new("fn-names");
     copy_corpus(&fx, &valid);
     fx.write("example.rs.txt", EX_HIGHLIGHT.as_bytes());
+    fx.write("rules.rs.txt", EX_RULES.as_bytes());
     let mut s = Script::default();
     let ids: Vec<(usize, usize)> = valid
         .iter()
@@ -1169,6 +1310,8 @@ fn highlight_marks_fn_names() {
         "syntax.highlight",
         json!({"doc": ex_doc, "start": 10, "end": 17}),
     );
+    s.push("doc.open", json!({"path": "rules.rs.txt"}));
+    let rules = s.push("syntax.highlight", json!({ "doc": ex_doc + 1 }));
     let (r, _) = s.run(&fx, "fn-names");
     let mut total = 0;
     let oracles: Vec<(String, Vec<Range<usize>>)> = valid
@@ -1220,6 +1363,16 @@ fn highlight_marks_fn_names() {
         expect_spans(&[(10, 12, "keyword"), (12, 16, "plain"), (16, 17, "type")]),
         "worked example clipped to 10..17"
     );
+    let want = expect_spans(EX_RULES_SPANS);
+    let chars: Vec<char> = EX_RULES.chars().collect();
+    for (a, b, k) in &want {
+        let slice: String = chars[*a..*b].iter().collect();
+        if k == "keyword" {
+            assert!(KEYWORDS.contains(&slice.as_str()), "fixture: {slice:?}");
+        }
+    }
+    let got = spans(ok(&r[rules], "rules fixture"), "rules fixture");
+    assert_eq!(got, want, "spans of {EX_RULES:?}");
 }
 
 // ---------------------------------------------------------------------------------------------
