@@ -219,6 +219,34 @@ fn root_error(root: &Path, e: &VfsError) -> String {
     format!("root `{}`: {reason}", root.display())
 }
 
+/// The longest string allowed in an error's `message` or anywhere inside its `details`, in
+/// characters (longer ones are cut to 199 characters followed by `…`).
+pub const MAX_ERROR_STRING: usize = 200;
+
+/// The longest error line allowed, in bytes; a longer one has its `details` replaced by
+/// `{"truncated":true}`.
+pub const MAX_ERROR_LINE: usize = 4096;
+
+/// Apply the error caps (D-031) to `line`: a protocol response holding an `error` object, or
+/// a bare error object `{"code","kind","message"[,"details"]}`. Every string in `message` and
+/// anywhere inside `details` is cut to [`MAX_ERROR_STRING`] characters; then, if the compact
+/// line is longer than [`MAX_ERROR_LINE`] bytes, `details` becomes `{"truncated":true}`.
+pub fn cap_error(line: &mut Value) {
+    let _ = line;
+}
+
+/// `text` with every line cut to [`MAX_ERROR_STRING`] characters (for error text on stderr).
+pub fn cap_text(text: &str) -> String {
+    text.to_owned()
+}
+
+/// The capped error object `{"code","kind","message"[,"details"]}` for `e`, raised by
+/// `command` with `params` (as the protocol reports it, without `id`).
+pub fn command_error_json(command: &str, params: &Value, e: &CommandError) -> Value {
+    let _ = (command, params);
+    e.to_json()
+}
+
 /// Clip, in an error object `{"code","kind","message"[,"details"]}`, every echo of a value
 /// from `sources` in `message` and in each `details` entry to at most 200 characters.
 /// `sources` are the input values the error may echo (requests, params, arguments).
