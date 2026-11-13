@@ -1060,7 +1060,16 @@ mod scaffold_tests {
         {
             use std::os::unix::fs::PermissionsExt;
             use std::process::{Command, Stdio};
-            use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+            use std::time::{Duration, Instant};
+
+            /// Removes the scratch directory when dropped, so a failing assertion (a panic)
+            /// does not leave it behind.
+            struct RemoveOnDrop(std::path::PathBuf);
+            impl Drop for RemoveOnDrop {
+                fn drop(&mut self) {
+                    let _ = std::fs::remove_dir_all(&self.0);
+                }
+            }
 
             let run = |mut cmd: Command| -> std::process::Output {
                 let mut child = cmd
@@ -1080,14 +1089,12 @@ mod scaffold_tests {
                 child.wait_with_output().expect("output")
             };
 
-            let nanos = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock")
-                .as_nanos();
-            let dir = std::env::temp_dir().join(format!(
-                "kiln-t015-default-runner-{}-{nanos}",
-                std::process::id()
-            ));
+            // Named by the process id only (unique among running processes, no clock); a
+            // leftover of an earlier process with the same id is removed first.
+            let dir = std::env::temp_dir()
+                .join(format!("kiln-t015-default-runner-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let cleanup = RemoveOnDrop(dir.clone());
             let bin = dir.join("bin");
             std::fs::create_dir_all(&bin).expect("bin dir");
             let marker = dir.join("marker");
@@ -1149,7 +1156,7 @@ mod scaffold_tests {
                 "the default runner started a process: {:?}",
                 std::fs::read_to_string(&marker)
             );
-            let _ = std::fs::remove_dir_all(&dir);
+            drop(cleanup);
         }
     }
 }
