@@ -210,6 +210,40 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   confirmed. · gate attempts: 0 · next: director review.
 <!-- end planner log -->
 ### implementer
+- 2026-11-13 · R-026 · in_progress · did: restated ACs: (1) `run` drives open/insert/undo/
+  redo/save on a real file, exact line 5 and `hello world\n` on disk; (2) one response per
+  non-blank line, ids echoed or null; (3) same script on two copies at different paths gives
+  identical stdout and files, errors included; (4) `--log` writes the successful requests as a
+  renumbered script whose replay reproduces files and log; (5) the listed malformed lines get
+  the listed codes and the host continues, `run` exits 3; (6) `control` answers and flushes
+  each line before reading the next, exit 0 at EOF; (7) responses are canonical sorted-key
+  compact JSON with no root path; (8) usage/missing script/file root exit 2, `exec` unchanged;
+  (9) `Host::in_memory` and disk give the same responses. Built `kiln_control::Host` (request
+  validation, own canonical serializer that sorts keys regardless of `serde_json` map type,
+  `catch_unwind` turning a panicking command into `internal`, `log_script`), `kiln-cli run` /
+  `control`, and D-023: `exec` and `run` take `--root <dir>` (default `.`) or `--memory`
+  (mutually exclusive); options may come in any order. Commits: API stubs (ee32218), Host
+  logic (543cf55), CLI (c035d23), doc (`docs/control-protocol.md`). Tests: 10 unit tests in
+  kiln-control, 4 new in kiln-cli `main.rs`, 7 in `apps/kiln-cli/tests/run.rs`.
+  End-to-end by hand in a temp dir (`target/e2e`, `proj/a.txt` = `hello\n`, the AC-1 script
+  plus one bad request): `kiln-cli run s.jsonl --root proj --log l.jsonl` → 6 lines, line 6
+  `{"id":5,"ok":true,"result":{"bytes_written":12,"dirty":false,"doc":1}}`, exit 3; `od -c
+  proj/a.txt` → `h e l l o   w o r l d \n`; `l.jsonl` = 5 renumbered requests (bad one
+  absent); `kiln-cli control --root proj` piped open+text → `"text":"hello world\n"`, exit 0;
+  `kiln-cli exec doc.open '{"path":"a.txt"}' --root proj` → `{…"doc":1,…"len_chars":12…}`,
+  exit 0; no `.kiln-tmp-*` left in `proj`. Full transcript is the worked example in
+  `docs/control-protocol.md`.
+  Choices the spec left open: `<script>` and `--log` are host paths relative to the cwd, not
+  to `--root` (I read "script paths are relative to it" as paths inside requests); blank =
+  any Unicode white space; `exec --root` with `--text` seeds the scratch buffer through a
+  `buffer.insert` command because `Context` has no constructor taking both a VFS and text;
+  `control` takes only `--root` (D-023 names `exec` and `run` for `--memory`); `control` exits
+  1 on a stdin/stdout I/O error (spec silent); the log file is created/truncated before the
+  first request so an unwritable log is refused with no side effects; duplicate JSON keys in a
+  request follow `serde_json` (last wins), not rejected. · gate attempts: 1 (last: green) ·
+  not run: acceptance tests (not visible to me); no test of a panicking command (none exists
+  in the registry); Windows/macOS · tokens: unknown · missing context: none · next: join with
+  the test author's branch.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
