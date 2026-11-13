@@ -345,8 +345,10 @@ fn host_constructors_reject_bad_roots() {
     let d = fresh_dir("bad-root");
     let file = d.join("f.txt");
     std::fs::write(&file, b"x").unwrap();
-    let e: Result<Host, HostError> = Host::on_disk(&file);
-    let e = e.err().expect("a file is not a root");
+    let r: Result<Host, HostError> = Host::on_disk(&file);
+    let Err(e) = r else {
+        panic!("a file is not a root");
+    };
     assert!(!e.0.is_empty());
     assert!(!format!("{e}").is_empty());
     let _: &dyn std::error::Error = &e;

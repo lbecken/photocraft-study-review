@@ -301,6 +301,13 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   assertion. Fixed test passes against a throwaway id-echoing stub (not kept); control file is
   still `compile` on base. `--log` test keeps exit 2 as in the Interface. · gate attempts: 0 ·
   not run: gate (only test files changed) · missing context: none · next: re-join.
+- 2026-11-13 · R-030 · join round 2 · did: fixed `clippy::err_expect` in control
+  `host_constructors_reject_bad_roots` (`let Err(e) = … else { panic! }`; `expect_err` would need
+  `Host: Debug`, which the spec does not declare). Ran `cargo clippy --all-targets -- -D warnings`
+  on a throwaway package (stub `Host` + copies of all three T-004 test files, workspace lints and
+  clippy.toml): clean; a planted `.err().expect()` probe was caught, so the check reaches the
+  file. · gate attempts: 0 · not run: full gate (base cannot compile the control file) · missing
+  context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
