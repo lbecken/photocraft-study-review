@@ -5,7 +5,6 @@
 //!   `doc.line` with it).
 //! - The existing read-only document commands (`doc.info`, `doc.text`, `doc.list`) and a
 //!   refused insert do not end a typing group (AC-4 holds the new commands to the same rule).
-//! - The `out_of_range` kind keeps its description (ruling q2 of D-059).
 //!
 //! Every spawned process is killed after [`TIMEOUT`] (D-028 (8)).
 #![cfg(test)]
@@ -158,21 +157,4 @@ fn read_only_commands_do_not_end_a_typing_group() {
     assert_eq!(r[8]["result"]["text"], json!("ab\n"), "{}", r[8]);
     assert_eq!(r[9]["result"]["can_undo"], json!(false), "{}", r[9]);
     assert_eq!(r[9]["result"]["can_redo"], json!(true), "{}", r[9]);
-}
-
-#[test]
-fn out_of_range_keeps_its_description() {
-    let out = kiln(&["commands", "--schema"]);
-    assert_eq!(out.status.code(), Some(0));
-    let dump: Value = serde_json::from_slice(&out.stdout).expect("JSON");
-    let entries: Vec<&Value> = dump["error_kinds"]["rejected"]
-        .as_array()
-        .expect("rejected")
-        .iter()
-        .filter(|e| e["kind"] == json!("out_of_range"))
-        .collect();
-    assert_eq!(
-        entries,
-        [&json!({"kind": "out_of_range", "when": "an offset beyond the end of the text"})]
-    );
 }

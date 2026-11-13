@@ -829,6 +829,29 @@ fn refusals_have_exact_kinds_and_messages_and_change_nothing() {
         json!({"doc": 2, "at": {"char": 2}}),
         rejected("no_such_document", None),
     );
+    // Ruling t1 (D-064): the id is checked before the position in every unit: an
+    // out-of-range value (just past the end, or huge) with an unknown, closed or 0 id is
+    // `no_such_document`, never `out_of_range`.
+    for doc in [0u64, 2, 99] {
+        for at in [
+            json!({"char": 10}),
+            json!({"char": max}),
+            json!({"byte": 14}),
+            json!({"byte": max}),
+            json!({"utf16": 11}),
+            json!({"utf16": max}),
+            json!({"line_col": {"line": 4, "col": 0}}),
+            json!({"line_col": {"line": max, "col": 0}}),
+            json!({"line_col": {"line": 1, "col": 4}}),
+            json!({"line_col": {"line": 0, "col": max}}),
+        ] {
+            s.push(
+                "doc.position",
+                json!({"doc": doc, "at": at}),
+                rejected("no_such_document", None),
+            );
+        }
+    }
     // Nothing changed.
     s.push("doc.text", json!({"doc": 1}), Expect::Result(text_result));
     let (_, log) = s.run(&work, &root, "s");

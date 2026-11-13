@@ -352,6 +352,35 @@ fn ids_params_and_precedence() {
                 "doc.position",
                 json!({"doc": doc, "at": {"byte": u64::MAX}}),
             ),
+            // Ruling t1 (D-064): out of range in every unit, the id still wins ("a\r\nb":
+            // 4 chars, 4 bytes, 4 UTF-16 units, 2 lines).
+            ("doc.position", json!({"doc": doc, "at": {"char": 5}})),
+            (
+                "doc.position",
+                json!({"doc": doc, "at": {"char": u64::MAX}}),
+            ),
+            ("doc.position", json!({"doc": doc, "at": {"byte": 5}})),
+            ("doc.position", json!({"doc": doc, "at": {"utf16": 5}})),
+            (
+                "doc.position",
+                json!({"doc": doc, "at": {"utf16": u64::MAX}}),
+            ),
+            (
+                "doc.position",
+                json!({"doc": doc, "at": {"line_col": {"line": 2, "col": 0}}}),
+            ),
+            (
+                "doc.position",
+                json!({"doc": doc, "at": {"line_col": {"line": u64::MAX, "col": 0}}}),
+            ),
+            (
+                "doc.position",
+                json!({"doc": doc, "at": {"line_col": {"line": 0, "col": 2}}}),
+            ),
+            (
+                "doc.position",
+                json!({"doc": doc, "at": {"line_col": {"line": 0, "col": u64::MAX}}}),
+            ),
         ] {
             let e = r.execute(&mut ctx, name, params.clone()).unwrap_err();
             assert!(no_doc(e.clone()), "{name} {params}: {e:?}");
