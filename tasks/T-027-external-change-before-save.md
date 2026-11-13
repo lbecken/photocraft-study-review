@@ -33,7 +33,7 @@ bytes-as-read.
 
 No gate path. Reading list: `tasks/T-002-*.md` Interface (`Document::open/save`);
 `tasks/T-008-*.md` (confinement, precedence); `crates/kiln-workspace/src/document.rs`;
-`crates/kiln-commands/src/doc.rs` (`Save`); `tasks/T-015-*.md` (reasons, `reason.rs` mapping rule).
+`crates/kiln-commands/src/doc.rs` (`Save`); `tasks/T-032-*.md` (reasons, `reason.rs` mapping rule).
 
 ## Interface
 

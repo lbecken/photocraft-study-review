@@ -61,3 +61,8 @@ repository; this note says where to look and what is in flight.
 
 ## Run IDs
 Used so far: R-001 … R-073.
+
+## Addendum (07:00 UTC)
+- T-032 has had its spec-check edits applied (still `draft`); ADR-0004 still `proposed` — accept it, then make T-032 ready once T-015 merges. After ADR-0004 is accepted, publish the CHARTER §3 sentence as a low-tier task.
+- Two spec edits still owed before their tasks are dispatched: T-008 line ~122 must drop its edit of a table cell in `docs/control-protocol.md` (it conflicts with T-032's rule that later tasks do not edit table cells — spec check T-032 finding 4); T-027 line ~72 still says "T-015's `VfsError` mapping" (it is T-032's now).
+- T-015's AC-1 was corrected after dispatch (D-043); both builders were notified.

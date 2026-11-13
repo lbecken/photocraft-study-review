@@ -51,9 +51,11 @@ Option A.
   kinds the protocol may produce.
 
 ## Consequences
-- T-032 carries the change and applies the CHARTER sentence (`docs/CHARTER.md` in its
-  `touches`). Hence it depends on T-013, which holds that file. T-007, T-008, T-010, T-030 and
-  the feature tasks that raise a refusal (T-018 onward, except T-025) follow it.
+- T-032 carries the change. The director publishes the CHARTER §3 decision 2 sentence
+  separately, as a low-tier task once this ADR is accepted (D-042). T-007, T-008, T-010, T-030
+  and the feature tasks that raise a refusal (T-018 onward, except T-025) follow it.
+- Guards that pin CLI output exclude `kiln-cli commands` output, which every command-adding
+  task changes.
 - No iteration-0 test or fixture changes: no `xtask/` path; the T-004 test that reads kinds from
   `docs/control-protocol.md` keeps passing because the table is kept;
   `acceptance_t003_registry.rs` (`docs/commands.json == describe()`) holds after regeneration.
