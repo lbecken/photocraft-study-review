@@ -631,6 +631,12 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   lock moves; an approved workspace-member version bump → merged. All 11 r3 tests still fail on base by
   assertion; acceptance_t005 16/16 and r2 4/4 still fail by assertion; guards 4/4 pass; clippy/fmt
   clean. · gate attempts: 0 this run (R-033: red only at test) · missing context: none.
+- 2026-11-13 · R-037 · round 3 continued · did: `self_weakened_gate_fails_under_mains_gate`
+  (AC-1) setup only. Under R3(a) a low task's `xtask/` change is refused at `gate-path` before
+  any gate runs, so T-001 is now a high task with committed join/review evidence and an
+  `Approve T-001 including its gate paths.` row. Assertions are unchanged (`gate_failed`,
+  `main:red`, `main+task`). It still fails on base by assertion (base merges). No other older test
+  has this shape. Clippy and fmt pass. · gate attempts: 0 · missing context: none.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-028 · tests_joined (main) · did: review round 1 of 055821a → `reviews/T-005-r1.md`,

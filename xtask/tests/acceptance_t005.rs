@@ -33,18 +33,27 @@ fn self_weakened_gate_fails_under_mains_gate() {
     let base = r.main_sha();
     assert!(TOY_XTASK_MAIN.contains(GATE_RULE));
     let weakened = TOY_XTASK_MAIN.replace(GATE_RULE, GATE_WEAKENED);
-    r.add_task("T-001", "low", "self_verified", &["RED", "xtask"], &[]);
+    // An `xtask/` change is a gate path (D-026 R3): only an approved high task reaches the
+    // gates, so T-001 carries high-tier evidence and a `gate paths` approval row.
+    r.add_task("T-001", "high", "reviewed", &["RED", "xtask"], &[]);
     r.add_task("T-002", "low", "self_verified", &["RED"], &[]);
-    let main_before = r.main_sha();
-    assert_ne!(main_before, base);
-    r.commit_wt(
+    r.with_evidence(
         "T-001",
-        "add RED and make my own gate always pass",
+        "high",
         &[
             ("RED", Some("red\n")),
             ("xtask/src/main.rs", Some(&weakened)),
         ],
     );
+    let decisions = format!(
+        "{DECISIONS}| D-002 | 2026-11-13 | Approve T-001 including its gate paths. | toy | yes |\n"
+    );
+    r.main_commit(
+        "director: approve",
+        &[("docs/decisions.md", Some(&decisions))],
+    );
+    let main_before = r.main_sha();
+    assert_ne!(main_before, base);
     let rec = r.queue_record("T-001");
     assert_eq!(
         (
