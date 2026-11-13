@@ -339,3 +339,4 @@
 {"kind":"transition","task":"T-017","iteration":1,"at":"2026-11-13T16:47:23Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-017","iteration":1,"at":"2026-11-13T16:47:23Z","from":"reviewed","to":"queued"}
 {"kind":"transition","task":"T-017","iteration":1,"at":"2026-11-13T16:52:29Z","from":"queued","to":"merged"}
+{"kind":"transition","task":"T-008","iteration":1,"at":"2026-11-13T16:53:57Z","from":"tests_joined","to":"in_progress"}
