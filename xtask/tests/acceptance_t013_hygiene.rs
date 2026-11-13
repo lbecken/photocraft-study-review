@@ -19,7 +19,13 @@ const MUTANTS_OK: &str =
 #[cfg(test)]
 fn review(task: &str, round: u32, tier: &str, arm: &str, mutants: Option<&str>) -> String {
     let m = mutants
-        .map(|m| format!("mutants: {m}\n"))
+        .map(|m| {
+            if m.starts_with('\n') {
+                format!("mutants:{m}\n")
+            } else {
+                format!("mutants: {m}\n")
+            }
+        })
         .unwrap_or_default();
     format!(
         "---\ntask: {task}\nround: {round}\nrun: R-900\ntier: {tier}\narm: {arm}\nreviewed_sha: {s}\nprevious_sha: null\nverdict: approve\nfindings: {{defect: 0, spec_gap: 0, test_gap: 0, nit: 0}}\n{m}follow_ups: 0\n---\n\n# Review {task} round {round}\n",
@@ -106,6 +112,20 @@ fn reviews_repo(name: &str) -> Lite {
     r(
         "T-026-r1.md",
         review("T-026", 1, "medium", "independent", Some(MUTANTS_OK)),
+    );
+    // Ruling: `mutants` may also be an indented block map.
+    l.task(&TaskSpec::new("T-028", "high", 1));
+    r(
+        "T-028-r1.md",
+        review(
+            "T-028",
+            1,
+            "high",
+            "independent",
+            Some(
+                "\n  introduced: 10\n  equivalent: 0\n  killed: 9\n  killed_by_acceptance: 9\n  survived: 1",
+            ),
+        ),
     );
     // Other names under reviews/ are ignored.
     r(

@@ -259,6 +259,13 @@ fn main() -> ExitCode {
         queue_jsonl: Option<Vec<u8>>,
     }
 
+    /// How the fixture prepares main before a toy task's worktree (T-013 ruling D-1).
+    enum Prep {
+        AsIs,
+        Plain,
+        Restore(String, String),
+    }
+
     /// A toy repository: primary checkout `root`, task worktrees under `.worktrees/`.
     pub struct Repo {
         pub root: PathBuf,
@@ -367,34 +374,54 @@ fn main() -> ExitCode {
         }
 
         pub fn worktree(&self, id: &str) -> PathBuf {
-            // T-013 ruling D-1: `worktree new` needs the task `ready` on main, so the toy task
-            // is made `ready` on main for the call and main's task files are put back after.
-            let restore = self.ready_on_main(id);
-            let o = xtask(&self.root, &["worktree", "new", id, "--no-seed"]);
-            assert_eq!(o.code, 0, "worktree new {id}: {}{}", o.stdout, o.stderr);
-            if let Some((tmp, originals)) = restore {
-                let mut files: Vec<(&str, Option<&str>)> = originals
-                    .iter()
-                    .map(|(p, c)| (p.as_str(), Some(c.as_str())))
-                    .collect();
-                if !originals.iter().any(|(p, _)| *p == tmp) {
-                    files.push((tmp.as_str(), None));
+            // T-013 ruling D-1: `worktree new` needs the task `ready` on main. A toy task with
+            // one task file is made `ready` on main for the call and its file put back after;
+            // a task with no (or several) task files on main, which `worktree new` refuses, gets
+            // its worktree from a plain `git worktree add` (setup only).
+            match self.ready_on_main(id) {
+                Prep::Plain => {
+                    let wt = self.wt(id);
+                    git(
+                        &self.root,
+                        &[
+                            "worktree",
+                            "add",
+                            "-q",
+                            "-b",
+                            &format!("task/{id}"),
+                            &wt.to_string_lossy(),
+                            "main",
+                        ],
+                    );
+                    std::fs::create_dir_all(wt.join("target")).unwrap();
+                    return wt;
                 }
-                self.main_commit(&format!("director: {id} task file back"), &files);
-                // The branch starts at main's tip again, as without the state check.
-                git(&self.wt(id), &["merge", "-q", "--ff-only", "main"]);
+                Prep::AsIs => {
+                    let o = xtask(&self.root, &["worktree", "new", id, "--no-seed"]);
+                    assert_eq!(o.code, 0, "worktree new {id}: {}{}", o.stdout, o.stderr);
+                }
+                Prep::Restore(path, original) => {
+                    let o = xtask(&self.root, &["worktree", "new", id, "--no-seed"]);
+                    assert_eq!(o.code, 0, "worktree new {id}: {}{}", o.stdout, o.stderr);
+                    self.main_commit(
+                        &format!("director: {id} task file back"),
+                        &[(path.as_str(), Some(original.as_str()))],
+                    );
+                    // The branch starts at main's tip again, as without the state check.
+                    git(&self.wt(id), &["merge", "-q", "--ff-only", "main"]);
+                }
             }
             self.wt(id)
         }
 
-        /// Unless main has exactly one `tasks/<id>-*.md` in state `ready` (or no `tasks/` at
-        /// all), commit one on main: the existing file with `state: ready`, or a minimal toy
-        /// task. Returns the path written and main's previous task files of `id`.
-        fn ready_on_main(&self, id: &str) -> Option<(String, Vec<(String, String)>)> {
+        /// How to give `id` a worktree: as is (no `tasks/` on main, or its one task file is
+        /// `ready`), plainly (no or several task files on main), or by committing its one task
+        /// file with `state: ready` first (returns the path and main's original text).
+        fn ready_on_main(&self, id: &str) -> Prep {
             let task = id.strip_suffix("-tests").unwrap_or(id);
             let listed = git(&self.root, &["ls-tree", "--name-only", "main", "tasks/"]);
             if listed.is_empty() {
-                return None;
+                return Prep::AsIs;
             }
             let prefix = format!("tasks/{task}-");
             let originals: Vec<(String, String)> = listed
@@ -402,39 +429,30 @@ fn main() -> ExitCode {
                 .filter(|p| p.starts_with(&prefix) && p.ends_with(".md"))
                 .map(|p| (p.to_owned(), git_show(&self.root, &format!("main:{p}"))))
                 .collect();
-            let is_ready = |c: &str| c.lines().any(|l| l.trim_end() == "state: ready");
-            if let [(_, c)] = originals.as_slice()
-                && is_ready(c)
-            {
-                return None;
-            }
-            let (tmp, text) = match originals.as_slice() {
-                [(p, c)] if c.lines().any(|l| l.starts_with("state: ")) => {
-                    let text: String = c
-                        .split_inclusive('\n')
-                        .map(|l| {
-                            if l.starts_with("state: ") {
-                                "state: ready\n"
-                            } else {
-                                l
-                            }
-                        })
-                        .collect();
-                    (p.clone(), text)
-                }
-                _ => (
-                    format!("tasks/{task}-toy.md"),
-                    task_md(task, "low", "ready", &["crates/a"], &[]),
-                ),
+            let [(path, c)] = originals.as_slice() else {
+                return Prep::Plain;
             };
-            let mut files: Vec<(&str, Option<&str>)> = originals
-                .iter()
-                .filter(|(p, _)| *p != tmp)
-                .map(|(p, _)| (p.as_str(), None))
+            if c.lines().any(|l| l.trim_end() == "state: ready") {
+                return Prep::AsIs;
+            }
+            if !c.lines().any(|l| l.starts_with("state: ")) {
+                return Prep::Plain;
+            }
+            let text: String = c
+                .split_inclusive('\n')
+                .map(|l| {
+                    if l.starts_with("state: ") {
+                        "state: ready\n"
+                    } else {
+                        l
+                    }
+                })
                 .collect();
-            files.push((tmp.as_str(), Some(text.as_str())));
-            self.main_commit(&format!("director: {task} ready"), &files);
-            Some((tmp, originals))
+            self.main_commit(
+                &format!("director: {task} ready"),
+                &[(path.as_str(), Some(text.as_str()))],
+            );
+            Prep::Restore(path.clone(), c.clone())
         }
 
         pub fn commit_wt(&self, id: &str, msg: &str, files: &[(&str, Option<&str>)]) -> String {

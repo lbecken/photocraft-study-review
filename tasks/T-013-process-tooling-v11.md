@@ -650,6 +650,56 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   between). Proposed: say "exactly these five".
   QUESTION: AC-11 says "PASS or EMPTY" on this repository's main; Interface (6) says the step is
   never EMPTY. Tests require PASS (run on a clone of the tested commit, a toy repository).
+- 2026-11-13T05:40Z · R-059 · in_progress · did: wrote `xtask/tests/acceptance_t013_{metrics,
+  report,queue,publish,hygiene,docs}.rs` (25 tests) and helper `acceptance_t013_support.rs`;
+  changed the shared fixture `acceptance_t005_support.rs` only as D-1 allows (`Repo::worktree`
+  commits a one-file toy task as `ready` on main for the call, restores it and fast-forwards
+  the branch; a task with no or several task files on main gets a plain `git worktree add`,
+  per the director's ruling to the implementer); no T-005 assertion changed, all 41 T-005
+  tests pass on base. Applied the director's rulings (1)–(6) and the implementer's (red gate
+  leaves `in_progress` committed and the tree clean; `--tier` on iter-N refused; `budget
+  none`; block-map `mutants`). Criterion → tests → base result (all assertion or command
+  error exit 2, none compile-only): AC-1 `add_and_transition_record_the_clock_time_by_default`,
+  `times_before_the_tasks_latest_record_or_after_now_are_refused`; AC-2
+  `a_medium_task_walks_the_whole_path_with_default_times`,
+  `transitions_outside_the_table_are_refused_and_change_nothing`,
+  `every_state_pair_follows_the_table` (naive model, 3 tiers × 20 states × 12); AC-3
+  `tokens_must_be_positive_or_declared_unknown`; AC-4
+  `add_prints_the_tasks_tokens_against_its_budget`; AC-5 `overhead_runs_are_booked_to_iter_n`,
+  `a_task_run_needs_exactly_one_task_file`; AC-6 `queue_refuses_a_task_over_its_ceiling_until_an_extend_row_covers_it`,
+  `budget_sits_after_approval_counts_unknown_runs_as_zero_and_needs_budget_tokens`; AC-7 (+AC-13
+  output) `worktree_new_needs_the_task_ready_on_main`,
+  `worktree_new_checks_no_state_without_a_tasks_directory_on_main` (fails on base only on the
+  `CARGO_TARGET_DIR` line); AC-8 `report_computes_the_v11_metrics`,
+  `join_defects_appends_one_record_and_classifies_the_join`; AC-9
+  `publish_carries_a_ledger_input_to_main_in_one_command`; AC-10 `publish_refusals_change_nothing`,
+  `publish_stops_when_the_gate_fails_and_keeps_the_inputs`,
+  `a_failed_ready_commit_stops_publish_and_prints_the_commit_command`; AC-11/12
+  `reviews_check_accepts_v11_front_matter_and_names_each_faulty_file`,
+  `session_paths_check_flags_tracked_files_by_path_and_line_only`,
+  `this_repositorys_tree_passes_hygiene`, `ci_and_charter_list_hygiene_between_ui_commands_and_schema`;
+  AC-13 `a_join_with_weak_base_evidence_points_to_the_mutation_spot_check`,
+  `development_md_has_no_stale_v10_references`; AC-14: the T-005 suites themselves.
+  Self-check: scratch stub (worktree ready check, metrics add/transition/join-defects, queue
+  `budget`, `hygiene`, gate step, join line; no publish, report or docs — those tests fail on
+  it for being unimplemented) passed every test it covered and all T-005 tests; seeded bugs
+  killed 14/14: B1 worktree reads working copy (worktree_new_needs…); B2 equal time refused
+  (times_before…, +3); B3 `--tokens 0` accepted (tokens_must…); B4 blocked ignores entered
+  state (every_state_pair…, transitions_outside…); B5 budget `>=` (queue_refuses…); B6 fenced
+  Extend counts (queue_refuses…); B7 first Extend row wins (queue_refuses…, add_prints…); B8 no
+  `killed_by_acceptance ≤ killed` (reviews_check…); B9 session path text printed
+  (session_paths…); B10 arm parity swapped (reviews_check…); B11 join-defects N ≤ f+1
+  (join_defects…); B12 iter-N tier "" (overhead_runs…); B13 run time = started_at
+  (times_before…); B14 unknown-runs line dropped for one run (add_prints…). The stub found one
+  test bug (untracked case re-tracked by `git add -A`), fixed. Clippy `-D warnings` clean with
+  the stub. Not tested: `worktree new` with two task files on main (unspecified); the queue
+  summary's count of unknown-token runs (no format); report's "excluded runs" count on the
+  tokens-per-merged-task line (no format); the T-005 fixture's own git/cargo calls have no
+  timeout (reused as is; every xtask call in T-013 tests has one); gate.rs
+  `step_order_matches_charter` is the implementer's (Pinned (f)(3)). · gate attempts: 1 (last:
+  red test, only in acceptance_t013_* targets; fmt, clippy, layers, ui-commands, schema,
+  scorecard, no-skip PASS) · not run: gate after the last ruling edits (tests re-run directly:
+  41 T-005 pass, 25 T-013 fail on base) · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

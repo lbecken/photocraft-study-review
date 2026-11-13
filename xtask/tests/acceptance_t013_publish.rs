@@ -526,10 +526,29 @@ fn publish_stops_when_the_gate_fails_and_keeps_the_inputs() {
         "the primary checkout's input must stay"
     );
     assert!(r.wt("T-050").is_dir(), "the worktree stays for the fix");
-    // main got only the `ready` commit.
+    // Ruling: main's ledger stays committed where publish stops: `in_progress` in main's
+    // committed metrics, the working tree clean apart from the input itself.
+    let committed: Vec<serde_json::Value> = git_show(&r.root, "main:metrics/tasks.jsonl")
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .filter(|v| v["kind"] == "transition" && v["task"] == "T-050")
+        .collect();
     assert_eq!(
-        git(&r.root, &["log", "-1", "--format=%s", "main"]),
-        "publish: T-050 ready"
+        committed.last().map(|t| t["to"].clone()),
+        Some("in_progress".into()),
+        "main's committed transitions: {committed:?}"
+    );
+    assert_eq!(
+        status(&r.root),
+        format!("?? {item}\n"),
+        "primary checkout status"
+    );
+    assert!(
+        !first_parent_subjects(&r, "main~1")
+            .iter()
+            .any(|(_, s)| s.contains("queued") || s.contains("merged")),
+        "publish went past the gate"
     );
     assert!(r.queue_lines().is_empty(), "the queue must not run");
 }

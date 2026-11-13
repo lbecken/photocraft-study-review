@@ -672,6 +672,11 @@ fn overhead_runs_are_booked_to_iter_n() {
         &strs(&add_args("iter-01", "planner", Some(10), &[])),
         "iter-01 (leading zero)",
     );
+    // Ruling: `--tier` on an iter-N record is refused.
+    l.refused(
+        &strs(&add_args("iter-1", "planner", Some(10), &["--tier", "low"])),
+        "--tier on iter-1",
+    );
 }
 
 #[test]
@@ -709,4 +714,20 @@ fn a_task_run_needs_exactly_one_task_file() {
         (rec["tier"].as_str(), rec["iteration"].as_u64()),
         (Some("high"), Some(1))
     );
+    // Ruling: a task file without budget_tokens prints `budget none` and no over line.
+    l.task(&TaskSpec {
+        budget: None,
+        ..TaskSpec::new("T-033", "medium", 1)
+    });
+    let (_, o) = l.appended(
+        &strs(&add_args("T-033", "implementer", Some(700), &[])),
+        "task without budget_tokens",
+    );
+    assert_eq!(
+        last_lines(&o.stdout, 1),
+        ["T-033: 700 tokens of budget none"],
+        "{}",
+        o.stdout
+    );
+    assert!(!o.stdout.contains("over its ceiling"), "{}", o.stdout);
 }
