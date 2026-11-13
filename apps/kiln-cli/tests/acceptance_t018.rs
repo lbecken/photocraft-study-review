@@ -390,13 +390,24 @@ struct Op {
     inserted: Vec<char>,
 }
 
+/// One edit of a batch, in the text before the batch: at `at`, `removed` → `inserted`.
+type BatchEdit = (usize, Vec<char>, Vec<char>);
+
+/// One undo step: a single edit (possibly a typing group) or a batch (`eol.normalize`).
+#[derive(Clone, Debug)]
+enum Step {
+    Op(Op),
+    /// The batch's non-no-op edits in index (text) order.
+    Batch(Vec<BatchEdit>),
+}
+
 /// Naive model of one open document: text, saved text, history, selection.
 #[derive(Clone, Debug)]
 struct Model {
     text: Vec<char>,
     saved: Vec<char>,
-    undo: Vec<Op>,
-    redo: Vec<Op>,
+    undo: Vec<Step>,
+    redo: Vec<Step>,
     typing_open: bool,
     anchor: usize,
     head: usize,
@@ -454,14 +465,77 @@ impl Model {
         self.redo.clear();
         if typing
             && self.typing_open
-            && let Some(top) = self.undo.last_mut()
+            && let Some(Step::Op(top)) = self.undo.last_mut()
             && top.at + top.inserted.len() == op.at
         {
             top.inserted.extend(op.inserted);
             return;
         }
-        self.undo.push(op);
+        self.undo.push(Step::Op(op));
         self.typing_open = typing;
+    }
+
+    /// Ruling w2: one batch with one edit per break that differs from `to`, in text order;
+    /// nothing at all if none differs. Returns the number of edits.
+    fn normalize(&mut self, to: &str) -> usize {
+        let target: Vec<char> = break_text(to).chars().collect();
+        let mut edits: Vec<BatchEdit> = Vec::new();
+        let mut i = 0;
+        while i < self.text.len() {
+            let n = break_len(&self.text, i);
+            if n > 0 && self.text[i..i + n] != target[..] {
+                edits.push((i, self.text[i..i + n].to_vec(), target.clone()));
+            }
+            i += n.max(1);
+        }
+        if edits.is_empty() {
+            return 0;
+        }
+        // Batch rule: applied (and mapped) from the last edit to the first.
+        for (at, removed, inserted) in edits.iter().rev() {
+            self.primitive(*at, at + removed.len(), inserted);
+        }
+        self.redo.clear();
+        self.typing_open = false;
+        let n = edits.len();
+        self.undo.push(Step::Batch(edits));
+        n
+    }
+
+    /// Undo one step. Ruling w1: a batch is undone by its inverse edits from the last
+    /// (highest position) to the first, each at its place in the text after the batch.
+    fn undo_step(&mut self, step: &Step) {
+        match step {
+            Step::Op(op) => {
+                self.primitive(op.at, op.at + op.inserted.len(), &op.removed);
+            }
+            Step::Batch(edits) => {
+                let mut shift: Vec<isize> = Vec::with_capacity(edits.len());
+                let mut delta = 0isize;
+                for (_, removed, inserted) in edits {
+                    shift.push(delta);
+                    delta += inserted.len() as isize - removed.len() as isize;
+                }
+                for ((at, removed, inserted), d) in edits.iter().zip(shift).rev() {
+                    let at = usize::try_from(*at as isize + d).expect("in text");
+                    self.primitive(at, at + inserted.len(), removed);
+                }
+            }
+        }
+    }
+
+    /// Redo one step; a batch maps as the original batch did (last edit first).
+    fn redo_step(&mut self, step: &Step) {
+        match step {
+            Step::Op(op) => {
+                self.primitive(op.at, op.at + op.removed.len(), &op.inserted);
+            }
+            Step::Batch(edits) => {
+                for (at, removed, inserted) in edits.iter().rev() {
+                    self.primitive(*at, at + removed.len(), inserted);
+                }
+            }
+        }
     }
 
     fn insert(&mut self, at: usize, text: &str) {
@@ -500,22 +574,22 @@ impl Model {
     }
 
     fn undo(&mut self) -> bool {
-        let Some(op) = self.undo.pop() else {
+        let Some(step) = self.undo.pop() else {
             return false;
         };
         self.typing_open = false;
-        self.primitive(op.at, op.at + op.inserted.len(), &op.removed);
-        self.redo.push(op);
+        self.undo_step(&step);
+        self.redo.push(step);
         true
     }
 
     fn redo(&mut self) -> bool {
-        let Some(op) = self.redo.pop() else {
+        let Some(step) = self.redo.pop() else {
             return false;
         };
         self.typing_open = false;
-        self.primitive(op.at, op.at + op.removed.len(), &op.inserted);
-        self.undo.push(op);
+        self.redo_step(&step);
+        self.undo.push(step);
         true
     }
 
@@ -704,7 +778,38 @@ fn random_command(
                 }
             }
         }
-        72..=89 => {
+        86..=89 => {
+            // Ruling w2: eol.normalize as one batch; nothing at all if no break differs.
+            let to = *rng.pick(&[Some("lf"), Some("crlf"), Some("cr"), None]);
+            let target = to.unwrap_or_else(|| naive_dominant(naive_counts(&m.string())));
+            let changed = if target == "none" {
+                0
+            } else {
+                m.normalize(target)
+            };
+            let after = naive_counts(&m.string());
+            let kinds = [after.0, after.1, after.2]
+                .iter()
+                .filter(|&&n| n > 0)
+                .count();
+            let params = match to {
+                Some(t) => json!({"doc": 1, "to": t}),
+                None => json!({"doc": 1}),
+            };
+            reqs.push(
+                "eol.normalize",
+                params,
+                Expect::Result(json!({
+                    "changed": changed,
+                    "len_chars": m.len(),
+                    "line_ending": naive_dominant(after),
+                    "mixed_line_endings": kinds > 1,
+                })),
+            );
+            // A one-char insert may follow: it joins the group only if nothing changed.
+            *last_typed = typed;
+        }
+        72..=85 => {
             let by = *rng.pick(&["char", "word", "line"]);
             let forward = rng.chance(50);
             let extend = rng.below(3);
@@ -1475,6 +1580,133 @@ fn eol_normalize_is_one_undo_step() {
     r.push("doc.undo", json!({"doc": doc}), Expect::AnyOk);
     r.push("doc.save", json!({"doc": doc}), Expect::AnyOk);
     checks.push(("keep.txt".to_owned(), mixed.to_owned()));
+
+    // Rulings w1/w2: the selection maps through eol.normalize as through one batch (last edit
+    // first), through its undo by the inverse edits (last first) and through its redo as the
+    // batch did. "a\r\nb\nc\rd": every valid position as the anchor, its mirror as the head.
+    let example = "a\r\nb\nc\rd";
+    let valid = [0usize, 1, 3, 4, 5, 6, 7, 8];
+    for to in ["lf", "crlf", "cr"] {
+        for (i, &anchor) in valid.iter().enumerate() {
+            let head = valid[valid.len() - 1 - i];
+            doc += 1;
+            let name = format!("sel-{to}-{anchor}.txt");
+            std::fs::write(root.join(&name), example).expect("write file");
+            let mut m = Model::new(example);
+            m.anchor = anchor;
+            m.head = head;
+            r.push("doc.open", json!({"path": name}), Expect::AnyOk);
+            r.push(
+                "cursor.set",
+                json!({"doc": doc, "anchor": anchor, "head": head}),
+                Expect::Result(m.cursor(doc)),
+            );
+            let changed = m.normalize(to);
+            r.push(
+                "eol.normalize",
+                json!({"doc": doc, "to": to}),
+                Expect::Result(json!({"changed": changed, "len_chars": m.len(),
+                    "line_ending": to, "mixed_line_endings": false})),
+            );
+            r.push(
+                "cursor.get",
+                json!({"doc": doc}),
+                Expect::Result(m.cursor(doc)),
+            );
+            assert!(m.undo());
+            r.push("doc.undo", json!({"doc": doc}), Expect::AnyOk);
+            r.push(
+                "cursor.get",
+                json!({"doc": doc}),
+                Expect::Result(m.cursor(doc)),
+            );
+            assert!(m.redo());
+            r.push("doc.redo", json!({"doc": doc}), Expect::AnyOk);
+            r.push(
+                "cursor.get",
+                json!({"doc": doc}),
+                Expect::Result(m.cursor(doc)),
+            );
+        }
+    }
+    // The model's values for one case, spelled out: to LF, anchor 3 / head 5 (after the CRLF,
+    // before the CR) → 2 / 4; undo → 3 / 5 (each inverse edit maps its end to s + n).
+    doc += 1;
+    std::fs::write(root.join("sel-spelled.txt"), example).expect("write file");
+    r.push(
+        "doc.open",
+        json!({"path": "sel-spelled.txt"}),
+        Expect::AnyOk,
+    );
+    r.push(
+        "cursor.set",
+        json!({"doc": doc, "anchor": 3, "head": 5}),
+        cursor(doc, 3, 5, 2, 0),
+    );
+    r.push(
+        "eol.normalize",
+        json!({"doc": doc, "to": "lf"}),
+        Expect::AnyOk,
+    );
+    r.push("cursor.get", json!({"doc": doc}), cursor(doc, 2, 4, 2, 0));
+    r.push("doc.undo", json!({"doc": doc}), Expect::AnyOk);
+    r.push("cursor.get", json!({"doc": doc}), cursor(doc, 3, 5, 2, 0));
+
+    // Ruling w2: a normalize that rewrites nothing leaves an open typing group open ...
+    std::fs::write(root.join("lf.txt"), "a\nb").expect("write file");
+    doc += 1;
+    r.push("doc.open", json!({"path": "lf.txt"}), Expect::AnyOk);
+    r.push(
+        "doc.insert",
+        json!({"doc": doc, "offset": 0, "text": "x"}),
+        Expect::AnyOk,
+    );
+    r.push(
+        "eol.normalize",
+        json!({"doc": doc, "to": "lf"}),
+        Expect::Result(json!({"changed": 0, "len_chars": 4, "line_ending": "lf",
+            "mixed_line_endings": false})),
+    );
+    r.push(
+        "doc.insert",
+        json!({"doc": doc, "offset": 1, "text": "y"}),
+        Expect::AnyOk,
+    );
+    r.push(
+        "doc.undo",
+        json!({"doc": doc}),
+        Expect::Result(json!({"undone": true, "len_chars": 3, "dirty": false})),
+    );
+    r.push(
+        "doc.undo",
+        json!({"doc": doc}),
+        Expect::Result(json!({"undone": false, "len_chars": 3, "dirty": false})),
+    );
+    // ... and one that rewrites a break ends it and is never joined.
+    std::fs::write(root.join("crlf.txt"), "a\r\nb").expect("write file");
+    doc += 1;
+    r.push("doc.open", json!({"path": "crlf.txt"}), Expect::AnyOk);
+    r.push(
+        "doc.insert",
+        json!({"doc": doc, "offset": 0, "text": "x"}),
+        Expect::AnyOk,
+    );
+    r.push(
+        "eol.normalize",
+        json!({"doc": doc, "to": "lf"}),
+        Expect::Result(json!({"changed": 1, "len_chars": 4, "line_ending": "lf",
+            "mixed_line_endings": false})),
+    );
+    r.push(
+        "doc.insert",
+        json!({"doc": doc, "offset": 1, "text": "y"}),
+        Expect::AnyOk,
+    );
+    let text_is = |t: &str| Expect::Result(json!({"text": t, "len_chars": t.chars().count()}));
+    for want in ["xa\nb", "xa\r\nb", "a\r\nb"] {
+        r.push("doc.undo", json!({"doc": doc}), Expect::AnyOk);
+        r.push("doc.text", json!({"doc": doc}), text_is(want));
+    }
     r.run_script(&work, &root, "eol-undo");
     for (name, want) in checks {
         let got = std::fs::read(root.join(&name)).expect("read saved file");
