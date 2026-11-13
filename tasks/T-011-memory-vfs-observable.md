@@ -219,6 +219,26 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   as given (like `<reason>`, a placeholder); the acceptance tests pin that reading.
   QUESTION: "the same for `--memory`" implemented as ``options `--memory` and `--memory-seed`
   cannot be combined``; tests assert only both option names and "cannot be combined".
+- 2026-11-13T13:35Z · R-121 · review r1 request-changes, rulings u1–u5 (D-067) · did: test
+  commits on `task/T-011-tests`, each saying what the ruling requires:
+  u1 `9645f083cb0ebd7ab30dcfdd0e0128b6b27f6d14` (13:28:44Z; `ac4_valid…` now seeds `c/x`,
+  `c/y`, `dx/y`, `d` and reads `d` and `dx/y` back; the old manifest had no file `d`);
+  u5 `1d728f5c410f997f7d8ef876b46748e811f48d23` (13:30:11Z; generator 1–5 files incl. the
+  undecodable one, asserts `1..=5`; second session runs a read-only script and asserts the
+  manifest's texts); u3 `905bcb47d3803be5cf374374c2b0f94e753c21be` (13:30:24Z;
+  `ac4_exec_reports_invalid_params_json_before_the_manifest`); u2
+  `30faadd33f09a0da9702f54e7a4a9b77cb3facbe` (13:30:40Z; `ac4_repeated_json_keys_are_refused`).
+  All new/changed tests fail on base by assertion (unknown option); in a throwaway merge with
+  the pre-u2 code only the u2 test failed. Reviewer's M1 (string-prefix check,
+  `starts_with(p)`) re-seeded: killed by `ac4_valid_manifest_edge_cases_are_accepted`;
+  reverted. Then on `task/T-011`: `2627f4024191c3d51e608abf26a0b6e6464fd496` (13:31:41Z):
+  u2 implemented as a key scan over the already-validated JSON (keys unescaped, compared per
+  object; no new dependency), unit cases added; unit test u1 corrected (`d` + `dx/y`); doc
+  states u1, u2 and u3. u4: nothing. Throwaway merge of the tests branch: 11/11 acceptance,
+  3/3 guards pass (branch deleted). · gate attempts: 1 (last: green, 11 steps, test 543
+  passed; fuzz, budgets EMPTY). The gate ran the OLD joined copy of the acceptance tests on
+  this branch; the four new/changed tests run only after the director's re-join. · not run:
+  gate on the re-joined branch · missing context: none · next: director re-join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
