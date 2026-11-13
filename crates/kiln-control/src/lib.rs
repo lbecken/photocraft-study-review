@@ -1039,6 +1039,56 @@ mod tests {
         assert_eq!(v["error"]["message"], "unknown command `no.such`");
     }
 
+    /// A command that always panics (registered only by the test below).
+    struct Boom;
+
+    impl kiln_commands::Command for Boom {
+        const NAME: &'static str = "test.boom";
+        const DOC: &'static str = "Panics (a test of the host's panic path).";
+        type Params = Value;
+        type Output = Value;
+        const MUTATING: bool = false;
+
+        fn examples() -> Vec<kiln_commands::Example> {
+            vec![kiln_commands::Example {
+                description: "never run",
+                initial_text: "",
+                files: vec![],
+                setup: vec![],
+                params: json!({}),
+                result: json!({}),
+            }]
+        }
+
+        fn run(_: &mut Context, _: Value) -> Result<Value, CommandError> {
+            panic!("boom on purpose");
+        }
+    }
+
+    /// D-051 r2: the host catches a command's panic, reports it as `internal`/`panic` with
+    /// the fixed message, and answers the next request normally.
+    #[test]
+    fn a_panicking_command_is_internal_panic_and_the_host_continues() {
+        let mut registry = standard_registry().unwrap();
+        registry.register::<Boom>().unwrap();
+        let mut h = Host {
+            registry,
+            ctx: Context::with_text("ab"),
+        };
+        let v = call(&mut h, r#"{"id":7,"command":"test.boom","params":{}}"#);
+        assert_eq!(
+            v,
+            json!({"error": {"code": "internal", "kind": "panic",
+                "message": "command `test.boom` panicked"}, "id": 7, "ok": false})
+        );
+        let v = call(&mut h, r#"{"id":8,"command":"buffer.text"}"#);
+        assert_eq!(
+            v,
+            json!({"id": 8, "ok": true, "result": {"len_chars": 2, "text": "ab"}})
+        );
+        assert_eq!(h.log().len(), 1, "only the successful request is logged");
+    }
+
     #[test]
     fn command_error_json_has_kind_and_caps() {
         let e = CommandError::rejected(
