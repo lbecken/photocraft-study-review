@@ -300,3 +300,4 @@
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:46:10Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:46:10Z","from":"reviewed","to":"queued"}
 {"kind":"transition","task":"T-011","iteration":1,"at":"2026-11-13T13:49:29Z","from":"queued","to":"merged"}
+{"kind":"run","task":"T-011","iteration":1,"run":"R-123","role":"reviewer","tier":"medium","started_at":"2026-11-13T13:42:30Z","ended_at":"2026-11-13T13:49:57Z","wall_s":213,"tokens":24557,"tool_calls":11,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"round 2 (delta, final) on d0f9416: approve; r1 items resolved; delta mutants 10 introduced / 10 killed (8 by acceptance) / 0 survived; the four test commits precede the implementation commit. The run ended 2026-11-13T13:46:02Z; it is booked after the merge transition, so ended_at is the booking time and wall_s is the harness figure"}
