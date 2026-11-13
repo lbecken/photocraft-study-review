@@ -263,4 +263,12 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   - 1 nit.
 
   `join --revert-check` gave 6/6 fails. It sees only the kiln-cli target, because `xtask/src/join.rs` merges same-stem targets; this is outside the task (Follow-ups). · gate attempts: 0 (relied on the join record; ran the affected targets per mutant) · not run: the full `cargo xtask ci`; anchors through the CLI (not exposed) · missing context: none · next: implementer fixes findings 1–3; the director rules on 4–6 and the xtask duplicate-stem defect.
+- 2026-11-13T17:39Z · R-149 · tests_joined · did: round-2 (final) delta review of `f8d2abb887df18c5971acb9edba52650b44c1dc7` (reviews/T-018-r2.md). Verdict: request-changes.
+  - x1, x3, x4, x5 and x6 are confirmed. `null` is refused for `head`, `to` and `extend`, and the schemas are bare types.
+  - The exhaustive `eol.md` check (19,683 cases) found 0 cases outside the documented exception.
+  - 1 defect: `eol.md:53-54` says the position ends "before the lone CR's new LF". In runs of three or more `\r` it cascades to the first `\r` of the run (142 of 547 cases; `x\r\r\r\ry`, caret 4 → 1).
+  - Mutants: 4 introduced, 1 equivalent, 3 killed by acceptance tests.
+  - The revert check saw both targets: 6 tests ran and all 6 failed; the `kiln-text` target did not compile (`mixed`).
+
+  · gate attempts: 0 · not run: the full `cargo xtask ci` · missing context: none · next: the implementer corrects the wording in `eol.md`; round 3 confirms it.
 <!-- end reviewer log -->
