@@ -2,26 +2,23 @@
 id: T-021
 title: "Search an open document by literal or regex, case-sensitive or not, optionally whole-word, and replace one or all matches as one undo step with capture groups"
 tier: medium            # ADR-0002 default: in-memory behaviour; adds public API to kiln-search (not a CHARTER §3 contract, no dependency); the regex dependency was added by T-017
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: [search.literal, search.regex, search.whole-word, search.replace]
-depends_on: [T-015, T-017, T-018, T-032]   # all merged (spec check R-158 against main 1dc59d0): module slot; Regex contract; apply_edits; invalid_pattern
+depends_on: [T-015, T-017, T-018, T-032]   # all merged (spec check R-158 against main 1dc59d0; R-170 at e72ef59): module slot; Regex contract; apply_edits; invalid_pattern
 touches:
   - crates/kiln-search/src/lib.rs         # re-exports; the crate doc's "Literal search … come with T-021" line
   - crates/kiln-search/src/regex.rs       # R-127: additive only, `Regex::for_each_match` (D-070 s4) and private helpers; T-017's public items unchanged
   - crates/kiln-search/src/query.rs       # new: Query, literal/whole-word matching, replacement planning
   - crates/kiln-search/tests/query.rs     # implementer's own integration tests
-  - crates/kiln-search/tests/acceptance_t021_search.rs  # implementer (odd arm), on task/T-021-tests: the Rust-API parts of AC-7 and AC-10
+  - crates/kiln-search/tests/acceptance_t021_search.rs  # implementer (odd arm), on task/T-021-tests: AC-7b, AC-10 (Rust API)
   - crates/kiln-commands/src/search.rs    # search.* (slot from T-015); QueryError → RejectReason mapped here
-  - apps/kiln-cli/tests/acceptance_t021_cli.rs          # implementer (odd arm), on task/T-021-tests: AC-1 to AC-9 through kiln-cli
+  - apps/kiln-cli/tests/acceptance_t021_cli.rs          # implementer (odd arm), on task/T-021-tests: AC-1 to AC-9, AC-7a, AC-11 through kiln-cli
   - docs/protocol/search.md               # new
   - docs/protocol/cursor.md               # the list of selection-moving commands (:8–9) and the "(`eol.normalize`)" example (:80) only, to name `search.replace` (R-158)
-  - scorecard/items/search.literal.toml   # director at join (METHODOLOGY §6): this task's test names
-  - scorecard/items/search.regex.toml     # director at join
-  - scorecard/items/search.whole-word.toml  # director at join
-  - scorecard/items/search.replace.toml   # director at join
   # docs/commands.json changes: generated (`cargo xtask schema --write`); docs/scorecard.md: generated
-  # NOT touched (R-158): crates/kiln-commands/src/reason.rs (pending Q-3), any Cargo.toml or Cargo.lock, docs/control-protocol.md
+  # scorecard/items/*.toml: NOT a builder path; the director ties the tests to the items at the join (METHODOLOGY §6)
+  # NOT touched: crates/kiln-commands/src/reason.rs (D-101 Q-3), any Cargo.toml or Cargo.lock, docs/control-protocol.md
 budget_tokens: 700000   # medium (v1.2, D-091 change 3)
 iteration: 2
 found_by: planner
@@ -37,8 +34,23 @@ not, and optionally restricted to whole words. `search.replace` replaces the fir
 after an offset, or all matches, as a single undoable step. In regex mode the replacement can
 use capture groups. `kiln-search` gains the `Query` type that find-in-files (T-022) reuses.
 
-No gate path. Arm: **odd**. The implementer writes the acceptance tests on `task/T-021-tests`
-first, through the public interface, then the code (METHODOLOGY §6).
+No gate path.
+
+Acceptance-test protocol (medium tier, odd task number: METHODOLOGY §4, §6 "Experiment arm").
+There is no test author. The implementer, in one run:
+1. writes the acceptance tests first, through the public interface, in exactly two files:
+   `apps/kiln-cli/tests/acceptance_t021_cli.rs` (everything observable through `kiln-cli`) and
+   `crates/kiln-search/tests/acceptance_t021_search.rs` (the Rust-API criteria AC-7b and AC-10);
+2. commits them on `task/T-021-tests`, from the implementer's base, before any implementation
+   code is written or committed, so the order is visible in the history;
+3. shows each acceptance test failing on the base (the test name, the command it ran and the
+   failure, by assertion or, for AC-7b and AC-10, by compilation), and records that in its log;
+4. then writes the code on `task/T-021`, which adds no `acceptance_t*` file and nothing under
+   `scorecard/` (METHODOLOGY §5.6);
+5. lists in its log, per scorecard item, the tests it wrote; the director ties them to the items
+   at the join (the table "Scorecard items and intended test names").
+The reviewer's mutation spot-check (≥ 10 seeded bugs) is the only independent check of these
+tests. No guard file is required; none is planned.
 
 Reading list (all on main now): `crates/kiln-search/src/regex.rs` module docs (Iteration,
 Expansion, Limits) and `tasks/T-017-*.md` Semantics and rulings s1, s2, s4, s8; the cost of
@@ -146,7 +158,7 @@ Optional params, when present, must not be `null` (`invalid_params`/`schema`), a
 | Command | Mutating | Extra params | Result |
 |---|---|---|---|
 | `search.find` | no | `limit?` integer 1..=100000 (default 10000) | `{matches:[{start,end}], total, truncated}` |
-| `search.replace` | yes | `replacement` string; `all?` bool (default false); `from?` offset (default 0); `limit?` integer 1..=100000 (default 10000), PENDING Q-2 | `{replaced, len_chars, ranges:[{start,end}], truncated}`, `ranges` and `truncated` PENDING Q-2 |
+| `search.replace` | yes | `replacement` string; `all?` bool (default false); `from?` offset (default 0); `limit?` integer 1..=100000 (default 10000; D-101 Q-2) | `{replaced, len_chars, ranges:[{start,end}], truncated}` |
 
 - `search.find`: `CompiledQuery::find(text, limit)`. `total` is the exact number of all
   matches (D-071 c1); `matches` holds the first `limit`; `truncated = total > limit`.
@@ -158,9 +170,11 @@ Optional params, when present, must not be `null` (`invalid_params`/`schema`), a
   selection and the anchors move through each replacement by the mapping rule
   (`docs/protocol/cursor.md`), as for `eol.normalize`. With no match, `replaced: 0`
   and nothing changes: no undo step, the typing group is not ended.
-- `ranges` (PENDING Q-2, written for its recommendation (a)): the ranges of the inserted texts
-  in the new text, in order, for the first `limit` replacements; `truncated = replaced >
-  limit`. Every replacement is made whatever `limit` is; `limit` bounds only the reply.
+- `replaced` is the exact number of replacements made (the exact total of D-101 Q-2). `ranges`
+  (D-101 Q-2): the ranges of the inserted texts in the new text, in order, for the first
+  `limit` replacements; `truncated = replaced > limit`. Every replacement is made whatever
+  `limit` is; `limit` bounds only the reply. With `all: false` there is at most one range.
+  `limit: 0` or `100001` → `invalid_params`.
 - Refusals, after schema and `no_such_document` (Pinned (a)): `QueryError::Empty`, `TooLong`
   and `Pattern` → `rejected`/`invalid_pattern`. The message is `empty search pattern`, or
   `invalid pattern: the pattern has <chars> chars; the limit is 1000` (`TooLong`, both modes),
@@ -168,8 +182,9 @@ Optional params, when present, must not be `null` (`invalid_params`/`schema`), a
   more than 100 capture groups (T-017 ruling s1) that is exactly
   `invalid pattern: the pattern has more than 100 capture groups`; 100 groups are accepted.
   Other `PatternError` messages are the regex crate's (T-017 s2) and are not pinned here; the
-  protocol cuts every message to 200 chars (`docs/control-protocol.md`, Response). Then
-  `from > len_chars` → `out_of_range`; `from` inside a CRLF is not refused. All kinds exist
+  protocol cuts every message to 200 chars (`docs/control-protocol.md`, Response). Then, with
+  `all: false` only (with `all: true`, `from` is ignored and not checked), `from > len_chars`
+  → `out_of_range`; `from` inside a CRLF is not refused. All kinds exist
   (T-032's reason table); no new kind.
 - Replacement naming a group that does not exist (regex mode; T-017 `TemplateError`): whether a
   template is an error depends only on the pattern and the template, so `search.replace`
@@ -179,9 +194,9 @@ Optional params, when present, must not be `null` (`invalid_params`/`schema`), a
 - Bounds (D-070 s4/s5, D-071). Memory: `search.find` holds at most `limit` ranges plus one match's
   slots; `search.replace` holds one match's slots (`all: false`) or one range and one
   replacement string per match (`all: true`), never the group slots of more than the current
-  match, and its reply holds at most `limit` ranges (PENDING Q-2). Time: no bound (PENDING Q-1,
-  written for its recommendation (a)); see Pinned (e) for what was measured. No wall clock is
-  used (CHARTER §3 decision 4).
+  match, and its reply holds at most `limit` ranges (D-101 Q-2). Time: no bound is promised
+  (D-101 Q-1); the pattern and group caps do not bound search time (Pinned (e), (i) S4). No
+  wall clock is used (CHARTER §3 decision 4).
 
 `docs/protocol/search.md` documents the commands and all rules above, with the examples of
 Pinned (g), T-017's expansion rule (a reference to a group that does not exist is refused,
@@ -200,19 +215,19 @@ word for word, the sentences of Pinned (i).
   (D-014).
 - (e) Threat model: n/a (no security boundary). Resource bounds come from this task, not from
   T-017: the 100-group cap bounds only the engine's working memory (D-070 s4). Memory is
-  bounded by never keeping more than one match's slots (Interface, "Bounds"). Time (PENDING
-  Q-1): the spec check (R-158) measured that the 1,000-char cap does **not** bound search
-  time, because a counted repetition is short to write and large to run; the figures are in
-  "Spec check R-158" below. Under Q-1's recommendation the task promises no time bound,
-  documents the measured figures (Pinned (i), S4) and has no time-bound acceptance test; the
-  earlier instruction that the reviewer reports "above about 5 s" as a finding is withdrawn
-  (every probe at or under the cap that matters exceeds it). If Q-1 rules otherwise, this
-  line, AC-11 and S4 are rewritten with the ruling, and any time-bound test uses a text
-  longer than the pattern's minimum match length (D-077 c7).
-- (f) Snapshots: none. No test of this task pins a whole document, the list of commands, the
-  `error_kinds` list or a `when` text (T-038 changes them; D-091 change 6). The messages pinned
-  in Interface are this task's own; no drafted task changes them (T-022 reuses them, T-038
-  leaves messages alone, its "Out of scope").
+  bounded by never keeping more than one match's slots and at most `limit` ranges in a reply
+  (Interface, "Bounds"). Time (D-101 Q-1): no bound is promised. The 1,000-char and 100-group
+  caps stay and bound pattern text and capture slots only; the spec check R-158 showed
+  (debug, throwaway stub; evidence for this spec only, not for any document) that they do not
+  bound search time. No test asserts a time; each timeout in a test is a hang detector and is
+  labelled so in the test. A real bound (refusing large counted repeats, a whole-match-only
+  search) is a follow-up task the director files; this task does not attempt it. The earlier
+  instruction that the reviewer reports "above about 5 s" as a finding is withdrawn.
+- (f) Snapshots: none. No test of this task pins a message text, a whole document, the list of
+  commands, `error_kinds` or a `when` text (golden rule 9; D-091 change 6): the tests assert
+  `code`/`kind`, results and texts of documents under edit, never `error.message`. The
+  messages in Interface are the implementation's wording; the reviewer checks them on the diff
+  and against the binary.
 - (g) Worked examples (executed against a naive Python model; regex rows against regex 1.13.1;
   the `search.find` results of the third and fourth rows re-run by the spec check R-158 on a
   throwaway stub over merged `Regex::find_all`: `baaab`/`a*` → `0..0, 1..4, 5..5`,
@@ -232,29 +247,42 @@ word for word, the sentences of Pinned (i).
 - (h) Evaluator calls: `kiln-cli run` with `doc.open`, `search.find` (each option combination),
   `search.replace`, `doc.undo`, `doc.redo`, `doc.text`, `doc.info` (`can_undo`), `cursor.get`.
 - (i) Guarantee and limit sentences for `docs/protocol/search.md`, to be copied (any line
-  wrapping; `<N>` is filled in by the implementer from its own measurement, ruling c2). No
-  other sentence stating a guarantee or a limit is added; an implementer who needs one
-  records its evidence in its log (D-091 change 5).
+  wrapping). A `<…>` slot is a figure the implementer measures itself (D-101 Q-1): through
+  `kiln-cli` on a **release** build of its worktree (`cargo build --release -p kiln-cli`, its own
+  `target/`), each run under `timeout`, with the exact command and its output recorded in its
+  log; a run that reaches its timeout is written as "more than <timeout> s". The spec check's
+  debug-stub figures (below, "Spec check R-158") are evidence for this spec only and are never
+  copied into a document. No other sentence stating a guarantee or a limit is added; an
+  implementer who needs one records its evidence in its log (D-091 change 5).
   - S1: "`search.find` reports `total`, the exact number of matches, and lists at most `limit`
     of them; it keeps at most `limit` ranges and the capture groups of one match at a time,
-    however many matches there are." Evidence: AC-6, AC-8 (find half; R-158 stub: 16,548 KiB
-    peak under a 512 MiB cap, while `find_all` aborts).
+    however many matches there are." Evidence: AC-6, AC-8 (find half). No figure.
   - S2: "`search.replace` with `all: true` replaces every match, however many, as one undo
     step: one `doc.undo` restores the text and one `doc.redo` re-applies it. It keeps one
     range and one replacement text per match, never the capture groups of more than one
-    match: about <N> bytes per match, measured on 400,001 matches of 100 empty groups." Evidence:
-    AC-4, AC-8 (replace half), the implementer's measurement (c2); R-158 stub figure for
-    reference: 104,508 KiB peak for the whole AC-8 script without reply ranges.
-  - S3 (PENDING Q-2 (a)): "The reply of `search.replace` lists the ranges of the first `limit`
-    replacements (default 10,000) and sets `truncated` when there were more; every match is
-    replaced whatever `limit` is." Evidence: AC-8, AC-12.
-  - S4 (PENDING Q-1 (a)): "A pattern may have at most 1,000 chars and, in regex mode, at most
-    100 capture groups. These limits do not bound the time a search takes: a counted
-    repetition is short to write but large to run. Measured in a debug build on texts of
-    1,000,000 chars, `[ab]{5000}[^ab]` (15 chars, no match) took 544 s, `[ab]{3000}` (10 chars,
-    333 matches) 172 s and `([ab]*)` repeated 100 times (800 chars, one match) 38 s. Kiln sets
-    no time limit on a search." Evidence: AC-2, AC-9 (limits); "Spec check R-158", table T1
-    (times).
+    match: about <B> bytes per match, measured with a release build on 400,001 matches of 100
+    empty groups." Evidence: AC-4, AC-8 (replace half). `<B>` (ruling c2): `(P1 − P0) × 1024 /
+    400001`, where P1 is the `Maximum resident set size` (KiB) of
+    `/usr/bin/time -v timeout 600 target/release/kiln-cli run s.jsonl --root <dir>` on AC-8's
+    file with the script `doc.open`, then `search.replace {query:"()"×100, regex:true,
+    replacement:"-", all:true}`, and P0 that of the same command with the `doc.open` line only;
+    rounded to two significant figures.
+  - S3: "The reply of `search.replace` lists the ranges of the first `limit` replacements
+    (default 10,000) and sets `truncated` when there were more; `replaced` is the exact number
+    of replacements, and every match is replaced whatever `limit` is." Evidence: AC-8, AC-11.
+  - S4: "A pattern may have at most 1,000 chars and, in regex mode, at most 100 capture groups.
+    These limits do not bound the time a search takes: a counted repetition is short to write
+    but can be slow to run. Measured with a release build on texts of 1,000,000 chars,
+    `[ab]{5000}[^ab]` (15 chars, no match) took <T1> s, `[ab]{3000}` (10 chars, 333 matches)
+    <T2> s and `([ab]*)` repeated 100 times (800 chars, one match) <T3> s. Kiln sets no time
+    limit on a search." Evidence: AC-2, AC-9 (limits); the implementer's release measurement
+    (times): for each pattern, a file holding `ab` repeated 500,000 times, the script
+    `doc.open` then `search.find {query:<pattern>, regex:true, limit:1}`, run as
+    `/usr/bin/time -f '%e s' timeout 1800 target/release/kiln-cli run s.jsonl --root <dir>`;
+    the figure is the wall time minus that of the `doc.open`-only script, to two significant
+    figures. If a measured time is under 1 s, the implementer writes the measured figures
+    anyway and logs a `QUESTION:` (the sentence's "can be slow" then needs the director's
+    wording).
   - S5: "With no match, `search.replace` changes nothing: it adds no undo step and an open
     typing group stays open." Evidence: AC-4.
   - S6: "Matches never overlap and are found from the start of the text; `from` applies only
@@ -268,82 +296,94 @@ word for word, the sentences of Pinned (i).
     codes (D-091 change 18 does not apply).
 
 ## Acceptance criteria
-All through `kiln-cli run` or `kiln-cli control` (file `apps/kiln-cli/tests/acceptance_t021_cli.rs`),
-except the Rust-API parts of AC-7 and AC-10 (file `crates/kiln-search/tests/acceptance_t021_search.rs`:
-`kiln-cli` has no `kiln-search` dependency and adding one is a dependency change). Send many
-requests per process (one `control` session or one `run` script per batch), not one process
-per random case.
-- AC-1 (`search.literal`): for ≥ 5,000 fixed-seed random (text, pattern) pairs over `a b A B _ 0
-  é É σ Σ ς ſ s S K k \r \n` and space, `search.find` (literal, both case settings) equals a
-  naive scan. The naive scan compares chars with T-017's test predicate ("equal, or equal
-  lowercase, or equal uppercase") when case-insensitive. Oracle: naive model.
-- AC-2 (`search.regex`): for ≥ 5,000 random pairs in T-017's regex subset, generated with
-  T-017's restriction (no `*`, `+`, `?` or lazy form on a sub-pattern that can match the empty
-  string; T-017 AC-1 says why), `search.find` equals a naive backtracking model, written in the
-  test, of T-017's iteration, anchor and capture rules. `(`, `[a-`,
-  `a{99999999}` and the empty pattern give `rejected`/`invalid_pattern`, and the session is
-  unchanged. A pattern of 101 groups `(a)(a)…(a)` → `rejected`/`invalid_pattern` with the exact
-  message of Interface; 100 groups → `ok`. Oracle: naive model + exact value.
-- AC-3 (`search.whole-word`): for the AC-1 and AC-2 inputs, `whole_word: true` equals the naive
-  filter of the non-whole-word result. The worked examples hold. Oracle: naive model.
-- AC-4 (`search.replace`): for random texts, queries and replacement templates (regex mode:
-  T-017's AC-2 template alphabet and its expansion rule), `all: true` gives `doc.text` equal to
-  the naive replacement, and `replaced` equals the match count. A template that names a group
-  that does not exist is refused as in Interface, and the session is unchanged.
-  `all: false, from: f` replaces exactly the first match with `start ≥ f`. One `doc.undo`
-  restores the original text exactly, and `doc.redo` re-applies. `replaced: 0` leaves
-  `can_undo` unchanged and an open typing group open (a one-char `doc.insert`, then a
+Files: `apps/kiln-cli/tests/acceptance_t021_cli.rs` (`cli` below) drives the built binary
+(`env!("CARGO_BIN_EXE_kiln-cli")`) through `kiln-cli run` or `kiln-cli control`;
+`crates/kiln-search/tests/acceptance_t021_search.rs` (`search` below) holds the Rust-API
+criteria (`kiln-cli` has no `kiln-search` dependency, and adding one is a dependency change).
+Send many requests per process (one `control` session or one `run` script per batch), not one
+process per random case. Every spawned process has a timeout, which is a hang detector, labelled
+so in the test, never a time assertion (D-101 Q-1). No test reads `error.message`, a whole
+document, the command list or `error_kinds` (Pinned (f)). "Base" is the implementer's base
+commit: no `search.*` command is registered there, so every `search.*` request answers
+`unknown_command`, and `Regex::for_each_match` does not exist.
+- AC-1 (`search.literal`; `cli`; **fails on base**, by assertion): for ≥ 5,000 fixed-seed random
+  (text, pattern) pairs over `a b A B _ 0 é É σ Σ ς ſ s S K k \r \n` and space, `search.find`
+  (literal, both case settings) equals a naive scan. The naive scan compares chars with
+  T-017's test predicate ("equal, or equal lowercase, or equal uppercase") when
+  case-insensitive. Oracle: naive model.
+- AC-2 (`search.regex`; `cli`; **fails on base**, by assertion): for ≥ 5,000 random pairs in
+  T-017's regex subset, generated with T-017's restriction (no `*`, `+`, `?` or lazy form on a
+  sub-pattern that can match the empty string; T-017 AC-1 says why), `search.find` equals a
+  naive backtracking model, written in the test, of T-017's iteration, anchor and capture
+  rules. `(`, `[a-`, `a{99999999}` and the empty pattern give `rejected`/`invalid_pattern`, and
+  the session is unchanged (`doc.text`, `doc.info`). A pattern of 101 groups `(a)(a)…(a)` →
+  `rejected`/`invalid_pattern`; 100 groups → `ok` with 100-group matches. Oracle: naive model +
+  exact kind.
+- AC-3 (`search.whole-word`; `cli`; **fails on base**, by assertion): for the AC-1 and AC-2
+  inputs, `whole_word: true` equals the naive filter of the non-whole-word result. Oracle:
+  naive model.
+- AC-4 (`search.replace`; `cli`; **fails on base**, by assertion): for random texts, queries and
+  replacement templates (regex mode: T-017's AC-2 template alphabet and its expansion rule),
+  `all: true` gives `doc.text` equal to the naive replacement, and `replaced` equals the match
+  count. A template that names a group that does not exist gives `rejected`/`invalid_pattern`,
+  also when nothing matches, and the session is unchanged. `all: false, from: f` replaces
+  exactly the first match with `start ≥ f`; with `all: false`, `from > len_chars` gives
+  `rejected`/`out_of_range`, and with `all: true` such a `from` is ignored.
+  One `doc.undo` restores the original text exactly, and `doc.redo` re-applies. `replaced: 0`
+  leaves `can_undo` unchanged and an open typing group open (a one-char `doc.insert`, then a
   `search.replace` with no match, then a one-char `doc.insert` right after the first: one
   `doc.undo` removes both chars). After a replacement with a selection set by `cursor.set`,
   `cursor.get` equals a naive model of the mapping rule applied to the edits from the last to
   the first. Oracle: naive model + round trip.
-- AC-5 (worked examples): every example in Pinned (g) holds exactly. Oracle: exact value.
-- AC-6 (limit): a text with 20,001 matches and `limit: 10` gives 10 matches, `total: 20001`,
-  `truncated: true`. Oracle: exact value.
-- AC-7 (`search.replace`, bounded cost): a document of `ab` repeated 200,000 times (400,000
-  chars), regex `(a)b`, replacement `$1$1`, `all: true` → `replaced: 200000` and `doc.text`
-  equal to `aa` repeated 200,000 times, under a 20-second timeout on the whole `kiln-cli run`
-  (a hang-style bound, not a measurement: one walk from the text's start per reference is
-  about 8·10^10 char steps here, far beyond it; R-158's stub with a linear expansion ran this
-  script in 3.14 s debug, 86,396 KiB peak). And through the Rust API
-  (`acceptance_t021_search.rs`), `replace_all` equals `replacement_for` applied to each match
-  of `find_all` on the AC-4 inputs. Oracle: exact value + coarse timeout.
-- AC-8 (bounded memory): `kiln-cli run` is started through `sh -c 'ulimit -v 524288; exec <kiln-cli> run
-  s.jsonl --root <dir>'` (a 512 MiB address-space cap; Unix, D-014) under a 120-second timeout
-  (a hang bound; R-158 measured 21–26 s for this script in debug, too close to the 30 s first
-  drafted). The document is `x` repeated 400,000 times; the regex is `()` repeated 100 times
-  (100 empty groups, 200 chars). `search.find {limit:10}` → matches `0..0` … `9..9`, `total: 400001`,
-  `truncated: true`; `search.replace {replacement:"-", all:true}` → `replaced: 400001`,
-  `len_chars: 800001`, `truncated: true` and 10,000 `ranges` (PENDING Q-2); `doc.undo` restores
-  the text. Every line `ok`, exit 0. An implementation that keeps every match's slots needs
-  about 400,001 × 2.4 kB ≈ 0.96 GB and aborts under the cap (measured by R-158: "memory
-  allocation of 2424 bytes failed", no response line): the test detects it without using the
+- AC-5 (worked examples; `cli`; **fails on base**, by assertion): every example in Pinned (g)
+  holds exactly (results, texts, kinds). Oracle: exact value.
+- AC-6 (limit; `cli`; **fails on base**, by assertion): a text with 20,001 matches and
+  `limit: 10` gives 10 matches, `total: 20001`, `truncated: true`. Oracle: exact value.
+- AC-7a (`search.replace`, no quadratic walk; `cli`; **fails on base**, by assertion): a
+  document of `ab` repeated 200,000 times (400,000 chars), regex `(a)b`, replacement `$1$1`,
+  `all: true` → `replaced: 200000` and `doc.text` equal to `aa` repeated 200,000 times. The
+  whole `kiln-cli run` has a 120-second timeout, a hang detector: an expansion that walks
+  the text from its start per reference makes about 8·10^10 char steps here and never
+  finishes in it (arithmetic); the spec check's linear stub took about 3 s (debug, evidence
+  only). Oracle: exact value.
+- AC-7b (`search`; **fails on base**, by compilation: `kiln_search::Query` does not exist):
+  `replace_all` equals `replacement_for` applied to each match of `find_all` on the AC-4
+  inputs, and `find(text, limit)` (including `limit` 0) equals the first `limit` whole-match
+  ranges and the count of a `find_all`-based model with the whole-word filter. Oracle: model on
+  merged `find_all`.
+- AC-8 (bounded memory; `cli`; **fails on base**, by assertion): `kiln-cli run` is started
+  through `sh -c 'ulimit -v 524288; exec <kiln-cli> run s.jsonl --root <dir>'` (a 512 MiB
+  address-space cap; Unix, D-014) with a 120-second timeout, a hang detector. The document is
+  `x` repeated 400,000 times; the regex is `()` repeated 100 times (100 empty groups, 200 chars).
+  `search.find {limit:10}` → matches `0..0` … `9..9`, `total: 400001`, `truncated: true`;
+  `search.replace {replacement:"-", all:true}` → `replaced: 400001`, `len_chars: 800001`,
+  `truncated: true` and 10,000 `ranges` (the default `limit`); `doc.undo` restores the text.
+  Every line `ok`, exit 0. An implementation that keeps every match's slots needs about
+  400,001 × 2.4 kB ≈ 0.96 GB and aborts under the cap: the test detects it without using the
   memory. Oracle: exact value.
-- AC-9 (pattern cap): in both modes a 1,001-char pattern → `rejected`/`invalid_pattern` with
-  message `invalid pattern: the pattern has 1001 chars; the limit is 1000`; a 1,000-char
-  pattern (`a` repeated) is accepted. Oracle: exact value.
-- AC-10 (`for_each_match`, Rust API, `acceptance_t021_search.rs`): without a break it yields
-  exactly `find_all(text)` element by element on the AC-2 inputs; a break after k calls yields
-  its first k. Oracle: `find_all` (merged, T-017).
-- AC-11 (time): none under Q-1 (a) (Pinned (e)).
-- AC-12 (reply limit, PENDING Q-2 (a)): on AC-6's text, `search.replace {all:true, limit:10}` →
-  `replaced: 20001`, 10 `ranges`, `truncated: true`, and `doc.text` equals the naive
-  replace-all of every match. Oracle: naive model + exact value.
-
-Every AC except AC-10 is an **acceptance** test that fails on base by assertion (on base no
-`search.*` command exists, so every request is `unknown_command`); AC-10 fails on base by
-compilation (new API), which METHODOLOGY §6 accepts as weak evidence.
+- AC-9 (pattern cap; `cli`; **fails on base**, by assertion): in both modes a 1,001-char pattern
+  → `rejected`/`invalid_pattern`, and the session is unchanged; a 1,000-char pattern (`a`
+  repeated) → `ok`. Oracle: exact kind.
+- AC-10 (`for_each_match`; `search`; **fails on base**, by compilation: the method does not
+  exist, which METHODOLOGY §6 accepts as weak evidence, made up for by the mutation
+  spot-check): without a break it yields exactly `find_all(text)` element by element on the
+  AC-2 inputs; a break after k calls yields its first k. Oracle: merged `find_all` (T-017).
+- AC-11 (reply limit; `cli`; **fails on base**, by assertion): on AC-6's text,
+  `search.replace {all:true, limit:10}` → `replaced: 20001`, 10 `ranges` equal to the first 10
+  of the naive model, `truncated: true`, and `doc.text` equals the naive replace-all of every
+  match. Oracle: naive model + exact value.
+- No criterion asserts a time (D-101 Q-1).
 
 ## Scorecard items and intended test names
-| Item | Tests |
+For the director, who ties tests to items at the join (METHODOLOGY §6); the builders do not
+edit `scorecard/`. The implementer uses these names, or lists the names it used in its log.
+| Item | Intended tests (AC) |
 |---|---|
-| search.literal | `kiln_cli::acceptance_t021_cli::literal_find_matches_naive_scan` |
-| search.regex | `kiln_cli::acceptance_t021_cli::regex_find_matches_naive_backtracker`, `kiln_cli::acceptance_t021_cli::invalid_patterns_are_reported`, `kiln_cli::acceptance_t021_cli::pattern_length_is_capped` |
-| search.whole-word | `kiln_cli::acceptance_t021_cli::whole_word_filters_at_identifier_boundaries` |
-| search.replace | `kiln_cli::acceptance_t021_cli::replace_all_matches_naive_model_and_undoes_in_one_step`, `kiln_cli::acceptance_t021_cli::replace_one_from_offset`, `kiln_cli::acceptance_t021_cli::replace_all_is_linear`, `kiln_cli::acceptance_t021_cli::search_memory_is_bounded` |
-
-The implementer lists the tests it wrote in its log; the director ties them to the items at
-the join (METHODOLOGY §6, D-091 change 8).
+| search.literal | `kiln_cli::acceptance_t021_cli::literal_find_matches_naive_scan` (AC-1), `kiln_cli::acceptance_t021_cli::find_limit_counts_every_match` (AC-6) |
+| search.regex | `kiln_cli::acceptance_t021_cli::regex_find_matches_naive_backtracker` (AC-2), `kiln_cli::acceptance_t021_cli::invalid_patterns_are_reported` (AC-2), `kiln_cli::acceptance_t021_cli::pattern_length_is_capped` (AC-9) |
+| search.whole-word | `kiln_cli::acceptance_t021_cli::whole_word_filters_at_identifier_boundaries` (AC-3) |
+| search.replace | `kiln_cli::acceptance_t021_cli::replace_all_matches_naive_model_and_undoes_in_one_step` (AC-4), `kiln_cli::acceptance_t021_cli::replace_one_from_offset` (AC-4), `kiln_cli::acceptance_t021_cli::replace_all_is_linear` (AC-7a), `kiln_cli::acceptance_t021_cli::search_memory_is_bounded` (AC-8), `kiln_cli::acceptance_t021_cli::replace_reply_is_limited` (AC-11) |
+| (all four; not tied to an item) | `kiln_cli::acceptance_t021_cli::worked_examples_hold` (AC-5), `kiln_search::acceptance_t021_search::replace_all_equals_per_match_expansion` (AC-7b), `kiln_search::acceptance_t021_search::for_each_match_equals_find_all` (AC-10) |
 
 ## Out of scope and implementer notes
 - Search across files (T-022); find-next with selection or wrap-around (UI, iteration 2);
@@ -351,14 +391,18 @@ the join (METHODOLOGY §6, D-091 change 8).
 - No dependency change: no `Cargo.toml` dependency table or `Cargo.lock` edit (that would make
   the task high; the queue refuses it as `dependencies`). `kiln-search` does not gain
   `kiln-text`; `query.rs` works on `&str`.
-- No new reason row and no `when` text change in `reason.rs` (PENDING Q-3); refusal
+- No new reason row and no `when` text change in `reason.rs` (D-101 Q-3). Known gap: the
+  published `when` text of `invalid_pattern` ("the search pattern is empty or is not a valid
+  regular expression") stays narrower than this task's refusals (a pattern over 1,000 chars, a
+  replacement template naming a missing group) until T-038 merges, whose list of `when` texts
+  gains it. The reviewer does not raise this gap as a finding against this task;
+  `docs/protocol/search.md` names every case that gives `invalid_pattern`. Refusal
   declarations per command are T-038's, which runs after this task (D-092).
-- Your own tests: `crates/kiln-search/tests/query.rs`, unit tests. Acceptance tests (odd arm)
-  go on `task/T-021-tests` in the two `acceptance_t021_*.rs` files of `touches`, committed and
-  failing on base before you write the code.
-- Debug-build cost of the heavy ACs measured by R-158 (stub): AC-8 21–26 s, AC-7 3 s. A
-  `search.find` with 100 groups costs about 8.5 s per 400,000 matches in debug (the capture
-  engine), so keep other large inputs small.
+- Your own tests: `crates/kiln-search/tests/query.rs`, unit tests. Acceptance tests: the
+  protocol in Goal.
+- For planning only (spec check R-158, debug throwaway stub; not for any document): AC-8's
+  script took 21–26 s and AC-7a's about 3 s; a `search.find` with 100 groups cost about 8.5 s
+  per 400,000 matches (the capture engine), so keep other large inputs small.
 
 ## Questions and rulings
 Director rulings on the planner's choices (2026-11-13, decision D-071; planner run R-127), made after reading the choices section, AC-8, AC-9 and the `replace_all` signature above, and CHARTER §3 decision 4:
@@ -372,8 +416,9 @@ Where a ruling differs from text above, the ruling governs; the planner removes 
 - Director (2026-11-13, D-044): a replacement template that fails to expand is refused as `invalid_pattern`, checked before any matching is done, as proposed.
 
 ### Spec check R-158 (planner, 2026-11-13, against main `1dc59d0`; measured on `512b5f3`, whose code differs from `1dc59d0` only in two `doc.rs` DOC strings and tests of T-039)
-Verdict: **not ready**; ready to dispatch once Q-1 to Q-3 are ruled and the spec follows the
-rulings (it is written for the recommendations, marked PENDING). The R-127 "Choices for the
+Verdict at R-158: **not ready** until Q-1 to Q-3 were ruled. They are ruled (D-101, below) and
+applied by R-170; the spec above reads as decided. The figures in this section come from a
+debug build of a throwaway stub and are evidence for this spec only (D-101 Q-1). The R-127 "Choices for the
 director" section was removed: c1–c3 above rule it, and the Interface carries the rulings.
 
 **How measured (VERIFIED, debug build, as the gate builds tests).** In a private clone of main
@@ -448,7 +493,7 @@ shown before the task is built; the stub is regex-only and expands only `-` and 
 3. The Rust-API parts of the ACs (AC-7's second half, the `for_each_match` tests) cannot live in
    `kiln-cli`'s tests: `apps/kiln-cli/Cargo.toml` has no `kiln-search` dependency, and adding a
    dev-dependency is a dependency change (high tier, refused by the queue). Moved to
-   `crates/kiln-search/tests/acceptance_t021_search.rs` (AC-7, AC-10).
+   `crates/kiln-search/tests/acceptance_t021_search.rs` (AC-7b, AC-10).
 4. Scorecard test names used the stem `acceptance_t021`; `touches` named no acceptance file.
    Now `acceptance_t021_cli.rs` / `acceptance_t021_search.rs`, names `kiln_cli::acceptance_t021_cli::…`.
 5. The `invalid_pattern` `when` text on main ("the search pattern is empty or is not a valid
@@ -468,9 +513,8 @@ shown before the task is built; the stub is regex-only and expands only `-` and 
    no CLI option or exit code changes; `docs/control-protocol.md` is not touched.
 9. `docs/commands.json` is a generated path: moved from `touches` to a comment, as T-038 and
    T-039 do, so it is not a declared overlap with T-019, T-020, T-022, T-023 (METHODOLOGY §5.2).
-   Scorecard item files are listed for the director's join edit.
 
-**Questions for the director (the spec is written for each recommendation, marked PENDING).**
+**Questions put to the director (ruled by D-101 as recommended; kept as the record).**
 - Q-1 (planner, R-158; amends c3/c7). The cap does not bound search time (T1). Options:
   (a) **promise no time bound, document it with the measured figures** (S4), keep the
   1,000-char and 100-group caps as limits on pattern text and slots, no time-bound AC — as
@@ -525,6 +569,7 @@ builder of the cap of three compiling at once (§5.4).
 - Q-1: (a). No time bound is promised. The caps of 1,000 pattern chars and 100 groups stay; they bound what they bound and the documents say that search time is not bounded by them. Every figure that goes into a document is measured by the implementer through `kiln-cli` on a release build, with the command recorded; the spec check's figures are from a debug build of a throwaway stub and are evidence for this spec only. No test asserts a time; a timeout in a test is a hang detector and is labelled so. A real bound (refusing large counted repeats, a whole-match-only search) is a follow-up task the director files; this task does not attempt it.
 - Q-2: (a). `search.replace` with `all: true` takes a `limit` like `search.find`'s (default 10,000) that caps the `ranges` list in the reply, and reports `truncated`; every match is still replaced and `total` is exact.
 - Q-3: (b). This task does not touch `reason.rs`. The published `when` text of `invalid_pattern` stays narrower than the binary (it does not mention a pattern over the cap or a bad replacement template) until T-038 merges; T-038's list of `when` texts gains this one. The gap is known and recorded here; the reviewer does not raise it as a finding against this task.
+- Two readings of the planner in R-170, confirmed (director, D-102): `from` is checked (`out_of_range` when beyond the text) only with `all: false`, and ignored with `all: true`; "`total` is exact" in Q-2 means the existing `replaced` field, and the reply gains no separate `total`.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -603,6 +648,24 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   write a `tasks/spec-checks/T-021.md` file (this run's brief allowed edits to this file only).
   QUESTION: Q-1 (time bound: recommend (a) document no bound), Q-2 (replace reply: recommend
   (a) `limit` on `ranges`), Q-3 (`invalid_pattern` `when` text: recommend (b) via T-038).
+- 2026-11-13T23:05Z · R-170 · draft · did: finalised the spec on D-101 (Q-1 (a), Q-2 (a),
+  Q-3 (b)); every PENDING mark removed. Q-1: Pinned (e) rewritten (no time bound, caps bound
+  pattern text and slots only, follow-up is the director's); S4's and S2's figures are now
+  slots the implementer fills from its own release-build `kiln-cli` measurement, with the
+  commands given; the R-158 debug-stub figures are marked evidence for the spec only and no
+  longer appear in a sentence for a document; every test timeout is a hang detector, AC-7a's
+  raised from 20 s to 120 s (the quadratic case stays far beyond it, about 8·10^10 steps). Q-2:
+  `limit` and `truncated` on `search.replace`; `replaced` is the exact total; AC-11 (was AC-12).
+  Q-3: the known `when`-text gap stated in Out of scope, not a finding against this task.
+  Acceptance-test protocol for the odd arm written in Goal; each AC names its file and whether
+  it fails on base (all fail: by assertion, AC-7b and AC-10 by compilation); AC-7 split into
+  AC-7a (cli) and AC-7b (Rust API, which also checks `find`); the four scorecard item files
+  removed from `touches`; test names per item tabled for the director, with the AC each covers.
+  Golden rule 9: AC-2 and AC-9 no longer assert message texts (kinds only); Pinned (f) says no
+  test reads `error.message`. Builder read-through fixed one contradiction: `from` was both
+  "ignored" with `all: true` and checked for `out_of_range`; now checked with `all: false`
+  only (the reading the Interface already stated). · gate attempts: 0 · not run: cargo, any
+  measurement (none needed) · missing context: none · next: director: ready to dispatch.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
