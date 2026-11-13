@@ -168,6 +168,7 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
 - `Cargo.lock` is a generated file under T-005's policy; until T-005 lands the director
   regenerates it on a rebase conflict.
 - Director ruling (2026-11-13, decision D-023), part of the spec: `kiln-cli exec` and `kiln-cli run` must be able to act on real files. Both take `--root <dir>` (default: the current directory) and run commands against a disk workspace rooted there; an explicit `--memory` flag selects the empty in-memory file system for tests. Review of T-003 found that `exec` currently starts from an empty in-memory file system on every call, so no document can be opened from the CLI.
+- Director rulings at the join (2026-11-13, decision D-025), part of the spec: the AC-9 example file contains `hello\n` (the original `x` made its own offset out of range); an unwritable `--log` path is detected before the script runs (empty stdout, non-zero exit); `exec --text` seeds the legacy single buffer and may be combined with `--root` or `--memory`; `<script>` and `--log` paths are relative to the current directory, not to `--root`; `control` has no `--memory`; a `control` I/O error exits 1; for duplicate JSON keys in a request the last one wins.
 
 ## Questions
 None open.
