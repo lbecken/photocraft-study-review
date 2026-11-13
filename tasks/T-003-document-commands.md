@@ -366,4 +366,24 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   audit. The io.crlf item names crate kiln-text, but its tests live in kiln-commands.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-13 · R-025 · tests_joined · did: round-1 review of `061f313` → `reviews/T-003-r1.md`,
+  verdict approve (0 defects, 0 test gaps, 6 spec gaps, 5 nits). Checked every AC through
+  `Registry::execute` and a scratch probe (deleted); 41 hostile `kiln-cli exec` calls over all
+  eleven `doc.*` commands, no panic; `docs/commands.json` == `commands --schema`, audit ok.
+  D-020 applied narrowly in `main.rs`; the same kind of assertion loosening in
+  `src/buffer.rs` (inside touches) is undisclosed (N-1). Mutation spot-check: 29 mutants, 27
+  killed (24 by acceptance tests). M21/M28/M29 are killed only by the implementer's unit tests;
+  M23 (empty-insert dirty) and M25 (utf-16be name) survive, and their behaviour is correct.
+  · gate attempts: 1 (last: green) · not run: disk VFS (T-004), revert check (director did it) ·
+  missing context: none · next: director rulings on SG-1…SG-6, approval row, rebase on main
+  keeping both task logs.
+  QUESTION: SG-1, CLI `exec` uses an empty MemoryFs, so 10 of 11 doc commands only fail
+  headlessly. Should T-004 run every commands.json example through the CLI or control protocol?
+  QUESTION: SG-2/SG-3, replay checks no results and ignores `mutating`, and nothing requires a
+  read-only command to change only the log. Rule on (a) a result digest in the log or an
+  explicit statement that replay is unverified, and (b) "MUTATING=false ⇒ changes nothing but
+  the log" plus an acceptance test.
+  Rulings recommended for the test author's QUESTIONs: Q1 `MUTATING` is per command, so
+  `doc.open` is true (SG-4); Q2 only a successful first open assigns an id (SG-5); Q3 save
+  changes history only by ending the typing group, and redo is kept (SG-6).
 <!-- end reviewer log -->
