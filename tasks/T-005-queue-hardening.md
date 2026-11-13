@@ -2,7 +2,7 @@
 id: T-005
 title: "Merge queue gates with main's xtask, refuses tasks without their lifecycle evidence, resolves generated-file conflicts, tolerates only ledger commits on main, and seeds worktrees without copying the whole target"
 tier: high              # xtask/ (CI and gate)
-state: tests_joined
+state: in_progress
 owner_role: director
 scorecard_items: []
 depends_on: []
@@ -268,6 +268,16 @@ Director's answers to the planner's questions of R-003 (2026-11-12).
   e. `cargo xtask join` also finds acceptance and guard tests under `xtask/tests`.
      Clarified (D-021): `join` runs guard tests itself — every guard must pass on base and on the joined branch; otherwise the result is `guard_failed`, exit non-zero, and the record carries `guard_total`, `guard_fail_base`, `guard_fail_join`.
   f. `xtask` refuses to run (exit 2, one line naming both paths) when the checkout it was built from differs from the workspace it is run in, except where the queue deliberately runs main's `xtask` against a task worktree.
+- Director rulings after review r1 (2026-11-13, decision D-026) — part of the spec. Threat model: honest mistakes and corner-cutting by agents, not a malicious agent; every weakening of the gate must be either impossible or visible and approved, never silent.
+  R1 (review F1). The queue rebuilds main's `xtask` crate from the sources at `base_sha` at the start of every run; it never trusts a previously built `xtask` binary. Cached dependency artifacts may be reused (accepted residual risk, documented).
+  R2 (F2). A review's `reviewed_sha` must be a full 40-hex commit id that is an ancestor of, or equal to, the task head; commits after it may touch only review files, the task file, generated paths and acceptance/guard test files. Anything else is refused at `review` as stale.
+  R3 (F3). Gate paths are: `xtask/**`, `.cargo/**`, `rust-toolchain.toml`, `clippy.toml`, `rustfmt.toml`, `.github/**`, any `build.rs`, and the root `Cargo.toml` when its `[workspace.lints]`, `[workspace.metadata]` or any `[profile.*]` table differs from main's. A task whose diff touches a gate path (a) must be tier high, else refusal `gate-path`; (b) runs both gates as already specified; (c) needs an approval row in main's `docs/decisions.md` whose Decision cell begins `Approve T-NNN` and contains the words `gate paths`, else refusal `approval`. The queue prints the gate paths the task changed.
+  R4 (F4). A task whose diff changes `Cargo.lock` or the dependency tables of any `Cargo.toml` must be tier high, else refusal `dependencies`. The lock rule — no package already in main's lock changes version — is checked on every queue run, not only after a rebase conflict; a violation is refusal `dependencies`.
+  R5 (F7). The queue is side-effect free on every non-merged outcome: after `gate_failed`, `ff_failed`, a conflict or a refusal, the task branch points at the commit it pointed at before the run and its worktree is clean.
+  R6 (F8). Evidence (join records, review verdicts, approval rows, task front matter, policy files) is read from main's committed tree, never from uncommitted working-copy files. If `metrics/` has uncommitted changes when the queue starts, refusal `ledger` with a hint to commit the ledger first.
+  R7 (F10). An approval row is a Markdown table row in `docs/decisions.md` outside any code block.
+  R8 (F9). `KILN_XTASK_RUN_IN` must either be what makes the queue's main-gate run possible, with a test that fails if it is ignored, or be removed. No dead bypass variable.
+  R9 (F5, F6). End-to-end tests are required for the lock version rule and for "regeneration changed a non-generated path".
 
 ## Questions
 None open.
