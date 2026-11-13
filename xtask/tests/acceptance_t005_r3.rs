@@ -144,22 +144,6 @@ fn refused(
     reason
 }
 
-/// Queue `id` and assert it did not merge and changed nothing: non-zero exit, no record, main,
-/// the task branch and both checkouts' status unchanged.
-fn rejected_without_effect(r: &Repo, id: &str) -> Out {
-    let before = r.snap(id);
-    let records = r.queue_lines().len();
-    let o = queue_env(r, id, &[]);
-    assert_ne!(
-        o.code, 0,
-        "queue {id} must not succeed:\n{}\n{}",
-        o.stdout, o.stderr
-    );
-    assert_eq!(r.queue_lines().len(), records, "queue {id} wrote a record");
-    assert_eq!(before, r.snap(id), "queue {id} changed state: {}", o.stderr);
-    o
-}
-
 /// Append a `joined` record for `sha` to `metrics/tasks.jsonl` and commit it on main.
 fn commit_join(r: &Repo, id: &str, sha: &str) {
     let mut t = std::fs::read_to_string(r.root.join("metrics/tasks.jsonl")).unwrap_or_default();
@@ -454,6 +438,17 @@ fn review_sha_must_be_a_full_ancestor_and_only_evidence_may_follow() {
             "non-acceptance test file after review",
             vec![("crates/a/tests/helper.rs", Some("// helper\n"))],
         ),
+        (
+            "another task's acceptance file after review",
+            vec![("crates/a/tests/acceptance_t002.rs", Some("// other\n"))],
+        ),
+        (
+            "another task's support file after review",
+            vec![(
+                "crates/a/tests/acceptance_t002_support.rs",
+                Some("// other\n"),
+            )],
+        ),
     ] {
         let files: Vec<(&str, Option<&str>)> = files;
         r.commit_wt("T-001", what, &files);
@@ -488,6 +483,10 @@ fn review_sha_must_be_a_full_ancestor_and_only_evidence_may_follow() {
         &[
             ("crates/a/tests/acceptance_t001_more.rs", Some("// acc\n")),
             ("crates/a/tests/guard_t001.rs", Some("// guard\n")),
+            (
+                "crates/a/tests/acceptance_t001_support.rs",
+                Some("// support\n"),
+            ),
         ],
     );
     merged(&r, "T-001", &[]);
@@ -811,7 +810,7 @@ fn non_merged_outcomes_leave_the_task_branch_where_it_was() {
     );
 }
 
-// ---- R6: evidence only from main's committed tree; uncommitted metrics → `ledger` ---------
+// ---- R6: evidence only from main's committed tree; uncommitted evidence → `ledger` --------
 
 #[test]
 fn uncommitted_evidence_does_not_count() {
@@ -826,24 +825,26 @@ fn uncommitted_evidence_does_not_count() {
             Some(&review_md("T-001", 1, "medium", "approve", &h1)),
         )],
     );
-    // The join record exists only in the primary checkout's working copy.
-    r.set_tasks_jsonl(&[join_rec("T-001", "joined", &h1)]);
+    // The join record exists only in the primary checkout's working copy (untracked).
+    let joined = format!("{}\n", join_rec("T-001", "joined", &h1));
+    write(&r.root, "metrics/tasks.jsonl", &joined);
     let reason = refused(&r, "T-001", "ledger", &[], &[]);
     assert!(
         reason.to_lowercase().contains("commit"),
         "the `ledger` refusal should hint to commit the ledger: {reason}"
     );
     commit_ledger(&r);
-    // A modified tracked metrics file, and an untracked one.
-    write(&r.root, "metrics/notes.txt", "notes 1\n");
+    // A tracked evidence file modified but not committed.
+    write(
+        &r.root,
+        "metrics/tasks.jsonl",
+        &format!("{joined}{}\n", join_rec("T-009", "joined", &h1)),
+    );
     refused(&r, "T-001", "ledger", &[], &[]);
-    git(&r.root, &["checkout", "-q", "--", "metrics/notes.txt"]);
-    write(&r.root, "metrics/extra/scratch.jsonl", "{}\n");
-    refused(&r, "T-001", "ledger", &[], &[]);
-    std::fs::remove_dir_all(r.root.join("metrics/extra")).unwrap();
+    git(&r.root, &["checkout", "-q", "--", "metrics/tasks.jsonl"]);
 
-    // Other evidence in the working copy only: an approval row, task front matter, a policy
-    // file. None may let a task through.
+    // Other evidence in the working copy only: an approval row, task front matter, a review
+    // file, a policy file. Each is refused at `ledger`, whatever else would happen.
     r.add_task("T-002", "high", "reviewed", &["crates/a"], &[]);
     evidence(
         &r,
@@ -857,16 +858,23 @@ fn uncommitted_evidence_does_not_count() {
         "docs/decisions.md",
         &format!("{decisions}| D-099 | 2026-11-13 | Approve T-002 for merge. | toy | yes |\n"),
     );
-    rejected_without_effect(&r, "T-002");
+    refused(&r, "T-002", "ledger", &[], &[]);
     git(&r.root, &["checkout", "-q", "--", "docs/decisions.md"]);
 
-    r.add_task("T-003", "low", "in_progress", &["crates/a"], &[]);
+    // T-003 would merge as committed; its working-copy front matter differs.
+    r.add_task("T-003", "low", "self_verified", &["crates/a"], &[]);
     r.commit_wt("T-003", "code", &[("crates/a/src/c.rs", Some("// c\n"))]);
-    let t3 =
-        read(&r.root, "tasks/T-003-toy.md").replace("state: in_progress", "state: self_verified");
+    let t3 = read(&r.root, "tasks/T-003-toy.md").replace("tier: low", "tier: medium");
     write(&r.root, "tasks/T-003-toy.md", &t3);
-    rejected_without_effect(&r, "T-003");
+    refused(&r, "T-003", "ledger", &[], &[]);
     git(&r.root, &["checkout", "-q", "--", "tasks/T-003-toy.md"]);
+    write(
+        &r.root,
+        "reviews/T-003-r1.md",
+        &review_md("T-003", 1, "low", "approve", &h1),
+    );
+    refused(&r, "T-003", "ledger", &[], &[]);
+    std::fs::remove_dir_all(r.root.join("reviews")).unwrap();
 
     r.add_task("T-004", "low", "self_verified", &["crates/a"], &[]);
     r.commit_wt(
@@ -874,16 +882,39 @@ fn uncommitted_evidence_does_not_count() {
         "outside touches",
         &[("README.md", Some("# changed\n"))],
     );
-    let generated = read(&r.root, "xtask/generated.toml")
-        + "\n[[file]]\npath = \"README.md\"\ncommand = [\"true\"]\n";
-    write(&r.root, "xtask/generated.toml", &generated);
-    rejected_without_effect(&r, "T-004");
-    git(&r.root, &["checkout", "-q", "--", "xtask/generated.toml"]);
+    for policy in ["xtask/generated.toml", "xtask/ledger.toml"] {
+        let text = read(&r.root, policy) + "\n# edited in the working copy only\n";
+        write(&r.root, policy, &text);
+        refused(&r, "T-004", "ledger", &[], &[]);
+        git(&r.root, &["checkout", "-q", "--", policy]);
+    }
 
-    // Legitimate: the same evidence, committed, is accepted.
-    merged(&r, "T-001", &[]);
-    decide(&r, "Approve T-002 for merge.", "toy");
+    // Legitimate: the same evidence, committed, is accepted; the queue's own uncommitted
+    // output log `metrics/queue.jsonl` (left as the queue wrote it) does not block.
+    let before = r.queue_lines().len();
+    let o = queue_env(&r, "T-001", &[]);
+    let lines = r.queue_lines();
+    assert_eq!(lines.len(), before + 1, "T-001: {}\n{}", o.stdout, o.stderr);
+    assert_eq!(
+        lines[before]["result"], "merged",
+        "record: {}\n{}",
+        lines[before], o.stderr
+    );
+    assert!(
+        !status_of(&r.root, "metrics/queue.jsonl").is_empty(),
+        "queue.jsonl should be uncommitted here"
+    );
+    r.main_commit(
+        "director: approve",
+        &[(
+            "docs/decisions.md",
+            Some(&format!(
+                "{decisions}| D-100 | 2026-11-13 | Approve T-002 for merge. | toy | yes |\n"
+            )),
+        )],
+    );
     merged(&r, "T-002", &[]);
+    merged(&r, "T-003", &[]);
 }
 
 // ---- R7: an approval row is a Markdown table row outside any code block -------------------
@@ -984,61 +1015,91 @@ fn run_in_variable_lets_nothing_through() {
 
 // ---- R9: end to end — the lock version rule, and regeneration touching other paths ---------
 
+/// Main gains a registry package `regdep` (versions 1.0.0 and 1.1.0 served offline from a
+/// directory source replacing crates.io) that crate `a` requires as `"1"`, locked at 1.0.0.
+/// Done before any merge, so `main-history` passes trivially.
+fn add_registry_dep_on_main(r: &Repo) {
+    for v in ["1.0.0", "1.1.0"] {
+        let d = format!("vendored/regdep-{v}");
+        write(
+            &r.root,
+            &format!("{d}/Cargo.toml"),
+            &format!("[package]\nname = \"regdep\"\nversion = \"{v}\"\nedition = \"2021\"\n"),
+        );
+        write(
+            &r.root,
+            &format!("{d}/src/lib.rs"),
+            "/// Toy.\npub fn r() -> u32 {\n    1\n}\n",
+        );
+        write(
+            &r.root,
+            &format!("{d}/.cargo-checksum.json"),
+            "{\"files\":{},\"package\":null}\n",
+        );
+    }
+    let cfg = read(&r.root, ".cargo/config.toml")
+        + "\n[source.crates-io]\nreplace-with = \"toy-vendored\"\n\n[source.toy-vendored]\ndirectory = \"vendored\"\n";
+    write(&r.root, ".cargo/config.toml", &cfg);
+    write(
+        &r.root,
+        "crates/a/Cargo.toml",
+        &format!("{A_TOML}\n[dependencies]\nregdep = \"1\"\n"),
+    );
+    cargo_in(&r.root, &["generate-lockfile", "--offline"]);
+    // Pin the older version (cargo picks the newest); the lock stays valid (`--locked`).
+    let latest = read(&r.root, "Cargo.lock");
+    let pinned = latest.replace(
+        "name = \"regdep\"\nversion = \"1.1.0\"",
+        "name = \"regdep\"\nversion = \"1.0.0\"",
+    );
+    assert_ne!(pinned, latest);
+    write(&r.root, "Cargo.lock", &pinned);
+    cargo_in(
+        &r.root,
+        &["metadata", "--offline", "--locked", "--format-version", "1"],
+    );
+    let lock = read(&r.root, "Cargo.lock");
+    assert_eq!(lock_version(&lock, "regdep").as_deref(), Some("1.0.0"));
+    assert!(lock.contains("source = \"registry+"), "{lock}");
+    git(&r.root, &["add", "-A"]);
+    git(&r.root, &["commit", "-q", "-m", "toy: registry dependency"]);
+}
+
 #[test]
 fn lock_version_change_is_refused_with_or_without_a_conflict() {
     let r = Repo::new("r3-r9-lock");
-    add_dep_on_main(&r);
-    r.add_task("T-020", "high", "reviewed", &["vendor/dep"], &[]);
-    r.add_task(
-        "T-021",
-        "high",
-        "reviewed",
-        &["crates/a", "vendor/dep2"],
-        &[],
-    );
-    // T-020 bumps an existing package and regenerates the lock: no conflict with main.
+    add_registry_dep_on_main(&r);
+    r.add_task("T-020", "high", "reviewed", &["crates/a"], &[]);
+    r.add_task("T-021", "high", "reviewed", &["crates/a"], &[]);
+    // T-020 bumps the existing registry package in the lock only: no conflict with main.
     let wt0 = r.wt("T-020");
-    write(
-        &wt0,
-        "vendor/dep/Cargo.toml",
-        &DEP_TOML.replace("1.0.0", "1.1.0"),
-    );
-    cargo_in(&wt0, &["generate-lockfile", "--offline"]);
+    cargo_in(&wt0, &["update", "--offline", "-p", "regdep"]);
     let lock0 = read(&wt0, "Cargo.lock");
-    assert_eq!(lock_version(&lock0, "dep").as_deref(), Some("1.1.0"));
+    assert_eq!(lock_version(&lock0, "regdep").as_deref(), Some("1.1.0"));
     evidence(&r, "T-020", "high", &[("Cargo.lock", Some(&lock0))]);
     decide(&r, "Approve T-020 for merge.", "toy");
     refused(&r, "T-020", "dependencies", &[], &[]);
 
-    // T-021 adds a new package (legitimate) and merges, so main's lock moves …
+    // Legitimate (ruling 5): an approved high task bumps a workspace member's version; the
+    // lock rule compares registry and git packages only, so it merges and main's lock moves …
     let wt1 = r.wt("T-021");
-    write(
-        &wt1,
-        "vendor/dep2/Cargo.toml",
-        &DEP_TOML
-            .replace("\"dep\"", "\"dep2\"")
-            .replace("1.0.0", "0.3.0"),
-    );
-    write(
-        &wt1,
-        "vendor/dep2/src/lib.rs",
-        "/// Toy.\npub fn d2() -> u32 {\n    2\n}\n",
-    );
-    let a1 = read(&wt1, "crates/a/Cargo.toml") + "dep2 = { path = \"../../vendor/dep2\" }\n";
+    let a1 =
+        read(&wt1, "crates/a/Cargo.toml").replace("version = \"0.1.0\"", "version = \"0.2.0\"");
     write(&wt1, "crates/a/Cargo.toml", &a1);
-    cargo_in(&wt1, &["generate-lockfile", "--offline"]);
+    cargo_in(&wt1, &["metadata", "--offline", "--format-version", "1"]);
     let lock1 = read(&wt1, "Cargo.lock");
+    assert_eq!(lock_version(&lock1, "a").as_deref(), Some("0.2.0"));
+    assert_eq!(lock_version(&lock1, "regdep").as_deref(), Some("1.0.0"));
     evidence(&r, "T-021", "high", &[("Cargo.lock", Some(&lock1))]);
     decide(&r, "Approve T-021 for merge.", "toy");
     merged(&r, "T-021", &[]);
-    assert_eq!(
-        lock_version(&read(&r.root, "Cargo.lock"), "dep").as_deref(),
-        Some("1.0.0")
-    );
-    // … and T-020 (whose lock now also differs from main's in the rebase) is still refused.
+    let lock = read(&r.root, "Cargo.lock");
+    assert_eq!(lock_version(&lock, "a").as_deref(), Some("0.2.0"));
+    assert_eq!(lock_version(&lock, "regdep").as_deref(), Some("1.0.0"));
+    // … and T-020, whose lock now also differs from main's in the rebase, is still refused.
     refused(&r, "T-020", "dependencies", &[], &[]);
     assert_eq!(
-        lock_version(&show(&r.root, "main", "Cargo.lock"), "dep").as_deref(),
+        lock_version(&show(&r.root, "main", "Cargo.lock"), "regdep").as_deref(),
         Some("1.0.0")
     );
 }
@@ -1088,9 +1149,23 @@ fn regeneration_that_changes_a_non_generated_path_is_not_merged() {
         "T-003 must not merge:\n{}\n{}",
         o.stdout, o.stderr
     );
-    if let Some(rec) = r.queue_lines().get(records) {
-        assert_ne!(rec["result"], "merged", "record: {rec}");
-    }
+    // Same result kind as a failed regeneration (D-026 ruling on R9): `conflict` at
+    // `regenerate:<path>`.
+    let lines = r.queue_lines();
+    assert_eq!(
+        lines.len(),
+        records + 1,
+        "T-003 wrote no record: {}",
+        o.stderr
+    );
+    let rec = &lines[records];
+    assert_eq!(rec["result"], "conflict", "record: {rec}");
+    assert!(
+        rec["failed_step"]
+            .as_str()
+            .is_some_and(|f| f.starts_with("regenerate:")),
+        "record: {rec}"
+    );
     assert_eq!(r.main_sha(), main_before, "main moved");
     assert_eq!(show(&r.root, "main", "notes/shared.txt"), "shared\n");
     assert_eq!(read(&r.root, "notes/shared.txt"), "shared\n");

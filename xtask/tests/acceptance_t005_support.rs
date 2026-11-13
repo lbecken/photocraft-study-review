@@ -392,6 +392,24 @@ fn main() -> ExitCode {
                 s.push('\n');
             }
             write(&self.root, "metrics/tasks.jsonl", &s);
+            // Evidence counts only when committed on main (D-026 R6): a director ledger commit.
+            let o = run(Command::new("git")
+                .args(["status", "--porcelain", "--", "metrics/tasks.jsonl"])
+                .current_dir(&self.root));
+            if !o.stdout.trim().is_empty() {
+                git(&self.root, &["add", "--", "metrics/tasks.jsonl"]);
+                git(
+                    &self.root,
+                    &[
+                        "commit",
+                        "-q",
+                        "-m",
+                        "director: join records",
+                        "--",
+                        "metrics/tasks.jsonl",
+                    ],
+                );
+            }
         }
 
         pub fn queue_lines(&self) -> Vec<Value> {

@@ -615,6 +615,22 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   scoping it to non-member packages or saying so.
   Not tested: R8 with a legitimate run plus a stray variable (refusing it would also be acceptable);
   R1 caches outside the scratch dir (e.g. under $HOME) are not tampered; R3 case of `gate paths`.
+- 2026-11-13 · R-034 · round 3 continued · did: applied the director's answers to my R-033
+  questions. (1) R6: the fixture's `set_tasks_jsonl` (and so `with_evidence`) now commits
+  `metrics/tasks.jsonl` on main. That is a setup change only; no assertion changed. Tests that needed it:
+  `refuses_unaccepted_states`, `refuses_missing_or_failed_join`,
+  `refuses_missing_rejected_or_stale_review`, `refuses_high_without_approval_row`,
+  `refusals_change_nothing`. `uncommitted_evidence_does_not_count` now refuses at `ledger` for
+  uncommitted `metrics/tasks.jsonl` (new or modified), `docs/decisions.md`, a task file, a primary
+  `reviews/` file and each policy file. It no longer tests non-evidence metrics files, and it checks
+  that an uncommitted `metrics/queue.jsonl` does not block a merge. (2) R2: another task's
+  `acceptance_t002.rs` / `acceptance_t002_support.rs` after review → stale; own
+  `acceptance_t001_support.rs` allowed. (3) R7 unchanged. (4) R9 leak: requires `conflict` with
+  `failed_step` `regenerate:…`. (5) R4/R9 lock test now uses a registry package (offline
+  directory source replacing crates.io): a lock-only bump → `dependencies` before and after main's
+  lock moves; an approved workspace-member version bump → merged. All 11 r3 tests still fail on base by
+  assertion; acceptance_t005 16/16 and r2 4/4 still fail by assertion; guards 4/4 pass; clippy/fmt
+  clean. · gate attempts: 0 this run (R-033: red only at test) · missing context: none.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-028 · tests_joined (main) · did: review round 1 of 055821a → `reviews/T-005-r1.md`,
