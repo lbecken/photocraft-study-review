@@ -651,4 +651,16 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   join/main-history evidence comes from uncommitted `metrics/` files. · gate attempts: 1 (last:
   green) · not run: queue on the real repository, registry `cargo update` · tokens: unknown ·
   missing context: none · next: director rules on F3, F4, F7, F8; implementer fixes F1, F2, F5, F6.
+- 2026-11-13 · R-038 · tests_joined (main) · did: review round 2 of 8914907..ac9627f →
+  `reviews/T-005-r2.md`, verdict request-changes (spec gap 3, test gap 2, nit 3). Gate green
+  (192 tests). Re-ran round-1 exploits in toy repos: F1, F2, F4, F6, F7, F9, F10 resolved;
+  F3, F5, F8 partly. Mutations on the new code 17/22 killed (N12 equivalent). Test gaps: removing
+  the main-xtask prune (plus its bail) lets a future-dated tampered binary merge, and no test
+  fails; both after-rebase lock checks can be removed with no failing test. SPEC GAPS for the
+  director: member `[lints]` and `build = "…"` weaken the gate silently in a low task (both
+  merged); R4 leaves no route for any dependency version change; the main-history anchor still
+  comes from the uncommitted `queue.jsonl` (a fake line let a direct code commit through). ·
+  gate attempts: 1 (last: green) · not run: real-repo queue, registry `cargo update` · tokens:
+  unknown · missing context: none · next: test author adds F12/F14 tests; director rules on
+  F11, F13, F15.
 <!-- end reviewer log -->
