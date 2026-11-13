@@ -437,14 +437,14 @@ fn checks(
     let result = scorecard_in(&tree, &argv, &target)?;
     let regenerated = std::fs::read(tree.join("docs/scorecard.md")).ok();
     let _ = std::fs::remove_dir_all(&tree);
-    let named = inputs.join(", ");
+    // Interface (5) pins both lines exactly: the scorecard's own error, and the no-change line.
     if let Err(e) = result {
-        return Err(refused(format_args!("{named}: {e}")));
+        return Err(refused(e));
     }
     if regenerated == blob(root, "main", "docs/scorecard.md")? {
-        return Err(refused(format_args!(
-            "the inputs change no generated file; commit them on main as a ledger commit ({named})"
-        )));
+        return Err(refused(
+            "the inputs change no generated file; commit them on main as a ledger commit",
+        ));
     }
     Ok((xtask, argv, inputs))
 }
@@ -563,7 +563,7 @@ pub fn run_with(
     let outcome = gate.run(&wt, GateXtask::Binary(&xtask))?;
     if !outcome.passed {
         eprintln!(
-            "publish: gate failed in .worktrees/{task} at {}; {task} stays in_progress (committed on main); fix the input and re-run the gate there, or abandon (metrics transition --to abandoned; worktree rm {task} --force)",
+            "publish: gate failed in .worktrees/{task} at {}; {task} stays in_progress; fix the input and re-run the gate there, or abandon (metrics transition --to abandoned; worktree rm {task} --force)",
             outcome.failed_step.as_deref().unwrap_or("unknown")
         );
         return Err(Exit(1).into());

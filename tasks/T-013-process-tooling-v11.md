@@ -621,6 +621,25 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   committed metrics, only the inputs dirty. development.md updated. · gate attempts: 3 (last:
   red `test` only, the same 15 T-005 fixture failures; all else PASS). · not run: acceptance
   tests. · missing context: none · next: join.
+- 2026-11-13T07:10Z · R-070 · in_progress (joined) · did: restored the Interface-pinned publish
+  lines: step-5 gate line exactly as written (no "(committed on main)"), the no-change refusal
+  exactly, and the malformed-input refusal as `publish: refused: <the scorecard's own error>`
+  (I had prefixed the input names; the Interface pins "the scorecard's own error, prefixed
+  `publish: refused: `"). Other publish lines (step-2 commit failure, step 7, step 8) checked
+  against the Interface: unchanged. · gate attempts: 4 (last: red `test`, 404 passed, 1
+  failed: `publish_refusals_change_nothing`). · not run: — · missing context: none · next:
+  director rules on the question below.
+  QUESTION: (Q-g) `acceptance_t013_publish.rs::publish_refusals_change_nothing`, malformed-item
+  case (around line 503): earlier cases leave `scorecard/items/x.y.toml` (untracked) and
+  `evaluations/iter-0.md` (modified) in the primary checkout, then publish is called with
+  `scorecard/items/bad.toml` as the only input. Interface (5) step 1 says that *apart from the
+  inputs* the checkout must pass the queue's working-tree rules, and the queue refuses any
+  dirty path outside `metrics/`, so the binary refuses with `publish: refused: the main working
+  tree is dirty apart from the inputs: evaluations/iter-0.md, scorecard/items/x.y.toml` before
+  it runs the scorecard; the test expects the scorecard's own error. I read the test as
+  wrong (it should remove or pass the two files first) and have not changed the order of the
+  checks. If instead uncommitted files of input kinds that are not inputs are to be
+  tolerated, that is a spec change.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T04:05Z · R-059 · ready (worktree copy; in_progress on main) · did: read spec,
