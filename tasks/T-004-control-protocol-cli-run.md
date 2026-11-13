@@ -412,6 +412,27 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `docs/control-protocol.md`. Assumed: `--help` output goes to stdout. · gate attempts: 1 (last:
   red clippy, scorecard, test — only the kiln-control acceptance file not compiling, as before) ·
   not run: nothing else · missing context: none · next: re-join.
+- 2026-11-13 · R-044 · review r2 (D-031) · did: new `apps/kiln-cli/tests/acceptance_t004_r3.rs`
+  (5 tests, all fail on base by assertion): `run_and_control_error_responses_obey_size_caps` and
+  `exec_errors_on_stderr_obey_size_caps` (r9: huge string, huge wrong-type string, 15k-element
+  array of short strings with spaces, 100-deep nested object, 5000 unknown param keys, huge
+  multi-byte string, huge (multi-byte) command name, 5000 unknown top-level keys, huge array as
+  params, huge path; every error line ≤ 4096 bytes, JSON, every string incl. keys ≤ 200 chars;
+  truncated unknown-command message ends with `…`; small values `zero` / `no.such.cmd` still
+  reported intact), `usage_errors_on_stderr_obey_size_caps_and_name_the_problem` (r9 stderr caps
+  for a 10k-char flag, still names it), `usage_error_names_the_offending_flag_or_missing_argument`
+  (r12), `error_kinds_are_documented_and_pinned_to_situations` (r10: 9 situations × 2 value
+  variants on two roots; each kind is in the documented set, equal across variants and roots, maps
+  to one `code`; the four `rejected` situations have four distinct kinds; `exec` errors carry the
+  same kind as `run` for 5 situations). The r2 truncation test does not contradict the new caps
+  and is unchanged. Lint: clippy `--all-targets -D warnings` clean for kiln-cli.
+  QUESTION: r10 does not fix the layout of the kinds list or the kind names, so I read every
+  inline-code token in `docs/control-protocol.md` as the documented set (a superset) and pin
+  kinds by consistency, not by literal name; proposed: a fenced list or table of kinds the tests
+  can read exactly. Assumed: the four `rejected` situations are distinct kinds; a missing-argument
+  message contains one of missing/required/requires/expected/expects/needs. · gate attempts: 1
+  (last: red clippy, scorecard, test — only the kiln-control acceptance file not compiling, as
+  before) · not run: nothing else · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-031 · tests_joined (review r1) · did: reviewed 76051fb as a CLI user: hand slice
