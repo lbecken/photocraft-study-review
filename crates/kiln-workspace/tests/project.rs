@@ -15,85 +15,92 @@ use std::time::{Duration, Instant};
 use kiln_workspace::project::{MAX_DEPTH, ProjectTree, tree};
 use kiln_workspace::{DirEntry, DiskFs, EntryKind, MemoryFs, RelPath, Vfs, VfsError};
 
-const TIMEOUT: Duration = Duration::from_secs(5);
-const SECRET: &[u8] = b"*\n";
+#[cfg(test)]
+mod support {
+    use super::*;
 
-fn p(s: &str) -> RelPath {
-    RelPath::new(s).unwrap()
-}
+    pub const TIMEOUT: Duration = Duration::from_secs(5);
+    pub const SECRET: &[u8] = b"*\n";
 
-/// `work/root/` and `work/outside/` (holding `f.rs` and a `.gitignore` of `*`), under the
-/// system temp dir with a short name (socket paths are limited to 108 bytes).
-fn work(name: &str) -> PathBuf {
-    let work = std::env::temp_dir().join(format!("k19i-{}-{name}", std::process::id()));
-    let _ = fs::remove_dir_all(&work);
-    fs::create_dir_all(work.join("root")).unwrap();
-    fs::create_dir_all(work.join("outside")).unwrap();
-    fs::write(work.join("outside/f.rs"), b"fn f() {}\n").unwrap();
-    fs::write(work.join("outside/.gitignore"), SECRET).unwrap();
-    work
-}
-
-fn write(root: &Path, rel: &str, content: &str) {
-    let path = root.join(rel);
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, content).unwrap();
-}
-
-/// Run `f` on another thread; fail (never hang) if it takes longer than `TIMEOUT`.
-fn bounded<T: Send + 'static>(what: &str, f: impl FnOnce() -> T + Send + 'static) -> T {
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(f());
-    });
-    rx.recv_timeout(TIMEOUT)
-        .unwrap_or_else(|_| panic!("{what} blocked for more than {TIMEOUT:?}"))
-}
-
-/// `mkfifo <path>` under a timeout.
-fn mkfifo(path: &Path) {
-    let mut child = Command::new("mkfifo").arg(path).spawn().unwrap();
-    let deadline = Instant::now() + TIMEOUT;
-    loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            assert!(status.success());
-            break;
-        }
-        if Instant::now() > deadline {
-            let _ = child.kill();
-            panic!("mkfifo timed out");
-        }
-        std::thread::sleep(Duration::from_millis(10));
+    pub fn p(s: &str) -> RelPath {
+        RelPath::new(s).unwrap()
     }
-    assert!(fs::symlink_metadata(path).unwrap().file_type().is_fifo());
-}
 
-fn entry(name: &str, kind: EntryKind) -> DirEntry {
-    DirEntry {
-        name: name.to_owned(),
-        kind,
+    /// `work/root/` and `work/outside/` (holding `f.rs` and a `.gitignore` of `*`), under the
+    /// system temp dir with a short name (socket paths are limited to 108 bytes).
+    pub fn work(name: &str) -> PathBuf {
+        let work = std::env::temp_dir().join(format!("k19i-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&work);
+        fs::create_dir_all(work.join("root")).unwrap();
+        fs::create_dir_all(work.join("outside")).unwrap();
+        fs::write(work.join("outside/f.rs"), b"fn f() {}\n").unwrap();
+        fs::write(work.join("outside/.gitignore"), SECRET).unwrap();
+        work
+    }
+
+    pub fn write(root: &Path, rel: &str, content: &str) {
+        let path = root.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
+
+    /// Run `f` on another thread; fail (never hang) if it takes longer than `TIMEOUT`.
+    pub fn bounded<T: Send + 'static>(what: &str, f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(TIMEOUT)
+            .unwrap_or_else(|_| panic!("{what} blocked for more than {TIMEOUT:?}"))
+    }
+
+    /// `mkfifo <path>` under a timeout.
+    pub fn mkfifo(path: &Path) {
+        let mut child = Command::new("mkfifo").arg(path).spawn().unwrap();
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            if Instant::now() > deadline {
+                let _ = child.kill();
+                panic!("mkfifo timed out");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(fs::symlink_metadata(path).unwrap().file_type().is_fifo());
+    }
+
+    pub fn entry(name: &str, kind: EntryKind) -> DirEntry {
+        DirEntry {
+            name: name.to_owned(),
+            kind,
+        }
+    }
+
+    pub fn listed(t: &ProjectTree) -> Vec<(String, EntryKind)> {
+        t.entries
+            .iter()
+            .map(|e| (e.path.to_string(), e.kind))
+            .collect()
+    }
+
+    pub fn paths(t: &ProjectTree) -> Vec<String> {
+        t.entries.iter().map(|e| e.path.to_string()).collect()
+    }
+
+    pub fn disk_tree(root: &Path, under: Option<&str>) -> Result<ProjectTree, VfsError> {
+        let root = root.to_path_buf();
+        let under = under.map(p);
+        bounded("tree", move || {
+            let fs_ = DiskFs::new(&root).unwrap();
+            tree(&fs_, under.as_ref(), 50_000)
+        })
     }
 }
 
-fn listed(t: &ProjectTree) -> Vec<(String, EntryKind)> {
-    t.entries
-        .iter()
-        .map(|e| (e.path.to_string(), e.kind))
-        .collect()
-}
-
-fn paths(t: &ProjectTree) -> Vec<String> {
-    t.entries.iter().map(|e| e.path.to_string()).collect()
-}
-
-fn disk_tree(root: &Path, under: Option<&str>) -> Result<ProjectTree, VfsError> {
-    let root = root.to_path_buf();
-    let under = under.map(p);
-    bounded("tree", move || {
-        let fs_ = DiskFs::new(&root).unwrap();
-        tree(&fs_, under.as_ref(), 50_000)
-    })
-}
+use support::*;
 
 #[test]
 fn disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names() {
