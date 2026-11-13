@@ -473,4 +473,14 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   Windows/macOS · missing context: none · next: implementer fixes R2-D1 and R2-N1 doc row.
   QUESTION: R2-SG1 freeze the 23-kind table in the spec so acceptance tests can pin it?
   R2-SG2 add "refuse FIFOs/non-regular files" (doc.open hangs) to T-008? SG-2 panic path test?
+- 2026-11-13 · R-047 · review r3 (delta 2421071..a76ae29) · did: re-ran the R2-D1 reproduction
+  (fixed: 389-byte line, 358 B exec stderr); attacked caps at 199/200/201 chars, emoji and
+  combining marks, escapes, nested details, exact 4095/4096/4097-byte lines (exact), 5000-char
+  id (5118-byte line, documented exception); usage errors (12 forms) and exec kind; re-timed the
+  long session (108 s → 0.29 s). 13 mutants: 11 killed (7 by acceptance), 1 equivalent (C07),
+  1 survived (C04, `>=` at the 4096 boundary). Verdict approve; follow-ups R3-SG1 (id exempt
+  from the 4096 cap), R3-N1 (id counted when deciding truncation), R3-N2 (boundary test),
+  R3-N3 (doc sentence misplaced). Review: `reviews/T-004-r3.md`. · gate attempts: 1 (last:
+  green) · not run: Windows/macOS, permission-denied io_error, release timing · missing
+  context: none · next: director final approval.
 <!-- end reviewer log -->
