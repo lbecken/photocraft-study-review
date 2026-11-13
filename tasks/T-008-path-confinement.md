@@ -410,6 +410,10 @@ Director's answers to the planner's questions of R-049 (2026-11-13, run R-051).
   The test author asserts the new description in `acceptance_t008_cli.rs` (AC-9).
 
 ## Questions
+Director rulings on the test author's two questions (2026-11-13, decision D-068; run R-120), given to both builders; the test author's tests already follow these readings:
+- v1 (AC-4, AC-7 texts). `Document::save` returns the `VfsError`, whose text is `<path>: …`; the words `cannot save ` are added by the `doc.save` command. Where AC-4 and AC-7 quote `cannot save a.txt: …` as the text of the Rust API error, read: the command's message is `cannot save ` followed by the API error's text. `document.rs` is not changed for this.
+- v2 (AC-8). The director's edit after re-check R-115 forbade the text `outside` in error texts, which the pinned message `resolves outside the root` itself contains. AC-8 reads: apart from the pinned phrase `resolves outside the root`, no error text contains the absolute work path, the fixture directory names `outside` or `rootx`, or a link's target.
+
 - Q-1 (planner, R-057): D-6 limits edits of `docs/control-protocol.md` to error-kind lines, but
   its "Paths" section has a bullet saying symlinks are followed out of the root, which becomes a
   false security claim when T-008 merges. Specified: T-008 replaces exactly that bullet by a
