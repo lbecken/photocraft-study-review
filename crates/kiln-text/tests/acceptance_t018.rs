@@ -162,6 +162,9 @@ fn as_refs(edits: &[(Range<usize>, String)]) -> Edits<'_> {
 // Naive model: text, history (typing-group rule), tracked positions
 // ---------------------------------------------------------------------------------------------
 
+/// One edit of a batch, in the text before the batch: at `at`, `removed` → `inserted`.
+type BatchEdit = (usize, Vec<char>, Vec<char>);
+
 #[derive(Clone, Debug)]
 enum Step {
     /// At `at`, `removed` was replaced by `inserted`.
@@ -170,8 +173,8 @@ enum Step {
         removed: Vec<char>,
         inserted: Vec<char>,
     },
-    /// A batch: the texts before and after it (its undo mapping is not modelled).
-    Batch { before: Vec<char>, after: Vec<char> },
+    /// A batch: its non-no-op edits in index (text) order.
+    Batch(Vec<BatchEdit>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -234,65 +237,100 @@ impl Model {
         );
     }
 
-    /// Naive batch: last to first, mapping through each edit; one step unless all no-ops.
+    /// Naive batch: last to first, mapping through each edit; one step unless all no-ops
+    /// (then nothing changes, an open typing group included).
     fn batch(&mut self, edits: &[(Range<usize>, String)]) {
-        if edits.iter().all(|(r, t)| r.is_empty() && t.is_empty()) {
+        let edits: Vec<BatchEdit> = edits
+            .iter()
+            .filter(|(r, t)| !(r.is_empty() && t.is_empty()))
+            .map(|(r, t)| (r.start, self.text[r.clone()].to_vec(), chars(t)))
+            .collect();
+        if edits.is_empty() {
             return;
         }
-        let before = self.text.clone();
-        for (r, t) in edits.iter().rev() {
-            self.primitive(r.start, r.end, &chars(t));
+        for (at, removed, inserted) in edits.iter().rev() {
+            self.primitive(*at, at + removed.len(), inserted);
         }
-        let after = self.text.clone();
         self.typing_open = false;
-        self.record(Step::Batch { before, after }, false);
+        self.record(Step::Batch(edits), false);
     }
 
-    /// Returns (changed, positions known): after a batch undo the positions are unknown.
-    fn undo(&mut self) -> (bool, bool) {
+    /// Ruling w2: one batch with one edit per break that differs from `to`, in text order.
+    fn normalize(&mut self, to: &str) -> usize {
+        let mut edits = Vec::new();
+        let mut i = 0;
+        while i < self.text.len() {
+            let n = match self.text[i] {
+                '\r' if self.text.get(i + 1) == Some(&'\n') => 2,
+                '\r' | '\n' => 1,
+                _ => 0,
+            };
+            if n > 0 {
+                let old: String = self.text[i..i + n].iter().collect();
+                if old != to {
+                    edits.push((i..i + n, to.to_owned()));
+                }
+            }
+            i += n.max(1);
+        }
+        self.batch(&edits);
+        edits.len()
+    }
+
+    /// Ruling w1: a batch is undone by its inverse edits from the last (highest position) to
+    /// the first, each at its place in the text after the batch.
+    fn undo(&mut self) -> bool {
         let Some(step) = self.undo.pop() else {
-            return (false, true);
+            return false;
         };
         self.typing_open = false;
-        let known = match &step {
+        match &step {
             Step::Op {
                 at,
                 removed,
                 inserted,
             } => {
                 self.primitive(*at, at + inserted.len(), removed);
-                true
             }
-            Step::Batch { before, .. } => {
-                self.text = before.clone();
-                false
+            Step::Batch(edits) => {
+                let mut shifted = Vec::with_capacity(edits.len());
+                let mut delta = 0isize;
+                for (at, removed, inserted) in edits {
+                    let at = usize::try_from(*at as isize + delta).expect("in text");
+                    shifted.push((at, removed, inserted));
+                    delta += inserted.len() as isize - removed.len() as isize;
+                }
+                for (at, removed, inserted) in shifted.into_iter().rev() {
+                    self.primitive(at, at + inserted.len(), removed);
+                }
             }
-        };
+        }
         self.redo.push(step);
-        (true, known)
+        true
     }
 
-    fn redo(&mut self) -> (bool, bool) {
+    /// Redo; a batch maps as the original `apply_edits` did (last edit first).
+    fn redo(&mut self) -> bool {
         let Some(step) = self.redo.pop() else {
-            return (false, true);
+            return false;
         };
         self.typing_open = false;
-        let known = match &step {
+        match &step {
             Step::Op {
                 at,
                 removed,
                 inserted,
             } => {
                 self.primitive(*at, at + removed.len(), inserted);
-                true
             }
-            Step::Batch { after, .. } => {
-                self.text = after.clone();
-                false
+            Step::Batch(edits) => {
+                for (at, removed, inserted) in edits.iter().rev() {
+                    self.primitive(*at, at + removed.len(), inserted);
+                }
             }
-        };
+        }
         self.undo.push(step);
-        (true, known)
+        true
     }
 }
 
@@ -365,11 +403,15 @@ fn batch_edits_and_anchors() {
             assert!(!b.undo(), "{ctx}");
         } else {
             assert!(b.undo(), "{ctx}");
+            assert!(m.undo());
             assert_eq!(b.text(), original, "{ctx}: one undo restores");
             assert!(!b.can_undo(), "{ctx}: one step");
+            assert_eq!(observed(&b, &ids), m.pos, "{ctx}: after undo (w1)");
             assert!(b.redo(), "{ctx}");
+            assert!(m.redo());
             assert_eq!(b.text(), want, "{ctx}: redo re-applies");
             assert!(!b.can_redo(), "{ctx}");
+            assert_eq!(observed(&b, &ids), m.pos, "{ctx}: after redo (w1)");
         }
     }
 
@@ -420,6 +462,25 @@ fn batch_edits_and_anchors() {
                 index: 1,
                 error: oob(99),
             },
+        ),
+        // Ruling w4: an edit that is both invalid and out of order is `Edit`.
+        (
+            vec![(0..1, "x"), (0..9, "y")],
+            BatchError::Edit {
+                index: 1,
+                error: oob(9),
+            },
+        ),
+        (
+            vec![(2..4, "x"), (Range { start: 3, end: 1 }, "y")],
+            BatchError::Edit {
+                index: 1,
+                error: EditError::InvertedRange { start: 3, end: 1 },
+            },
+        ),
+        (
+            vec![(0..2, ""), (1..1, ""), (5..99, "")],
+            BatchError::Unordered { index: 1 },
         ),
         (
             vec![(Range { start: 5, end: 3 }, "")],
@@ -504,8 +565,8 @@ fn batch_edits_and_anchors() {
 /// Anchors and the selection follow the mapping rule through random sequences of inserts,
 /// deletes, replaces, undo, redo and batches (at, before, after and across tracked positions;
 /// 2-, 3- and 4-byte chars; CRLF made and split), compared with the naive model after every
-/// step. After undoing or redoing a batch the positions are re-read (their mapping depends on
-/// how the batch is undone, which the spec leaves open), the text is still checked.
+/// step, undo and redo of batches and `normalize_line_endings` included (rulings w1, w2).
+/// `set_selection`, `add_anchor` and `remove_anchor` neither end nor join a typing group (w3).
 #[test]
 fn anchors_follow_random_edit_sequences() {
     let mut rng = Rng(0x7018_A11C);
@@ -527,7 +588,7 @@ fn anchors_follow_random_edit_sequences() {
             let what;
             match roll {
                 0..=14 if typed.is_some() => {
-                    let at = typed.expect("checked");
+                    let at = typed.expect("checked").min(len);
                     let c = *rng.pick(&["a", "é", "€", "😀"]);
                     what = format!("insert({at}, {c:?})");
                     b.insert(at, c).expect("insert");
@@ -577,21 +638,24 @@ fn anchors_follow_random_edit_sequences() {
                 }
                 45..=56 => {
                     what = "undo".to_owned();
-                    let (changed, known) = m.undo();
-                    assert_eq!(b.undo(), changed, "seq {seq} step {step}: undo");
-                    if !known {
-                        m.pos = observed(&b, &ids);
-                    }
+                    assert_eq!(b.undo(), m.undo(), "seq {seq} step {step}: undo");
                 }
                 57..=64 => {
                     what = "redo".to_owned();
-                    let (changed, known) = m.redo();
-                    assert_eq!(b.redo(), changed, "seq {seq} step {step}: redo");
-                    if !known {
-                        m.pos = observed(&b, &ids);
-                    }
+                    assert_eq!(b.redo(), m.redo(), "seq {seq} step {step}: redo");
                 }
-                65..=76 => {
+                65..=69 => {
+                    let (to, brk) = *rng.pick(&[
+                        (LineEnding::Lf, "\n"),
+                        (LineEnding::Crlf, "\r\n"),
+                        (LineEnding::Cr, "\r"),
+                    ]);
+                    what = format!("normalize_line_endings({to:?})");
+                    let want = m.normalize(brk);
+                    assert_eq!(b.normalize_line_endings(to), want, "seq {seq} step {step}");
+                    last_typed = typed;
+                }
+                70..=76 => {
                     let near = m.pos.clone();
                     let edits = random_edits(&mut rng, &m.text, &near);
                     what = format!("apply_edits({edits:?})");
@@ -603,8 +667,7 @@ fn anchors_follow_random_edit_sequences() {
                     what = format!("add_anchor({p})");
                     ids.push(b.add_anchor(p).expect("valid anchor"));
                     m.pos.push(p);
-                    b.break_undo_group();
-                    m.typing_open = false;
+                    last_typed = typed;
                 }
                 85..=88 if !ids.is_empty() => {
                     let i = rng.below(ids.len());
@@ -613,8 +676,7 @@ fn anchors_follow_random_edit_sequences() {
                     m.pos.remove(i + 2);
                     assert!(b.remove_anchor(id));
                     removed_ids.push(id);
-                    b.break_undo_group();
-                    m.typing_open = false;
+                    last_typed = typed;
                 }
                 _ => {
                     let near = m.pos.clone();
@@ -623,11 +685,20 @@ fn anchors_follow_random_edit_sequences() {
                         head: valid_pos(&mut rng, &m.text, &near),
                     };
                     what = format!("set_selection({s:?})");
-                    b.set_selection(s).expect("valid selection");
-                    m.pos[0] = s.anchor;
-                    m.pos[1] = s.head;
-                    b.break_undo_group();
-                    m.typing_open = false;
+                    if rng.chance(20) {
+                        // Refused: nothing changes.
+                        let bad = Selection {
+                            anchor: s.anchor,
+                            head: len + 1,
+                        };
+                        assert!(b.set_selection(bad).is_err());
+                        assert!(b.add_anchor(len + 1).is_err());
+                    } else {
+                        b.set_selection(s).expect("valid selection");
+                        m.pos[0] = s.anchor;
+                        m.pos[1] = s.head;
+                    }
+                    last_typed = typed;
                 }
             }
             let ctx = format!("seq {seq} step {step} after {what}, text {:?}", b.text());
@@ -643,6 +714,114 @@ fn anchors_follow_random_edit_sequences() {
             }
         }
     }
+}
+
+/// Fixed cases for rulings w1 (undo/redo of a batch: inverse edits last to first), w2
+/// (normalising is one batch, or nothing at all) and w3 (`set_selection`, `add_anchor`,
+/// `remove_anchor` neither end nor change an open typing group).
+#[test]
+fn batch_undo_normalize_and_typing_rulings() {
+    // w1: a batch deleting two adjacent ranges; its undo is two insertions at one position.
+    let mut b = Buffer::from_text("abcdef");
+    let ids: Vec<AnchorId> = (0..=6)
+        .map(|p| b.add_anchor(p).expect("valid anchor"))
+        .collect();
+    b.set_selection(Selection { anchor: 2, head: 3 })
+        .expect("valid");
+    let mut m = Model {
+        text: chars("abcdef"),
+        pos: vec![2, 3, 0, 1, 2, 3, 4, 5, 6],
+        ..Model::default()
+    };
+    let edits = vec![(1..2, String::new()), (2..3, String::new())];
+    b.apply_edits(&as_refs(&edits)).expect("valid batch");
+    m.batch(&edits);
+    assert_eq!(b.text(), "adef");
+    assert_eq!(observed(&b, &ids), [1, 1, 0, 1, 1, 1, 2, 3, 4]);
+    assert_eq!(observed(&b, &ids), m.pos);
+    assert!(b.undo());
+    assert!(m.undo());
+    assert_eq!(b.text(), "abcdef");
+    assert_eq!(observed(&b, &ids), [3, 3, 0, 3, 3, 3, 4, 5, 6]);
+    assert_eq!(observed(&b, &ids), m.pos);
+    assert!(b.redo());
+    assert!(m.redo());
+    assert_eq!(observed(&b, &ids), [1, 1, 0, 1, 1, 1, 2, 3, 4]);
+    assert_eq!(observed(&b, &ids), m.pos);
+
+    // w2: "a\r\nb\nc\rd" to each target, anchors before, between and after the breaks.
+    let example = "a\r\nb\nc\rd";
+    let valid = [0usize, 1, 3, 4, 5, 6, 7, 8];
+    for (to, brk) in [
+        (LineEnding::Lf, "\n"),
+        (LineEnding::Crlf, "\r\n"),
+        (LineEnding::Cr, "\r"),
+    ] {
+        let mut b = Buffer::from_text(example);
+        let ids: Vec<AnchorId> = valid
+            .iter()
+            .map(|&p| b.add_anchor(p).expect("valid anchor"))
+            .collect();
+        b.set_selection(Selection { anchor: 3, head: 5 })
+            .expect("valid");
+        let mut m = Model {
+            text: chars(example),
+            pos: [vec![3, 5], valid.to_vec()].concat(),
+            ..Model::default()
+        };
+        assert_eq!(b.normalize_line_endings(to), m.normalize(brk), "{to:?}");
+        assert_eq!(b.text(), m.text.iter().collect::<String>(), "{to:?}");
+        assert_eq!(observed(&b, &ids), m.pos, "{to:?}: after normalize");
+        if to == LineEnding::Lf {
+            assert_eq!(observed(&b, &ids), [2, 4, 0, 1, 2, 3, 4, 5, 6, 7]);
+        }
+        assert!(b.undo());
+        assert!(m.undo());
+        assert_eq!(b.text(), example, "{to:?}");
+        assert_eq!(observed(&b, &ids), m.pos, "{to:?}: after undo");
+        assert!(b.redo());
+        assert!(m.redo());
+        assert_eq!(observed(&b, &ids), m.pos, "{to:?}: after redo");
+    }
+
+    // w2: a normalize that changes nothing leaves the open typing group (and all else) alone.
+    let mut b = Buffer::from_text("a\nb");
+    let id = b.add_anchor(2).expect("valid");
+    b.insert(0, "x").expect("insert");
+    let sel = b.selection();
+    assert_eq!(b.normalize_line_endings(LineEnding::Lf), 0);
+    assert_eq!(
+        (b.text().as_str(), b.selection(), b.anchor(id)),
+        ("xa\nb", sel, Some(3))
+    );
+    b.insert(1, "y").expect("insert");
+    assert!(b.undo());
+    assert_eq!(b.text(), "a\nb", "one typing group");
+    assert!(!b.can_undo());
+    // ... and one that changes a break ends it and is never joined.
+    let mut b = Buffer::from_text("a\r\nb");
+    b.insert(0, "x").expect("insert");
+    assert_eq!(b.normalize_line_endings(LineEnding::Lf), 1);
+    b.insert(1, "y").expect("insert");
+    for want in ["xa\nb", "xa\r\nb", "a\r\nb"] {
+        assert!(b.undo());
+        assert_eq!(b.text(), want);
+    }
+
+    // w3: selection and anchor calls, successful or refused, keep the typing group open.
+    let mut b = Buffer::new();
+    b.insert(0, "a").expect("insert");
+    b.set_selection(Selection { anchor: 0, head: 1 })
+        .expect("valid");
+    let id = b.add_anchor(0).expect("valid");
+    assert!(b.remove_anchor(id));
+    assert!(!b.remove_anchor(id));
+    assert!(b.set_selection(Selection { anchor: 5, head: 0 }).is_err());
+    assert!(b.add_anchor(5).is_err());
+    b.insert(1, "b").expect("insert");
+    assert!(b.undo());
+    assert_eq!(b.text(), "", "one typing group");
+    assert!(!b.can_undo());
 }
 
 // ---------------------------------------------------------------------------------------------
