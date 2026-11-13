@@ -5,7 +5,7 @@ tier: high              # ADR-0002: gate paths (xtask/src, xtask/budgets.toml); 
 state: draft
 owner_role: planner
 scorecard_items: [text.rope]
-depends_on: [T-009, T-013]   # both touch xtask/src (directory); runs after them
+depends_on: [T-013]          # merged; R-112: none of T-009/T-033/T-034 is needed (they do not touch registries.rs, gate.rs or budgets.toml); shares only docs/development.md with them: not in flight together
 touches:
   - xtask/src/registries.rs                 # GATE PATH: the runners
   - xtask/src/gate.rs                       # GATE PATH: only if the step dispatch must change
@@ -205,6 +205,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `cargo xtask budgets` counts as the "CLI" for the per-item AC rule (Q-4). · gate attempts: 0
   · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: applied answer 3. Added the second target `cli-roundtrip-50mb` (built CLI, 50 MB open + one edit + save), with an optional `prepare` key so the release binary is built first. Both maxima are about 5× the iteration-0 measurements: median 0.04 ms → 200 µs (metric changed to `median_edit_us`), 0.3 s → 1,500 ms. The purpose (order-of-magnitude regressions on any machine) is stated in the spec. Fixed an AC-1 slip (a correct line with exit 0 was listed among the FAIL cases). Touches gain `apps/kiln-cli/examples/budget_roundtrip.rs`, which is disjoint from T-007/T-011/T-024 (`src/main.rs`). · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13T12:51Z · R-112 · draft · did: `depends_on` [T-009, T-013] → [T-013]. T-009 was split (T-009 queue, T-033 join, T-034 lint and publish); none of the three changes `xtask/src/registries.rs`, `xtask/src/gate.rs` or `xtask/budgets.toml`, and T-028 uses nothing they add, so it needs none of them; T-013 (merged) gave the gate its current steps. The only shared path is `docs/development.md`: a dispatch constraint (never in flight with T-009, T-033, T-034), not a dependency. T-029 (`depends_on: [T-028]`) is unaffected. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

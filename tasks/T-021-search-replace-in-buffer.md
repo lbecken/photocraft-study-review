@@ -32,7 +32,10 @@ No gate path. Arm: **odd**. The implementer writes the acceptance tests on `task
 first, through the public interface, then the code (METHODOLOGY §6).
 
 Reading list: `tasks/T-017-*.md` Semantics (iteration, anchors, case folding, expansion);
-`tasks/T-018-*.md` (`apply_edits`, mapping rule); `tasks/T-015-*.md` (reason `invalid_pattern`).
+`tasks/T-017-*.md` rulings s1 (capture-group cap) and s2 (error messages) and its implementer
+note on `expand`'s cost (on `task/T-017`; T-017 is not merged yet, so read the spec, not main);
+`tasks/T-018-*.md` (`apply_edits`, mapping rule); `crates/kiln-commands/src/reason.rs`
+(reason `invalid_pattern`, declared by T-032).
 
 ## Interface
 
@@ -50,8 +53,16 @@ impl CompiledQuery {
     pub fn find_all(&self, text: &str) -> Vec<Captures>;   // T-017's Captures; literal: one group (0)
     /// The replacement text for one match: literal mode → `Ok(replacement)` verbatim;
     /// regex mode → T-017's `Regex::expand`, whose `Err(TemplateError)` is passed through.
+    /// Cost: T-017's `expand` maps each referenced group's char range to bytes by walking
+    /// `text` from its start, so one call costs O(end of the match) per reference.
     pub fn replacement_for(&self, caps: &Captures, text: &str, replacement: &str)
         -> Result<String, TemplateError>;                    // T-017's TemplateError
+    /// The replacement texts of `matches` (as `find_all(text)` returned them, in that order),
+    /// equal element by element to `replacement_for` on each. Bounded cost: O(len(text) +
+    /// Σ over matches of (match length × references in `replacement`)), never
+    /// O(len(text) × matches). `Err` exactly when `replacement_for` would give it.
+    pub fn replacements(&self, matches: &[Captures], text: &str, replacement: &str)
+        -> Result<Vec<String>, TemplateError>;
 }
 ```
 
@@ -86,14 +97,20 @@ true), `whole_word?` (default false).
   `ranges` are the inserted texts' ranges in the new text. With no match, `replaced: 0`
   and nothing changes: no undo step, the typing group is not ended.
 - Refusals: `QueryError::Empty` and `Pattern` → `rejected`/`invalid_pattern`. The message is
-  `empty search pattern`, or `invalid pattern: <PatternError message>`. Then `no_such_document`,
-  and `from > len_chars` → `out_of_range`. All kinds exist (T-015); no new kind.
+  `empty search pattern`, or `invalid pattern: <PatternError message>`; for a pattern with
+  more than 100 capture groups (T-017 ruling s1) that is exactly
+  `invalid pattern: the pattern has more than 100 capture groups`; 100 groups are accepted.
+  Other `PatternError` messages are the regex crate's (T-017 s2) and are not pinned here. Then
+  `no_such_document`, and `from > len_chars` → `out_of_range`. All kinds exist (T-032's reason
+  table); no new kind.
 - Replacement naming a group that does not exist (regex mode; T-017 `TemplateError`): whether a
   template is an error depends only on the pattern and the template, so `search.replace`
   checks it before matching, whether or not there is a match, and refuses with
   `rejected`/`invalid_pattern`, message `invalid replacement: <TemplateError Display>` (e.g.
-  `invalid replacement: no capture group "3"`). Nothing changes. (PROPOSED, R-079: kind and
-  message await the director; see the planner log.)
+  `invalid replacement: no capture group "3"`). Nothing changes. (Ruled by D-044.)
+- Cost of replace-all (T-017 implementer note): `search.replace` computes its replacement
+  texts with `replacements`, so replace-all is linear in the text plus the replaced matches,
+  not O(text × matches) as one `replacement_for` call per match would be. AC-7 checks it.
 
 `docs/protocol/search.md` documents the commands and all rules above, with the examples,
 including T-017's expansion rule (a reference to a group that does not exist is refused, unlike
@@ -107,7 +124,8 @@ the `regex` crate's own expansion) and that inline flags override the options.
   replacement texts are computed from those captures.
 - (d) Offsets are chars. Platform independent.
 - (e) Threat model: n/a (no boundary). Pathological patterns are bounded by T-017's engine
-  guarantee.
+  guarantee and its 100-capture-group cap (s1). Replace-all is bounded as in Interface (cost
+  of replace-all).
 - (f) Snapshots: none.
 - (g) Worked examples (executed against a naive Python model; regex rows against regex 1.13.1):
   - text `foo FOO fOo_x éFoo`, literal `Foo`, `case_sensitive:false` → `0..3, 4..7, 8..11,
@@ -120,7 +138,7 @@ the `regex` crate's own expansion) and that inline flags override the options.
     One `doc.undo` → `a1 b2`.
   - literal `$1` replacement in literal mode is inserted verbatim.
   - text `a1 b2`, regex `(\w)(\d)`, replacement `$3` or `$x`, `all:true` → refused
-    (`rejected`/`invalid_pattern`, per the PROPOSED rule above), text unchanged; `$0-` →
+    (`rejected`/`invalid_pattern`, D-044), text unchanged; `$0-` →
     `a1- b2-`. (Executed against a naive model of T-017's rule, R-079.)
 - (h) Evaluator calls: `kiln-cli run` with `doc.open`, `search.find` (each option combination),
   `search.replace`, `doc.undo`, `doc.text`.
@@ -136,7 +154,8 @@ All through `kiln-cli run` or `kiln_control::Host`.
   string; T-017 AC-1 says why), `search.find` equals a naive backtracking model, written in the
   test, of T-017's iteration, anchor and capture rules. `(`, `[a-`,
   `a{99999999}` and the empty pattern give `rejected`/`invalid_pattern`, and the session is
-  unchanged. Oracle: naive model + exact value.
+  unchanged. A pattern of 101 groups `(a)(a)…(a)` → `rejected`/`invalid_pattern` with the exact
+  message of Interface; 100 groups → `ok`. Oracle: naive model + exact value.
 - AC-3 (`search.whole-word`): for the AC-1 and AC-2 inputs, `whole_word: true` equals the naive
   filter of the non-whole-word result. The worked examples hold. Oracle: naive model.
 - AC-4 (`search.replace`): for random texts, queries and replacement templates (regex mode:
@@ -149,6 +168,13 @@ All through `kiln-cli run` or `kiln_control::Host`.
 - AC-5 (worked examples): every example in Pinned (g) holds exactly. Oracle: exact value.
 - AC-6 (limit): a text with 20,001 matches and `limit: 10` gives 10 matches, `total: 20001`,
   `truncated: true`. Oracle: exact value.
+- AC-7 (`search.replace`, bounded cost): a document of `ab` repeated 200,000 times (400,000
+  chars), regex `(a)b`, replacement `$1$1`, `all: true` → `replaced: 200000` and `doc.text`
+  equal to `aa` repeated 200,000 times, under a 20-second timeout on the whole `kiln-cli run`
+  (a hang-style bound, not a measurement: one walk from the text's start per reference is
+  about 8·10^10 char steps here, far beyond it; the linear cost is well under a second). And
+  through the Rust API, `replacements` equals `replacement_for` applied to each match on the
+  AC-4 inputs. Oracle: exact value + coarse timeout.
 
 ## Scorecard items and intended test names
 | Item | Tests |
@@ -156,7 +182,7 @@ All through `kiln-cli run` or `kiln_control::Host`.
 | search.literal | `kiln_cli::acceptance_t021::literal_find_matches_naive_scan` |
 | search.regex | `kiln_cli::acceptance_t021::regex_find_matches_naive_backtracker`, `kiln_cli::acceptance_t021::invalid_patterns_are_reported` |
 | search.whole-word | `kiln_cli::acceptance_t021::whole_word_filters_at_identifier_boundaries` |
-| search.replace | `kiln_cli::acceptance_t021::replace_all_matches_naive_model_and_undoes_in_one_step`, `kiln_cli::acceptance_t021::replace_one_from_offset` |
+| search.replace | `kiln_cli::acceptance_t021::replace_all_matches_naive_model_and_undoes_in_one_step`, `kiln_cli::acceptance_t021::replace_one_from_offset`, `kiln_cli::acceptance_t021::replace_all_is_linear` |
 
 ## Out of scope and implementer notes
 - Search across files (T-022); find-next with selection or wrap-around (UI, iteration 2);
@@ -192,6 +218,18 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: a replacement naming a non-existent group: refuse with `invalid_pattern` and
   message `invalid replacement: …` (proposed; no new kind), or a new kind through T-032? And
   is it checked before matching (proposed), so a bad template is refused even with no match?
+- 2026-11-13T12:55Z · R-112 · draft · did: checked against T-017's spec (not on main yet): `expand`
+  and `replacement_for` already return `Result<_, TemplateError>` here; fixed stale lines (kinds
+  are T-032's, the template refusal is ruled by D-044, not PROPOSED); added ruling s1's
+  101-group refusal with its exact message (AC-2) and s2's unpinned crate messages; took the
+  T-017 implementer's note (`expand` walks the text from its start per reference, so
+  replace-all would be O(text × matches)) and chose to bound it: new
+  `CompiledQuery::replacements` with a linear cost contract, used by `search.replace` and by
+  T-022; AC-7 checks it with a coarse 20-second timeout on 200,000 matches (quadratic ≈ 8·10^10
+  steps). · gate attempts: 0 · not run: no cargo; AC-7's step count is arithmetic, not
+  measured · missing context: T-017's merged code · next: director.
+  QUESTION: is a coarse timeout acceptable as AC-7's oracle (D-028 allows timeouts for hangs),
+  or should the bound be stated as a limit only?
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

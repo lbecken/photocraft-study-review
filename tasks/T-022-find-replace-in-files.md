@@ -32,8 +32,9 @@ is written to disk; the user saves with `doc.save`.
 No gate path. Arm: **even** (independent test author).
 
 Reading list: `tasks/T-019-*.md` (walk rules), `tasks/T-021-*.md` (Query, matching rules),
-`tasks/T-018-*.md` (`apply_edits`), `tasks/T-015-*.md` (`FindState`, `Parts`, `Docs`,
-reasons `stale_preview`, `no_such_preview`).
+`tasks/T-018-*.md` (`apply_edits`), `tasks/T-015-*.md` (`FindState`, `Parts`, `Docs`),
+`crates/kiln-commands/src/reason.rs` (reasons `stale_preview`, `no_such_preview`,
+`invalid_pattern`, declared by T-032), `tasks/T-017-*.md` rulings s1/s2.
 
 ## Interface
 
@@ -61,23 +62,31 @@ break.
   there, and later files are dropped, with `truncated: true`. `skipped` lists every file
   skipped, in tree order.
 - `find.replace-preview` stores, under a new id (1, 2, 3, … per session, never reused), for
-  each file with matches: its text at preview time and its replacement edits (T-021's
-  `replacement_for`). There is no limit on a preview: it holds every match. Its result lists
-  `new`, the replacement text of each match.
+  each file with matches: its text at preview time and its replacement edits. The replacement
+  texts come from T-021's `CompiledQuery::replacements` per file (linear in the file's text
+  plus its matches; one `replacement_for` call per match would be O(text × matches)), which
+  returns `Result<Vec<String>, TemplateError>`. A template naming a group that does not exist
+  is refused before the walk, as T-021 refuses it before matching (D-044): `rejected`/
+  `invalid_pattern`, message `invalid replacement: <TemplateError Display>`, nothing stored,
+  no id used. So the `Err` never arises per file. There is no limit on a preview: it holds
+  every match. Its result lists `new`, the replacement text of each match.
 - `find.replace-apply` first checks, for every file selected by `paths`, that its current text
   equals the preview's snapshot. A path not in the preview → `rejected`/`invalid_path`. Any
   difference → `rejected`/`stale_preview`, and nothing changes. Then, in tree order, it opens
   each file that is not open (as `doc.open`, so the next ids are used, `opened: true`) and
   applies that file's edits with one `Buffer::apply_edits`. On success the preview is removed;
   a later use of its id → `rejected`/`no_such_preview`.
-- Refusals use existing or T-015 kinds only: `invalid_pattern`, `invalid_path`, `not_found`,
-  `not_a_file`, `outside_root`, `io_error` (from the walk), `stale_preview`, `no_such_preview`.
-  No new kind.
+- Refusals use existing kinds only (T-032's reason table, `outside_root` from T-008):
+  `invalid_pattern` (T-021's messages, including `invalid pattern: the pattern has more than
+  100 capture groups`, T-017 s1, and `invalid replacement: …`), `invalid_path`, `not_found`,
+  `not_a_file`, `outside_root`, `io_error` (from the walk), `stale_preview`,
+  `no_such_preview`. No new kind.
 
 `docs/protocol/find.md` documents all of this.
 
 ## Pinned
-- (a) Precedence: schema → query (`invalid_pattern`) → walk errors (T-019's) → (apply only)
+- (a) Precedence: schema → query (`invalid_pattern`: the pattern, then, for
+  `find.replace-preview`, the replacement template) → walk errors (T-019's) → (apply only)
   preview exists → paths valid → staleness of every selected file → apply.
 - (b) Files: read only, through `Vfs::read`; nothing written. The preview is held in memory in
   `FindState`, never on disk.
@@ -117,7 +126,10 @@ break.
   `rejected`/`stale_preview`. No document is opened or changed, and `doc.list` is unchanged.
   `paths` naming only the unchanged files succeeds. Oracle: exact value.
 - AC-5 (`ws.replace-in-files`, preview ids): a second apply of the same preview →
-  `no_such_preview`; ids increase from 1. The worked example holds exactly. Oracle: exact value.
+  `no_such_preview`; ids increase from 1. The worked example holds exactly. A
+  `find.replace-preview` with regex `(\w)(\d)` and replacement `$3` → `rejected`/`invalid_pattern`
+  with message `invalid replacement: no capture group "3"`, and the next successful preview
+  still gets the next unused id (no id consumed by the refusal). Oracle: exact value.
 
 ## Scorecard items and intended test names
 | Item | Tests |
@@ -151,6 +163,12 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (f) n/a beyond reuse. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: item tier ruled medium; the test author changes the item file on the tests branch. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-066 · draft · did: `stale_preview`/`no_such_preview` are T-032's (D-041); T-032's description of `stale_preview` now covers a removed file (finding 25). Transitively after T-032 via T-021. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-13T12:55Z · R-112 · draft · did: `replacement_for` returns `Result` (T-017 `expand`,
+  T-021), which the preview text ignored: the template is now refused before the walk with
+  T-021's `invalid_pattern` message (D-044), no preview id used (AC-5); replacement texts come
+  from T-021's new linear `replacements` (T-017 implementer's cost note); the s1 capture-group
+  message is listed; kinds are T-032's, not T-015's. · gate attempts: 0 · not run: no cargo ·
+  missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
