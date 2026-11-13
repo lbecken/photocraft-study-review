@@ -563,6 +563,37 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `join-defects` applies no time rule (its `at` is `<now>`); a task file without
   `budget_tokens` prints `T-NNN: <sum> tokens of budget none` and no over line; the review
   check accepts `mutants` as a flow map `{…}` (template form) or an indented block map.
+- 2026-11-13T06:40Z · R-058 · in_progress (main) · did: (6) `xtask/src/hygiene.rs` + gate
+  step after `ui-commands` (unit test `step_order_matches_charter` extended: hygiene directly
+  after ui-commands, schema directly after hygiene), CHARTER §4 line, the four redactions
+  (only the named lines; `git grep -nE` of the pattern now finds nothing); (3) ready-on-main
+  check in `worktree::create` (queue/join unit-test fixtures use a `#[cfg(test)]`-only
+  `create_unchecked_for_tests`, so the binary has no bypass; queue unit fixture task files got
+  `budget_tokens: 1000`); (2) `budget` precondition + `precheck::extension` shared with the
+  report and `add`; (1)/(4) metrics rewritten (injected clock, §3 table, iter-N, tokens,
+  budget lines, `join-defects`, report sections, report exit 1); (5) `xtask/src/publish.rs`;
+  (7) messages and `docs/development.md`. Exercised through the binary in toy repositories:
+  metrics refusals/budget lines/report exit codes; publish success (main's first-parent log
+  ready, queued, content, `queue: record T-050 merged`, merged; transitions in order; worktree
+  removed), refusals (docs/ input, unchanged input, malformed item, dirty `tasks/`, existing
+  task file), step-2 signing failure (exit 2, printed command then commits exactly the two
+  paths) and step-5 red gate. · gate attempts: 1 (last: red `test` only — 15 failures, every
+  one `worktree: refused: T-001 is self_verified|reviewed on main` from the T-005 fixture,
+  the D-1 change I may not make; all other steps PASS, hygiene PASS on this tree). With a
+  trial fixture change in a throw-away clone (not committed: toy task committed `ready`, worktree
+  made, then the real state committed) all T-005 suites pass except three, each still a
+  `worktree new` refusal: `refusals_change_nothing` makes a worktree for T-010 that has **no
+  task file** on main (a `tasks/` directory exists) — that is beyond "toy tasks are ready";
+  `join_finds_acceptance_and_guard_tests_under_xtask_tests` makes `T-001-tests` when the task
+  is `tests_joined`; `refuses_front_matter_changes_on_task_branch` depends on the branch's copy
+  of the task file (fixture design). · not run: the acceptance tests of the parallel test
+  author; publish on the real repository (forbidden; the real `scorecard` in the export builds
+  every test binary into `.git/kiln-publish/target`, a cold build); a concurrent queue during
+  publish (publish does not hold the queue lock across steps 1–7). · missing context: none ·
+  next: join; director answers Q-a…Q-e.
+  QUESTION: (Q-f) `refusals_change_nothing` (T-005) needs a worktree for a task with no task
+  file on main; with rule (3) that cannot be done through `worktree new` without changing the
+  test beyond D-1 — the test author will meet it.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
