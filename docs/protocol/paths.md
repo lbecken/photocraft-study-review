@@ -11,13 +11,15 @@ The root is resolved once, when the session starts: if `--root` is a symlink to 
 that directory is the root. A root that does not exist, or is not a directory, is refused as
 before (the messages end in `: not found` and `: not a directory`).
 
-The root is that directory, not its path; Kiln keeps it open while the session runs, only so
-that no other directory can take its identity. Before each request Kiln resolves `--root` again,
-as it was given, and goes on only if it still leads to that same directory. Once the root path
-stops leading to the root directory (the root, or a directory above it, was replaced, for
-example by a symlink to another directory), the session refuses every path with
+The root is that directory, not its path. When the root can be opened for reading, Kiln keeps
+it open while the session runs, only so that no other directory can take its identity; when it
+cannot (see Residual limits), it is not kept open. Before each request Kiln resolves `--root`
+again, as it was given, and goes on only if it still leads to that same directory. Once the
+root path stops leading to the root directory (the root, or a directory above it, was replaced,
+for example by a symlink to another directory), the session refuses every path with
 `outside_root`, at open and at save, including the save of a document opened before; nothing
-is read or written in the other directory. The same refusal is given while the root path leads
+is read or written in the other directory, except in the case of an unreadable root described
+under Residual limits. The same refusal is given while the root path leads
 nowhere (the root renamed or removed with nothing in its place). If the path leads to the root
 directory again (moved back, or a link at that path pointed at it), the session works there
 again.
@@ -48,7 +50,8 @@ At open and at save (and whenever Kiln checks whether a file exists):
 - **A path whose location is outside the root is refused** as `rejected` / `outside_root`, with
   the message `cannot open <path>: resolves outside the root` or
   `cannot save <path>: resolves outside the root`. Unless the file system is changed while
-  the request runs (see Residual limits), nothing outside the root is read, created, replaced
+  the request runs, or an unreadable root is replaced between requests (see Residual limits),
+  nothing outside the root is read, created, replaced
   or removed, and no temporary file is left anywhere. This holds for links to files or
   directories outside, absolute links, chains of links, links whose target uses `..` after a
   link to a directory, and dangling links that point outside. A dangling link whose walk ends
@@ -66,7 +69,8 @@ At open and at save (and whenever Kiln checks whether a file exists):
 - **Each request is checked again.** What `doc.open` saw does not authorise a later
   `doc.save`: if the file, a directory on its path, the root or a directory above the root
   was replaced in between by a link that leads outside, or the file by a FIFO, the save is
-  refused, and the document stays modified.
+  refused, and the document stays modified (for a root that cannot be opened for reading, see
+  Residual limits).
 
 When several of these apply, the first in this order is reported: `invalid_path`,
 `outside_root`, `not_found`, `not_a_file`, any other failure (`io_error`). A path that follows
@@ -89,5 +93,10 @@ error object on stderr.
   the write) can slip through, so a file outside can be read or written and a temporary file
   can be left behind, and a FIFO swapped in during that window can make the request block.
   Changes made between two requests, to the path or to the root and the directories above it,
-  are always caught.
+  are always caught, except in the case of an unreadable root below.
+- **A root that cannot be opened for reading.** When the process may traverse the root but has
+  no read permission on it, Kiln cannot keep it open. A root that is then removed and replaced
+  by another directory between two requests may go undetected (the new directory can get the
+  removed root's identity), and the session may then read and write in the replacement
+  directory.
 - Unix only.

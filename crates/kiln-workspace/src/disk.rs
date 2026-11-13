@@ -23,8 +23,11 @@
 //! Confinement (T-008, `docs/protocol/paths.md`):
 //! - The root is resolved once, at construction (`fs::canonicalize`; a root given as a symlink
 //!   to a directory is that directory), and that *directory* is the root: its device and inode
-//!   are kept, and it is held open for the life of the `DiskFs` (so the inode number cannot be
-//!   reused by another directory after the root is removed; nothing is looked up through it).
+//!   are kept, and, when it can be opened for reading, it is held open for the life of the
+//!   `DiskFs` (so the inode number cannot be reused by another directory after the root is
+//!   removed; nothing is looked up through it). A root without read permission is not held,
+//!   and then a root removed and replaced by a new directory that reuses its inode number
+//!   between two calls is not detected (documented limit, ruling v10).
 //!   Every call resolves the root path *as given* again and walks from there only if it still
 //!   reaches that same directory; if the root path or a directory above it has been
 //!   replaced since (for example by a symlink to another directory), or leads nowhere, the
