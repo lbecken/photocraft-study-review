@@ -974,4 +974,156 @@ mod scaffold_tests {
         assert_eq!(order, vec![2, 3]);
         assert_eq!(docs.map().keys().copied().collect::<Vec<_>>(), order);
     }
+
+    const DEFAULT_RUNNER_CHILD_ENV: &str = "KILN_T015_DEFAULT_RUNNER_CHILD";
+    const DEFAULT_RUNNER_MARKER_ENV: &str = "KILN_T015_DEFAULT_RUNNER_MARKER";
+
+    /// D-046 point 2 (amended): the default runner of every standard constructor starts no
+    /// process. The parent shows that marker-writing fake `cargo`/`rustfmt` work, then reruns
+    /// this one test in a child process with the fakes first on its `PATH` (the parent's own
+    /// `PATH` is never changed, so no other test can see the fakes). The child runs one request
+    /// of each tool through `parts().tools` of each constructor; the parent then asserts that
+    /// the child passed and that no marker appeared.
+    #[test]
+    fn default_runner_of_every_constructor_starts_no_process() {
+        // The runs happen only in the child, where the fakes are first on `PATH`; the parent
+        // sets up the fakes, starts the child and checks the marker.
+        if std::env::var_os(DEFAULT_RUNNER_CHILD_ENV).is_some() {
+            default_runner_child_runs();
+        } else {
+            default_runner_parent_checks();
+        }
+    }
+
+    /// The child half: one request of each tool through `parts().tools` of each constructor.
+    fn default_runner_child_runs() {
+        let contexts: Vec<(&str, Context)> = vec![
+            ("Context::new()", Context::new()),
+            ("Context::with_text", Context::with_text("fn main() {}\n")),
+            (
+                "Context::with_files",
+                Context::with_files(&[("src/main.rs", b"fn main() {}\n")]).expect("with_files"),
+            ),
+            (
+                "Context::with_vfs",
+                Context::with_vfs(Box::new(MemoryFs::new())),
+            ),
+        ];
+        let requests = [
+            req(Tool::Cargo, &["check", "--message-format=json"], None),
+            req(Tool::Rustfmt, &["--emit=stdout"], Some("fn main() {}\n")),
+        ];
+        for (name, mut ctx) in contexts {
+            for r in &requests {
+                assert_eq!(
+                    ctx.parts().tools.run(r),
+                    Err(ToolError::Unavailable),
+                    "{name}: {r:?}"
+                );
+            }
+        }
+    }
+
+    /// The parent half of [`default_runner_of_every_constructor_starts_no_process`].
+    fn default_runner_parent_checks() {
+        #[cfg(not(unix))]
+        panic!(
+            "precondition: the fake `cargo`/`rustfmt` of this test are shell scripts and need Unix"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            use std::process::{Command, Stdio};
+            use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+            let run = |mut cmd: Command| -> std::process::Output {
+                let mut child = cmd
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .expect("spawn");
+                let start = Instant::now();
+                while child.try_wait().expect("try_wait").is_none() {
+                    if start.elapsed() > Duration::from_secs(120) {
+                        let _ = child.kill();
+                        panic!("timed out after 120 s: {cmd:?}");
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                child.wait_with_output().expect("output")
+            };
+
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "kiln-t015-default-runner-{}-{nanos}",
+                std::process::id()
+            ));
+            let bin = dir.join("bin");
+            std::fs::create_dir_all(&bin).expect("bin dir");
+            let marker = dir.join("marker");
+            for tool in [Tool::Cargo, Tool::Rustfmt] {
+                let fake = bin.join(tool.as_str());
+                std::fs::write(
+                    &fake,
+                    format!("#!/bin/sh\necho \"$0 $*\" >> \"${DEFAULT_RUNNER_MARKER_ENV}\"\n"),
+                )
+                .expect("write fake");
+                std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755))
+                    .expect("chmod fake");
+            }
+            let mut path = std::ffi::OsString::from(&bin);
+            if let Some(old) = std::env::var_os("PATH") {
+                path.push(":");
+                path.push(old);
+            }
+
+            // Precondition: started by name with that PATH, each fake leaves its marker line.
+            for tool in [Tool::Cargo, Tool::Rustfmt] {
+                let mut cmd = Command::new(tool.as_str());
+                cmd.env("PATH", &path)
+                    .env(DEFAULT_RUNNER_MARKER_ENV, &marker);
+                let out = run(cmd);
+                assert!(
+                    out.status.success(),
+                    "precondition: fake {tool:?} runs: {out:?}"
+                );
+            }
+            let seen = std::fs::read_to_string(&marker).expect("precondition: marker written");
+            assert_eq!(
+                seen.lines().count(),
+                2,
+                "precondition: one line per fake: {seen}"
+            );
+            std::fs::remove_file(&marker).expect("remove marker");
+
+            // The child copy of this test, with the fakes first on its PATH.
+            let mut cmd = Command::new(std::env::current_exe().expect("test binary"));
+            cmd.args([
+                "--exact",
+                "registry::scaffold_tests::default_runner_of_every_constructor_starts_no_process",
+                "--test-threads=1",
+            ])
+            .env("PATH", &path)
+            .env(DEFAULT_RUNNER_MARKER_ENV, &marker)
+            .env(DEFAULT_RUNNER_CHILD_ENV, "1");
+            let out = run(cmd);
+            assert!(out.status.success(), "child failed: {out:?}");
+            assert!(
+                String::from_utf8_lossy(&out.stdout).contains("1 passed"),
+                "precondition: the child ran this test: {out:?}"
+            );
+            // A process the runner spawned but did not wait for may write a moment later.
+            std::thread::sleep(Duration::from_millis(500));
+            assert!(
+                !marker.exists(),
+                "the default runner started a process: {:?}",
+                std::fs::read_to_string(&marker)
+            );
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
 }

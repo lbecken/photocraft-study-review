@@ -332,6 +332,24 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (its `touches` lacks `doc.rs`); I followed `main`'s spec. · gate attempts: 1 (last: green,
   10 steps, 404 tests) · not run: nothing else · missing context: none · next: director re-join /
   review.
+- 2026-11-13 · R-086 · after R-085; D-046 point 2 amended (director message) · did: unit test
+  `registry::scaffold_tests::default_runner_of_every_constructor_starts_no_process` in
+  `crates/kiln-commands/src/registry.rs`. The parent writes marker-writing fake `cargo`/`rustfmt`,
+  proves each leaves its marker when started by name on the new `PATH`, then reruns this one test
+  (`--exact`, one thread) as a child with that `PATH`. The parent's own `PATH` is never changed,
+  so no other test can race on it and there is nothing to restore (same pattern as
+  `acceptance_t015_tools.rs`). The child runs one `cargo` and one `rustfmt` request through
+  `parts().tools` of `Context::new()`, `with_text`, `with_files` and `with_vfs` and asserts
+  `Err(ToolError::Unavailable)`. The parent asserts the child passed with "1 passed", waits
+  500 ms and asserts there is no marker. No early return; failed preconditions panic with a
+  message. Proof: `NoTools::run` temporarily made to spawn the tool, once with `.status()` and
+  once with `.spawn()` (its `Debug` text still `NoTools`). Both times the test failed with
+  "the default runner started a process" listing marker lines. Reverted: no diff in `tools.rs`.
+  Lesson: my first draft also ran the requests in the parent, so with the seeded bug the parent
+  started the real `rustfmt`, which hung reading stdin. I killed that process (my own) and moved
+  all runs into the child. · gate attempts: 1 (last: green, 10 steps, 405 tests) · not run:
+  non-Unix (the test panics there by design) · missing context: none · next: director re-join
+  and review.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T06:48Z · R-073 · in_progress · did: tests from the spec (AC-1 per D-043) on
