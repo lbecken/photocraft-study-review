@@ -457,8 +457,8 @@ fn representative() -> Vec<(&'static str, &'static str, &'static str, &'static s
         ),
         (
             "malformed JSON",
-            r#"{"command":"#,
             "not json at all",
+            r#"{"command" "doc.list"}"#,
             "invalid_json",
         ),
         (
@@ -494,10 +494,21 @@ fn representative() -> Vec<(&'static str, &'static str, &'static str, &'static s
         (
             "path refused",
             r#"{"command":"doc.open","params":{"path":"../outside.txt"}}"#,
-            r#"{"command":"doc.open","params":{"path":"/etc/passwd"}}"#,
+            r#"{"command":"doc.open","params":{"path":"sub/../../outside.txt"}}"#,
             "rejected",
         ),
-        ("invalid request", "[1,2]", r#"{"id":7}"#, "invalid_request"),
+        (
+            "request not an object",
+            "42",
+            r#""a string""#,
+            "invalid_request",
+        ),
+        (
+            "request without command",
+            r#"{"id":7}"#,
+            r#"{"params":{}}"#,
+            "invalid_request",
+        ),
     ]
 }
 
@@ -557,22 +568,6 @@ fn error_kinds_are_documented_and_pinned_to_situations() {
         }
         kind_of.insert(label, kinds[0].clone());
     }
-    // Distinct `rejected` situations get distinct kinds (otherwise `kind` adds nothing to `code`).
-    let rejected: BTreeSet<&String> = [
-        "out-of-range offset",
-        "unknown document",
-        "file not found",
-        "path refused",
-    ]
-    .iter()
-    .map(|l| &kind_of[l])
-    .collect();
-    assert_eq!(
-        rejected.len(),
-        4,
-        "rejected situations share a kind: {kind_of:?}"
-    );
-
     // `exec` errors carry the same kinds as `run` for the same situation.
     let root = work.join("one");
     let r = root.to_str().unwrap();

@@ -433,6 +433,16 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   message contains one of missing/required/requires/expected/expects/needs. · gate attempts: 1
   (last: red clippy, scorecard, test — only the kiln-control acceptance file not compiling, as
   before) · not run: nothing else · missing context: none · next: re-join.
+- 2026-11-13 · R-045 · join (r3 tests) · did: fixed my over-assumptions in
+  `error_kinds_are_documented_and_pinned_to_situations`: the "invalid request" pair mixed two
+  documented situations; it is now "request not an object" (`42`, a JSON string) and "request
+  without command" (`{"id":7}`, `{"params":{}}`). Each remaining pair now uses one situation only:
+  malformed JSON is two syntax errors (no truncated-input variant), and path refused is two `..`
+  paths (no absolute-path variant). Removed the assertion that the four `rejected` situations have
+  distinct kinds (the spec does not say so). Each pair is still checked for self-consistency,
+  documentation, the same result on both roots, one `code` per kind, and an `exec`-vs-`run`
+  match. Clippy clean; fails on base by assertion. · gate attempts: 0 · not run: gate (only this test
+  changed) · missing context: none · next: re-join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-13 · R-031 · tests_joined (review r1) · did: reviewed 76051fb as a CLI user: hand slice
