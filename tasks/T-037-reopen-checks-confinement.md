@@ -219,7 +219,7 @@ uses the kinds `outside_root` and `io_error`, which `doc.open` already reports.
     `a.txt`. `rejected`/`io_error` for a link loop (`… I/O error: too many levels of symbolic
     links`), `sub` mode 0000 and 0600, and the root made 0000 after the start (`… I/O error:
     Permission denied (os error 13)`). `already_open: true`, `len_chars` 7 (9), for: no change;
-    deleted; directory; directory of mode 0000; FIFO (answered at once); file mode 0000; link to
+    deleted; directory; directory of mode 0000; FIFO (answered, without blocking); file mode 0000; link to
     `b.txt`; dangling link inside; `real/t.txt/`; bytes `FF FE FF`; `sub` removed; `sub`
     replaced by a file; root made 0311. In every refused case `doc.info` said `dirty: true` and
     `doc.list` one document, and `outside/` was unchanged. Root renamed away and moved back:
@@ -243,7 +243,7 @@ uses the kinds `outside_root` and `io_error`, which `doc.open` already reports.
   binary.
 
   `docs/protocol/paths.md` — the six sentences T-036's review lists as untrue until T-037:
-  - **P1 (:20–21), changed (PENDING Q-3).** Now: "Before each request Kiln resolves `--root`
+  - **P1 (:20–21), changed (Q-3 ruled (a), D-120).** Now: "Before each request Kiln resolves `--root`
     again, as it was given, and goes on only if it still leads to that same directory." After
     O1 this is true of every request that uses the file system, but not of the others: a
     `doc.info` after the root vanished still answers (probe (g): `doc.info` `dirty: true` with
@@ -367,10 +367,12 @@ target, bytes.
 a duration assertion) and every `control` response is awaited at most 10 s. No test asserts a
 time.
 
-**Pins.** No test asserts a message text, the command list, `error_kinds`, a document's text
-(`paths.md`, `control-protocol.md`, a DOC string) or the text of an editor document. Refusals
-are asserted by `ok: false`, `error.code` `rejected` and `error.kind` (Rust API: `to_json()`'s
-`code` and `reason`), plus: the response names no part of the work path. A re-open that
+**Pins.** No test reads or asserts a message text, the command list, `error_kinds`, a
+document's text (`paths.md`, `control-protocol.md`, a DOC string, `docs/commands.json`) or the
+text of an editor document. Refusals are asserted by `ok: false`, `error.code` `rejected` and
+`error.kind` (Rust API: `to_json()`'s `code` and `reason`), plus one absence check: the whole
+serialised response does not contain the work directory's path (no message is compared with
+any text). A re-open that
 succeeds is asserted by its whole result object (`already_open`, `doc`, `encoding`,
 `len_chars`, `line_ending`, `mixed_line_endings`, `path`).
 
@@ -501,21 +503,19 @@ confirms the item again. The four file stems are unique across crates (no other
   consequence: a guarantee sentence wider than the binary stays (the class of 6 of 14 review
   defects in iteration 1). (c) Make every request check the root; consequence: a behaviour
   change outside NEW-1 and D-092 (an in-memory edit refused because a directory moved).
-  **Recommended: (a).** Pinned (i) P1 is written for (a), PENDING the ruling; under (b) P1 is
-  dropped and the sentence stays as it is.
+  Recommended: (a). Ruled (a) (D-120, below); Pinned (i) P1 is the replacement.
 - **Q-4 (planner, spec check R-196): the comment at `apps/kiln-cli/tests/guard_t036_cli.rs`
   :325–326** explains that `f.txt` is not re-opened because a re-open "returns it without
   reading the disk (`already_open`)"; after this task that re-open would be refused. It is a
   comment in a merged guard, not an assertion. Options: (a) leave it; consequence: one stale
   comment, no merged test file in `touches` (golden rules 4 and 5 not engaged). (b) Add the file
   to `touches` for a comment-only edit by the implementer, logged; consequence: an implementer
-  edits a merged guard file. **Recommended: (a)**; this file is written for (a), PENDING the
-  ruling.
+  edits a merged guard file. Recommended: (a). Ruled (a) (D-120, below); the comment stays.
 
 ### Spec check R-196 (planner, 2026-11-14, against `task/T-036` `cbcfdbbf87b36dd0b8fb70244c4e90b8adf46ddb` and main `83102abd824e874d9d64368a8054e99f64989e21`)
 Recorded here, as the director asked, rather than in `tasks/spec-checks/`. Verdict: **ready to
-dispatch once Q-3 and Q-4 are ruled and T-036 has merged**, after the facts under "To re-check at
-dispatch" are confirmed on main.
+dispatch once T-036 has merged**, after the facts under "To re-check at dispatch" are
+confirmed on main (Q-3 and Q-4 ruled by D-120, R-198).
 
 Blockers found in the draft (8), each fixed above:
 1. `touches` gave the test author `scorecard/items/ws.path-confinement.toml` to edit; v1.2 §6:
@@ -534,7 +534,7 @@ Blockers found in the draft (8), each fixed above:
 5. Documentation wider than the code after O1: the draft left `paths.md`:51 ("At open and at
    save …") governing a re-open, so the `not_a_file` bullet would claim a re-open of a
    directory or FIFO is refused; and left :96–97 and :20–21 unexamined. Fixed by P4, P6 and
-   (PENDING Q-3) P1.
+   P1 (Q-3, ruled (a) by D-120).
 6. The root-removal case relied on nothing reliable (a removal after a rename was undone, no
    reuse search). Now AC-2 (v), (vi) use T-036's removal pattern in a binary of their own.
 7. The high-tier protocol was not stated (independent test author, the implementer adds no
@@ -570,11 +570,12 @@ position/list/close/insert/delete/replace/undo/redo` read no disk.
 D-091: one item (the re-open check, NEW-1) and its documents; P1 (Q-3) documents the same root
 check. Not a bundle.
 
-### To re-check at dispatch (facts read on `task/T-036` at `cbcfdbbf87b36dd0b8fb70244c4e90b8adf46ddb`; the branch moved to `c77936117751810cd05658bb03439cbf39f6e0f4` during the check, which changes only `crates/kiln-workspace/tests/confinement.rs`)
+### To re-check at dispatch (facts read on `task/T-036` at `cbcfdbbf87b36dd0b8fb70244c4e90b8adf46ddb`; re-read at R-198 against its head `5b2bffb677b6f8ad89b38ca27cfc47dbbb3243ef`: `git diff cbcfdbb..5b2bffb --stat` changes only `crates/kiln-workspace/tests/confinement.rs` (`c779361`), `docs/control-protocol.md` (`09d96d9`, one sentence after the `--root` bullet's C1 on `exec`'s `invalid_json`-before-root order) and T-036's task file; none of the facts below depends on them)
 1. T-036 merged; base for the acceptance tests = that main.
 2. `docs/protocol/paths.md` on main reads as on `cbcfdbb` at the lines Pinned (i) names
-   (:20–21, :21–24, :25–27, :51, :71–74, :76–77, :96–97); T-036's rework p2 edits only
-   `docs/control-protocol.md`.
+   (:20–21, :21–24, :25–27, :51, :71–74, :76–77, :96–97); T-036's rework p2 (`09d96d9`) edits
+   only `docs/control-protocol.md`, in the `--root` bullet, not the Paths bullet this task
+   relies on (Pinned (i)), so this task still does not edit that file.
 3. `disk.rs`: `_root_handle: fs::File` always held; `current_root` (:207–216), `locate`/
    `locate_steps` (:220–329) and the `Vfs` impl (:448–524) as read; module-doc bullet at :35.
 4. `vfs.rs`: the trait holds `read`, `write_atomic`, `is_file`, `list_dir` only; `git grep
@@ -636,6 +637,21 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   T-036 merges, confirms "To re-check at dispatch" and makes the task ready.
   QUESTION: Q-3 (narrow `paths.md`:20–21), Q-4 (stale comment in `guard_t036_cli.rs`) — see
   "Questions and rulings".
+- 2026-11-14T05:10Z · R-198 · draft · spec check continued (booked to `iter-2`, role
+  `planner`; note "spec check: T-037"). Rulings D-120 on Q-3 (a) and Q-4 (a) acknowledged and
+  accepted. did: removed every PENDING mark (P1, Q-3, Q-4, blocker 5, verdict); re-read the
+  file top to bottom as a builder: Interface, Pinned, ACs and `touches` agree (four test files,
+  each named by its ACs; implementer paths only in `src/` and `paths.md`); the only times are
+  the 10 s hang detectors, stated as never asserted, and Pinned (g)'s "answered at once" became
+  "answered, without blocking"; the Pins paragraph now says no test reads a message text, a
+  document (`docs/commands.json` included), the command list or `error_kinds`, and the
+  work-path check is an absence check on the whole response. Read `git diff
+  cbcfdbb..5b2bffb --stat` (`task/T-036` head now `5b2bffb`): `confinement.rs`, one sentence in
+  `docs/control-protocol.md`'s `--root` bullet (`09d96d9`) and T-036's task file; nothing in this
+  spec depends on them (it relies only on the Paths bullet of `control-protocol.md`, which is
+  unchanged, and still does not edit that file); "To re-check at dispatch" names the new head.
+  · gate attempts: 0 · not run: cargo, no probe (none needed) · missing context: none · next:
+  after T-036 merges, the director confirms "To re-check at dispatch" and makes the task ready.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
