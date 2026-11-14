@@ -862,6 +862,90 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `specified`/`ready`.
 <!-- end planner log -->
 ### implementer
+- 2026-11-14T03:11Z · R-189 · ready · did: item 1 (code and documents) and my own integration
+  test; items 2–4 left to the test author (not seen).
+  - Rulings acknowledged, all accepted: D-092 Q-1 (b) as widened by D-111 Q-4 (A) (refuse every
+    root that cannot be opened for reading, `PermissionDenied` for lack of permission, the
+    open's own kind otherwise); D-092 Q-2 (`docs/control-protocol.md` `--root` bullet and the
+    `run`/`control` exit-code cells edited, C1–C3); D-092 Q-3 (T-008's four tests untouched);
+    D-111 split (item 5 is T-044: walk not changed); D-114 (AC-6 is no test; removals checked on
+    the diff). No ruling, Interface line or Pinned sentence contradicted the merged code.
+  - Criteria in my words: `DiskFs::new` keeps its `NotFound`/`NotADirectory` results, then, after
+    canonicalising, opens the root for reading; a failed open is `Io { path: (root), kind: <the
+    open's kind> }` and nothing is created; every `DiskFs` holds that handle and takes (dev, ino)
+    from it. `kiln-cli` then exits 2, stdout empty, `bad --root` on stderr, no request run.
+    Removal/replacement, retargeted link and vanished root stay refused on `read`,
+    `write_atomic`, `list_dir`.
+  - Code (`disk.rs`): `_root_handle` is now `fs::File` (was `Option`); `new` maps a failed
+    `File::open` or `fstat` of the held handle to `io_error((root), e)`; identity from the held
+    handle only (the fallback to the path's metadata is gone). Order kept as Pinned (c):
+    metadata, directory, canonicalise, open. Module, field and `new` docs say the root is always
+    held and a root that cannot be held is refused. `locate`/`locate_steps` untouched; no
+    `unsafe`, no dependency.
+  - Test (`tests/confinement.rs::root_that_cannot_be_opened_for_reading_is_refused_by_new`): re-runs
+    its own binary (`--exact`, env marker) as U (uid/gid 65534 via `CommandExt` when euid is 0, on
+    a chowned fixture; own identity otherwise), 10 s hard timeout, marker file checked by the
+    parent. Child: positive control (0711 root accepted, `f.txt` read), negative control (0000
+    file → `Io{PermissionDenied}`), then modes 0311, 0300, 0200, 0100, 0000 directly and through a
+    root symlink → `Io{PermissionDenied}`, `path()` `(root)`, `Display` without the work path, work
+    snapshot unchanged; then a root held at 0711, made 0311, removed and replaced by a link to a
+    new directory (64 dirs, no inode reuse asserted) → `read`/`write_atomic`/`list_dir(None)`/save
+    `OutsideRoot`, `is_file` false, document dirty, snapshot unchanged. No message text asserted.
+    Against base `disk.rs` it fails ("mode 311 accepted"); restored after.
+  - gate attempts: 3 (1: red clippy, `unwrap_used` in my test helpers, moved into a `cfg(test)`
+    module; 2: lost, the container restarted at 02:59Z while it ran; 3: green, "GATE PASSED in
+    588.6s (11 steps; 2 step(s) EMPTY …)", test step "759 passed, 0 failed, 0 ignored in 93
+    suites"). `cargo xtask no-skip` PASS separately.
+  - Evidence for each document sentence: on the debug `kiln-cli` of this branch (built before
+    the restart from `3c9b3c5`, the code commit; later commits change tests and docs only), the
+    binary and fixture copied to a fixed `/tmp/t036-impl-probe/` (and `-sess/`, `-run/`), removed
+    afterwards. Identities: `setpriv --reuid=65534 --regid=65534 --clear-groups` (`Groups:` empty,
+    `CapEff 0`) on a fixture chowned to 65534, and `capsh
+    --drop=cap_dac_override,cap_dac_read_search` (uid 0, `CapEff 000001fffefffff9`) on a root-owned
+    fixture; both gave identical results.
+    - S1, C1, C2, C3: `exec doc.open '{"path":"f.txt"}' --root root`, `run s.jsonl --root root`,
+      `control --root root` (one `doc.open` on stdin). Modes 0311, 0300, 0100, 0000: each rc=2,
+      0 stdout bytes, one stderr line ``kiln-cli: bad --root: root `root`: I/O error: Permission
+      denied (os error 13)``, no usage text. 0711: rc=0 for all three. 0644 (read, no search):
+      accepted as on base (exec rc=2 with a JSON `io_error` object, run rc=3, control rc=0).
+      Negative control (0000 file in a 0711 root) gave `io_error` for both identities. Plain uid 0
+      with capabilities: a 0000 root is accepted (capabilities bypass the bits). Base cases
+      unchanged: `--root nope` → ``bad --root: root `nope`: not found`` rc=2; a file root → `…:
+      not a directory` rc=2. "No request runs": `run no-such-script.jsonl --root root` (0311, as
+      65534) gives the `bad --root` line, not a script error, rc=2; `control` with `not json` on
+      stdin gives 0 stdout bytes, rc=2.
+    - S2 and R1–R6 (held root; removals): as 65534, `control --root root` at 0711, `doc.open
+      f.txt`, `doc.insert`, `chmod 0311 root`, then root removed and 64 new dirs made: no inode
+      reuse (old (65024,835942), last new (65024,837331)); root → link to `c63` holding
+      `secret.txt` (readable through the root path via std): `doc.open secret.txt`, `doc.save`
+      and `project.tree {}` all `rejected`/`outside_root`, `doc.info` `dirty: true`, the
+      replacement held only `secret.txt` afterwards.
+    - S3 (`project.tree` refused): the same session; also as uid 0, `control --root rootlink`
+      with `rootlink` retargeted to `other` (`doc.open secret.txt`, `doc.save`, `project.tree {}`
+      → `outside_root`; pointed back, the save wrote `root/f.txt`, `other/` unchanged), and the
+      root renamed to `root.away` and later removed (`doc.save`, `project.tree {}` →
+      `outside_root`, no `root` created; renamed back, the save succeeded).
+    - No sentence was added about what a root made unreadable after start answers. Observed only
+      (recorded, not documented): after `chmod 0311` a held root gave `doc.open g.txt` ok,
+      `project.tree {}` → `io_error` ("cannot list the project: (root): I/O error: Permission
+      denied"), `doc.save` ok.
+  - Pinned (i): S1, S2, S3, C1, C2, C3 copied word for word; R1–R6 removed as listed. The two
+    edited "The root" paragraphs were re-wrapped (words unchanged); nothing else edited in either
+    document. `docs/protocol/project.md` not edited.
+  - not run: the test author's tests (not seen); the reviewer's 20-run detection measurement
+    and mutant M; an ACL or LSM denial; macOS/CI non-root identity (my test's own-identity branch
+    is covered by code reading only, the gate is uid 0); a release build.
+  - missing context: none. Interruption: the container restart killed gate attempt 2; probe
+    outputs above were observed before it, the gate was re-run in full after it.
+  - next: director joins `task/T-036-tests`.
+  QUESTION: AC-4 through `control` expects `doc.open` of `f.txt` → `outside_root` after the root
+  vanishes, but if `f.txt` is the document opened before, `doc.open` answers `ok` with
+  `already_open: true` without touching the disk (`crates/kiln-commands/src/doc.rs`:136,
+  documented; observed on this branch and the same code on base). `paths.md` "The root" keeps
+  (Pinned, verbatim) "the session refuses every path with `outside_root`, at open …", which is
+  then wider than the binary for an already-open path. I changed neither (outside `touches` /
+  kept verbatim); does AC-4 mean a path not already open, and should a later task narrow the
+  sentence?
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
