@@ -789,4 +789,21 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `task/T-037` and ties the seven tests to `ws.path-confinement`.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-14T06:40Z · R-205 · tests_joined · review round 1 (high, independent) of
+  `8d649e8818fbb0738b8c12fee8a3e5a73636dd43` against the primary copy of this file. Rulings
+  D-092 (O1, `io_error`, order) and D-120 (Q-3 (a), Q-4 (a)) acknowledged and accepted. did:
+  about 85 `kiln-cli control` sessions (uid 0; uid/gid 65534 via `setpriv`; uid 0 with DAC caps
+  dropped via `capsh`; 15 under `strace`) on fixtures under `/tmp/t037-review-r205`: every
+  outside/root/loop/unsearchable case refused as P7 says, every inside change answered
+  `already_open: true`, document and tree unchanged, re-open made only `readlink`/`statx`;
+  P1–P8, D1–D3 copied exactly and true of the binary; T-037 tests run as uid 65534 (non-root
+  branch) pass, and fail (not skip) without CAP_SETUID; 17 mutants: 15 killed (11 by
+  acceptance), 2 survived (M15 check only when dirty, M17 selection reset on refusal), both
+  confirmed wrong through a mutant binary and surviving `cargo test --workspace`; removal
+  binary 20/20 pass, 0 reuse; against "no check" 20/20 fail; no `k37*` fixture left.
+  Verdict request-changes: test gaps 1, 2; spec gap 3 (parent of root unsearchable →
+  `outside_root`) to the director; nits 4–6. Review `reviews/T-037-r1.md`. · gate attempts: 0
+  (`cargo xtask ci` not run; `no-skip` PASS, T-037 targets green) · not run: base build, whole
+  gate, `run` with a mid-session change · missing context: none · next: test author closes
+  test gaps 1–2 (director may word them into AC-1/AC-2 "Document unchanged"); round 2.
 <!-- end reviewer log -->
