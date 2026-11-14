@@ -12,7 +12,7 @@ touches:
   - crates/kiln-ui/Cargo.toml           # [dependencies] and [dev-dependencies] only; [lints] unchanged
   - crates/kiln-ui/src/                 # the shell and the script runner (new modules)
   - crates/kiln-ui/tests/               # implementer's own integration tests
-  - apps/kiln/Cargo.toml                # [dependencies] and [dev-dependencies] only; [lints] unchanged
+  - apps/kiln/Cargo.toml                # [dependencies] and [dev-dependencies] only; [lints] unchanged; the test author adds the one `[dev-dependencies]` line `kiln-control.workspace = true` (n1, D-148)
   - apps/kiln/src/                      # the `script` subcommand and usage text
   - apps/kiln/tests/acceptance_t055.rs  # test author
   - apps/kiln/tests/guard_t055.rs       # test author (behaviour main has that this task keeps)
@@ -320,6 +320,18 @@ Questions for the director, before dispatch (from ADR-0008):
   (METHODOLOGY §5.7). The planner's probe (ADR-0008) is the evidence for the pinned figures.
 - The reviewer's round 1 includes one real window under Xvfb only if this task's shell opens a window; if it does
   not (the window is T-056), say so in the review.
+
+### Rulings on the test author's questions of R-227 (director, D-148; told to both builders)
+- **n1.** `apps/kiln/Cargo.toml` and `Cargo.lock` are edited by both roles. The test author's line
+  `[dev-dependencies] kiln-control.workspace = true` (the oracle of AC-1) stands; the implementer adds no
+  dev-dependency on `kiln-control` of its own. The director resolves the textual merge at the join.
+- **n2.** A fresh session has no focused node: a `type` request before any `focus`, or before a `click` that gives a
+  text input the focus, is refused `not_actionable` and changes nothing. The shell does not give `Path` the focus by
+  itself.
+- **n3.** A `--log` file that can be opened but not written behaves as with `kiln-cli run`: exit status 2, one
+  message on stderr, nothing on stdout. Measured by the director on main: `kiln-cli run s.jsonl --memory --log
+  /dev/full` with the one request `doc.list` printed `kiln-cli: cannot write log `/dev/full`: No space left on
+  device (os error 28)` on stderr, nothing on stdout, exit 2.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
