@@ -608,3 +608,6 @@
 {"kind":"transition","task":"T-055","iteration":2,"at":"2026-11-14T21:29:24Z","from":"in_progress","to":"self_verified"}
 {"kind":"join","task":"T-055","at":"2026-11-14T21:29:26Z","acc_total":26,"acc_fail_base":26,"base_fail_kind":"fails","acc_fail_first_join":0,"acc_defects":null,"impl_tests_green":true,"gate_green":true,"tests_sha":"6ccf760ec78e3e0738d710198445ae110b89f3ea","joined_sha":"96d91e0827bbfe1b6a3609dd40963dc31318e70c","result":"joined","guard_total":2,"guard_fail_base":0,"guard_fail_join":0}
 {"kind":"transition","task":"T-055","iteration":2,"at":"2026-11-14T21:47:59Z","from":"self_verified","to":"tests_joined"}
+{"kind":"run","task":"T-055","iteration":2,"run":"R-236","role":"reviewer","tier":"high","started_at":"2026-11-14T21:48:01Z","ended_at":"2026-11-14T21:48:48Z","wall_s":47,"tokens":6505,"tool_calls":4,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"confirmation, not a review round (D-154): the tree at the rebuilt head 96d91e0 is identical to the head approved in round 2; tests branch is its ancestor; reviews/T-055-r3.md at fce5ef1"}
+{"kind":"transition","task":"T-055","iteration":2,"at":"2026-11-14T21:49:10Z","from":"tests_joined","to":"reviewed"}
+{"kind":"transition","task":"T-055","iteration":2,"at":"2026-11-14T21:49:11Z","from":"reviewed","to":"queued"}
