@@ -882,7 +882,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   Random check (scratch, not committed): 25 seeded sessions of 40 keys/typed texts on LF, CRLF,
   CR-only, no-break and mixed documents, compared with a Python model of the Input table and
   `cursor.md` (`text`, `cursor.get`, `Editor` value and selection): 25 of 25 equal.
-  · gate attempts: GATE_ATTEMPTS · not run: the acceptance tests of T-056 (not visible to me); a
+  · gate attempts: 2 (1: green at `4fe2774`, 758.9 s, 930 tests; 2: green at `de53df5`, 515.2 s, after x1) · not run: the acceptance tests of T-056 (not visible to me); a
   real window (T-065); release builds; a timing of keystrokes on large documents (the 1,048,577-char
   document opens, paints and settles in the test that takes about 2 s for all 10 tests) · missing
   context: none · next: join with `task/T-056-tests`; review.
