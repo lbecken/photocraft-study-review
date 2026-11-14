@@ -2,7 +2,7 @@
 id: T-023
 title: "List a document's outline, go to a line and column clamped to the document, go to an outline symbol, and find symbols by name across the project's Rust files"
 tier: medium            # ADR-0002 default: in-memory, plus reads through T-019's walk and the unchanged `Vfs::read` (no new disk code, no dependency, no CHARTER §3 contract); confirmed by the director (D-108, note N-3)
-state: self_verified
+state: tests_joined
 owner_role: planner
 scorecard_items: [syntax.outline, nav.goto-line, nav.goto-symbol, nav.workspace-symbol]
 depends_on: [T-016, T-018, T-019, T-020, T-032]   # T-016, T-018, T-019 (3b1a95d), T-032 merged; T-020 (`too_large`, `syntax::MAX_CHARS`) must merge first (spec check R-180); T-021 is not a dependency but merges first (D-092 order)
