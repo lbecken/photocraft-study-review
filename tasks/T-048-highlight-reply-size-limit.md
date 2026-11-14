@@ -47,6 +47,7 @@ Interface, Pinned and acceptance criteria are written after the spec check below
 - `docs/protocol/search.md`: `search.find` takes `limit` (1 to 100,000, default 10,000) and
   reports `total` and `truncated`; `search.replace` caps `ranges` the same way (T-021 ruling Q-2,
   D-101, taken after a replace-all reply pushed the process past 512 MiB).
+- `evaluations/iter-2.md`, Q5 (added by the director, D-141): at the size limit the `syntax.tree` reply is one line with a 34 to 37 MB `sexp`, and `errors` has no cap either; the evaluator also saw the 1,048,575-span highlight reply (peak 2,124,528 KB for `1;` repeated, 707,048 KB for `a;`). The specification decides whether the reply limit of this task covers `sexp` and `errors` too.
 
 ## Options the record names
 - A `limit` param and a `truncated` flag, as the search commands have (the precedent of T-021
