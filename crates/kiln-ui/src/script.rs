@@ -658,3 +658,61 @@ pub fn parse_size(text: &str) -> Option<(u32, u32)> {
     };
     Some((number(w)?, number(h)?))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LINES: &[&[u8]] = &[
+        br#"{"id":1,"command":"doc.list"}"#,
+        br#"{"id":2,"command":"buffer.insert","params":{"offset":0,"text":"fn main() {}"}}"#,
+        br#"{"id":3,"command":"doc.open","params":{"path":"missing.rs"}}"#,
+        b"",
+        b"  \r",
+        b"not json",
+        b"\xff\xfe",
+        b"[1]",
+        br#"{"id":1.5,"ui":"snapshot"}"#,
+        br#"{"id":[],"command":"doc.list"}"#,
+        br#"{"id":"x","command":"nope"}"#,
+        br#"{"id":"y","command":"buffer.insert","params":{}}"#,
+        br#"{"id":4,"command":"buffer.text"}"#,
+        br#"{"id":5,"command":"doc.list","extra":1}"#,
+    ];
+
+    #[test]
+    fn control_lines_get_the_hosts_bytes_and_log() {
+        let mut script = Script::new(Files::Memory, DEFAULT_SIZE).unwrap();
+        let mut host = Host::in_memory(&[]).unwrap();
+        for line in LINES {
+            assert_eq!(script.handle_line(line), host.handle_line(line));
+        }
+        assert_eq!(script.log_script(), host.log_script());
+    }
+
+    #[test]
+    fn frames_run_after_successful_control_requests_only() {
+        let mut script = Script::new(Files::Memory, DEFAULT_SIZE).unwrap();
+        let start = script.frames();
+        assert!(start >= 1);
+        script.handle_line(br#"{"command":"doc.open","params":{"path":"missing.rs"}}"#);
+        assert_eq!(script.frames(), start);
+        script.handle_line(br#"{"command":"doc.list"}"#);
+        assert!(script.frames() > start);
+        let before = script.frames();
+        script.handle_line(br#"{"ui":"frames","count":0}"#);
+        script.handle_line(br#"{"ui":"type","text":"x"}"#);
+        assert_eq!(script.frames(), before);
+    }
+
+    #[test]
+    fn size_values_are_checked() {
+        assert_eq!(parse_size("1280x800"), Some((1280, 800)));
+        assert_eq!(parse_size("200x8192"), Some((200, 8192)));
+        for bad in [
+            "199x800", "800x8193", "800", "x800", "800x", "+800x800", "8 x8", "1e3x800",
+        ] {
+            assert_eq!(parse_size(bad), None, "{bad}");
+        }
+    }
+}

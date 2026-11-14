@@ -8,7 +8,6 @@ use std::process::{Child, Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use kiln_control::Host;
 use serde_json::Value;
 
 /// Every spawned `kiln` is killed and the test fails after this long (D-028 (8)).
@@ -163,19 +162,15 @@ fn row_texts(node: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The host's responses (and log) for `text` on `root`.
+/// The responses of `kiln script` for `text` on `root` (in `dir`), as parsed lines.
 #[cfg(test)]
-fn oracle(root: &Path, text: &str) -> (Vec<String>, String) {
-    let mut host = Host::on_disk(root).unwrap();
-    let responses = text
-        .split('\n')
-        .filter_map(|l| host.handle_line(l.as_bytes()))
-        .collect();
-    (responses, host.log_script())
+fn replay(dir: &Path, root: &str, text: &str) -> Vec<Value> {
+    let (out, _) = script(dir, root, text);
+    lines(&out)
 }
 
 #[test]
-fn control_requests_are_answered_as_the_host_answers_them() {
+fn control_requests_get_control_responses_and_a_replayable_log() {
     let dir = fresh("control");
     project(&dir, "proj");
     project(&dir, "copy");
@@ -200,15 +195,58 @@ fn control_requests_are_answered_as_the_host_answers_them() {
         r#"{"id":7,"command":"doc.list"}"#,
     );
     let (out, log) = script(&dir, "proj", text);
-    let (expected, expected_log) = oracle(&dir.join("copy"), text);
-    let printed: Vec<&str> = std::str::from_utf8(&out.stdout).unwrap().lines().collect();
-    assert_eq!(printed, expected);
-    assert_eq!(log, expected_log);
     assert_eq!(out.status.code(), Some(3));
+    // One response per non-blank line, in order; kinds as the control protocol gives them
+    // (the byte-for-byte comparison with `kiln_control::Host` is kiln-ui's unit test).
+    let r = lines(&out);
+    let kinds: Vec<&str> = r
+        .iter()
+        .map(|v| v["error"]["kind"].as_str().unwrap_or("ok"))
+        .collect();
     assert_eq!(
-        fs::read(dir.join("proj/src/a.rs")).unwrap(),
-        fs::read(dir.join("copy/src/a.rs")).unwrap()
+        kinds,
+        [
+            "ok",
+            "ok",
+            "not_found",
+            "syntax",
+            "not_an_object",
+            "bad_id",
+            "schema",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+        ]
     );
+    let logged: Vec<String> = log
+        .lines()
+        .map(|l| {
+            serde_json::from_str::<Value>(l).unwrap()["command"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(
+        logged,
+        [
+            "doc.list",
+            "doc.open",
+            "doc.insert",
+            "syntax.highlight",
+            "doc.save",
+            "doc.list"
+        ]
+    );
+    let mut saved = b"// hi\n".to_vec();
+    saved.extend_from_slice(A_RS);
+    assert_eq!(fs::read(dir.join("proj/src/a.rs")).unwrap(), saved);
+    // The log run again on a copy of the initial root writes the same file and the same log.
+    let (again, again_log) = script(&dir, "copy", &log);
+    assert_eq!(again.status.code(), Some(0));
+    assert_eq!(again_log, log);
+    assert_eq!(fs::read(dir.join("copy/src/a.rs")).unwrap(), saved);
 
     // Only successful requests: exit 0.
     let (out, _) = script(&dir, "proj", r#"{"command":"doc.list"}"#);
@@ -292,12 +330,12 @@ fn the_ui_opens_through_the_session_by_click_and_by_enter() {
         assert_eq!(first["command"], "doc.open");
         assert_eq!(first["params"]["path"], "src/a.rs");
         // The log replayed on a copy of the initial root gives the same list.
-        let (replayed, _) = oracle(
-            &dir.join("replay"),
+        let replayed = replay(
+            &dir,
+            "replay",
             &format!("{log}{{\"id\":\"l\",\"command\":\"doc.list\"}}\n"),
         );
-        let replayed: Value = serde_json::from_str(replayed.last().unwrap()).unwrap();
-        assert_eq!(replayed["result"]["docs"], *docs);
+        assert_eq!(replayed.last().unwrap()["result"]["docs"], *docs);
     }
 }
 
@@ -307,13 +345,19 @@ fn refused_opens_are_shown_with_the_kind_and_not_logged() {
     let root = project(&dir, "proj");
     fs::write(dir.join("outside.txt"), b"o\n").unwrap();
     std::os::unix::fs::symlink(dir.join("outside.txt"), root.join("link.txt")).unwrap();
-    for path in ["src/missing.rs", "dir", "link.txt", "../x"] {
-        let mut host = Host::on_disk(&root).unwrap();
-        let request = serde_json::json!({"command": "doc.open", "params": {"path": path}});
-        let control: Value =
-            serde_json::from_str(&host.handle_line(request.to_string().as_bytes()).unwrap())
-                .unwrap();
-        let kind = control["error"]["kind"].as_str().unwrap().to_owned();
+    for (path, kind) in [
+        ("src/missing.rs", "not_found"),
+        ("dir", "not_a_file"),
+        ("link.txt", "outside_root"),
+        ("../x", "invalid_path"),
+    ] {
+        // The same path as a control request reports this kind.
+        let control = replay(
+            &dir,
+            "proj",
+            &serde_json::json!({"command": "doc.open", "params": {"path": path}}).to_string(),
+        );
+        assert_eq!(control[0]["error"]["kind"], kind, "{path}");
 
         let (out, log) = script(&dir, "proj", &open_through_ui(path, false));
         assert_eq!(out.status.code(), Some(0), "{path}");
@@ -321,7 +365,7 @@ fn refused_opens_are_shown_with_the_kind_and_not_logged() {
         let s = by_id(&r, "s");
         assert!(child_values(labelled(s, "Documents")).is_empty(), "{path}");
         let message = labelled(s, "Message")["value"].as_str().unwrap().to_owned();
-        assert!(message.starts_with(&kind), "{path}: {message} / {kind}");
+        assert!(message.starts_with(kind), "{path}: {message} / {kind}");
         assert!(!log.contains("doc.open"), "{path}");
     }
     // A later successful open clears the message.
