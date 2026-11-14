@@ -494,6 +494,35 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   runner; release build · missing context: none · next: director (questions; join with
   `task/T-055-tests`; resolve the `apps/kiln/Cargo.toml` merge per n1). Disk: worktree `target/`
   9.9 GB after the gate (whole-workspace test build).
+- 2026-11-14 · R-228 · rework after the first join (head seen 1fa0aa6) · **Rulings acknowledged
+  (D-149):** n4 accepted and acted on: control requests no longer run frames (the frames before
+  the first request stay); `snapshot` runs none; one sentence in `docs/protocol/ui.md` ("A control
+  request runs no frame …"). n5 accepted (no change). n6 accepted: ui.md now says "Every scrollable
+  area is reported as a node of role `scroll_view` whose bounds are the visible part". n7
+  confirmed (no change). n8 accepted and acted on: `click` (with or without `at`) on an `offscreen`
+  target is refused `not_actionable` before any frame; listed in ui.md's `not_actionable` row; unit
+  test `a_click_on_an_offscreen_target_is_refused_and_runs_no_frame` (40 documents in 400×300: the
+  refusal runs no frame and the snapshot is unchanged, a visible document is clicked). n9 accepted
+  (my AC-5-like test already compares `root`). n10 accepted. n11 accepted: ui.md adds the limit
+  (a space's reported colour is its neighbour's, not necessarily its text's).
+  did: the changes above; my binary tests now run `{"ui":"frames","count":1}` between control
+  requests and the snapshots that expect their effect (3 places); unit test
+  `only_ui_actions_run_frames` replaces the old frames-after-control test. Checked against the
+  binary: 40 `doc.open`s then a snapshot shows no document and the same frame total; after
+  `frames 1` (which reports 1) the total grows by 1 and the documents are shown; a click on the
+  offscreen `f40.txt` answers `not_actionable` and the next snapshot has the same total.
+  **Acceptance tests:** `ac6_frame_counts_add_up` now passes. Five fail, each because it takes a
+  snapshot right after control `doc.open`s with no frame in between (the case n4 foresees; not
+  worked around): `ac2_shell_shown` (script `snapshot, open, open, snapshot`), `ac9_no_display`
+  (same script), `ac4_refusals_shown` (`open b.txt` then `snapshot s0`), `ac5_idle_frames_add_nothing`
+  (`ac5-fresh`: `open b.txt`, snapshot, 600 frames, snapshot — the first shows no document, the
+  second shows it), `ac7_ui_refusals` (setup `open, open, snapshot s0`; precondition "two nodes
+  with a `.`" fails). 13 of 18 pass; guard_t055 2/2; my tests 9/9; kiln-ui 12/12.
+  · gate attempts: 3 in all (this run: 1, `--keep-going`: red at `test` only, the five tests
+  above; every other step PASS/EMPTY; `cargo test --workspace --locked --no-fail-fast`: 901
+  passed, 5 failed, the same five) · not run: the test author's n4 revision of its scripts (not
+  on this branch) · missing context: none · next: director (merge the test author's revised
+  scripts, rerun the gate).
 <!-- end implementer log -->
 ### test author
 - 2026-11-14T19:25Z · R-227 · ready · did: wrote `apps/kiln/tests/acceptance_t055.rs` (18 tests)
