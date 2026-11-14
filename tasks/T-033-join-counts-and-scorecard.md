@@ -336,6 +336,11 @@ Planner's options for the director (R-160); the spec above is written for the re
 - Q-5: the role is named `spec-checker`.
 - Order: after T-042; not in flight with T-041 or T-043 (shared `docs/development.md`).
 
+## Note from T-055 (director, D-153) — to add at specification
+The queue's linear rebase met again a conflict that the join merges had resolved by hand (both builders edited
+`apps/kiln/Cargo.toml`). Either the join leaves a branch the queue can replay, or the queue accepts a branch with
+resolved merges; and the tool refuses a `touches` path edited on both branches unless a ruling names it.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
