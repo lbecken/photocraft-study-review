@@ -830,4 +830,22 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   - gate attempts: 0 this run · missing context: none · next: director, join.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-14 · R-230 · round 1 at `f9fc44e0c18d19bc9b363ac716bdf54e731ec5ce` (tests joined) ·
+  **Rulings acknowledged** (read from the task file on main, `fe1f014`; this branch's copy lacks
+  the D-148 and D-149 sections): D-147 Q-1 A and Q-3 A accepted (one `kiln_control::Host`
+  allowlist entry, `kiln script`); D-148 n1–n3 accepted and verified (n2: nothing focused at
+  start; n3: `--log /dev/full` exit 2, empty stdout); D-149 n4–n10 accepted and verified through
+  the binary (n4 frame totals, n8 offscreen click refused with no frame). n11 questioned with
+  evidence: read literally ("deepest node whose rectangle contains the centre") it attributes the
+  `Path` label's text to the scrolled `Documents` list or to an `offscreen` document (review
+  finding 1, spec gap 10). · did: full review `reviews/T-055-r1.md`: every AC and ruling through
+  the binary; ui.md, usage text and the control-protocol line against the binary; differential
+  run (seeds 20261114 and 7031, 120 scripts, 3934 lines, 0 differences against `kiln-cli run` and
+  `kiln-cli control`); 20 mutants (13 killed, 9 by acceptance tests; 7 survived); boundary probes
+  (command line, FIFO, `/dev/full`, long paths, hostile lines, strace, determinism at 5 locations
+  and under load, log replay). No Xvfb run: this task opens no window. Verdict
+  **request-changes**: 2 defects, 6 test gaps, 3 spec gaps, 1 nit. · gate attempts: 0 (ran
+  `ui-commands`, `layers`, `no-skip`, `hygiene` PASS and the `kiln`/`kiln-ui` tests, 42 passed) ·
+  not run: full `cargo xtask ci`; permission-denied reads (sandbox is root) · missing context:
+  none · next: director (findings 1–8 to the implementer and test author; spec gaps 9–11).
 <!-- end reviewer log -->
