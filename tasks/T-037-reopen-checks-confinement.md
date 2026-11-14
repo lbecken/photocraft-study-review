@@ -804,6 +804,24 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `outside_root` as well" does not mention it either. `paths.md` is in `touches`, but this
   wording is not in Pinned (i), so I have not changed it. Should P1's list add
   `nav.workspace-symbols`, here or in a later task?
+- 2026-11-14T07:26Z · R-213 · in_progress (ruling k7) · I accept k7 (D-132), read in the director's
+  copy of this file in the primary checkout: P1's list and P2's `project.tree` clause gain
+  `nav.workspace-symbols`, and nothing else changes. Probe (debug `kiln-cli` of this branch, the
+  same code as R-210, `control --root root` as uid 0, fixtures `/tmp/t037-impl-r213/<case>` with
+  `root/a.rs` = `fn foo() {}` and `outside/secret.rs`, removed with `rm -rf
+  /tmp/t037-impl-r213`):
+  - `nav.workspace-symbols {"query":"foo"}` returned `foo`.
+  - After each of: root renamed away; renamed and `root -> outside`; removed; removed and
+    replaced by a new directory holding `a.rs`, it was refused `rejected/outside_root`.
+  - No reply named `secret`, and `outside/` was unchanged.
+  Together with R-210 (answers normally before the change) this is the evidence for P1 and P2.
+  did: in `docs/protocol/paths.md`, P1 now reads "(`doc.open`, also of a path that is already
+  open, `doc.save`, `project.tree` and `nav.workspace-symbols`)", and P2's clause now reads
+  "`project.tree` and `nav.workspace-symbols` are refused with `outside_root` as well." I
+  re-wrapped that paragraph at the file's width. A word diff shows only these two changes, and
+  no line is over 96 characters. Checks: `cargo fmt --all -- --check` passed, and `cargo xtask
+  hygiene` gave PASS. · gate attempts: 0 (no full gate, as the director asked; the join runs
+  it) · not run: the full gate · missing context: none · next: director's join.
 <!-- end implementer log -->
 ### test author
 - 2026-11-14T04:49Z · R-202 · ready · Rulings acknowledged and accepted before acting: D-092
