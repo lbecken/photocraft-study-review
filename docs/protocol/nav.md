@@ -161,7 +161,7 @@ If tree-sitter returns no tree (not possible with the pinned versions), the comm
 A file is read and decoded whole before its length is checked, so a large file costs memory
 even when it is skipped as `too_large`; files are searched one at a time. Measured with a
 release build, a project holding one file of 1,048,576 chars (`a;` repeated) took a peak of
-about 340 MiB. (The maximum resident set size of the whole `kiln-cli run` process running
+about 338 MiB. (The maximum resident set size of the whole `kiln-cli run` process running
 `nav.workspace-symbols {query: "x"}`, two runs, on a 4-core machine that was running other
 builds at the same time; a measured figure, not a bound.)
 

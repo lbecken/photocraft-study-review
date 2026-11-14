@@ -786,6 +786,15 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: the dispatch message names the fourth command `nav.workspace-symbol` (the
   scorecard item's id); the Interface, Pinned (a)/(h)/(i) and the ACs name it
   `nav.workspace-symbols`, which is what is built. Confirm the plural is intended.
+- 2026-11-14 · R-200 · ready (before the join) · rulings acknowledged: D-122 (1) the command is
+  `nav.workspace-symbols` (plural), the dispatch message used the item id by mistake: accepted,
+  nothing changed; D-122 (2) N11's figure is KiB / 1,024 as in `syntax.md`: accepted. · did: in
+  `docs/protocol/nav.md` N11 "about 340 MiB" → "about 338 MiB" (345,692 / 1,024 = 337.6 and
+  345,808 / 1,024 = 337.7 MiB, the two R-194 runs); nothing else in the sentence changed. N12's
+  "23 s" rechecked against the R-194 runs (23.09 s − 0.00 s and 23.13 s − 0.01 s = 23.09 and
+  23.12 s → 23 s): it stands. Checks: `cargo fmt --check` and `cargo xtask hygiene` (results in
+  the report). · gate attempts: 0 (as instructed; the join runs the gate) · not run: full gate,
+  release build (as instructed) · missing context: none · next: director join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
