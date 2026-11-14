@@ -1,9 +1,9 @@
 //! T-055 guards: behaviour main already has that the task must keep (they pass on base).
 //!
-//! * `kiln` with no subcommand keeps its current behaviour in this task (Interface, "Exit
-//!   codes": T-056 replaces it with the window): it exits 1, prints nothing on stdout and says
-//!   why on stderr, without a panic, also with no display variable set. The message text is not
-//!   pinned (golden rule 9).
+//! * Bare `kiln` with no display (`DISPLAY` and `WAYLAND_DISPLAY` removed) exits with a
+//!   non-zero status, a message on stderr and nothing on stdout, without a panic: true on base
+//!   (the UI is not built) and after T-056 (no display for the window, ADR-0008 decision 6).
+//!   The status itself and the message text are not pinned (D-150 w4; golden rule 9).
 //! * The oracle of AC-1, `kiln_control::Host`, still answers the control parts of Pinned (g) as
 //!   the spec records them for this main: which responses succeed, the refusal's code and kind,
 //!   and a log of the three successful requests renumbered 1 to 3.
@@ -67,12 +67,12 @@ fn kiln_no_args() -> (i32, Vec<u8>, Vec<u8>) {
 }
 
 #[test]
-fn kiln_without_subcommand_exits_1_with_a_message() {
+fn kiln_without_subcommand_and_display_exits_nonzero_with_a_message() {
     let (code, stdout, stderr) = kiln_no_args();
-    assert_eq!(
+    assert_ne!(
         code,
-        1,
-        "exit code of `kiln` (stderr: {})",
+        0,
+        "`kiln` with no display exited 0 (stderr: {})",
         String::from_utf8_lossy(&stderr)
     );
     assert!(stdout.is_empty(), "`kiln` printed on stdout");

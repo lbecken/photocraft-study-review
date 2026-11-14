@@ -619,7 +619,55 @@ fn snap(resp: &J) -> (&J, u64) {
         .expect("snapshot result.frames is an unsigned integer");
     let root = result.at("root");
     check_names(root);
+    check_colours(root);
     (root, frames)
+}
+
+/// D-150 w3 (c): colours as structure, never as values. Every run has a string `text` and a
+/// `color` of the form `#rrggbb`, and no two adjacent runs of a row share a colour (they are
+/// merged).
+fn check_colours(root: &J) {
+    for n in all_nodes(root) {
+        let Some(rows) = n.get("rows") else { continue };
+        let rows = rows
+            .as_arr()
+            .unwrap_or_else(|| panic!("`rows` is not an array: {}", n.show()));
+        for row in rows {
+            let runs = row
+                .as_arr()
+                .unwrap_or_else(|| panic!("a row is not an array: {}", n.show()));
+            let mut last: Option<&str> = None;
+            for run in runs {
+                assert!(run.at("text").as_str().is_some(), "run text: {}", n.show());
+                let c = run.at("color").as_str().expect("run color is a string");
+                assert!(
+                    c.len() == 7
+                        && c.starts_with('#')
+                        && c[1..].bytes().all(|b| b.is_ascii_hexdigit()),
+                    "colour `{c}` is not #rrggbb: {}",
+                    n.show()
+                );
+                assert_ne!(last, Some(c), "adjacent runs of one colour: {}", n.show());
+                last = Some(c);
+            }
+        }
+    }
+}
+
+/// The text of each painted row of `n` (its runs joined); empty when it has no `rows`.
+fn row_texts(n: &J) -> Vec<String> {
+    n.get("rows")
+        .and_then(J::as_arr)
+        .unwrap_or_default()
+        .iter()
+        .map(|row| {
+            row.as_arr()
+                .unwrap_or_default()
+                .iter()
+                .map(|run| run.at("text").as_str().unwrap_or_default())
+                .collect()
+        })
+        .collect()
 }
 
 fn children(n: &J) -> &[J] {
@@ -2153,6 +2201,322 @@ fn ac10_accessible_names() {
                     "{line}: no {wanted} node to check"
                 );
             }
+        }
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Review round 1 (D-150 w2, w3): an overflowing `Documents`, scrolling, settling, colours,
+// `label_contains`, `doc.close`.
+// ---------------------------------------------------------------------------------------------
+
+/// 100 documents with 20-char paths that differ in three digits (so no path is part of
+/// another), under `<dir>/proj`. Returns the paths.
+fn overflow_fixture(dir: &Path) -> Vec<String> {
+    let root = dir.join("proj");
+    let paths: Vec<String> = (0..100)
+        .map(|i| format!("docs/document-{i:03}.txt"))
+        .collect();
+    for p in &paths {
+        write(&root.join(p), b"x\n");
+    }
+    paths
+}
+
+/// Open every path, then run one frame (D-149 n4).
+fn open_all(paths: &[String]) -> Vec<String> {
+    let mut lines: Vec<String> = paths.iter().zip(1..).map(|(p, id)| open(id, p)).collect();
+    lines.push(one_frame("frame"));
+    lines
+}
+
+const SMALL: [&str; 4] = ["--root", "proj", "--size", "200x200"];
+
+/// Indices of the `Documents` children that are not `offscreen`.
+fn visible_docs(root: &J) -> Vec<usize> {
+    children(shell(root).documents)
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.get("offscreen") != Some(&J::Bool(true)))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// A `scroll` down of the list holding the first document.
+fn scroll_down(steps: u64) -> String {
+    format!(
+        r#"{{"direction":"down","id":"scroll","steps":{steps},"target":{{"value":"docs/document-000.txt"}},"ui":"scroll"}}"#
+    )
+}
+
+/// w3 (a): after an idle `frames` request the UI asks for no further frame: `settled` is true.
+#[test]
+fn w3a_frames_on_an_idle_shell_is_settled() {
+    let dir = case_dir("w3a");
+    fixture(&dir);
+    let script = vec![
+        r#"{"count":5,"id":"f5","ui":"frames"}"#.to_owned(),
+        one_frame("f1"),
+    ];
+    let sess = run_script(&dir, "s", &script);
+    let r = sess.responses(script.len());
+    for (resp, count) in r.iter().zip([5, 1]) {
+        action_ok(resp, Some(count));
+        assert_eq!(
+            resp.at("result").at("settled"),
+            &J::Bool(true),
+            "`frames` on an idle shell: {}",
+            resp.show()
+        );
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// w3 (b): a target given by `label_contains` acts on the one node whose label contains it.
+#[test]
+fn w3b_target_by_label_contains() {
+    let dir = case_dir("w3b");
+    fixture(&dir);
+    let script = vec![
+        snapshot("s0"),
+        r#"{"id":"focus","target":{"label_contains":"Pat"},"ui":"focus"}"#.to_owned(),
+        type_text("type", "b.txt"),
+        r#"{"id":"click","target":{"label_contains":"Ope"},"ui":"click"}"#.to_owned(),
+        snapshot("s1"),
+        control(1, "doc.list", "{}"),
+    ];
+    let sess = run_script(&dir, "s", &script);
+    let r = sess.responses(script.len());
+    let (s0, _) = snap(&r[0]);
+    for (part, whole) in [("Pat", "Path"), ("Ope", "Open")] {
+        let matching: Vec<&str> = all_nodes(s0)
+            .into_iter()
+            .filter_map(label)
+            .filter(|l| l.contains(part))
+            .collect();
+        assert_eq!(matching, [whole], "precondition: `{part}` names one node");
+    }
+    for resp in &r[1..4] {
+        action_ok(resp, None);
+    }
+    let (s1, _) = snap(&r[4]);
+    assert_eq!(doc_list(&r[5]), [(1, "b.txt".to_owned())], "doc.list");
+    assert_eq!(documents(s1), ["b.txt"], "Documents");
+    assert_eq!(logged_opens(&sess.log), ["b.txt"], "log");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// w3 (c): text typed into `Path` is reported in its rows; colours are checked as structure on
+/// every snapshot (`check_colours`), here on a session with painted text in several nodes.
+#[test]
+fn w3c_typed_text_is_painted_with_structured_colours() {
+    let dir = case_dir("w3c");
+    fixture(&dir);
+    let script = vec![
+        open(1, "src/a.rs"),
+        focus_path(),
+        type_text("type", "src/lib.rs"),
+        snapshot("s0"),
+    ];
+    let sess = run_script(&dir, "s", &script);
+    let r = sess.responses(script.len());
+    let (s0, _) = snap(&r[3]);
+    let path = shell(s0).path;
+    assert!(
+        row_texts(path).iter().any(|t| t.contains("src/lib.rs")),
+        "the typed text is not in Path's rows: {}",
+        path.show()
+    );
+    let runs: usize = all_nodes(s0)
+        .iter()
+        .map(|n| {
+            n.get("rows")
+                .and_then(J::as_arr)
+                .unwrap_or_default()
+                .iter()
+                .map(|row| row.as_arr().map_or(0, <[J]>::len))
+                .sum::<usize>()
+        })
+        .sum();
+    assert!(
+        runs >= 3,
+        "precondition: painted runs to check (Path, Open, a document)"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// w3 (d), the test of w1: after a `scroll` of an overflowing `Documents`, documents outside the
+/// visible part are `offscreen` and have no rows, the rows under `Documents` hold only text of
+/// visible documents, and the text painted outside `Documents` (the `Path` input with its text,
+/// `Open`) is unchanged.
+#[test]
+fn w3d_scrolled_list_reports_only_visible_text() {
+    let dir = case_dir("w3d");
+    let paths = overflow_fixture(&dir);
+    let mut script = open_all(&paths);
+    script.extend([
+        focus_path(),
+        type_text("type", "zz"),
+        snapshot("s0"),
+        scroll_down(4),
+        snapshot("s1"),
+    ]);
+    let sess = run_script_bytes(&dir, "s", &as_bytes(&script), &SMALL);
+    let r = sess.responses(script.len());
+    let n = paths.len() + 3;
+    let (s0, _) = snap(&r[n]);
+    action_ok(&r[n + 1], None);
+    let (s1, _) = snap(&r[n + 2]);
+    let before = visible_docs(s0);
+    let after = visible_docs(s1);
+    assert!(
+        before.contains(&0),
+        "precondition: the first document is visible before"
+    );
+    assert!(
+        !after.is_empty() && after.len() < paths.len(),
+        "after the scroll some documents are visible and some offscreen: {after:?}"
+    );
+    assert!(
+        !after.contains(&0),
+        "the first document is still visible after 4 steps"
+    );
+    let docs = shell(s1).documents;
+    let offscreen: Vec<&str> = children(docs)
+        .iter()
+        .filter(|c| c.get("offscreen") == Some(&J::Bool(true)))
+        .map(|c| value(c).expect("document value"))
+        .collect();
+    for c in children(docs) {
+        if c.get("offscreen") == Some(&J::Bool(true)) {
+            assert!(
+                row_texts(c).is_empty(),
+                "an offscreen document has rows: {}",
+                c.show()
+            );
+        }
+    }
+    for node in all_nodes(docs) {
+        for text in row_texts(node) {
+            for p in &offscreen {
+                assert!(
+                    !text.contains(p),
+                    "text of offscreen `{p}` is reported in a row under Documents: {}",
+                    node.show()
+                );
+            }
+        }
+    }
+    // Outside Documents nothing moved: the same painted text, node by node.
+    let outside = |root: &J| -> Vec<Vec<String>> {
+        let inside: Vec<*const J> = all_nodes(shell(root).documents)
+            .into_iter()
+            .map(std::ptr::from_ref)
+            .collect();
+        all_nodes(root)
+            .into_iter()
+            .filter(|n| !inside.contains(&std::ptr::from_ref(*n)))
+            .map(row_texts)
+            .collect()
+    };
+    assert_eq!(
+        outside(s1),
+        outside(s0),
+        "text outside Documents changed with the scroll"
+    );
+    let path_rows = row_texts(shell(s1).path);
+    assert!(
+        path_rows.iter().any(|t| t.contains("zz")),
+        "Path lost its text: {}",
+        shell(s1).path.show()
+    );
+    assert!(!row_texts(shell(s1).open).is_empty(), "Open lost its rows");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// w3 (e): more `steps` scroll further than fewer (which documents are visible, no pixels).
+#[test]
+fn w3e_more_steps_scroll_further() {
+    let dir = case_dir("w3e");
+    let paths = overflow_fixture(&dir);
+    let mut first = Vec::new();
+    for steps in [1, 4] {
+        let mut script = open_all(&paths);
+        script.extend([snapshot("s0"), scroll_down(steps), snapshot("s1")]);
+        let sess = run_script_bytes(&dir, &format!("s{steps}"), &as_bytes(&script), &SMALL);
+        let r = sess.responses(script.len());
+        let n = paths.len() + 1;
+        let (s0, _) = snap(&r[n]);
+        assert_eq!(
+            visible_docs(s0).first(),
+            Some(&0),
+            "precondition: unscrolled"
+        );
+        action_ok(&r[n + 1], None);
+        let (s1, _) = snap(&r[n + 2]);
+        let v = visible_docs(s1);
+        assert!(!v.is_empty(), "{steps} steps: no document visible");
+        first.push(v[0]);
+    }
+    assert!(
+        first[1] > first[0],
+        "4 steps reach no further than 1 (first visible document {} vs {})",
+        first[1],
+        first[0]
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// w3 (f): after a control `doc.close` and one frame, `Documents` has lost that child
+/// (oracle: `doc.list` in the same session).
+#[test]
+fn w3f_doc_close_removes_the_child() {
+    let dir = case_dir("w3f");
+    fixture(&dir);
+    let script = vec![
+        open(1, "src/a.rs"),
+        open(2, "b.txt"),
+        one_frame("f1"),
+        snapshot("s0"),
+        control(3, "doc.close", r#"{"doc":1}"#),
+        one_frame("f2"),
+        snapshot("s1"),
+        control(4, "doc.list", "{}"),
+    ];
+    let sess = run_script(&dir, "s", &script);
+    let r = sess.responses(script.len());
+    let (s0, _) = snap(&r[3]);
+    assert_eq!(documents(s0), ["src/a.rs", "b.txt"], "before the close");
+    assert_eq!(r[4].get("ok"), Some(&J::Bool(true)), "{}", r[4].show());
+    let (s1, _) = snap(&r[6]);
+    let listed: Vec<String> = doc_list(&r[7]).into_iter().map(|(_, p)| p).collect();
+    assert_eq!(listed, ["b.txt"], "doc.list after the close");
+    assert_eq!(documents(s1), listed, "Documents after the close");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// w2: AC-10 on a snapshot whose `Documents` list overflows (a `scroll_bar` needs no label).
+#[test]
+fn w2_ac10_accessible_names_with_an_overflowing_list() {
+    let dir = case_dir("w2");
+    let paths = overflow_fixture(&dir);
+    let mut script = open_all(&paths);
+    script.extend([snapshot("s0"), scroll_down(2), snapshot("s1")]);
+    let sess = run_script_bytes(&dir, "s", &as_bytes(&script), &SMALL);
+    let r = sess.responses(script.len());
+    for i in [paths.len() + 1, paths.len() + 3] {
+        let (root, _) = snap(&r[i]);
+        assert!(
+            visible_docs(root).len() < paths.len(),
+            "precondition: the list overflows"
+        );
+        let nodes = all_nodes(root);
+        for wanted in ["button", "text_input"] {
+            assert!(
+                nodes.iter().any(|n| role(n) == Some(wanted)),
+                "no {wanted} node"
+            );
         }
     }
     let _ = fs::remove_dir_all(&dir);
