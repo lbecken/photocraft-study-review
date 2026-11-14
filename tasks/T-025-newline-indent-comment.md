@@ -4,7 +4,7 @@ title: "Insert a newline with the document's line ending and the current indenta
 tier: medium            # ADR-0002 default: in-memory editing commands in one new group
 state: draft
 owner_role: planner
-scorecard_items: [edit.newline, edit.indent, edit.comment-toggle]   # edit.newline: new item, created by the test author (R-060 answer 6)
+scorecard_items: [edit.indent, edit.comment-toggle]   # edit.newline is not a scorecard item (D-145); the newline rule is claimed under edit.indent (R-225)
 depends_on: [T-018]     # selection + apply_edits (T-015 transitively)
 touches:
   - crates/kiln-commands/src/edit.rs        # edit.* (slot from T-015)
@@ -89,12 +89,12 @@ Selections other than `edit.newline`'s map through the edits by T-018's rule.
   - `//x\n`, caret 0, toggle → `x\n`; toggle → `// x\n`. An uncomment-first toggle is not
     reversed exactly; this is documented, and AC-4 scopes the round trip.
 - (h) Evaluator calls: `kiln-cli run` with `doc.open` of a CRLF file, `cursor.set`,
-  `edit.newline`, `doc.save` and the file's bytes (`edit.newline`); `edit.indent`
-  / `edit.outdent` / `doc.undo` (`edit.indent`); `edit.toggle-comment` twice (`edit.comment-toggle`).
+  `edit.newline`, `doc.save` and the file's bytes, then `edit.indent` / `edit.outdent` /
+  `doc.undo` (`edit.indent`); `edit.toggle-comment` twice (`edit.comment-toggle`).
 
 ## Acceptance criteria
 All through `kiln-cli run` or `kiln_control::Host`.
-- AC-1 (`edit.newline`): for files whose only line ending is LF,
+- AC-1 (`edit.indent`, the command `edit.newline`): for files whose only line ending is LF,
   CRLF or CR, and for mixed files, `edit.newline` at random selections inserts exactly the
   dominant break (LF if none) plus the truncated indentation, per a naive model. After
   `doc.save` of an LF, CRLF or CR file edited only with `edit.newline` and `doc.insert` of
@@ -115,20 +115,18 @@ All through `kiln-cli run` or `kiln_control::Host`.
 ## Scorecard items and intended test names
 | Item | Tests |
 |---|---|
-| edit.newline | `kiln_cli::acceptance_t025::newline_inserts_document_line_ending` |
-| edit.indent | `kiln_cli::acceptance_t025::newline_keeps_indentation`, `kiln_cli::acceptance_t025::indent_outdent_match_naive_model`, `kiln_cli::acceptance_t025::indent_outdent_round_trip` |
+| edit.indent | `kiln_cli::acceptance_t025::newline_inserts_document_line_ending`, `kiln_cli::acceptance_t025::newline_keeps_indentation`, `kiln_cli::acceptance_t025::indent_outdent_match_naive_model`, `kiln_cli::acceptance_t025::indent_outdent_round_trip` |
 | edit.comment-toggle | `kiln_cli::acceptance_t025::toggle_comment_matches_naive_model_and_round_trips` |
 
 ## Out of scope and implementer notes
 - Smart indent after `{`, auto-closing brackets, configurable indent unit or tabs, block
   comments, Enter in the scratch buffer. Changing `doc.insert` or saving (bytes-as-read stays).
-- New item (director, R-060 answer 6): the test author creates `scorecard/items/edit.newline.toml`
-  on `task/T-025-tests` (an allowed path for this task's own item) with `id = "edit.newline"`,
-  `title = "Enter inserts the document's line ending, so a newline typed into a CRLF file keeps it CRLF"`,
-  `crate = "kiln-commands"`, `tier = "medium"` and the tests above, and regenerates
-  `docs/scorecard.md` (a generated path) on that branch. It cannot be added on `main` directly
-  (it changes the generated scorecard, D-034). `edit.indent` keeps the indentation part:
-  `newline_keeps_indentation` checks the truncated leading whitespace on LF texts.
+- No new scorecard item (D-145, correcting R-060 answer 6): `edit.newline` is a command, not an
+  item. Its behaviour is claimed under `edit.indent`, whose title begins "Newline keeps the
+  current indentation": `newline_inserts_document_line_ending` checks the inserted line ending,
+  `newline_keeps_indentation` the truncated leading whitespace on LF texts. The test author
+  lists the test names in its log; the director ties them to the item at the join (METHODOLOGY
+  §6); nobody creates a file under `scorecard/items/`.
 - Your own tests: `crates/kiln-commands/tests/edit.rs`, unit tests. Acceptance tests (odd arm)
   go first.
 
@@ -158,6 +156,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   in (g). Pinned (b), (e), (f) n/a. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-060 · draft · did: added the item `edit.newline` (answer 6). The test author creates it on the tests branch; AC-1 now claims it, and `edit.indent` keeps the indentation part through a separate test. · gate attempts: 0 · missing context: none · next: director.
 - 2026-11-13 · R-066 · draft · did: raises only `no_such_document` through T-015's existing helper; it needs T-032 only transitively, through T-018. · gate attempts: 0 · missing context: none · next: director.
+- 2026-11-14 · R-225 · draft · did: corrected the claim (D-145): `edit.newline` is not a scorecard item (`ls scorecard/items` lists no `edit.newline.toml`; the 23 planned items are those of `docs/scorecard.md`), so it is removed from `scorecard_items`, AC-1 and its test are claimed under `edit.indent` (whose title starts "Newline keeps the current indentation"), Pinned (h) no longer names it as an item, and the instruction to create `scorecard/items/edit.newline.toml` on the tests branch is replaced by the usual tie at the join. Nothing else changed; the budget (v1.1) and the declaration note of D-139 are left for the spec check. · gate attempts: 0 · missing context: none · next: director.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
