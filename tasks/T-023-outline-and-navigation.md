@@ -705,6 +705,87 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   T-021 have merged and "To re-check at dispatch" holds on main.
 <!-- end planner log -->
 ### implementer
+- 2026-11-14 04:32 · R-194 · ready (dispatched; base `c371a07`) · rulings acknowledged:
+  D-044 (NoTree → `internal`/`other`, not skipped) accepted; D-108 Q-1 (`too_large` for
+  outline/goto-symbol, skip in the workspace search, none for goto-line) accepted; Q-2 (`ERROR`
+  below the root is a container) accepted; Q-3 (walk `limit` 1,000,000, `walk_truncated`,
+  `too_deep`) accepted; Q-4 (skip with the existing kind's name, no `binary`) accepted; notes
+  N-3 to N-7 accepted; T-020 ruling Q-5 (iterative walks) and ruling x1 (D-084, `null` refused
+  for optional params) accepted. The dispatch check's nine facts held on `c371a07` as read.
+  ACs restated: AC-1 outline = syn walk on `valid`; AC-2 (g) 1–5 exact, `nav.*` leave the
+  `syntax.*` tree alone, name slices; AC-3 goto-line = clamp model, refusals inert, ends the
+  typing group; AC-4 goto-symbol selects every item's name, `out_of_range` inert, typing group;
+  AC-5 workspace search = model from public commands, (g) 7, open documents; AC-6 20,000-deep
+  nesting; AC-7 size limit at 1,048,576; AC-8 params, default/largest `limit`, depth bound.
+  · did: (1) tests first: `apps/kiln-cli/tests/acceptance_t023_cli.rs` committed on
+  `task/T-023-tests` at `6a60a756191e1aeba497c14c8bc66a5e59b150e9` (04:09:01Z), before any code;
+  one test fix before code at `e8423ff94426f97e6508cec7689887954d8f1578` (04:10:15Z:
+  `outline_survives_deep_nesting` now checks the `nav.outline` reply before the exit status,
+  so on base it fails at `unknown_command` instead of at exit code 3; the same assertions
+  reordered, no expected value changed). First code commit on `task/T-023`:
+  `65d8ad104c0f31591831089d668fc413db6c7e65` (04:13:01Z). (2) Base results
+  (`cargo test -p kiln-cli --test acceptance_t023_cli` in the tests worktree): 0 passed, 10
+  failed, each by assertion: `outline_agrees_with_syn`, `outline_worked_examples`,
+  `outline_survives_deep_nesting`, `outline_size_limit`, `goto_line_clamps`,
+  `goto_line_ends_typing_group`, `goto_symbol_selects_name`,
+  `workspace_symbols_match_naive_model` at their first `nav.*` reply ("expected an ok response,
+  got … `unknown_command`"); `workspace_symbols_limits_and_refusals` at its first refusal check
+  (wrong code/kind: `unknown_command` for `{"query":"hit","limit":0}`);
+  `nav_commands_published_schema` at "`nav.outline` is not in `commands --schema`".
+  (3) Built: `kiln_syntax::outline` (`ItemKind`, `OutlineItem`, `outline`: explicit-stack walk
+  from the root, the Interface rules); the crate-doc status sentence; `cursor_result` →
+  `pub(crate)` (only change in `cursor.rs`); `nav.rs`: `nav.outline {doc}` → `{items}`,
+  `nav.goto-line {doc, line, col?}` → `CursorResult`, `nav.goto-symbol {doc, index}` →
+  `{item, cursor}`, `nav.workspace-symbols {query, limit?}` → `{items, truncated, skipped,
+  walk_truncated, too_deep}`; `col` publishes `"default": 0`, `limit` `"default": 200` with
+  range 1..=10000, both refuse `null`; size check written in `nav.rs` with
+  `crate::syntax::MAX_CHARS`; one example per command (two for goto-line); unit tests in
+  `outline.rs` (6) and `nav.rs` (11, among them a `FailingFs` whose `read` fails after
+  `list_dir` with each of the four `VfsError` kinds, for N9, and a read counter showing an open
+  document's file is not read); `crates/kiln-syntax/tests/outline.rs` (5); `docs/protocol/nav.md`;
+  `docs/commands.json` regenerated. (4) Throwaway join (`tmp/T-023-join` off `task/T-023`,
+  merge of `task/T-023-tests`, deleted afterwards, never on `task/T-023`): 10 passed, 0 failed,
+  at the final code head as well. Self-check with 8 seeded bugs on the join (each discarded):
+  no `break_undo_group` in goto-line → `goto_line_ends_typing_group`; `>=` size check →
+  `outline_size_limit`; no exact rank → `workspace_symbols_match_naive_model`; open documents
+  ignored → that and `outline_size_limit`; depth not counted → four outline/goto tests; column
+  clamped one too far → `goto_line_clamps`; `truncated` off by one → both workspace tests;
+  `ERROR` not a container → SURVIVED (no input found where a non-root `ERROR` holds an item:
+  8 broken inputs probed, the `ERROR` nodes were leaves; as the spec's P3; no AC depends on
+  Q-2). Tests per scorecard item: `syntax.outline`: `outline_agrees_with_syn` (AC-1),
+  `outline_worked_examples` (AC-2), `outline_survives_deep_nesting` (AC-6),
+  `outline_size_limit` (AC-7, incl. the workspace `too_large` half); `nav.goto-line`:
+  `goto_line_clamps`, `goto_line_ends_typing_group` (AC-3); `nav.goto-symbol`:
+  `goto_symbol_selects_name` (AC-4); `nav.workspace-symbol`:
+  `workspace_symbols_match_naive_model` (AC-5), `workspace_symbols_limits_and_refusals`
+  (AC-8); extra, not tied to an AC: `nav_commands_published_schema` (mutating flags; no
+  `"default": null`). All under `kiln_cli::acceptance_t023_cli::`. Pinned (i): N1–N14 copied
+  word for word into `nav.md` (joined into paragraphs; N11 `<M>` = 340, N12 `<T>` = 23), each
+  figure followed by its conditions (two runs, 4-core machine running other builds, "a measured
+  figure, not a bound"); no other guarantee sentence added. Measurements (release build
+  `cargo build --release -p kiln-cli` at `c54eb13`, inputs under `target/measure/`, deleted with
+  `target/release` afterwards; load average 3.3–5.0 on 4 cores, other builds running): N11 `cd
+  target/measure && /usr/bin/time -v timeout 1800 ../release/kiln-cli run s.jsonl --root n11`
+  (`n11/a.rs` = `a;` × 524,288 = 1,048,576 chars; `s.jsonl` =
+  `{"id":0,"command":"nav.workspace-symbols","params":{"query":"x"}}`): `Maximum resident set
+  size (kbytes): 345692` and `345808` (337.6 MiB → 340 MiB), exit 0, reply `items: []`,
+  `skipped: []`; N12 `/usr/bin/time -f '%e s' timeout 1800 ../release/kiln-cli run s.jsonl
+  --root n12` (`n12/a.rs` = `#!` × 32,768 = 65,536 chars): `23.09 s`, `23.13 s`; same over an
+  empty project: `0.00 s`, `0.01 s` → 23 s (no timeout reached; over 1 s, so no question).
+  Pinned (h): `kiln-cli exec nav.workspace-symbols '{"query":"x"}' --root <dir>` returned the
+  item, exit 0 (release build). The other sentences were run as their acceptance cases through
+  the built (debug) binary. · gate attempts: 2 (attempt 1 red `clippy`: `unwrap_used` in a
+  helper of `crates/kiln-syntax/tests/outline.rs`, fixed with `#![cfg(test)]` as the acceptance
+  files do; last: green, "GATE PASSED in 543.0s (11 steps; 2 step(s) EMPTY (nothing
+  registered): fuzz, budgets)", test step "814 passed, 0 failed, 0 ignored in 96 suites").
+  `cargo xtask no-skip` in the tests worktree: PASS; its `target/` deleted. · not run: the
+  acceptance tests through the director's `cargo xtask join`; `walk_truncated: true` (needs a
+  walk over 1,000,000 entries; by construction: it is the walk's `truncated`); the four read
+  failures through `kiln-cli` (unit test only, as N9 says); N11/N12 on an idle machine ·
+  missing context: none · next: director join; reviewer.
+  QUESTION: the dispatch message names the fourth command `nav.workspace-symbol` (the
+  scorecard item's id); the Interface, Pinned (a)/(h)/(i) and the ACs name it
+  `nav.workspace-symbols`, which is what is built. Confirm the plural is intended.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
