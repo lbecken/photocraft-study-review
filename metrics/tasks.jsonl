@@ -582,3 +582,4 @@
 {"kind":"transition","task":"T-055","iteration":2,"at":"2026-11-14T19:49:51Z","from":"in_progress","to":"self_verified"}
 {"kind":"join","task":"T-055","at":"2026-11-14T19:50:00Z","acc_total":18,"acc_fail_base":18,"base_fail_kind":"fails","acc_fail_first_join":1,"acc_defects":null,"impl_tests_green":false,"gate_green":null,"tests_sha":"f8ca677dec7e3fa6fa7c75f26404d5f60ee2067f","joined_sha":"1fa0aa657c530974b8959307f0231e875745dc44","result":"acceptance_failed","guard_total":2,"guard_fail_base":0,"guard_fail_join":0}
 {"kind":"transition","task":"T-055","iteration":2,"at":"2026-11-14T19:53:00Z","from":"self_verified","to":"in_progress"}
+{"kind":"join_defects","task":"T-055","at":"2026-11-14T19:53:09Z","joined_sha":"1fa0aa657c530974b8959307f0231e875745dc44","acc_defects":1}
