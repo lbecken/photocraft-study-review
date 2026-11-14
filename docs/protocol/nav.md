@@ -48,7 +48,12 @@ the `impl` items, by the offset of their type and their depth, are exactly those
 parser finds.
 
 In a document with syntax errors the outline lists the items the parser's error recovery leaves
-in place, by the same rules; which items those are is not specified.
+in place, by the same rules; which items those are is not specified. Because text the parser
+could not fit into the grammar (an `ERROR` node) counts as a container, an item can be listed
+although it stands inside an unclosed function body: in
+`mod m { fn a() { } } fn b() { mod n { fn c() {} }` the outline is `mod` `m` `0..20` `4..5` 0;
+`fn` `a` `8..18` `11..12` 1; `mod` `n` `30..49` `34..35` 0; `fn` `c` `38..47` `41..42` 1, and
+`fn b` is not listed.
 
 Examples (kind, name, `start..end`, `name_start..name_end`, depth):
 
@@ -106,8 +111,8 @@ reports.
 
 `nav.workspace-symbols {query, limit?}` searches the outlines of the project's Rust files.
 
-`nav.workspace-symbols` searches the entries of kind `file` whose name ends in `.rs` that
-`project.tree {}` would list; it does not follow symbolic links, and files that `project.tree`
+`nav.workspace-symbols` searches the entries of kind `file` whose name ends in `.rs` that the
+walk of `project.tree` with `limit` 1,000,000 would list; it does not follow symbolic links, and files that `project.tree`
 ignores or does not reach are not searched. For a file that is open as a document, the
 document's current text is searched, saved or not, and the file is not read. Any other file is
 read and decoded as `doc.open` decodes it (UTF-8, UTF-8 with BOM, UTF-16 LE/BE by BOM). A file
@@ -161,7 +166,8 @@ If tree-sitter returns no tree (not possible with the pinned versions), the comm
 A file is read and decoded whole before its length is checked, so a large file costs memory
 even when it is skipped as `too_large`; files are searched one at a time. Measured with a
 release build, a project holding one file of 1,048,576 chars (`a;` repeated) took a peak of
-about 338 MiB. (The maximum resident set size of the whole `kiln-cli run` process running
+about 338 MiB. (The file is at the limit, so it was parsed, not skipped; other texts can need
+more. The maximum resident set size of the whole `kiln-cli run` process running
 `nav.workspace-symbols {query: "x"}`, two runs, on a 4-core machine that was running other
 builds at the same time; a measured figure, not a bound.)
 

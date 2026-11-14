@@ -506,7 +506,8 @@ pub(crate) struct WorkspaceSymbols;
 impl Command for WorkspaceSymbols {
     const NAME: &'static str = "nav.workspace-symbols";
     const DOC: &'static str = "Find outline items whose name contains `query` (ignoring case) \
-        in the project's `.rs` files, as `project.tree {}` lists them; an open document's \
+        in the project's `.rs` files, as the walk of `project.tree` with `limit` 1000000 \
+        lists them; an open document's \
         current text is searched in place of its file. Exact matches first, then prefixes, \
         then the others; at most `limit` (default 200). Files that cannot be read or decoded, \
         or are longer than 1048576 chars, are listed in `skipped`. Read-only.";
