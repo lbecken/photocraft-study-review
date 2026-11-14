@@ -9,7 +9,9 @@ The same protocol is spoken by:
 
 - `kiln-cli run <script>`: requests from a file, responses on stdout;
 - `kiln-cli control`: requests on stdin, responses on stdout, interactively;
-- the library type `kiln_control::Host` (`handle_line`).
+- the library type `kiln_control::Host` (`handle_line`);
+- `kiln script <script>`: the Kiln UI without a window, whose scripts mix these requests with UI
+  requests (`docs/protocol/ui.md`).
 
 ## Framing
 
