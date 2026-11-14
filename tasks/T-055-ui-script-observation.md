@@ -2,7 +2,7 @@
 id: T-055
 title: "Run the Kiln UI without a window from a script of control requests and UI requests, and read back what each frame shows"
 tier: high              # ADR-0002: adds dependencies (egui; kiln-control as an edge of kiln-ui); a new file write (--log); a gate path if Q-1 is answered A (xtask/ui-allowlist.toml)
-state: self_verified
+state: in_progress
 owner_role: planner
 scorecard_items: []     # an interface task: no ui.* item can be observed before it; T-056 claims the first items through it
 depends_on: []          # nothing unmerged; T-054 is deferred (D-147) and rebases on this task's change of the root Cargo.toml
@@ -384,6 +384,13 @@ The first join failed one acceptance test of 18, `ac6_frame_counts_add_up` (21 f
   part. The implementer adds a unit test; the reviewer checks it in round 2.
 - **w6 (nit 12; implementer).** `docs/protocol/ui.md` "Limits" says that a FIFO given as the script or as `--log`
   blocks until its other end is opened, as with `kiln-cli run`; the implementer logs the command that shows it.
+
+### Ruling after the third join (director, D-151; told to the test author)
+- **w7.** `w3d_scrolled_list_reports_only_visible_text` failed with "Open lost its rows": at `--size 200x200` the
+  `Open` button is `offscreen` before and after the scroll and has no rows in either snapshot (measured by the
+  director through the binary), which is what w1 requires. Outside `Documents` the test compares each node's rows
+  after the scroll with its rows before it, and requires `Path` to show the typed text; it requires no particular
+  node to be visible, since the spec pins no layout.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
