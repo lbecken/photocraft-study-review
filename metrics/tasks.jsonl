@@ -506,3 +506,5 @@
 {"kind":"transition","task":"T-037","iteration":2,"at":"2026-11-14T04:34:25Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-037","iteration":2,"at":"2026-11-14T04:34:25Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-037","iteration":2,"at":"2026-11-14T04:34:26Z","from":"ready","to":"in_progress"}
+{"kind":"run","task":"T-023","iteration":2,"run":"R-200","role":"implementer","tier":"medium","started_at":"2026-11-14T04:35:19Z","ended_at":"2026-11-14T04:35:48Z","wall_s":29,"tokens":3794,"tool_calls":4,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"rulings of D-122 applied: the memory figure in nav.md corrected to about 338 MiB; fmt and hygiene green; head 0ba1c54f9c0796aadf436e62fcd9cb5959f2e2e7; tokens = agent total minus the tokens booked for R-194"}
+{"kind":"transition","task":"T-023","iteration":2,"at":"2026-11-14T04:37:40Z","from":"in_progress","to":"self_verified"}
