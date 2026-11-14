@@ -2,7 +2,7 @@
 id: T-038
 title: "Publish only the refusal kinds that a registered command can produce, tie each kind to the commands that report it with a mechanical check, and make every `when` text true of the binary"
 tier: high              # ADR-0002: a CHARTER §3 contract change (decision 2: how the registry reports and describes refusals); ADR-0006 accepted (D-128)
-state: self_verified
+state: tests_joined
 owner_role: planner
 scorecard_items: [cmd.schema, control.errors]   # existing items, strengthened (no new item); intended tests: "Scorecard" below
 depends_on: [T-019, T-020, T-021, T-023, T-032, T-036, T-037, T-039]   # all merged except T-037 (in rework; branch task/T-037 read at 2f1d9f86ade442d3345e01f9814c27bfa3dca074): see "To re-check at dispatch"
