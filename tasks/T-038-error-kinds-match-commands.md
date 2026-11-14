@@ -2,7 +2,7 @@
 id: T-038
 title: "Publish only the refusal kinds that a registered command can produce, tie each kind to the commands that report it with a mechanical check, and make every `when` text true of the binary"
 tier: high              # ADR-0002: a CHARTER §3 contract change (decision 2: how the registry reports and describes refusals); ADR-0006 accepted (D-128)
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: [cmd.schema, control.errors]   # existing items, strengthened (no new item); intended tests: "Scorecard" below
 depends_on: [T-019, T-020, T-021, T-023, T-032, T-036, T-037, T-039]   # all merged except T-037 (in rework; branch task/T-037 read at 2f1d9f86ade442d3345e01f9814c27bfa3dca074): see "To re-check at dispatch"
@@ -719,6 +719,7 @@ One task; no data or file format depends on declarations.
 - Q-10: leave the unreachable raise site in `search.rs` as it is; it stays undeclared.
 - Size: the task is kept whole (the grounds of D-092 Q-3 stand), with 30 commands to declare. The director watches the budget at the round-1 verdict as METHODOLOGY §11 says.
 - On three criteria the planner flagged in R-211 (director, D-130; golden rule 9, as D-094 and D-114): AC-8's check that a phrase no longer appears in `docs/control-protocol.md` is not a test; the reviewer checks that removal on the diff. AC-1's comparison of `commands --schema` with `docs/commands.json` is already the gate's `schema` step and is not written as a test of this task. AC-3's check that each audit line names its command stays (it identifies the line; it asserts no wording).
+- Dispatch check (director, D-135): on main `53c1355`, after T-037 merged at `f81092a7be14313834d9601cac000092a7c1bd7e`: `docs/commands.json` lists 30 commands and 24 `rejected` kinds; `FailingFs` in `crates/kiln-commands/src/nav.rs` implements `check_location` (line 678); ADR-0006 is filed as `docs/adr/0006-declared-refusal-kinds.md`; T-023 and T-037 are merged. The line numbers the spec cites were read before T-037's merge and are found by their text.
 
 ## To re-check at dispatch
 Read at the spec check: main `e0f4daa` (T-023 merged at `1da69fd3433474d8de74bae430a4d7d3d79e290f`,
