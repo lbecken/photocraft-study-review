@@ -23,11 +23,11 @@
 //! Confinement (T-008, `docs/protocol/paths.md`):
 //! - The root is resolved once, at construction (`fs::canonicalize`; a root given as a symlink
 //!   to a directory is that directory), and that *directory* is the root: its device and inode
-//!   are kept, and, when it can be opened for reading, it is held open for the life of the
-//!   `DiskFs` (so the inode number cannot be reused by another directory after the root is
-//!   removed; nothing is looked up through it). A root without read permission is not held,
-//!   and then a root removed and replaced by a new directory that reuses its inode number
-//!   between two calls is not detected (documented limit, ruling v10).
+//!   are kept, and it is always held open for the life of the `DiskFs` (so the inode number
+//!   cannot be reused by another directory after the root is removed; nothing is looked up
+//!   through it). A root that cannot be opened for reading, whatever its search permission
+//!   (for example mode `0311` or `0000`), cannot be held and is refused at construction
+//!   (T-036).
 //!   Every call resolves the root path *as given* again and walks from there only if it still
 //!   reaches that same directory; if the root path or a directory above it has been
 //!   replaced since (for example by a symlink to another directory), or leads nowhere, the
@@ -109,9 +109,10 @@ pub struct DiskFs {
     /// `DiskFs` lives, so that its inode cannot be freed and given to another directory: a
     /// root removed and replaced by a link to a new directory that reused the inode number
     /// would otherwise pass the `root_id` check. It is only an identity anchor: nothing is
-    /// ever looked up through it, every walk starts from `given` resolved again. `None` only
-    /// if the root cannot be opened (no read permission); then that reuse is not excluded.
-    _root_handle: Option<fs::File>,
+    /// ever looked up through it, every walk starts from `given` resolved again. Every
+    /// `DiskFs` holds one: a root that cannot be opened for reading is refused by
+    /// [`DiskFs::new`] (T-036).
+    _root_handle: fs::File,
 }
 
 /// One step of the walk to a location.
@@ -154,7 +155,11 @@ struct Location {
 }
 
 impl DiskFs {
-    /// A VFS rooted at `root`. Err if root is not a directory.
+    /// A VFS rooted at `root`. Err if root does not exist, is not a directory, or cannot be
+    /// opened for reading (then it cannot be held open, so it is refused: `Io` with
+    /// `PermissionDenied` for lack of permission, the open's own kind otherwise). Every
+    /// `DiskFs` returned holds its root directory open for as long as it lives and takes the
+    /// root's identity (device, inode) from the directory it holds.
     ///
     /// The error cannot name a `RelPath` of the root (none is valid), and must not name the
     /// host path, so it uses the placeholder path `(root)`. The root is the directory `root`
@@ -170,15 +175,16 @@ impl DiskFs {
         match fs::metadata(root) {
             Ok(meta) if meta.is_dir() => {
                 let resolved = fs::canonicalize(root).map_err(root_error)?;
-                let handle = fs::File::open(&resolved).ok();
-                // The identity of the directory actually held, where there is one.
-                let held = handle.as_ref().and_then(|h| h.metadata().ok());
-                let id = held
-                    .as_ref()
-                    .map_or((meta.dev(), meta.ino()), |m| (m.dev(), m.ino()));
+                // A root that cannot be held open is refused (T-036): `PermissionDenied` for a
+                // directory the process may not open for reading (whatever its search
+                // permission), the open's own kind for any other failure.
+                let open_error = |e: io::Error| io_error(&placeholder(), &e);
+                let handle = fs::File::open(&resolved).map_err(open_error)?;
+                // The identity is that of the directory actually held.
+                let held = handle.metadata().map_err(open_error)?;
                 Ok(DiskFs {
                     given: std::path::absolute(root).map_err(root_error)?,
-                    root_id: id,
+                    root_id: (held.dev(), held.ino()),
                     _root_handle: handle,
                 })
             }
