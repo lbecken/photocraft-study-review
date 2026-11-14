@@ -2,7 +2,7 @@
 id: T-023
 title: "List a document's outline, go to a line and column clamped to the document, go to an outline symbol, and find symbols by name across the project's Rust files"
 tier: medium            # ADR-0002 default: in-memory, plus reads through T-019's walk and the unchanged `Vfs::read` (no new disk code, no dependency, no CHARTER §3 contract); confirmed by the director (D-108, note N-3)
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: [syntax.outline, nav.goto-line, nav.goto-symbol, nav.workspace-symbol]
 depends_on: [T-016, T-018, T-019, T-020, T-032]   # T-016, T-018, T-019 (3b1a95d), T-032 merged; T-020 (`too_large`, `syntax::MAX_CHARS`) must merge first (spec check R-180); T-021 is not a dependency but merges first (D-092 order)
@@ -606,6 +606,7 @@ written from the Rules above (with a switch for Q-2) and three throwaway tests i
 - No test asserts a time, and no figure enters a document except from the implementer's release-build measurement (as for T-020 and T-021).
 
 ### To re-check at dispatch
+Checked by the director on main `88c7d29` on 2026-11-14, after T-020 (`04a8fdf9c9b0d759eb131b6a7eae851cfa46708b`) and T-021 (`f01179bc68b7f760ebea674ca59e2731ac18fcf9`) merged: all nine facts below hold (commands: `grep` for `MAX_CHARS`, `TooLarge`, `struct SyntaxState`, `last successful`, `outline`, `fn root`, `fn char_at_byte`, the section headings of `docs/protocol/syntax.md`, `fn cursor_result`, `InvalidPattern`; `git diff 12f57a9..88c7d29 --stat` shows T-021 changed none of `cursor.rs`, `kiln-syntax` or `syntax.rs`). One difference in wording to know: the first sentence of the "Time" section of `syntax.md` now reads "the size limit bounds the length of the text a command accepts, not the time a parse takes or the memory it needs" (T-020 ruling r1, D-110).
 Read by R-180/R-182 on the branches, not on main: T-020 at `c0c12fc30d473ff1d0f5b71c8ce9d4a0b66e0c12`,
 T-021 at `46b93d64a018268b60528146cf16f55a36f10555`; their reviews may still change details. Once
 both have merged, confirm on main (and edit the named lines of this spec if one differs):
