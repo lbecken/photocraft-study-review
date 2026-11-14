@@ -776,6 +776,34 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `not_found` form of the chain note (pre-existing text, not changed) · missing context: the
   D-125 rulings are only in the primary checkout's task file · next: the test author's k1/k2
   round, then review round 2.
+- 2026-11-14T07:24Z · R-210 · in_progress (ruling k6, after the 07:11Z restart) · I accept k6
+  (D-128): `nav.rs` joins `touches` for the one method of `FailingFs`, which answers `Ok(())`,
+  and no other line changes. The branch was at `0946426` (merge of main) and clean. Before the
+  fix, `cargo test -p kiln-commands --lib --no-run` failed with: `error[E0046]: not all trait
+  items implemented, missing: check_location --> crates/kiln-commands/src/nav.rs:661:5`.
+  did: added to `impl Vfs for FailingFs` in `nav.rs` the three lines `fn check_location(&self,
+  _path: &RelPath) -> Result<(), VfsError> {` / `Ok(())` / `}`. Nothing else in `nav.rs`
+  changed. After the fix the `kiln-commands` unit tests passed (73). `git grep -n 'Vfs for'`
+  finds only `DiskFs` (`disk.rs`:450), `MemoryFs` (`memory.rs`:58) and `FailingFs`
+  (`nav.rs`:661), so the merge added no other implementation. `cargo xtask schema --write`
+  changed nothing ("30 commands; audit ok; docs/commands.json current").
+  Read-only probe as uid 0 (`control --root root`, fixture `/tmp/t037-impl-r210`, removed with
+  `rm -rf /tmp/t037-impl-r210`; nothing changed on disk):
+  - `nav.workspace-symbols {"query":"foo"}` answered.
+  - After the root was renamed away it was refused `rejected/outside_root` ("cannot list the
+    project: (root): resolves outside the root"), like `doc.open`.
+  · gate attempts: 1 (last: green; `GATE PASSED in 567.5s (11 steps; 2 step(s) EMPTY …)`; test
+  `851 passed, 0 failed, 0 ignored in 108 suites`; no-skip 0) · not run: nothing else · missing
+  context: none · next: director.
+  QUESTION: the merge brought in `nav.workspace-symbols`, which also uses the file system
+  (`nav.rs`:557 `walk::tree(ctx.vfs(), …)` and :485 `ctx.vfs().read`). So P1 in
+  `docs/protocol/paths.md` ("Before each request that uses the file system (`doc.open`, also of
+  a path that is already open, `doc.save` and `project.tree`), …") now names an incomplete
+  list of such requests. The behaviour agrees with the rule (probe above). Only the
+  parenthetical is narrower than the binary. P2's "`project.tree` is refused with
+  `outside_root` as well" does not mention it either. `paths.md` is in `touches`, but this
+  wording is not in Pinned (i), so I have not changed it. Should P1's list add
+  `nav.workspace-symbols`, here or in a later task?
 <!-- end implementer log -->
 ### test author
 - 2026-11-14T04:49Z · R-202 · ready · Rulings acknowledged and accepted before acting: D-092
