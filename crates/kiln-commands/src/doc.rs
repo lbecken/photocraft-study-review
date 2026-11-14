@@ -1274,6 +1274,210 @@ mod tests {
         );
     }
 
+    /// A fresh `work/` under the temp dir with `root/a.txt`, `root/sub/c.txt` and
+    /// `outside/secret.txt`; removed when dropped (also when the test fails), search
+    /// permission restored first.
+    struct Work(std::path::PathBuf);
+
+    impl Work {
+        fn new(name: &str) -> Work {
+            let dir = std::env::temp_dir()
+                .join(format!("kiln-commands-unit-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let work = Work(dir);
+            std::fs::create_dir_all(work.root().join("sub")).unwrap();
+            std::fs::create_dir_all(work.0.join("outside")).unwrap();
+            std::fs::write(work.root().join("a.txt"), b"alpha\n").unwrap();
+            std::fs::write(work.root().join("sub/c.txt"), b"charlie\n").unwrap();
+            std::fs::write(work.0.join("outside/secret.txt"), b"s3cr3t-content\n").unwrap();
+            work
+        }
+
+        fn root(&self) -> std::path::PathBuf {
+            self.0.join("root")
+        }
+
+        fn ctx(&self) -> Context {
+            Context::with_vfs(Box::new(kiln_workspace::DiskFs::new(&self.root()).unwrap()))
+        }
+    }
+
+    impl Drop for Work {
+        fn drop(&mut self) {
+            use std::os::unix::fs::PermissionsExt;
+            for dir in [self.0.clone(), self.root(), self.root().join("sub")] {
+                let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755));
+            }
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Open `path` (doc 1) and insert `E` at 0.
+    fn open_and_edit(r: &Registry, ctx: &mut Context, path: &str) -> Value {
+        let first = ok(r, ctx, "doc.open", json!({"path": path}));
+        assert_eq!(first["doc"], 1);
+        ok(
+            r,
+            ctx,
+            "doc.insert",
+            json!({"doc": 1, "offset": 0, "text": "E"}),
+        );
+        ok(r, ctx, "doc.open", json!({"path": path}))
+    }
+
+    /// The `code` and `reason` of a refused request.
+    fn refusal(r: &Registry, ctx: &mut Context, name: &str, params: Value) -> (Value, Value) {
+        let err = r.execute(ctx, name, params).unwrap_err().to_json();
+        (err["code"].clone(), err["reason"].clone())
+    }
+
+    /// T-037 (ruling D-092 O1): on a disk session a re-open whose location is now outside,
+    /// or whose walk fails inside, is refused like a first open and changes nothing.
+    #[test]
+    fn reopen_on_disk_is_refused_when_the_location_is_outside_or_unknown() {
+        use std::os::unix::fs::symlink;
+        let r = reg();
+        let cases: [(&str, &str, &str); 4] = [
+            ("rel-link", "a.txt", "outside_root"),
+            ("abs-link", "a.txt", "outside_root"),
+            ("sub-link", "sub/c.txt", "outside_root"),
+            ("loop", "a.txt", "io_error"),
+        ];
+        for (case, path, reason) in cases {
+            let work = Work::new(&format!("reopen-{case}"));
+            let root = work.root();
+            let mut ctx = work.ctx();
+            let reopened = open_and_edit(&r, &mut ctx, path);
+            assert_eq!(reopened["already_open"], true, "{case}");
+            match case {
+                "rel-link" | "abs-link" => {
+                    std::fs::remove_file(root.join("a.txt")).unwrap();
+                    let target = if case == "rel-link" {
+                        std::path::PathBuf::from("../outside/secret.txt")
+                    } else {
+                        work.0.join("outside/secret.txt")
+                    };
+                    symlink(target, root.join("a.txt")).unwrap();
+                    assert_eq!(
+                        std::fs::read(root.join("a.txt")).unwrap(),
+                        b"s3cr3t-content\n"
+                    );
+                }
+                "sub-link" => {
+                    std::fs::remove_dir_all(root.join("sub")).unwrap();
+                    symlink("../outside", root.join("sub")).unwrap();
+                }
+                _ => {
+                    std::fs::remove_file(root.join("a.txt")).unwrap();
+                    symlink("loop2", root.join("a.txt")).unwrap();
+                    symlink("a.txt", root.join("loop2")).unwrap();
+                }
+            }
+            let list = ok(&r, &mut ctx, "doc.list", json!({}));
+            let info = ok(&r, &mut ctx, "doc.info", json!({"doc": 1}));
+            let log_len = ctx.log().len();
+            assert_eq!(
+                refusal(&r, &mut ctx, "doc.open", json!({"path": path})),
+                (json!("rejected"), json!(reason)),
+                "{case}"
+            );
+            // A refused request adds nothing to the session log.
+            assert_eq!(ctx.log().len(), log_len, "{case}");
+            assert_eq!(ok(&r, &mut ctx, "doc.list", json!({})), list, "{case}");
+            assert_eq!(
+                ok(&r, &mut ctx, "doc.info", json!({"doc": 1})),
+                info,
+                "{case}"
+            );
+            assert_eq!(info["dirty"], true, "{case}");
+        }
+    }
+
+    /// T-037: the root renamed away (or removed and replaced) refuses the re-open
+    /// `outside_root`; the root moved back answers `already_open: true` again.
+    #[test]
+    fn reopen_on_disk_follows_the_root_identity() {
+        let r = reg();
+        let work = Work::new("reopen-root");
+        let root = work.root();
+        let away = work.0.join("root.away");
+        let mut ctx = work.ctx();
+        let reopened = open_and_edit(&r, &mut ctx, "a.txt");
+        std::fs::rename(&root, &away).unwrap();
+        assert!(!root.exists());
+        assert_eq!(
+            refusal(&r, &mut ctx, "doc.open", json!({"path": "a.txt"})),
+            (json!("rejected"), json!("outside_root"))
+        );
+        std::fs::rename(&away, &root).unwrap();
+        assert_eq!(
+            ok(&r, &mut ctx, "doc.open", json!({"path": "a.txt"})),
+            reopened
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("a.txt"), b"alpha\n").unwrap();
+        assert_eq!(
+            refusal(&r, &mut ctx, "doc.open", json!({"path": "a.txt"})),
+            (json!("rejected"), json!("outside_root"))
+        );
+        assert_eq!(
+            ok(&r, &mut ctx, "doc.info", json!({"doc": 1}))["dirty"],
+            true
+        );
+    }
+
+    /// T-037: a re-open whose location stays inside answers `already_open: true` with the open
+    /// document, whatever is now at the location, and reads nothing.
+    #[test]
+    fn reopen_on_disk_does_not_need_the_file() {
+        use std::os::unix::fs::symlink;
+        let r = reg();
+        for case in [
+            "deleted",
+            "directory",
+            "link-inside",
+            "undecodable",
+            "sub-removed",
+        ] {
+            let work = Work::new(&format!("reopen-ok-{case}"));
+            let root = work.root();
+            let mut ctx = work.ctx();
+            let path = if case == "sub-removed" {
+                "sub/c.txt"
+            } else {
+                "a.txt"
+            };
+            let reopened = open_and_edit(&r, &mut ctx, path);
+            match case {
+                "deleted" => std::fs::remove_file(root.join("a.txt")).unwrap(),
+                "directory" => {
+                    std::fs::remove_file(root.join("a.txt")).unwrap();
+                    std::fs::create_dir(root.join("a.txt")).unwrap();
+                }
+                "link-inside" => {
+                    std::fs::remove_file(root.join("a.txt")).unwrap();
+                    symlink("sub/c.txt", root.join("a.txt")).unwrap();
+                }
+                "undecodable" => std::fs::write(root.join("a.txt"), [0xFF, 0xFE, 0xFF]).unwrap(),
+                _ => std::fs::remove_dir_all(root.join("sub")).unwrap(),
+            }
+            assert_eq!(
+                ok(&r, &mut ctx, "doc.open", json!({"path": path})),
+                reopened,
+                "{case}"
+            );
+            assert_eq!(reopened["already_open"], true, "{case}");
+            assert_eq!(
+                ok(&r, &mut ctx, "doc.list", json!({}))["docs"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                1
+            );
+        }
+    }
+
     #[test]
     fn dirty_follows_saved_text() {
         let r = reg();

@@ -1231,6 +1231,197 @@ mod tests {
         assert_eq!(listing(&dir.join("real")), ["t.txt"]);
     }
 
+    /// A fresh work directory (as [`fresh_dir`]) removed when dropped, also when the test
+    /// fails; search permission is restored on every directory first.
+    struct Work(PathBuf);
+
+    impl Work {
+        fn new(name: &str) -> Work {
+            Work(fresh_dir(name))
+        }
+    }
+
+    impl Drop for Work {
+        fn drop(&mut self) {
+            use std::os::unix::fs::PermissionsExt;
+            fn restore(dir: &Path) {
+                let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
+                if let Ok(entries) = fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+                            restore(&entry.path());
+                        }
+                    }
+                }
+            }
+            restore(&self.0);
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Wait for `child` at most 10 s (a hang detector), killing it after that.
+    fn wait_bounded(child: &mut std::process::Child) -> bool {
+        for _ in 0..1000 {
+            if let Some(status) = child.try_wait().unwrap() {
+                return status.success();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        false
+    }
+
+    fn mkfifo(path: &Path) {
+        use std::os::unix::fs::FileTypeExt;
+        let mut child = std::process::Command::new("mkfifo")
+            .arg(path)
+            .stdin(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn mkfifo");
+        assert!(wait_bounded(&mut child), "mkfifo failed or hung");
+        assert!(fs::symlink_metadata(path).unwrap().file_type().is_fifo());
+    }
+
+    /// `root/` with `a.txt`, `sub/c.txt`, `real/t.txt`, and `outside/secret.txt` next to it.
+    fn location_fixture(name: &str) -> (Work, PathBuf) {
+        let work = Work::new(name);
+        let root = work.0.join("root");
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::create_dir_all(root.join("real")).unwrap();
+        fs::create_dir_all(work.0.join("outside")).unwrap();
+        fs::write(root.join("a.txt"), b"alpha\n").unwrap();
+        fs::write(root.join("sub/c.txt"), b"charlie\n").unwrap();
+        fs::write(root.join("real/t.txt"), b"tango\n").unwrap();
+        fs::write(work.0.join("outside/secret.txt"), b"s3cr3t-content\n").unwrap();
+        (work, root)
+    }
+
+    /// T-037: `check_location` is `Ok` for an inside location of every kind, and opens nothing
+    /// (a FIFO at the location is answered without blocking and stays a FIFO).
+    #[test]
+    fn check_location_is_ok_for_every_inside_location() {
+        use std::os::unix::fs::{FileTypeExt, symlink};
+        let (_work, root) = location_fixture("check-inside");
+        let fs_ = DiskFs::new(&root).unwrap();
+        fs::create_dir(root.join("dir")).unwrap();
+        mkfifo(&root.join("fifo"));
+        symlink("a.txt", root.join("to-a")).unwrap();
+        symlink("none.txt", root.join("dangling")).unwrap();
+        symlink("real/t.txt/", root.join("trail")).unwrap();
+        symlink("../root/sub", root.join("via-out-and-back")).unwrap();
+        fs::write(root.join("bad.txt"), [0xFF, 0xFE, 0xFF]).unwrap();
+        let paths = [
+            "a.txt",                  // a regular file
+            "dir",                    // a directory
+            "sub",                    // a directory
+            "fifo",                   // a special file, never opened
+            "none.txt",               // nothing there, parent exists
+            "nope/x.txt",             // a missing parent
+            "a.txt/x",                // a parent that is a file
+            "to-a",                   // a link to a file inside
+            "dangling",               // a dangling link inside
+            "trail",                  // a trailing `/` to a file
+            "via-out-and-back/c.txt", // leaves the root and comes back
+            "bad.txt",                // undecodable
+        ];
+        // On its own thread, so that a check that opened the FIFO would be noticed (hang
+        // detector of 10 s) instead of blocking the test run.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let results: Vec<_> = paths
+                .iter()
+                .map(|s| (*s, fs_.check_location(&p(s))))
+                .collect();
+            let _ = tx.send(results);
+        });
+        let results = match rx.recv_timeout(std::time::Duration::from_secs(10)) {
+            Ok(results) => results,
+            Err(e) => {
+                // Release a reader blocked on the FIFO before failing.
+                let _ = fs::OpenOptions::new().write(true).open(root.join("fifo"));
+                panic!("check_location did not answer: {e}");
+            }
+        };
+        for (path, result) in results {
+            assert_eq!(result, Ok(()), "{path}");
+        }
+        assert!(
+            fs::symlink_metadata(root.join("fifo"))
+                .unwrap()
+                .file_type()
+                .is_fifo()
+        );
+        assert!(!root.join("none.txt").exists());
+        assert!(!root.join("nope").exists());
+    }
+
+    /// T-037: a location outside, a link loop, and a root that is no longer the root.
+    #[test]
+    fn check_location_refuses_outside_loops_and_a_replaced_root() {
+        use std::os::unix::fs::symlink;
+        let (work, root) = location_fixture("check-refuse");
+        let fs_ = DiskFs::new(&root).unwrap();
+        let secret = work.0.join("outside/secret.txt");
+        symlink("../outside/secret.txt", root.join("rel-out")).unwrap();
+        symlink(&secret, root.join("abs-out")).unwrap();
+        symlink("../outside/none.txt", root.join("dangling-out")).unwrap();
+        symlink("../outside", root.join("dir-out")).unwrap();
+        symlink("loop2", root.join("loop1")).unwrap();
+        symlink("loop1", root.join("loop2")).unwrap();
+        for path in [
+            "rel-out",
+            "abs-out",
+            "dangling-out",
+            "dir-out/secret.txt",
+            "dir-out/none.txt",
+        ] {
+            assert_eq!(
+                fs_.check_location(&p(path)),
+                Err(VfsError::OutsideRoot { path: p(path) }),
+                "{path}"
+            );
+        }
+        assert!(matches!(
+            fs_.check_location(&p("loop1")),
+            Err(VfsError::Io { path, .. }) if path == p("loop1")
+        ));
+        assert!(!work.0.join("outside/none.txt").exists());
+
+        // The root renamed away: every location is outside; moved back: inside again.
+        let away = work.0.join("root.away");
+        fs::rename(&root, &away).unwrap();
+        assert!(!root.exists());
+        assert_eq!(
+            fs_.check_location(&p("a.txt")),
+            Err(VfsError::OutsideRoot { path: p("a.txt") })
+        );
+        // A link at the root path to another directory is not the root.
+        symlink("outside", &root).unwrap();
+        assert_eq!(
+            fs_.check_location(&p("secret.txt")),
+            Err(VfsError::OutsideRoot {
+                path: p("secret.txt")
+            })
+        );
+        fs::remove_file(&root).unwrap();
+        fs::rename(&away, &root).unwrap();
+        assert_eq!(fs_.check_location(&p("a.txt")), Ok(()));
+        // Removed, and replaced by a new directory holding the same name: still outside.
+        fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            fs_.check_location(&p("a.txt")),
+            Err(VfsError::OutsideRoot { path: p("a.txt") })
+        );
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("a.txt"), b"alpha\n").unwrap();
+        assert_eq!(
+            fs_.check_location(&p("a.txt")),
+            Err(VfsError::OutsideRoot { path: p("a.txt") })
+        );
+        assert_eq!(fs::read(&secret).unwrap(), b"s3cr3t-content\n");
+    }
+
     /// Fixed-seed differential test: MemoryFs is the reference model of DiskFs.
     #[test]
     fn matches_memory_model_on_random_operations() {
@@ -1266,6 +1457,12 @@ mod tests {
                 1 => assert_eq!(disk.read(&path), mem.read(&path), "read {path}"),
                 _ => assert_eq!(disk.is_file(&path), mem.is_file(&path), "is_file {path}"),
             }
+            // T-037: no links here, so every location is inside for both (consumes no seed).
+            assert_eq!(
+                disk.check_location(&path),
+                mem.check_location(&path),
+                "check_location {path}"
+            );
         }
         for path in mem.paths() {
             assert_eq!(disk.read(&path).unwrap(), mem.get(&path).unwrap());

@@ -274,4 +274,17 @@ mod tests {
         assert_eq!(fs.read(&p("a")), Err(VfsError::NotFound { path: p("a") }));
         assert!(fs.write_atomic(&p("a"), b"y").is_ok());
     }
+
+    /// T-037: every location is inside, whatever is stored there; nothing changes.
+    #[test]
+    fn check_location_is_always_ok_and_changes_nothing() {
+        let mut fs = MemoryFs::new();
+        fs.insert(&p("a.txt"), b"alpha\n");
+        fs.insert(&p("sub/c.txt"), b"charlie\n");
+        let before = fs.clone();
+        for path in ["a.txt", "sub", "sub/c.txt", "none.txt", "nope/x", "a.txt/x"] {
+            assert_eq!(fs.check_location(&p(path)), Ok(()), "{path}");
+        }
+        assert_eq!(fs, before);
+    }
 }

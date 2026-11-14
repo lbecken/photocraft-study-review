@@ -1354,7 +1354,7 @@
       }
     },
     {
-      "doc": "Open a file as a document and return its id. Opening a path that is already open returns the existing document unchanged, with `already_open: true`.",
+      "doc": "Open a file as a document and return its id. Opening a path that is already open returns the existing document unchanged, with `already_open: true`, and reads nothing; such a re-open is still refused, like a first open, when the root path no longer leads to the root or the path now resolves outside it (`outside_root`), or when where it leads cannot be determined (`io_error`).",
       "examples": [
         {
           "description": "open a CRLF file",
@@ -1493,7 +1493,7 @@
         "description": "Result of `doc.open`.",
         "properties": {
           "already_open": {
-            "description": "True iff the path was already open (the existing document is returned, unchanged).",
+            "description": "True iff the path was already open (the existing document is returned, unchanged; only\nwhere the path leads was checked, and the file was not read).",
             "type": "boolean"
           },
           "doc": {
