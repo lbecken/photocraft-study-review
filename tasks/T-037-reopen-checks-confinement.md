@@ -735,6 +735,47 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `task/T-037-tests`. Note: `/tmp` holds about 3,700 `kiln-*` entries left by other suites'
   fixtures (and possibly the stopped attempt 1); none are this task's unit fixtures, so I did
   not remove them.
+- 2026-11-14T06:05Z · R-208 · review round 1 request-changes (`reviews/T-037-r1.md`) · I read the
+  D-125 rulings (k1–k5) in the director's copy of this file in the primary checkout. They are not
+  yet on this branch. k3 (finding 3): accepted. P7 gains one clause, D1 stays as it is. k4
+  (findings 4, 5): accepted. k1, k2: the test author's; noted. k5: no change; noted. The review found
+  no defect in the code, so I changed no code. Probes: a debug `kiln-cli` of this head, run
+  through `control --root root` as uid 65534 (`setpriv --reuid=65534 --regid=65534
+  --clear-groups`) on fixtures owned by 65534 under `/tmp/t037-impl-r208-probe`. In every session
+  the negative control (`doc.open locked.txt`, mode 0000) was refused `io_error`.
+  k3, the root's parent `work/` made mode 0000, and in a second session 0600, each with `a.txt`
+  edited and not edited:
+  - re-open `a.txt` → `rejected/outside_root`;
+  - first `doc.open b.txt` → `outside_root`;
+  - `doc.save 1` → `outside_root`;
+  - `project.tree {}` → `outside_root`;
+  - `doc.info` and `doc.list` answered, the document unchanged (dirty and len as before);
+  - after `work/` was set back to 0755, the re-open answered `already_open: true`;
+  - no response named the fixture path.
+  k4, `root/l -> ../outside/dir/../../root/b.txt`:
+  - `doc.open l` while `outside/dir` exists → doc 1, and its re-open → `already_open: true`;
+  - `outside/dir` removed → re-open `outside_root`, and a first open of a new link `l2` with the
+    same target → `outside_root`;
+  - `outside/dir` back → re-open `already_open: true`;
+  - `outside/` held only `dir` and `secret.txt` afterwards.
+  did: in `docs/protocol/paths.md`:
+  - P7, after "when the root path no longer leads to the root", inserted: "(also when it can no
+    longer be followed, for example because a directory above the root cannot be searched,
+    which refuses a first open, a save and `project.tree` the same way)";
+  - the chain note now reads "by `not_found` versus `outside_root` (for a path that is already
+    open, by `already_open` versus `outside_root`), whether a directory it passes through outside
+    exists";
+  - re-wrapped "The root is that directory…", the P7 bullet and the precedence paragraph (the
+    former long lines 22 and 26 and the short line 90). The outside bullet changed only from
+    "chain that leaves" on.
+  A word-level diff against the previous file shows exactly these two insertions. No line is
+  over 96 characters. Probe fixtures and binary removed with literal paths (`rm -rf
+  /tmp/t037-impl-r208-probe /tmp/t037-impl-r208-bin`). · gate attempts: 1 (last: green, `GATE
+  PASSED in 555.7s (11 steps; 2 step(s) EMPTY …)`; test `818 passed, 0 failed, 0 ignored in 106
+  suites`; no-skip 0) · not run: the k3 case as a non-root CI identity other than 65534; the first-open
+  `not_found` form of the chain note (pre-existing text, not changed) · missing context: the
+  D-125 rulings are only in the primary checkout's task file · next: the test author's k1/k2
+  round, then review round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-14T04:49Z · R-202 · ready · Rulings acknowledged and accepted before acting: D-092
