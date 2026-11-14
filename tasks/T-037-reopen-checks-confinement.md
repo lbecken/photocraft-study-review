@@ -2,7 +2,7 @@
 id: T-037
 title: "Check the root and the path's location when `doc.open` names a path that is already open, and say so in paths.md and in doc.open's description"
 tier: high              # ADR-0002: a confinement boundary that docs/protocol/paths.md states ("At open and at save … a path whose location is outside the root is refused")
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # existing item, strengthened (no new item)
 depends_on: [T-036]     # not merged at the spec check R-196 (branch task/T-036 read at cbcfdbbf87b36dd0b8fb70244c4e90b8adf46ddb); T-008 (d4915606) and T-039 (c538ef8) merged. Never in flight with T-036 (shared disk.rs, paths.md).
@@ -590,6 +590,12 @@ Checked by the director on main `e42b5e5` on 2026-11-14, after T-036 merged at `
 ### Rulings on Q-3 and Q-4 of the spec check R-196 (director, D-120)
 - Q-3: (a). The sentence of `docs/protocol/paths.md` that says the root is resolved again before each request is narrowed to the requests that use the file system (`doc.open`, also of a path that is already open, `doc.save` and `project.tree`), as the check's replacement text gives it; a request that uses no file, such as `doc.info`, still answers after the root has vanished, and the document says nothing else about such requests.
 - Q-4: (a). The comment in T-036's guard file is left as it is; no merged test file enters `touches`.
+### Rulings on review round 1 (R-205, `reviews/T-037-r1.md`; director, D-125). Each builder acknowledges the rulings that concern it before acting.
+- k1 (finding 1, test gap; the surviving mutant that checks only a modified document). The check applies to a re-open of any open document, modified or not. AC-1 and AC-2 are read so: the test author adds, to the tests of AC-1 and AC-2 through `control` and to the Rust-API test, cases in which the document is opened and NOT edited before the change, with the same refusals expected.
+- k2 (finding 2, test gap; the surviving mutant that resets the selection). "Document unchanged" in the ACs means everything Interface 2 names. The test author adds, in at least one refused case of AC-1, one of AC-2 and one of AC-4, a selection set with `cursor.set` and a pending redo step (an edit undone) before the change, and asserts after the refused re-open that `cursor.get` gives the same selection and that `doc.info` still reports `can_redo: true`, besides the checks already there.
+- k3 (finding 3, spec gap). When the root itself cannot be reached any more (the reviewer's case: a directory above the root loses search permission, as an unprivileged user), a re-open is refused `outside_root`, as a first open, a save and `project.tree` are; this is T-036's rule for a root path that no longer leads to the same directory, which this task reuses. The new last bullet of "The rule" in `docs/protocol/paths.md` (P7) gains one clause saying so, which the implementer writes after running the reviewer's case as uid 65534; the description of `doc.open` (D1) is left as it is.
+- k4 (findings 4 and 5, nits). The implementer re-wraps the lines of `docs/protocol/paths.md` it left long or short, without changing a word, and extends the sentence about what a link chain reveals with the re-open form the reviewer observed (`already_open` versus `outside_root`), after running it.
+- k5 (finding 6, nit). No change: the title of the scorecard item `ws.path-confinement` speaks of opening and saving, where a non-regular file is refused; a re-open opens nothing, and the rule for it is in `paths.md`. Recorded as accepted; the evaluator reads both.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
