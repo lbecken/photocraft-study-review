@@ -563,6 +563,58 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   ui-commands, hygiene, schema and scorecard PASS. The gate stops at `test`, so I ran `no-skip` (PASS) and
   `hygiene` (PASS) on their own; `fuzz` and `budgets` did not run; the guards pass in `cargo test -p kiln --test
   guard_t055`) · missing context: none · next: director (Q 1–3), join.
+- 2026-11-14T19:58Z · R-229 · after the first join · did: updated `acceptance_t055.rs` for
+  D-148 and D-149. I read only the task file on main (its rulings sections), not `task/T-055`.
+  - Rulings acknowledged and accepted before acting on them:
+    - D-148: n1 (my dev-dependency line stands), n2 (a fresh session has no focused node), n3
+      (`--log /dev/full`: exit 2, stderr message, nothing on stdout). Each confirms what the
+      R-227 tests already assume, so none needs a test change.
+    - D-149: n4, n8; n5, n6, n7, n9, n10, n11 noted. n9 is what `ac5` already does: it compares
+      `root` only and checks the `frames` totals differ by 600.
+  - n4. Every test that takes a snapshot after a control request and expects that request's
+    effect now runs `{"ui":"frames","count":1}` first (new helper `one_frame`):
+    - `ac2_shell_shown`, and `ac9_no_display`, which runs the same script: before `s1`.
+    - `ac4_refusals_shown`: before `s0`.
+    - `ac5_idle_frames_add_nothing`: before `s0`, in both scripts.
+    - `ac7_ui_refusals`: in the setup, before `s0`. The ambiguous target needs the two documents
+      shown.
+    - `ac10_accessible_names`: before `two-docs`.
+    - Unchanged: `ac3_*`, `ac6_determinism`, `ac6_frame_counts_add_up`, and `ac7_line_level_errors_first`.
+      In those, an action already lies between the control request and the snapshot, or no
+      effect of a control request is expected.
+    - New test `ac6_control_effect_shown_from_the_next_frame`:
+      - after a control `doc.open`, with no frame run, the snapshot equals the one before (same
+        `root`, same `frames`), while `doc.list` lists the document;
+      - after one frame, `frames` is one higher and `Documents` lists `src/a.rs`.
+  - n8. The case is added to `ac7_ui_refusals` (helper `click_offscreen_is_refused`):
+    - setup: 100 open documents of 20-char paths, `--size 200x200`;
+    - the first `offscreen` node with a unique `value` is found in a snapshot; the test panics
+      with a precondition message if there is none;
+    - a `click` on it is refused `not_actionable`; `root`, `frames` and the log stay unchanged;
+      exit 3.
+    - Why I take it as given rather than guessed: AC-2 requires one child per open document,
+      each showing its path, and 100 such rows cannot fit in a 200-point window. The spec does
+      not pin the layout, so which node is offscreen is not assumed: it is read from the
+      snapshot.
+  - Base: all 19 acceptance tests fail by assertion (0 response lines, or exit 1). The 2 guards
+    pass. `no-skip` and `hygiene` PASS. Clippy and rustfmt are clean.
+  - Self-check. I rewrote the scratch stub, made it follow n4 (a control request's effect is
+    shown from the next frame on) and n8 (`scroll_view` Documents, offscreen rows below the
+    window height, offscreen clicks refused). It was never committed; the three files were
+    restored with `git checkout` and the stub deleted.
+    - All 19 tests pass against it.
+    - New seeded bugs and the tests that killed them:
+      - B30, a control request's effect shown with no frame:
+        `ac6_control_effect_shown_from_the_next_frame`.
+      - B31, a click on an offscreen node accepted: `ac7_ui_refusals`.
+      - B32, the join's defect (an unreported frame after each control request): both
+        `ac6_frame_counts_add_up` and `ac6_control_effect_shown_from_the_next_frame`.
+    - The R-227 bugs B1 to B23 and the naive mode are still all killed (naive mode: 12 of 19 fail).
+  - Not run: the full `cargo xtask ci` (the only change is to one test file and its result on
+    base is as above), and anything against the real toolkit, in particular whether its shell
+    overflows at 200×200 as the n8 case assumes.
+  - gate attempts: 0 this run (`no-skip`, `hygiene`, clippy and `cargo test -p kiln` run on
+    their own) · missing context: none · next: director, join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
