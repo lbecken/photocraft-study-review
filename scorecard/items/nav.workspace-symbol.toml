@@ -5,4 +5,5 @@ tier = "medium"
 tests = [
     "kiln_cli::acceptance_t023_cli::workspace_symbols_match_naive_model",
     "kiln_cli::acceptance_t023_cli::workspace_symbols_limits_and_refusals",
+    "kiln_cli::acceptance_t023_cli::workspace_symbols_search_beyond_project_tree_default",
 ]
