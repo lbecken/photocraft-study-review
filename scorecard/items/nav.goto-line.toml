@@ -2,4 +2,7 @@ id = "nav.goto-line"
 title = "Go to line:column, clamped to the document"
 crate = "kiln-commands"
 tier = "low"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t023_cli::goto_line_clamps",
+    "kiln_cli::acceptance_t023_cli::goto_line_ends_typing_group",
+]

@@ -2,4 +2,9 @@ id = "syntax.outline"
 title = "Outline lists fn, struct, enum, trait, impl and mod items with names and ranges"
 crate = "kiln-syntax"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t023_cli::outline_agrees_with_syn",
+    "kiln_cli::acceptance_t023_cli::outline_worked_examples",
+    "kiln_cli::acceptance_t023_cli::outline_survives_deep_nesting",
+    "kiln_cli::acceptance_t023_cli::outline_size_limit",
+]

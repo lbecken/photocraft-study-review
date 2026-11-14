@@ -2,4 +2,6 @@ id = "nav.goto-symbol"
 title = "Go to a symbol of the current file chosen from the outline"
 crate = "kiln-commands"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t023_cli::goto_symbol_selects_name",
+]

@@ -2,4 +2,7 @@ id = "nav.workspace-symbol"
 title = "Find a symbol by name across the project's Rust files"
 crate = "kiln-workspace"
 tier = "medium"
-tests = []
+tests = [
+    "kiln_cli::acceptance_t023_cli::workspace_symbols_match_naive_model",
+    "kiln_cli::acceptance_t023_cli::workspace_symbols_limits_and_refusals",
+]
