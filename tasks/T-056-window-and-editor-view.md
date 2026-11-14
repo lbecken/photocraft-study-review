@@ -249,6 +249,19 @@ Questions for the director, before dispatch:
 - **Q-4: A.** Enter inserts the document's line ending.
 - This spec gets its spec check when T-055 has merged (it depends on T-055's interface).
 
+### Follow-ups from T-055's review (director, D-152) — for this task's spec check
+- A test that a `frames` request reports `settled: false` when the UI still asks for a frame (T-055 mutant M2
+  survived: `settled` always true).
+- Colours compared with an independent source: the painted colour of each run against `syntax.highlight` and the
+  published colour of each highlight kind (T-055 mutant M5 survived: two colour channels swapped; T-055 could not pin
+  a colour value).
+- A click landing at the centre of a target's visible part, observed through something this task's UI shows (in
+  T-055 it is covered only by a unit test).
+- `apps/kiln/tests/guard_t055.rs` asserts a non-zero exit status for bare `kiln` without a display (T-055 w4); if
+  this task changes what bare `kiln` does without a display beyond the exit status, the guard goes into `touches`.
+- Scroll areas are reported with the helper of T-055 (role `scroll_view`, ruling n6); painted text belongs to the
+  deepest node whose visible part contains it (w1).
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
