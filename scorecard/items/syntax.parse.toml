@@ -6,4 +6,5 @@ tests = [
     "kiln_cli::acceptance_t020_cli::corpus_parses_through_protocol",
     "kiln_cli::acceptance_t020_cli::oversized_documents_are_refused",
     "kiln_cli::acceptance_t020_cli::syntax_commands_are_read_only",
+    "kiln_cli::acceptance_t020_cli::refusals_leave_the_cache_unchanged",
 ]
