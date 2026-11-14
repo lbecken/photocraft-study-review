@@ -946,6 +946,38 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   then wider than the binary for an already-open path. I changed neither (outside `touches` /
   kept verbatim); does AC-4 mean a path not already open, and should a later task narrow the
   sentence?
+- 2026-11-14T04:07Z · R-195 · review r1 request-changes · did: rework on `cbcfdbb` (my work,
+  the test author's tests, the scorecard tie, review r1).
+  - Rulings acknowledged, all accepted (D-119, read in the primary checkout's copy of this file,
+    "Rulings on review round 1"; this branch's copy does not carry them): p1 (finding 1, test
+    gap) the fixture must go on every exit path and the child is waited for after a kill, no
+    assertion change; p2 (finding 2, nit) C1 gains a pointer to `exec`'s params-before-root
+    order, written only from a probe, S1 untouched; p3 (finding 3) no change, accepted.
+  - p1 (`tests/confinement.rs`, `mod t036`): a `Fixture` guard whose `Drop` makes every
+    directory under the fixture mode 0755 again (links not followed) and removes it; the parent
+    holds it from creation, so success, a failed assertion and a panic all clean up. After
+    `kill()` on the 10 s hang detector the child is now `wait()`ed. No assertion changed.
+    Proof: temporary one-line mutant in `disk.rs` (`File::open(&resolved)` falling back to
+    `File::open("/")`, so unreadable roots are accepted); `cargo test -p kiln-workspace --test
+    confinement root_that` FAILED (child: "mode 311 accepted", leaving its root at mode 0311;
+    parent: "the unprivileged child run failed"); then `ls -d /tmp/k8i-*t036*` → "No such file or
+    directory". `disk.rs` restored with `git checkout --`; `git status` clean.
+  - p2 probe (debug `kiln-cli` rebuilt from this branch, as uid 65534 via `setpriv
+    --clear-groups`, fixture under `/tmp/t036-impl-p2/`, root 0311 owned by 65534, removed
+    after): `exec doc.open '{' --root root` → rc 2, 0 stdout bytes, stderr
+    `{"code":"invalid_json","kind":"syntax",…}` and no `bad --root` line; `exec doc.open
+    '{"path":"f.txt"}' --root root` → rc 2, 0 stdout bytes, ``kiln-cli: bad --root: root `root`:
+    I/O error: Permission denied (os error 13)``. Added after C1, which is otherwise unchanged:
+    "For `exec`, params that are not JSON are reported first (`invalid_json`), before the root is
+    checked (order of checks: `docs/protocol/cli-memory-seed.md`)."
+  - gate attempts: 1 (green: "GATE PASSED in 361.1s (11 steps; 2 step(s) EMPTY …)", test step
+    "770 passed, 0 failed, 0 ignored in 99 suites").
+  - not run: the test's own-identity branch on a non-root machine (a failed child there could
+    leave 0000/0311 directories; the guard unlocks them as the owner, by code reading only);
+    the 10 s hang path (not provoked). Seen, not mine: `/tmp/k8i-<pid>-{corner,esc,fifo,in,swap}`
+    from T-008's tests in earlier runs, which remove nothing by design.
+  - missing context: D-119 is not on this branch (read from the primary checkout). · next:
+    review round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-14T03:09Z · R-190 · ready · did: wrote the six files in `touches` from this spec
