@@ -883,6 +883,112 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   merges and dispatches.
 <!-- end planner log -->
 ### implementer
+- 2026-11-14T08:21Z · R-215 · ready · did: implemented on `task/T-038` from base `c82fa63`.
+  Acknowledged the rulings: D-092 (option B, Q-2 row removal, Q-3 kept whole, Q-4 ADR wording),
+  the notes D-101, D-113, D-126, D-128 (ADR-0006 accepted; Q-5 (a), Q-6 (a), Q-7 (a), Q-8 keep
+  (v), Q-9 (a), Q-10 (a)), D-130 and the dispatch check D-135: all accepted; none contradicted the
+  merged code. ACs in my words: every command declares its kinds and the description publishes
+  them, per command and as a union (AC-1); an undeclared refusal becomes `internal`/`other`
+  (AC-2); the audit witnesses every in-memory kind and refuses missing, wrong, undeclared and
+  disk-kind examples (AC-3); every refusal example refuses with its kind through the binary
+  (AC-4); disk and race pairs keep their kinds (AC-5, AC-6); the situations of the five texts
+  give their kinds (AC-7); the documents state the set (AC-8); follow-ups (AC-9).
+  Mechanism: `registry.rs` adds `Witness {Example, Disk}`, `Refusal {reason, witness}`
+  (`Refusal::example`/`::disk`), `SeedFile {Text, Hex}` (manifest form, `SeedFile::text`/`::hex`)
+  and `RefusalExample {description, initial_text, files, setup, params, kind}`, re-exported from
+  `lib.rs`; `Command` gains two provided items, `fn refusals() -> Option<Vec<Refusal>>` (default
+  `None` = no declaration, `Some(vec![])` = declares none) and `fn refusal_examples()` (default
+  empty), so the `Command` impls of merged test files compile unchanged. Each command declares in
+  its own module (shared helpers: `registry::no_such_document_example`,
+  `syntax::too_large_example`, the Q-7 setup). `register` also refuses a kind declared twice (my
+  addition; no spec line covers it). Execute: after the run, a `Rejected` of a kind the entry does
+  not declare (entries without a declaration are unchecked) → `Internal{Other}` naming command and
+  kind, before the result-schema check, nothing logged. `describe`: per command `refusals` (ALL
+  order) and `refusal_examples`; `error_kinds.rejected` = ALL filtered by "some command
+  declares". Audit: the existing loop, then per command in name order (i), (ii) by kind in ALL
+  order, then per refusal example at most one line: (iv) undeclared, (v) disk, else (iii) params /
+  files (path, hex) / setup / result; every line names the command.
+  Table as DECLARED: equal to the spec's table for all 30 commands, no difference (code read per
+  row; `cursor.move` `set_selection` refusal and `search.rs`:350 left undeclared as the notes
+  say). Measured from `kiln-cli commands --schema`: 30 commands, 56 E pairs (57 refusal
+  examples: `doc.open` has two `not_found`, `missing.txt` and `f.txt/x`), 12 D pairs;
+  `error_kinds.rejected` = 13 kinds: invalid_path, no_such_document, unsaved_changes, not_found,
+  not_a_file, io_error, decode_error, out_of_range, inverted_range, invalid_pattern,
+  not_a_boundary, outside_root, too_large. Five `when` texts copied (checked by script equal to
+  Interface 4 strings); variant doc comments of those five rows reworded to match (my reading of
+  "the five texts"); module docs of `reason.rs`, `registry.rs` (`describe`, `audit`, `execute`)
+  and `lib.rs` updated. `docs/control-protocol.md`: paragraph replaced (whitespace-squashed equal
+  to Interface 5, re-wrapped at 100 without splitting a code span), the `rejected`/`other` row
+  removed (22 rows). `doc-positions.md` parenthesis removed. Interface 6: `syntax.rs` sentence
+  replaced (wrapped over three comment lines; no other line of the comment changed);
+  `syntax.md` and `nav.md` paragraphs re-wrapped from the long line on (script asserted the
+  squashed paragraph unchanged and every line ≤ 100).
+  Own tests (`registry.rs` `refusal_tests`, 6): execute check (declared passes, undeclared →
+  internal/other, log empty, invalid params first, undeclared command unchecked); describe
+  publishes only declared kinds; manifest form and hex decoding; audit rules (i)–(v) one line each
+  naming the command (13 variant commands), disk kind without example no problem; duplicate
+  declaration refused; standard registry: all declare, union published, examples only of
+  *example* kinds, audit empty. No wording asserted.
+  Pin edits (golden rule 4, Pinned (f)): (1) `acceptance_t032.rs` `REJECTED` texts of
+  not_found, not_a_file, out_of_range, invalid_pattern: old → new = the base texts → Interface 4;
+  `describe_publishes_error_kinds_from_all`: `rejected` from `RejectReason::ALL` → ALL filtered by
+  the commands' `refusals`. (2) `acceptance_t032_cli.rs` `REJECTED`: 11 entries removed (other,
+  stale_preview, no_such_preview, tool_unavailable, tool_not_found, tool_timeout, tool_failed,
+  no_recording, format_error, changed_on_disk, invalid_keymap), the same four texts changed;
+  `rows.len(), 23` → 22; `NEW_PARAGRAPH` → Interface 5. (3) `acceptance_t032_control.rs`
+  `want_rejected` from ALL → filtered by declared kinds; `rows.len(), 23` → 22 (message "23
+  rows" → "22 rows"); `checked, 13` → 12 (message "10 rejected" → "9 rejected"). (4)
+  `acceptance_t008_cli.rs` `NOT_A_FILE_WHEN` and the `outside_root` text → Interface 4. (5)
+  `reason.rs` `outside_root_is_appended_and_not_a_file_is_widened`: both descriptions → Interface
+  4. (6) `reasons.rs` `describe_publishes_every_reason_in_all_order`: `want` (rejected) from ALL →
+  filtered by declared kinds; table test `13` → 12, message "10 rejected" → "9 rejected". (7)
+  `registry.rs` test commands Echo, Liar, Undocumented, NeedsSetup: `refusals() -> Some(vec![])`
+  added; no assertion changed. (8) `kiln-control/src/lib.rs` `ERROR_KINDS`: row
+  `("rejected", "other")` removed. Comments in those files that name old counts were left as they
+  were (nothing else changed).
+  Evidence per published text (debug `kiln-cli` of this branch at `f18e996`, copied out; memory
+  cases `kiln-cli run s.jsonl --memory-seed m.json`, disk cases `kiln-cli control --root`, run as
+  root, fixtures under `/tmp/t038-impl-probe`, `/tmp/t038-impl-deep`, `/tmp/t038-impl-examples`,
+  all removed): not_found — memory `doc.open` missing.txt, nodir/x.txt, f.txt/x (f.txt a file),
+  `project.tree` missing → not_found; disk `doc.save` of an open, edited `p/y.txt`: file removed
+  → ok (file recreated: True), `p` removed → not_found (directory created: False), `p` replaced
+  by a file → not_found, link `slash -> file/` `doc.open` → not_found. not_a_file — memory
+  `doc.open d` → not_a_file, `project.tree f.txt` → not_a_file; disk `doc.open` of a directory,
+  FIFO, Unix socket, char device (mknod 1,3) → not_a_file each; `project.tree` path a file,
+  FIFO, socket, device → not_a_file each; `doc.save` after the file was replaced by a directory →
+  not_a_file. out_of_range — memory `doc.insert` offset 99, `doc.position` char 99, byte 99,
+  utf16 99, line 9, line 0 col 4 (3-char line), `doc.line 3`, `nav.goto-symbol` index 5 of a
+  1-item outline → out_of_range; `nav.goto-line` 99/99 → ok (clamped). invalid_pattern — memory
+  `search.find` "" / 1,001 chars / regex `(` / regex `a{99999999}` / 101 groups → invalid_pattern;
+  1,000 chars and 100 groups → ok; `search.replace` regex `(a)(b)` with `$3` → invalid_pattern,
+  literal `a` with `$3` → ok; `nav.workspace-symbols` "" → invalid_pattern. outside_root — disk
+  `doc.open` of a link outside, `project.tree` path a link to an outside dir, `doc.save` after
+  the file became a link outside, re-open after the open file became a link outside →
+  outside_root; after the root was renamed and a new directory put in its place: `doc.open b.rs`,
+  re-open `a.txt`, `project.tree {}`, `nav.workspace-symbols` → outside_root. Other D pairs: link
+  loop `doc.open`/`project.tree`/`doc.save`/re-open → io_error; 300-byte name `doc.open` and
+  `project.tree` → io_error; 18 nested 250-byte directories (host path 4,542 bytes):
+  `nav.workspace-symbols` and `project.tree {}` → io_error. All 57 refusal examples run as the
+  evaluator would (manifest from `files`, script of `setup` + request, `run --memory-seed`): 57
+  rejected with their kind, 0 failed. Interface 5: union and per-command sets from `--schema`
+  (above); "no refusal example ⇒ disk only" = audit (ii)/(v) plus the D probes above; "undeclared
+  ⇒ internal/other" = unit test (no registered command can show it through the binary).
+  Guarantee sentences the spec lacks: none added.
+  Schema step time (`/usr/bin/time cargo xtask schema`, this machine, another builder active):
+  base `c82fa63` warm 0.48 s and 0.63 s (a first run that compiled xtask took 23.6 s, discarded);
+  branch `e78ec66` warm 3.54 s, 3.49 s, 3.34 s; `kiln-cli commands --audit` alone 3.05 s
+  (debug). The five `too_large` examples each took 0.62–0.72 s as separate `kiln-cli run`
+  processes (about 3.3 s together, process start included), so they are most of the increase;
+  their exact share inside the audit was not measured separately. In the gate the step read 5.2 s.
+  · gate attempts: 2 (1: red clippy `manual_is_multiple_of` in my hex decoder, fixed; 2: green,
+  `GATE PASSED in 551.6s (11 steps; 2 EMPTY: fuzz, budgets)`, test: 857 passed, 0 failed, 0
+  ignored in 108 suites) · not run: the test author's `acceptance_t038*`/`guard_t038*` (not
+  visible to me; their declaration API may need adapting to mine at the join: `Command::refusals`
+  / `refusal_examples`, `Refusal::example`/`::disk`); permission-denied cases as an unprivileged
+  user (no text this task changes names permissions); the two race pairs through a test VFS
+  (declared *disk* per Q-5; only the existing `nav.rs` unit test shows a walk read failure
+  keeping its kind); `cursor.move`'s and `search.rs`:350's branches (unreachable, INFERRED) ·
+  missing context: none · next: director joins with `task/T-038-tests`; reviewer.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
