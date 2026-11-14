@@ -2776,6 +2776,613 @@
         "title": "TreeResult",
         "type": "object"
       }
+    },
+    {
+      "doc": "Return highlight spans that cover the chars `start..end` of a document exactly once (default: the whole text), in seven kinds: `comment`, `string`, `number`, `keyword`, `type`, `function`, `plain` (rules in `docs/protocol/syntax.md`). Read-only; a document longer than 1048576 chars is refused with `too_large`.",
+      "examples": [
+        {
+          "description": "the whole text",
+          "files": [
+            [
+              "a.rs",
+              "fn f() { let s: u8 = 1; } // c"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "spans": [
+              {
+                "end": 2,
+                "kind": "keyword",
+                "start": 0
+              },
+              {
+                "end": 3,
+                "kind": "plain",
+                "start": 2
+              },
+              {
+                "end": 4,
+                "kind": "function",
+                "start": 3
+              },
+              {
+                "end": 9,
+                "kind": "plain",
+                "start": 4
+              },
+              {
+                "end": 12,
+                "kind": "keyword",
+                "start": 9
+              },
+              {
+                "end": 16,
+                "kind": "plain",
+                "start": 12
+              },
+              {
+                "end": 18,
+                "kind": "type",
+                "start": 16
+              },
+              {
+                "end": 21,
+                "kind": "plain",
+                "start": 18
+              },
+              {
+                "end": 22,
+                "kind": "number",
+                "start": 21
+              },
+              {
+                "end": 26,
+                "kind": "plain",
+                "start": 22
+              },
+              {
+                "end": 30,
+                "kind": "comment",
+                "start": 26
+              }
+            ]
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a range, clipped at its ends",
+          "files": [
+            [
+              "a.rs",
+              "fn f() { let s: u8 = 1; } // c"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "end": 17,
+            "start": 10
+          },
+          "result": {
+            "spans": [
+              {
+                "end": 12,
+                "kind": "keyword",
+                "start": 10
+              },
+              {
+                "end": 16,
+                "kind": "plain",
+                "start": 12
+              },
+              {
+                "end": 17,
+                "kind": "type",
+                "start": 16
+              }
+            ]
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "syntax.highlight",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `syntax.highlight`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "description": "Char offset where the spans end (default: the text's length in chars). Omit it for the\ndefault; `null` is refused.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "Char offset where the spans start (default 0). Omit it for the default; `null` is\nrefused.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "HighlightParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "SpanKind": {
+            "description": "The kind of a highlight span.",
+            "oneOf": [
+              {
+                "const": "comment",
+                "description": "Inside a line or block comment, doc comments included.",
+                "type": "string"
+              },
+              {
+                "const": "string",
+                "description": "Inside a string, raw string or char literal, quotes and prefixes included.",
+                "type": "string"
+              },
+              {
+                "const": "number",
+                "description": "Inside an integer or float literal.",
+                "type": "string"
+              },
+              {
+                "const": "keyword",
+                "description": "A keyword.",
+                "type": "string"
+              },
+              {
+                "const": "type",
+                "description": "A type name or primitive type.",
+                "type": "string"
+              },
+              {
+                "const": "function",
+                "description": "A function name at its definition or call.",
+                "type": "string"
+              },
+              {
+                "const": "plain",
+                "description": "Everything else.",
+                "type": "string"
+              }
+            ]
+          },
+          "SpanOut": {
+            "description": "One highlight span, in char offsets.",
+            "properties": {
+              "end": {
+                "description": "Char offset after the span's last char.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "$ref": "#/$defs/SpanKind",
+                "description": "The kind of every char in the span."
+              },
+              "start": {
+                "description": "Char offset of the span's first char.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "start",
+              "end",
+              "kind"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `syntax.highlight`.",
+        "properties": {
+          "spans": {
+            "description": "Sorted, contiguous, non-overlapping spans covering `start..end` exactly; adjacent\nspans of the same kind are merged. Empty for an empty range.",
+            "items": {
+              "$ref": "#/$defs/SpanOut"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "spans"
+        ],
+        "title": "HighlightResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "If the char at `offset` is one of `( ) [ ] { }` outside strings, char literals and comments and has a partner, return the offsets of the opening and closing bracket; otherwise `bracket` is `null`. Partners are bracket leaves of the same kind that are direct children of the same syntax node, paired left to right by a stack; a bracket the parser inserted is never a partner (rules in `docs/protocol/syntax.md`). Read-only; a document longer than 1048576 chars is refused with `too_large`.",
+      "examples": [
+        {
+          "description": "the braces of a function body",
+          "files": [
+            [
+              "a.rs",
+              "fn f() { let s: u8 = 1; } // c"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "offset": 7
+          },
+          "result": {
+            "bracket": {
+              "close": 24,
+              "open": 7
+            }
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "an unmatched bracket",
+          "files": [
+            [
+              "a.rs",
+              "fn a() { ("
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "offset": 9
+          },
+          "result": {
+            "bracket": null
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "syntax.match-bracket",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `syntax.match-bracket`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Char offset of the bracket (`offset <= len_chars`).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "offset"
+        ],
+        "title": "MatchBracketParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "BracketOut": {
+            "description": "A matched bracket pair, in char offsets.",
+            "properties": {
+              "close": {
+                "description": "Char offset of the closing bracket.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "open": {
+                "description": "Char offset of the opening bracket.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "open",
+              "close"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `syntax.match-bracket`.",
+        "properties": {
+          "bracket": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BracketOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pair the bracket at `offset` belongs to, or `null`: not a bracket, inside a\nstring, char literal or comment, without a partner, or `offset` = `len_chars`."
+          }
+        },
+        "title": "MatchBracketResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Report a document's syntax tree: whether it has errors, its `ERROR` and `MISSING` nodes as char spans, its S-expression form, its node count, and `mode`: how the tree was obtained (`full`, `incremental` or `unchanged`). Read-only; a document longer than 1048576 chars is refused with `too_large`.",
+      "examples": [
+        {
+          "description": "the tree of a small function, first call",
+          "files": [
+            [
+              "a.rs",
+              "fn f() {}"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "errors": [],
+            "has_error": false,
+            "mode": "full",
+            "node_count": 10,
+            "sexp": "(source_file@0..9 (function_item@0..9 name:(identifier@3..4) parameters:(parameters@4..6) body:(block@7..9)))"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "after an edit the cached tree is reused",
+          "files": [
+            [
+              "a.rs",
+              "fn f() {}"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "errors": [],
+            "has_error": false,
+            "mode": "incremental",
+            "node_count": 10,
+            "sexp": "(source_file@0..10 (function_item@0..10 name:(identifier@3..4) parameters:(parameters@4..6) body:(block@7..10)))"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ],
+            [
+              "syntax.tree",
+              {
+                "doc": 1
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 8,
+                "text": " "
+              }
+            ]
+          ]
+        },
+        {
+          "description": "an unclosed parenthesis",
+          "files": [
+            [
+              "a.rs",
+              "fn a() { ("
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "errors": [
+              {
+                "end": 10,
+                "kind": "error",
+                "start": 0
+              }
+            ],
+            "has_error": true,
+            "mode": "full",
+            "node_count": 9,
+            "sexp": "(source_file@0..10 (ERROR@0..10 (identifier@3..4) (parameters@4..6)))"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "syntax.tree",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "DocParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "ErrorSpanKind": {
+            "description": "The kind of an error span.",
+            "oneOf": [
+              {
+                "const": "error",
+                "description": "An `ERROR` node: text the parser could not fit into the grammar.",
+                "type": "string"
+              },
+              {
+                "const": "missing",
+                "description": "A `MISSING` node: a token the parser inserted (zero width) to recover.",
+                "type": "string"
+              }
+            ]
+          },
+          "ErrorSpanOut": {
+            "description": "One `ERROR` or `MISSING` node, in char offsets.",
+            "properties": {
+              "end": {
+                "description": "Char offset of the node's end (equal to `start` for `missing`).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "$ref": "#/$defs/ErrorSpanKind",
+                "description": "`error` or `missing`."
+              },
+              "start": {
+                "description": "Char offset of the node's start.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "start",
+              "end"
+            ],
+            "type": "object"
+          },
+          "Mode": {
+            "description": "How the tree of a call was obtained (`syntax.tree`'s `mode`).",
+            "oneOf": [
+              {
+                "const": "full",
+                "description": "No tree was cached for the document: parsed from scratch.",
+                "type": "string"
+              },
+              {
+                "const": "incremental",
+                "description": "The cached tree was reused for the changed region.",
+                "type": "string"
+              },
+              {
+                "const": "unchanged",
+                "description": "The text equals the cached text: nothing was parsed.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `syntax.tree`.",
+        "properties": {
+          "errors": {
+            "description": "Every `ERROR` and `MISSING` node, in preorder.",
+            "items": {
+              "$ref": "#/$defs/ErrorSpanOut"
+            },
+            "type": "array"
+          },
+          "has_error": {
+            "description": "True iff the tree holds an `ERROR` or `MISSING` node.",
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/$defs/Mode",
+            "description": "How the tree was obtained: `full` (no tree cached for the document, or reparsed after\nan incremental tree with an error), `incremental` (the cached tree reused), `unchanged`\n(the text equals the text of the document's last successful `syntax.*` call)."
+          },
+          "node_count": {
+            "description": "Number of nodes, named and anonymous, the root included.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sexp": {
+            "description": "The tree in the pinned S-expression form (char offsets).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "has_error",
+          "errors",
+          "sexp",
+          "node_count",
+          "mode"
+        ],
+        "title": "TreeResult",
+        "type": "object"
+      }
     }
   ],
   "error_kinds": {
@@ -2885,6 +3492,10 @@
       {
         "kind": "outside_root",
         "when": "the path resolves outside the root"
+      },
+      {
+        "kind": "too_large",
+        "when": "the document is longer than the command accepts"
       }
     ]
   }
