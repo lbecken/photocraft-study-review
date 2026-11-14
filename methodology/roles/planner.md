@@ -42,8 +42,8 @@ One file, `tasks/T-NNN-slug.md` from `methodology/templates/task.md`, state left
   T-003 (D-020). Paths in `touches` that are gate paths (anything under `xtask/` or `.github/`,
   build scripts, lint or toolchain files: the list is in `docs/development.md`) are named as
   such in the Goal, because they make the task high and the approval row must say `gate paths`.
-- **Budget** from the tier (high 1,100,000, medium 700,000, low 150,000; building and review
-  runs only), `depends_on`, **Out of scope**.
+- **Budget** from the tier (high 1,100,000, medium 800,000, low 150,000; building and review
+  runs only; a draft carrying an older budget is restated), `depends_on`, **Out of scope**.
 
 If the request needs a CHARTER §3 contract change, write it as its own high-tier task and make
 the feature depend on it. A high-tier request that bundles independent items becomes one spec per
@@ -53,9 +53,15 @@ item (T-013 bundled seven and cost 2.11× its ceiling, retro-1). Say in your log
 ## Spec check
 The director may dispatch you to check a spec before it is dispatched (METHODOLOGY §5.7): read it
 against `main` as it now is, including the merged dependencies' tests, guards and documents, and
-list every point that would stop a builder (blocker), every ambiguity and every note in a file
-under `tasks/spec-checks/`, with a verdict. Builders do not repeat this check, so be complete: in
-iteration 1 spec checks found 16 blockers, and T-010, which had none, stopped both builders.
+the branches of the tasks in flight: list every trait, type and document the spec shares with
+them (D-128, D-132). Pin the Rust signatures of any criterion tested through a Rust API (D-136).
+Every Pinned sentence that states a figure, a limit or a list carries the command and output
+that show it, or is marked "to be measured by the implementer" (3 of 5 round-1 defects in
+iteration 2's first stage were pinned sentences). Write every point that would stop a builder
+(blocker), every ambiguity and every note, with a verdict, into the task file as a subsection
+`### Spec check R-NNN` under "Questions and rulings". Builders do not repeat this check, so be
+complete: in iteration 1 spec checks found 16 blockers, and T-010, which had none, stopped both
+builders.
 
 ## What you must not do
 Do not write code or tests, or set state beyond `draft`. Do not put implementation hints in the

@@ -14,7 +14,10 @@ number (METHODOLOGY §6); the director's dispatch message says which case you ar
   `task/T-NNN-tests` in `.worktrees/T-NNN-tests`, through the public interface the spec names,
   committed and failing on base; then the code on `task/T-NNN`. Follow the test author brief's
   rules for those files (names, fail on base, guards, timeouts). Only the reviewer's seeded
-  bugs check them, so write the tests you would want someone else to have written.
+  bugs check them, so write the tests you would want someone else to have written. Before you
+  report, merge your tests branch with your task branch on a local scratch branch (never pushed,
+  never on `task/T-NNN`) and run the whole gate there, `no-skip` included: in iteration 2 the
+  first join of T-021 was the first gate run of its tests and failed at `no-skip` (D-108).
 - **Low:** your own tests and the gate are all the evidence.
 A reviewer then drives the product and seeds bugs to see whether the tests notice. Aim for
 behaviour that is correct through the public interface, not a green run.

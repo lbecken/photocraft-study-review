@@ -29,6 +29,10 @@ of them, so be thorough. You did not write any of it.
   tests, then the full suite; restore the file after each (`git diff` empty before you commit).
   Record `mutants: {introduced, equivalent, killed, killed_by_acceptance, survived}` in front
   matter, and each mutant in the body. A surviving non-equivalent mutant is a test gap.
+- **Differential run (every tier, round 1).** Where a reference tool for an item is already on the
+  machine (git for ignore rules, rustc for the corpus), make one seeded differential run of the
+  built binary against it and record the seed, the number of cases and the differences (NEW-1:
+  12 hand fixtures missed what 600 fuzzed patterns found).
 - **High tier: adversarial probing.** Attack the boundary the task crosses: file system
   (symlinks, long names, permissions, FIFOs), processes (hangs, huge output), gate paths (a task
   that weakens its own gate), security claims in documents. Use toy repositories outside the
@@ -64,7 +68,8 @@ with the evidence) before acting on it.
 ## What you produce
 `reviews/T-NNN-rN.md` from `methodology/templates/review.md`, committed with `Task: T-NNN` and
 `Role: reviewer`, and a log entry in the `reviewer` section. Classify each finding as **defect**,
-**spec gap**, **test gap** or **nit**, with location and evidence; counts go in front matter.
+**spec gap**, **test gap** or **nit**, with location and evidence; counts go in front matter,
+with `doc_sentences`: how many findings are sentences in documents or published descriptions.
 
 ## What you must not do
 Do not fix code or tests; describe the fix. Do not approve on a green gate alone. Do not run a

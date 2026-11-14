@@ -4,6 +4,39 @@ Each version lists what changed and the evidence behind it. From v1.1 on, every 
 metric (file, field, value) or an incident (`INC-NNN`) from this repository; v1.0 cites the
 PhotoCraft study (`/home/user/photocraft-study/deliverables/`), because no Kiln data exists yet.
 
+## v1.3 — 2026-11-14
+
+Adopted by D-144 from the retrospective of iteration 2, stage 1 (`retrospectives/iter-2-stage-1.md`,
+"retro-2s1", run R-223). Numbers follow its section 12, which D-144 decides one by one; every
+change's source is D-144 and retro-2s1 (evidence column, commands there). Change 12 is tooling in
+T-043's scope and is stated as pending it; the cause of change 8 is recorded by T-033.
+
+| # | What changed (METHODOLOGY § unless named) | Evidence (retro-2s1) |
+|---|---|---|
+| 1 | The `Extend` row at 75 % of a ceiling is dropped; the queue's `budget` check and the row before a run past the ceiling stay (§11, §2.1, §16). | 4 rows, none capping or moving work; 89–98 % of spend before the verdict. |
+| 2 | Ceilings high 1,100,000; medium 800,000 (provisional); low 150,000; a draft with an older budget is restated when specified (§11, planner brief, task template). | Pooled p75: 1,076,226; 781,214; 124,444. |
+| 3 | A spec check reads the branches in flight for shared traits, types and documents and pins the Rust signatures of criteria tested through a Rust API (§5.7, planner brief). | D-117, D-128/D-132, D-136. |
+| 4 | A ruling that changes `touches`, `depends_on` or a state is a front-matter edit in the same commit; the `state` line is written with every transition until `metrics transition` does it (§2.1, §3, task and handoff templates). | D-134, D-139 (two queue refusals). |
+| 5 | After a usage-limit stop or a restart, stopped agents are resumed with a restart notice (re-read their uncommitted work first), not relaunched fresh (§2.1, §16, handoff template). | 4 of 4 restarts resumed, nothing committed lost (D-112, D-116, D-129, D-143). |
+| 6 | One handoff file per day with timestamped addenda; session start and end times dropped (§12, handoff template). | One file, six addenda; session times never written. |
+| 7 | Implementer-first arm: the implementer runs the whole gate, `no-skip` included, on a local merge of its tests branch before reporting (§6, implementer brief). | D-108 (T-021's first join failed at `no-skip`). |
+| 8 | Every join that is not green is classified: acceptance-defect count and a cause (§6, §13, §15 O-8). | T-021's record `acc_defects: null` against D-108; 0 of 16 filled. |
+| 9 | Where a reference tool is on the machine (git, rustc), one seeded differential run of the built binary by the reviewer in round 1, in every tier, recorded with seed and counts (§6, reviewer brief, review template; D-146 corrects D-144, which gave the high tier to the test author, who has no implementation to run). | NEW-1: 12 hand fixtures against 600 fuzzed patterns. |
+| 10 | Pinned sentences stating figures, limits or lists carry their evidence at the spec check (§5.7, planner brief). | 3 of 5 round-1 defects were pinned sentences; D-131. |
+| 11 | Review front matter counts `doc_sentences` (§7, §13, review template, reviewer brief). | 21 of 40 round-1 findings, counted by reading. |
+| 12 | Pending T-043: every cited D-NNN has a row; `metrics add` refuses a run with start equal to end; `metrics transition` writes the task file's `state` line (§3, §13, §16). | D-104 (14 citations, no row); R-180. |
+| 13 | The evaluator may read named fixture data (e.g. `crates/kiln-syntax/tests/corpus/`) and works in a checkout other identities can reach (§9, evaluator brief, evaluation template). | D-141 (R-222); NEW-3. |
+| 14 | Gate time (`gate_seconds`) is reported per stage (§13, retrospective template). | Queue gate 241 s → 574 s. |
+| 15 | A stage closes only with a decision row listing what of its ADR list was not done and where it went (§14). | D-142 against ADR-0005 (T-033, T-041). |
+
+Also from D-144: the task state `evaluated` is dropped, the published evaluation's
+`confirmed_items` being the record, and `merged` is terminal (§3; no task ever entered it); spec
+checks are written into the task file, as practice was (§2, §5.7, planner brief, task template).
+
+Removed: the 75 % `Extend` row; "relaunch fresh" after a restart; the handoff's session number and
+start and end times; state `evaluated`; output under `tasks/spec-checks/`; the interim "the director
+passes `--acc-defects` at every failing join" (replaced by change 8's interim).
+
 ## v1.2 — 2026-11-13
 
 Adopted by D-091 from retrospective 1 (`retrospectives/iter-1.md`, "retro-1"). Changes keep the

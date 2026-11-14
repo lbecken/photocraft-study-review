@@ -12,7 +12,9 @@ not_evaluated: []        # item IDs not reached, with reason below
 # Evaluation, iteration N
 
 ## Setup
-How the product was built and started (commands), fixture projects used.
+How the product was built and started (commands), fixture projects used. Fixture data read (only
+what the brief or the director names, e.g. `crates/kiln-syntax/tests/corpus/`): … Checkout path,
+reachable by other user identities (yes / no): …
 
 ## Items
 One block per scorecard item with status `implemented`.

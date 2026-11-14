@@ -1,8 +1,8 @@
 ---
 iteration: N
 run: R-NNN
-methodology_in: v1.2
-methodology_proposed: v1.3
+methodology_in: v1.3
+methodology_proposed: v1.4
 main_sha: <sha at iteration close>
 claims: {C1: insufficient, C2: insufficient, C3: insufficient, C4: insufficient,
          C5: insufficient, C6: insufficient, C7: insufficient, C8: insufficient}
@@ -31,6 +31,7 @@ transitions missing. Every number below names its command or script.
 | Share of scorecard items verified | | |
 | Red-main minutes | | |
 | Budget overruns by tier | | |
+| Gate time (`gate_seconds`) per stage | | |
 
 ## Experiment arm (METHODOLOGY §6)
 | Measure | Independent (even) | Implementer-written (odd) | n each |

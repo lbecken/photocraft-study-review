@@ -8,6 +8,7 @@ reviewed_sha: <full 40-hex head of task/T-NNN after join>
 previous_sha: null       # round ≥ 2: the sha of the last verdict (review only the delta)
 verdict: request-changes # approve | request-changes
 findings: {defect: 0, spec_gap: 0, test_gap: 0, nit: 0}
+doc_sentences: 0         # findings above that are sentences in documents or published descriptions
 mutants: {introduced: 0, equivalent: 0, killed: 0, killed_by_acceptance: 0, survived: 0}
 follow_ups: 0            # findings sent to a follow-up task (round ≥ 2, or spec gaps)
 ---
@@ -28,6 +29,7 @@ Exact commands and result lines (gate, focused tests, CLI or control calls, toy 
 - Diff inside `touches`; no hidden CHARTER §3 contract change; layers respected; tier right (§4).
 - Determinism in L0–L4; invalid params rejected; no panic on hostile input.
 - High: boundary probed adversarially — what I tried: …
+- Round 1, where a reference tool is on the machine (git, rustc): differential run — seed, cases, differences: …
 
 ## Mutation spot-check (≥ 10 in round 1; round ≥ 2: in the delta)
 | # | Bug seeded (path:line, change) | Killed by (test) or survived | Equivalent? |

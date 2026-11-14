@@ -2,13 +2,13 @@
 id: T-NNN
 title: "<imperative, behaviour-level title>"
 tier: medium            # low | medium | high — boundary rule, METHODOLOGY §4 / ADR-0002
-state: draft            # director only; see METHODOLOGY §3
+state: draft            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner     # role expected to act next
 scorecard_items: []     # e.g. [text-undo-redo]; non-empty ⇒ tier ≥ medium
 depends_on: []          # task IDs that must be merged first
 touches:                # exact paths the task may change, incl. test dirs; mark gate paths
   - crates/kiln-xxx/src/yyy.rs
-budget_tokens: 700000   # building and review runs only: low 150000, medium 700000, high 1100000 (v1.2)
+budget_tokens: 800000   # building and review runs only: low 150000, medium 800000, high 1100000 (v1.3)
 iteration: 1
 found_by: planner       # planner | evaluator | reviewer | incident | task:T-NNN (who found the defect)
 origin_task: null       # the task whose defect this fixes, if any
@@ -42,9 +42,10 @@ expectations, determinism, performance budget if any.
 
 ## Questions and rulings
 Builders log `QUESTION:` lines; the director answers all at once here: Q-n (role, R-NNN) → answer
-(D-NNN). A ruling that changes behaviour edits the sections above in the same commit; it states
-observable behaviour, and a bound cites its measurement. Each builder acknowledges a ruling in its
-log (accept or question) before acting on it.
+(D-NNN). A ruling that changes behaviour edits the sections above in the same commit, and one that
+changes `touches`, `depends_on` or a state edits the front matter in it; it states observable
+behaviour, and a bound cites its measurement. A spec check goes here as `### Spec check R-NNN`. Each
+builder acknowledges a ruling in its log (accept or question) before acting on it.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:

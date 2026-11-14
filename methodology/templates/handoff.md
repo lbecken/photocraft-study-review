@@ -1,21 +1,19 @@
 ---
-date: YYYY-MM-DD
-session: sNN             # director session sequence number (not a platform session ID)
+date: YYYY-MM-DD         # one handoff file per day
 role: director
 iteration: N
-methodology: v1.2
-started_at: <UTC, from the clock>   # this director session
-ended_at: <UTC, from the clock>
+methodology: v1.3
 main_sha: <sha>
 main_green: true         # last gate / CI result on main
 ---
 
-# Handoff YYYY-MM-DD sNN
+# Handoff YYYY-MM-DD
 
-File: `handoffs/YYYY-MM-DD-sNN.md`. Builder runs do not write handoffs; their record is the
-task log. This note is for the next director session.
+File: `handoffs/YYYY-MM-DD-<slug>.md`, one per day. Builder runs do not write handoffs; their record is
+the task log. Later the same day, add a section `## Addendum <UTC time, from the clock>` naming
+the stop or restart before it and what it supersedes. This note is for the next director session.
 
-## Done this session
+## Done
 | Task | State change | Notes |
 |---|---|---|
 
@@ -28,15 +26,16 @@ task log. This note is for the next director session.
 |---|---|---|
 
 ## Decisions recorded
-D-NNN rows and ADRs added this session.
+D-NNN rows and ADRs added.
 
 ## Metrics hygiene
-- Runs dispatched this session: n; run records written at dispatch: n; log entries present: n.
-- Transitions recorded for every state change: yes / no (list gaps).
+- Runs dispatched: n; run records booked when the run ended: n; log entries present: n.
+- Transitions recorded, and the task file's `state` line written, for every state change: yes / no
+  (list gaps).
 - Runs not yet in `metrics/`: run, role, tokens, start, end. Spec checks are booked to `iter-N`.
-- Usage-limit stops: time, resume scheduled (yes / no). Container restarts: `git status` run in
-  every worktree (yes / no).
-- Free disk at session end (`df -h`): … GB; worktrees and scratch builds removed: yes / no.
+- Usage-limit stops: time, resume scheduled (yes / no). Restarts: `uptime -s`, `git status` run in
+  every worktree (yes / no). Stopped agents resumed with a restart notice (yes / no).
+- Free disk at the end (`df -h`): … GB; worktrees and scratch builds removed: yes / no.
 
 ## Incidents
 Open incidents and red-main status.

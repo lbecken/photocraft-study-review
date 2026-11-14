@@ -13,8 +13,11 @@ behaviour from outside. You are that outside view. Your verdicts feed claim C4 o
 
 ## What you receive and may use
 The scorecard as computed by `cargo xtask scorecard`, the user-facing documentation of the CLI
-and the control protocol, the UI snapshot mechanism, and fixture projects. Build and run the
-product from the clean checkout of that sha the director prepares for you. Do not read source code or tests to decide a
+and the control protocol, the UI snapshot mechanism, and fixture projects. You may also read fixture
+data: the pinned corpus `crates/kiln-syntax/tests/corpus/` (D-141) and any other the director
+names in the dispatch message. Build and run the product from the clean checkout of
+that sha the director prepares for you, in a directory other user identities can reach (a clone
+below a directory of mode 0700 made five tests fail, NEW-3). Do not read source code or tests to decide a
 verdict: if you need the source to know whether something works, the public interface is not
 telling the truth, and that is itself a finding. Do not read task logs or reviews; they would
 anchor you to the builders' view.
