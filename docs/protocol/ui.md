@@ -10,7 +10,7 @@ covers the UI requests and the mode.
 ## Usage
 
 ```text
-kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>]
+kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>…]
 kiln --help | -h | script --help
 ```
 
@@ -19,13 +19,19 @@ kiln --help | -h | script --help
 - `--root <dir>` (default: the current directory) and `--memory` (an empty in-memory file
   system) as for `kiln-cli run`; they exclude each other.
 - `--size <w>x<h>`: the UI's size in points, integers 200 to 8192 each; default `1280x800`.
-- Options may come before or after the positional argument, each at most once.
+- `<path>…` (T-056): `kiln script` opens the paths given after the script at start, in order,
+  as if each were opened through `Path`. A refused one sets `Message` to begin with its kind, a
+  successful one clears `Message`; start paths get no response line and do not change the exit
+  code; a successful one is logged as `doc.open` with that path, a refused one is not logged.
+  With `--memory` every start path is refused (`not_found`). Start paths are read only through
+  `doc.open`.
+- Options may come before or after the positional arguments, each at most once.
 - `--help`, `-h` (alone or after `script`): the usage on stdout, exit 0.
 - `kiln` with no subcommand still only says that the desktop window is not built and exits 1
-  (the window is T-056).
+  (the window is T-065).
 
 Order of checks at start: usage (options, `--size` range) → script readable → root (or
-`--memory`) → log file writable → requests. The conventions are those of `kiln-cli run`: a usage
+`--memory`) → log file writable → start paths in order → frames until settled → requests. The conventions are those of `kiln-cli run`: a usage
 error prints what was wrong and the usage on stderr; a bad root is refused before any request
 runs with a `kiln: bad --root:` message naming the root as given; in every such case nothing is
 written on stdout.
@@ -60,8 +66,10 @@ same point of the same session. The UI and the script's control requests act on 
 
 Every change the UI makes to documents or files is a control request: it is in the session log,
 and running the log with `kiln-cli run` on a copy of the initial files gives the same files.
-The UI sends no request while no input arrives: `frames` on an idle UI adds nothing to the
-session log.
+The editor reads what it shows with read-only control requests, which are in the session log;
+it sends them only in the first frame after a request or an input, never on a frame that
+follows neither. So `frames` on an idle UI adds nothing to the session log
+(`docs/protocol/ui-editor.md`, "Frames, reads and the log").
 
 ## UI requests
 
@@ -95,7 +103,8 @@ toolkit's (100 points).
 `{"id":…,"ok":true,"result":{"frames":<n>,"settled":<bool>}}`. After an action the runner runs
 frames until the UI asks for no further frame, at most 60, and reports how many it ran and
 whether it settled (`frames` runs exactly `count`). `n` counts the frames that carried the input
-too. Before the first request of a script the runner runs frames the same way.
+too. Before the first request of a script (after the start paths) the runner runs frames the
+same way.
 
 A control request runs no frame and a `snapshot` runs none: what a control request changed is
 shown from the next frame on (run `{"ui":"frames","count":1}` or any action before the snapshot),
@@ -172,7 +181,8 @@ UI requests add no registry command.
 
 ## The shell
 
-What the UI shows in T-055 (T-056 adds the window and the editor view, later tasks add panels):
+What the UI shows of T-055 (T-056 adds the editor view, `docs/protocol/ui-editor.md`;
+T-065 the window; later tasks add panels):
 
 - a text input labelled `Path` (role `text_input`);
 - a button labelled `Open`;
