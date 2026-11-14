@@ -2,7 +2,7 @@
 id: T-036
 title: "Refuse a root Kiln cannot hold open, and pin root removal, a retargeted root link and a vanished root with reliable tests"
 tier: high              # ADR-0002: a confinement/security boundary that docs/protocol/paths.md states (the root's identity between requests) and the persistence path (DiskFs construction, read, write_atomic)
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # existing item, strengthened (no new item)
 depends_on: [T-008, T-019, T-039]   # all merged: T-008 d4915606f9a789b42b99a1eea053554f1f9dd8a7, T-019 3b1a95d865619dead945cbf1ed857afdfc8fe99e, T-039 c538ef8c28f973fcc55974844fc7ccaf550fb307 (D-092 order)
