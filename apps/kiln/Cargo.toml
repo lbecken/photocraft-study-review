@@ -10,5 +10,9 @@ publish.workspace = true
 [dependencies]
 kiln-ui.workspace = true
 
+# T-055: the oracle of AC-1 (spec, "Rust API used by tests").
+[dev-dependencies]
+kiln-control.workspace = true
+
 [lints]
 workspace = true

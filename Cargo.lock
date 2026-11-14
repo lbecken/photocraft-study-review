@@ -348,6 +348,7 @@ dependencies = [
 name = "kiln"
 version = "0.0.0"
 dependencies = [
+ "kiln-control",
  "kiln-ui",
 ]
 
