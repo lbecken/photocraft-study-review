@@ -1,22 +1,21 @@
 # State
 
-_Last updated: 2026-11-14 10:30 UTC_
+_Last updated: 2026-11-14 12:00 UTC_
 
 ## Now
-Iteration 2, first stage (ADR-0005), under methodology **v1.2** (D-093). Every product task of the stage is merged:
-T-039, T-042, T-019 (project tree), T-020 (syntax), T-021 (search), T-036 (root identity), T-023 (outline and
-navigation), T-037 (re-open check), T-038 (declared refusal kinds, `76422d0`, D-139). Scorecard on main: 64 items:
-28 verified, 13 implemented, 0 failing, 23 planned. The 60% line (39 of 64) is reached only if the evaluator confirms
-at least 11 of the 13 implemented items and no verified item is rejected.
+Iteration 2 under methodology **v1.2** (D-093). **The first stage (ADR-0005) is closed (D-142):** ten tasks merged
+(T-039, T-042, T-019, T-020, T-021, T-036, T-023, T-037, T-038, T-049) and the evaluation is published
+(`evaluations/iter-2.md`, D-141: 41 items confirmed, none rejected). Scorecard on main: 64 items: 41 verified,
+0 implemented, 0 failing, 23 planned (64.1%; the 60% line is passed). No UI exists; the 23 planned items are the UI
+and the features that need it.
 
-In flight: the **evaluation of the first stage** (run R-221, fresh evaluator, clean clone of `0704b24`, public
-interfaces only, booked to `iter-2`). No worktree exists.
+In flight: the **retrospective of the stage** (run R-223, fresh analyst; output `retrospectives/iter-2-stage-1.md`
+and scripts under `retrospectives/scripts/`). No worktree exists.
 
-Then: publish `evaluations/iter-2.md` with `cargo xtask publish` (next free task number T-049; file its findings and
-the follow-up of j5, D-137), the retrospective of the stage, decisions on the methodology, and the UI tasks of the
-second stage (the owner's remark on PhotoCraft's order, surface first and depth later, is an input: D-140). Tooling
-T-033, T-043, T-041 (in that order; T-041 last, owner told first). Drafts needing a spec check before dispatch:
-T-044, T-045 to T-048 and the deferred drafts (six of them carry a note from T-038 on declaring refusals).
+Then: decisions on its proposals (methodology v1.3 if any are accepted), and the planning of the second stage
+(D-140, the owner's remark on PhotoCraft's order, is an input). Drafts, each needing a spec check before dispatch:
+T-050 to T-053 (the evaluation's findings), T-044, T-045 to T-048, tooling T-033, T-043, T-041 (in that order; T-041
+last, owner told first), and the deferred drafts T-007, T-009, T-022, T-024 to T-031, T-034. Next free task number: T-054.
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
