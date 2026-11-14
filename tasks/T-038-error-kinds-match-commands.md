@@ -391,6 +391,7 @@ Scorecard: the test author appends the AC-1, AC-3, AC-4 test names and AC-5 as a
 - Ruling on Q-4 (director, D-092): the ADR wording is accepted as the proposal to be checked; the ADR is numbered ADR-0006 (ADR-0005 re-scopes iteration 2) and is accepted or not at the pre-dispatch check.
 - Order (director, D-092): dispatched after the stage-1 feature tasks (T-019, T-020, T-021, T-023) have merged, so that it declares the refusals of every command registered by then; those four tasks are not changed for it. Its spec is checked against main at that point (D-091 change 7).
 - Note from T-021's spec check (director, D-101): the `when` text of `invalid_pattern` must also cover what T-021 makes the binary do — a pattern longer than the cap and a replacement template that cannot be expanded. T-021 leaves `reason.rs` alone, so this text joins the list this task makes true. Also from T-019 (D-095 Q-4): after T-019, `project.tree` produces `not_a_file` for a file where a directory is needed.
+- Note from T-020's review round 2 (director, D-113): two follow-ups ride with this task, since it edits `crates/kiln-commands/src/syntax.rs`: the module comment there that says the size limit "bounds memory, not time" is brought in line with `docs/protocol/syntax.md` (the limit bounds the length of the text, not time or memory), and the 153-char line in `docs/protocol/syntax.md` (the sentence about a bracket the parser inserted) is re-wrapped without changing a word.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
