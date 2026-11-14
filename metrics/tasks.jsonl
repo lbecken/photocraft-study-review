@@ -567,3 +567,4 @@
 {"kind":"run","task":"iter-2","iteration":2,"run":"R-222","role":"evaluator","tier":null,"started_at":"2026-11-14T11:34:47Z","ended_at":"2026-11-14T11:36:33Z","wall_s":106,"tokens":20610,"tool_calls":10,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"syntax.parse evaluated after the director's ruling that the corpus is fixture data (D-141): 45 files match the manifest; 33 valid files parse without error nodes, 2 gap files have one error node each, 10 invalid files have 1 to 2; recorded rustc results reproduced for 45 of 45; item confirmed; evaluation file updated in place"}
 {"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:41:48Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:41:48Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:41:56Z","from":"ready","to":"in_progress"}
