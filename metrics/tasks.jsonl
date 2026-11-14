@@ -616,3 +616,4 @@
 {"kind":"run","task":"iter-2","iteration":2,"run":"R-238","role":"planner","tier":null,"started_at":"2026-11-14T22:32:35Z","ended_at":"2026-11-14T22:36:17Z","wall_s":222,"tokens":31240,"tool_calls":9,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"spec check: the split of D-156 applied: tasks/T-056-editor-view.md (editor view, medium, 8 criteria, rulings folded into the spec) and tasks/T-065-window.md (window, high, 3 criteria, own spec check after T-056 merges); the two checked against each other; collisions updated"}
 {"kind":"transition","task":"T-056","iteration":2,"at":"2026-11-14T22:36:34Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-056","iteration":2,"at":"2026-11-14T22:36:34Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-056","iteration":2,"at":"2026-11-14T22:37:31Z","from":"ready","to":"in_progress"}

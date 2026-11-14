@@ -2,7 +2,7 @@
 id: T-056
 title: "Show the current document in an editor view with syntax colours, a caret and scrolling, and edit, undo and save it by dispatching commands only, observed through kiln script"
 tier: medium            # ADR-0002: a behaviour change with no dependency, gate path, persistence code or contract change (split by D-156; the window is T-065)
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: [ui.editor-view, ui.dispatch-only]
 depends_on: [T-055]     # merged at e34ba1f (D-155); spec checks R-237 (main 197617c) and R-238 (main e0926ae)
