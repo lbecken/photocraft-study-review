@@ -568,3 +568,5 @@
 {"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:41:48Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:41:48Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:41:56Z","from":"ready","to":"in_progress"}
+{"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:54:27Z","from":"in_progress","to":"self_verified"}
+{"kind":"transition","task":"T-049","iteration":2,"at":"2026-11-14T11:54:27Z","from":"self_verified","to":"queued"}
