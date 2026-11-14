@@ -948,6 +948,85 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   sentence?
 <!-- end implementer log -->
 ### test author
+- 2026-11-14T03:09Z · R-190 · ready · did: wrote the six files in `touches` from this spec
+  alone, on `task/T-036-tests` (base `138be41`). The container was restarted at 02:59Z, mid-run.
+  The work committed before it survived. The only uncommitted edits were rustfmt reflows in three
+  files; I read them, found them complete and committed them. No fixture was left in `/tmp`.
+  Every check below was re-run after the restart.
+  - Rulings acknowledged and accepted before acting on them:
+    - D-092 Q-1 (b): refusal at construction.
+    - D-092 Q-2: no test reads the docs.
+    - D-092 Q-3: T-008's and T-019's test files untouched; AC-2 in two new binaries.
+    - D-111 Q-4 (A): AC-1 covers 0311 and 0000.
+    - D-111 split: no item-5 test.
+    - D-114: AC-6 is not a test; `documents_drop_the_unreadable_root_limit` is not written, and
+      `acceptance_t036_cli.rs` holds AC-1 only.
+  - Tests for `ws.path-confinement`, and their result on base (euid 0, so U = 65534):
+    - AC-1 `kiln_cli::acceptance_t036_cli::unreadable_root_is_refused_at_start`: FAILS on base
+      by assertion in all six cases, after both controls passed.
+      - 0311: `exec` exit 0 with a result; `run` exit 0; `control` exit 0 with a response.
+      - 0000: `exec` exit 2 but a JSON `io_error` object on stderr; `run` exit 3; `control`
+        exit 0 with a response.
+      - This is exactly the base the spec predicts.
+    - AC-1 `kiln_workspace::acceptance_t036_workspace::unreadable_root_is_refused_by_new`: FAILS
+      on base by assertion in the child run as U, for both modes: `DiskFs::new` returned `Ok`,
+      with `_root_handle: None`.
+    - AC-2 `kiln_workspace::guard_t036_removal_workspace::{root_removed_and_replaced_by_link_is_refused,
+      root_removed_and_replaced_by_new_directory_is_refused}`: pass on base.
+    - AC-2 `kiln_cli::guard_t036_removal_cli::{root_removed_and_replaced_by_link_is_refused_through_control,
+      root_removed_and_replaced_by_new_directory_is_refused_through_control,
+      root_made_unreadable_after_start_stays_protected_through_control}`: pass on base.
+    - AC-3 `kiln_workspace::guard_t036_workspace::retargeted_root_link_is_refused` and
+      `kiln_cli::guard_t036_cli::retargeted_root_link_is_refused_through_control`: pass on base.
+    - AC-4 `kiln_workspace::guard_t036_workspace::vanished_root_is_refused` and
+      `kiln_cli::guard_t036_cli::vanished_root_is_refused_through_control`: pass on base, cases
+      (i), (ii) and (iii) in one test each.
+  - AC-2 parameters: K = 5, B = 64.
+    - Lock: a `static Mutex<()>` per file, held by every test (poison-tolerant).
+    - Fresh `work/` and a fresh session per trial; one stderr line per trial; `break` on reuse.
+    - Refusals are asserted in every trial. Beyond the spec's list, the Rust API test also checks
+      `list_dir(Some(secret.txt))`, which Interface 2 names.
+  - 20 runs of each removal binary on base (`cargo test -p … --test … -- --nocapture`, default
+    threads, load average about 4):
+    - `guard_t036_removal_workspace` 20/20 passed and `guard_t036_removal_cli` 20/20 passed.
+    - 0 of 20 runs of either binary reported reuse (0 of 200 and 0 of 300 trials).
+    - On base, as uid 0, every root of these tests is held (modes 0755, and 0711 at start for
+      (iii)), so base behaves as the fixed code. No unheld root was exercised there.
+  - Self-check, in a throwaway copy at `/tmp/t036-r190-selfcheck` (0755, so 65534 could reach
+    it; removed afterwards). All 11 tests were run against each version:
+    - plausible fix (open the root, refuse on failure, hold it): all 11 pass;
+    - B1 (refusal with `NotFound`): killed by AC-1 Rust;
+    - B2 (refuse only if owner-search is set, so 0000 is accepted): killed by AC-1 Rust and CLI;
+    - B3 (refusal with path `root`, not `(root)`): killed by AC-1 Rust;
+    - B4 (T-008 M4, `given` = canonical path): killed by AC-3 Rust and CLI;
+    - B5 (T-008 M5, failed re-resolution taken as success): killed by AC-4 Rust and CLI;
+    - B6 (no identity comparison): killed by AC-2 (5 tests) and AC-3 (2 tests);
+    - B7 (refusal message names the host path): killed by AC-1 Rust.
+    - B1, B3 and B7 survive the CLI test by design, since no stderr text is pinned (golden rule
+      9).
+  - Mutant M (open, refuse, then drop the handle), 10 runs per removal target with
+    `--nocapture`:
+    - every test failed in 10/10 runs;
+    - reuse was found in 20 of 23 workspace trials and 30 of 32 CLI trials, always by the first
+      or second trial, case (iii) included;
+    - no run passed, and no reused trial passed.
+  - `cargo fmt --check` clean.
+  - `cargo clippy -p kiln-workspace -p kiln-cli --tests -- -D warnings` clean.
+  - `cargo xtask no-skip` PASS.
+  · gate attempts: 0 · not run: `cargo xtask ci` and the full workspace suite (brief: own targets
+  only; on this branch the gate should fail only in the two acceptance tests); the non-root
+  identity branch (this machine is uid 0; that branch is written but not executed) · missing
+  context: none · next: director joins with `task/T-036`.
+  QUESTION: AC-4 lists "`read` / `doc.open` of `f.txt` … → `outside_root`" through `control`.
+  But `f.txt` is document 1 there, and `doc.open` of an open document returns it with
+  `already_open: true` without reading the disk (`crates/kiln-commands/src/doc.rs`:136, the
+  registry's contract). On base, `doc.open f.txt` answered `ok` after the root was renamed away
+  (and after the AC-3 retarget). So that step cannot hold on base or head while `kiln-commands`
+  is outside `touches`. I did not send it. Instead `vanished_root_is_refused_through_control`
+  opens `g.txt`, an existing file in the root that is not open (Interface 4: "every request is
+  refused"), plus `missing.txt`. The Rust test keeps `read("f.txt")`. Proposed wording: "through
+  `control`, `doc.open` of an existing file that is not open (`g.txt`) and of `missing.txt` →
+  `outside_root`; through the Rust API, `read` of `f.txt` and `missing.txt` → `OutsideRoot`".
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
