@@ -799,4 +799,25 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### test author
 <!-- end test author log -->
 ### reviewer
+- 2026-11-14 · R-203 · tests_joined (round 1 at `b5ae636254aaaa9c95500760f344c40d23e931d5`) ·
+  rulings acknowledged and accepted: D-044, D-108 Q-1 to Q-4 and notes N-3 to N-7, D-122 (1) the
+  plural command name, (2) N11's 338 MiB as KiB / 1,024 (arithmetic checked: 337.6 and 337.7);
+  Q-2 questioned with new evidence (spec gap 6). · did: confirmed tests before code from the
+  history (`6a60a75`, `e8423ff` on the tests branch off `c371a07`; first code `65d8ad1`, also off
+  `c371a07`) and that `e8423ff` only moves one assertion; ran every AC through `kiln-cli
+  run/exec/control` (debug), hostile projects as uid 65534 (symlinks in and out, FIFO, mode 000,
+  non-UTF-8 file and name, `.gitignore`, `target/`, UTF-16, BOM, CRLF, a race between listing and
+  reading), `strace` of the opens, the size limit at 1,048,576/1,048,577, refusal order and
+  inertness, log replay; checked every sentence of `nav.md`, the four descriptions and schema,
+  and the shared sentences of `syntax.md`, `project.md`, `cursor.md`, `control-protocol.md` and
+  `error_kinds` against the binary; 38 seeded mutants (35 killed, 34 by the acceptance file; O1
+  `ERROR` container, N15 `.rs` case, N19 walk limit 50,000 survived); found an input where Q-2
+  matters. Review `reviews/T-023-r1.md`: request-changes, 1 defect (nav.md:109–111 and the
+  `nav.workspace-symbols` description say `project.tree {}`, whose limit is 50,000, but the
+  search walks 1,000,000), 3 test gaps (the survivors), 3 spec gaps (N8 against Q-3; Q-2's
+  consequence; N11's context). Acceptance file run time 5.07 s. `cargo xtask no-skip` PASS. ·
+  gate attempts: 0 (not part of review; `cargo xtask hygiene` run) · not run: release build,
+  full gate, full workspace tests per survivor, `outside_root` and `walk_truncated: true`
+  through the CLI · missing context: none · next: director rules spec gaps 5–7; implementer
+  fixes finding 1 and adds the tests for findings 2–4; round 2 is the delta.
 <!-- end reviewer log -->
