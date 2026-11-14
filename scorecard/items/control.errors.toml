@@ -6,4 +6,7 @@ tests = [
     "kiln_control::acceptance_t004::malformed_requests_get_structured_errors_and_host_continues",
     "kiln_cli::acceptance_t004::run_exits_3_when_a_request_fails",
     "kiln_cli::acceptance_t004::run_survives_hostile_lines",
+    "kiln_commands::acceptance_t038_commands::undeclared_refusal_is_internal",
+    "kiln_cli::guard_t038_cli::disk_refusals_through_control",
+    "kiln_cli::acceptance_t038_cli::protocol_docs_state_the_published_set",
 ]

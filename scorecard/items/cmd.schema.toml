@@ -7,4 +7,7 @@ tests = [
     "kiln_commands::registry::tests::audit_catches_wrong_example_and_empty_registry",
     "kiln_commands::buffer::tests::standard_registry_passes_its_own_audit",
     "kiln_commands::acceptance_t003_registry::doc_commands_are_described_and_audited",
+    "kiln_cli::acceptance_t038_cli::schema_publishes_each_commands_refusals",
+    "kiln_cli::acceptance_t038_cli::every_refusal_example_refuses_through_the_binary",
+    "kiln_commands::acceptance_t038_commands::audit_requires_a_witness_for_every_declared_kind",
 ]
