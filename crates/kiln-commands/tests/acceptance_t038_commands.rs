@@ -240,6 +240,15 @@ test_command!(
     Some(vec![Refusal::example(NotFound), Refusal::disk(IoError)]),
     vec![witness(NotFound), witness(IoError)]
 );
+// Ruling j2 (D-137): no declaration, and one refusal example whose run returns `rejected`
+// with exactly its kind (an undeclared command is not checked at execute), so only rules (i)
+// and (iv) can report it.
+test_command!(
+    UndeclaredWithExample,
+    "t38.undeclared-with-example",
+    None,
+    vec![witness(NotFound)]
+);
 
 fn one<C: Command + 'static>() -> Registry {
     let mut r = Registry::new();
@@ -526,6 +535,12 @@ fn audit_requires_a_witness_for_every_declared_kind() {
         &one::<ExampleOfDisk>(),
         "t38.of-disk",
         1,
+    );
+    audit_case(
+        "(i) and (iv): no declaration and a refusal example that refuses with its kind",
+        &one::<UndeclaredWithExample>(),
+        "t38.undeclared-with-example",
+        2,
     );
 
     // Two commands without a declaration: one line each, in name order.
