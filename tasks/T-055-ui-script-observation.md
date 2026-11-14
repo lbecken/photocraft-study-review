@@ -559,7 +559,10 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
       appears in AC-6, compared byte for byte;
     - any effect of `--size` beyond whether it is accepted: the shell's layout is not pinned;
     - a real `kiln-cli` binary: the tests use `Host` only, so build order does not matter.
-  - gate attempts: 1 (last: GATE_RESULT) · missing context: none · next: director (Q 1–3), join.
+  - gate attempts: 1 (last: red `test`, only the 18 tests of `acceptance_t055`; fmt, clippy, layers,
+  ui-commands, hygiene, schema and scorecard PASS. The gate stops at `test`, so I ran `no-skip` (PASS) and
+  `hygiene` (PASS) on their own; `fuzz` and `budgets` did not run; the guards pass in `cargo test -p kiln --test
+  guard_t055`) · missing context: none · next: director (Q 1–3), join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
