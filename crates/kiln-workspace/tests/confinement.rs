@@ -426,12 +426,39 @@ fn root_that_cannot_be_opened_for_reading_is_refused_by_new() {
 #[cfg(test)]
 mod t036 {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// The parent's fixture: when dropped (on success, on a failed assertion or a panic), every
+    /// directory under it is made listable again and the whole fixture is removed, so a failing
+    /// run leaves nothing behind.
+    struct Fixture(PathBuf);
+
+    /// Make `dir` and every directory under it listable again, links not followed.
+    fn unlock(dir: &Path) {
+        let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o755));
+        if let Ok(entries) = fs::read_dir(dir) {
+            for e in entries.flatten() {
+                let path = e.path();
+                if fs::symlink_metadata(&path).is_ok_and(|m| m.is_dir()) {
+                    unlock(&path);
+                }
+            }
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            unlock(&self.0);
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
 
     /// The parent: builds the fixture, hands it to U, runs the child as U under a timeout.
     pub fn parent() {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt, chown};
+        use std::os::unix::fs::{MetadataExt, chown};
         use std::os::unix::process::CommandExt;
-        let work = work("t036-unreadable");
+        let fixture = Fixture(work("t036-unreadable"));
+        let work = fixture.0.clone();
         fs::set_permissions(&work, fs::Permissions::from_mode(0o755)).unwrap();
         fs::write(work.join("root/f.txt"), b"in\n").unwrap();
         // The owner of a file we just created is our effective uid.
@@ -466,6 +493,7 @@ mod t036 {
             }
             if Instant::now() > deadline {
                 let _ = child.kill();
+                let _ = child.wait();
                 panic!("the unprivileged child run took more than 10 s");
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -479,12 +507,12 @@ mod t036 {
             T036_DONE.as_bytes(),
             "the unprivileged child run did not reach the end of its assertions"
         );
-        let _ = fs::remove_dir_all(&work);
+        drop(fixture);
     }
 
     /// The child, run as U on the fixture `work` it owns.
     pub fn child(work: &Path) {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use std::os::unix::fs::MetadataExt;
         let set_mode = |path: &Path, mode: u32| {
             fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
         };
