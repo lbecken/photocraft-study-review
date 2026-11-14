@@ -239,10 +239,10 @@ impl Command for Outline {
 pub(crate) struct GotoLineParams {
     /// Id of an open document.
     doc: u64,
-    /// Zero-based line; one beyond the last line is clamped to the last line.
+    /// Zero-based line; a line beyond the last line is clamped to the last line.
     line: u64,
-    /// Zero-based column in chars; default 0. One beyond the line's content (without its line
-    /// break) is clamped to its end. `null` is refused.
+    /// Zero-based column in chars; default 0. A column beyond the line's content (without its
+    /// line break) is clamped to its end. `null` is refused.
     #[serde(default, deserialize_with = "present")]
     #[schemars(with = "u64", transform = default_zero)]
     col: Option<u64>,

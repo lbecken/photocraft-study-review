@@ -2633,7 +2633,7 @@
         "properties": {
           "col": {
             "default": 0,
-            "description": "Zero-based column in chars; default 0. One beyond the line's content (without its line\nbreak) is clamped to its end. `null` is refused.",
+            "description": "Zero-based column in chars; default 0. A column beyond the line's content (without its\nline break) is clamped to its end. `null` is refused.",
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
@@ -2645,7 +2645,7 @@
             "type": "integer"
           },
           "line": {
-            "description": "Zero-based line; one beyond the last line is clamped to the last line.",
+            "description": "Zero-based line; a line beyond the last line is clamped to the last line.",
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
