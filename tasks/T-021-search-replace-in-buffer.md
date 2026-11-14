@@ -2,7 +2,7 @@
 id: T-021
 title: "Search an open document by literal or regex, case-sensitive or not, optionally whole-word, and replace one or all matches as one undo step with capture groups"
 tier: medium            # ADR-0002 default: in-memory behaviour; adds public API to kiln-search (not a CHARTER §3 contract, no dependency); the regex dependency was added by T-017
-state: self_verified
+state: tests_joined
 owner_role: planner
 scorecard_items: [search.literal, search.regex, search.whole-word, search.replace]
 depends_on: [T-015, T-017, T-018, T-032]   # all merged (spec check R-158 against main 1dc59d0; R-170 at e72ef59): module slot; Regex contract; apply_edits; invalid_pattern
