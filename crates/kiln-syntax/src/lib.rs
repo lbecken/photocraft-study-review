@@ -11,8 +11,9 @@
 //! char spans, a pinned S-expression form and incremental update that always equals a parse
 //! from scratch. [`highlight`] gives highlight spans in seven kinds that partition a char
 //! range of the text, and [`brackets`] matches a bracket with its partner, ignoring brackets
-//! inside strings, char literals and comments. [`outline`] is still empty. Building this
-//! crate needs a C compiler (the grammar and the tree-sitter runtime are C).
+//! inside strings, char literals and comments. [`outline`] lists the `fn`, `struct`, `enum`,
+//! `trait`, `impl` and `mod` items of a tree with their names, char ranges and nesting depth.
+//! Building this crate needs a C compiler (the grammar and the tree-sitter runtime are C).
 
 pub mod tree;
 

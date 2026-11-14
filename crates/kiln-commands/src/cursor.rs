@@ -64,7 +64,7 @@ pub(crate) struct CursorResult {
     col: usize,
 }
 
-fn cursor_result(doc: u64, buffer: &Buffer) -> Result<CursorResult, CommandError> {
+pub(crate) fn cursor_result(doc: u64, buffer: &Buffer) -> Result<CursorResult, CommandError> {
     let s = buffer.selection();
     // The buffer keeps the selection at valid positions, so this cannot fail.
     let LineCol { line, col } =
