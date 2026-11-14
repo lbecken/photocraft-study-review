@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-14 22:40 UTC_
+_Last updated: 2026-11-14 23:45 UTC_
 
 ## Now
 Iteration 2, **second stage** (ADR-0007, accepted with a changed order in D-147), under methodology **v1.3**
@@ -13,10 +13,9 @@ evaluation B (cut 2: a project editor) → T-060, T-061, the feature drafts each
 T-041 (last; owner told first). Deferred until what they remove starts to cost: T-051, T-052, T-054, T-043, T-064.
 
 In flight:
-- **T-056** editor view (medium, the arm with an independent test author; split from the window by D-156):
-  implementer run R-239 in `.worktrees/T-056`, test author run R-240 in `.worktrees/T-056-tests`, both from main
-  `c0ae310fed53a608936c7ad3790270276c6bb308`. It claims `ui.editor-view` and `ui.dispatch-only`; no dependency, no
-  gate path; no approval row needed (medium tier).
+- **T-056** editor view (re-tiered to high, D-158): joined green on its first join at `97ba223` (22 acceptance
+  tests); review round 1 running (run R-241). It claims `ui.editor-view` and `ui.dispatch-only`; an approval row is
+  needed before the queue.
 - **T-065** window (high, draft; `ui.window`): its spec check runs when T-056 has merged; then evaluation A (cut 1).
 - T-055 merged at `e34ba1f` (D-155).
 
