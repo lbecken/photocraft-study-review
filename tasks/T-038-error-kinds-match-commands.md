@@ -1,7 +1,7 @@
 ---
 id: T-038
 title: "Publish only the refusal kinds that a registered command can produce, tie each kind to the commands that report it with a mechanical check, and make every `when` text true of the binary"
-tier: high              # ADR-0002: a CHARTER §3 contract change (decision 2: how the registry reports and describes refusals); needs an ADR (proposed ADR-0006, text below)
+tier: high              # ADR-0002: a CHARTER §3 contract change (decision 2: how the registry reports and describes refusals); ADR-0006 accepted (D-128)
 state: draft
 owner_role: planner
 scorecard_items: [cmd.schema, control.errors]   # existing items, strengthened (no new item); intended tests: "Scorecard" below
@@ -71,8 +71,8 @@ After this task:
 5. The three follow-ups of D-113 and D-126 are done (Interface 6).
 
 No gate path (`xtask/` is not touched), no dependency, no VFS change. Tier high by ADR-0002: it
-changes how the registry executes and describes commands (CHARTER §3 decision 2). The director
-writes ADR-0006 (proposed text below), amending ADR-0004's Decision bullet "Reason variants may
+changes how the registry executes and describes commands (CHARTER §3 decision 2). ADR-0006
+(accepted, D-128; text below, filed by the director as `docs/adr/0006-declared-refusal-kinds.md`) amends ADR-0004's Decision bullet "Reason variants may
 exist before any command raises them. The generated list is the set of kinds the protocol may
 produce."
 
@@ -160,7 +160,7 @@ the request, witnessed through a test VFS, AC-6).
   `RejectReason::ALL` order, possibly empty; and `"refusal_examples"`: a list (possibly empty) of
   objects with exactly the keys `description` (string), `initial_text` (string), `files`,
   `setup`, `params` and `kind` (a string of `refusals`). `initial_text`, `setup` and `params` are
-  as in `examples`. **PENDING Q-6:** `files` is a list of objects in the form of a
+  as in `examples`. `files` (ruling Q-6, D-128) is a list of objects in the form of a
   `--memory-seed` manifest entry (`docs/protocol/cli-memory-seed.md` "Manifest"): `{"path",
   "text"}` or `{"path", "hex"}`, so a refusal example can hold bytes that are not UTF-8. The keys
   and order of the other members of a command entry, and of `examples`, are unchanged.
@@ -197,20 +197,22 @@ test code) is not checked; Interface 3 (i) makes it an audit problem.
   problem line, naming the command and, where there is one, the kind, for each of:
   (i) a command with no declaration (an empty list is a declaration);
   (ii) a kind marked *example* for which the command has no refusal example of that kind;
-  (iii) a refusal example whose params fail the params schema, whose `files` path is invalid,
-  whose setup fails, or whose run does not return `rejected` with exactly its `kind` (a success,
+  (iii) a refusal example whose params fail the params schema, whose `files` entry has an
+  invalid path or a `hex` that is not an even number of hex digits, whose setup fails, or whose run does not return `rejected` with exactly its `kind` (a success,
   another kind, another code);
   (iv) a refusal example whose `kind` the command does not declare;
   (v) a refusal example whose `kind` is marked *disk*.
   Refusal examples run like examples: a fresh context, scratch buffer `initial_text`, `MemoryFs`
   holding `files`, then `setup` (each must succeed), then the command.
-- **PENDING Q-7:** a `too_large` refusal example reaches 1,048,577 chars through its `setup`, not
-  through a literal: for example `files` `[{"path": "g.rs", "text": "a"×32}]`, setup `doc.open`,
+- A `too_large` refusal example (ruling Q-7, D-128) reaches 1,048,577 chars through its
+  `setup`, not through a literal: for example `files` `[{"path": "g.rs", "text": "a"×32}]`, setup `doc.open`,
   three times `search.replace {"doc": 1, "query": "a", "replacement": "a"×32, "all": true,
   "limit": 1}` (32 → 1,024 → 32,768 → 1,048,576 chars), `doc.insert {"doc": 1, "offset": 0,
-  "text": "b"}`, then the command. Measured: 0.6–0.7 s per example with a debug `kiln-cli run`
-  (Pinned (g)). The audit message line and the success line of `commands --audit` (`audit ok: N
-  commands, all examples validate`) are otherwise unchanged.
+  "text": "b"}`, then the command. (This planner measured 0.6–0.7 s per such run with a debug
+  `kiln-cli run`, Pinned (g); no time is promised. The implementer reports, as measured, the time
+  these examples add to the gate's `schema` step: "Implementer's report" below.) The audit
+  message lines and the success line of `commands --audit` (`audit ok: N commands, all examples
+  validate`) are otherwise unchanged.
 - The standard registry's audit is empty after this task.
 
 ### 4. `when` texts (`RejectReason::description`), after this task exactly
@@ -430,10 +432,9 @@ unchanged; each other published one was checked against the binary (Pinned (g)):
 ## Acceptance criteria
 High tier: an independent test author writes every `acceptance_t038*`/`guard_t038*` file on
 `task/T-038-tests`; the implementer adds none and edits no `scorecard/` file (METHODOLOGY §5.6,
-§6). Every child process has a hard timeout of 10 s (a refusal example run, including the
-growth setup, takes under 1 s in a debug build); every `control` response is awaited at most
-10 s. No test returns early or skips. Base = main after T-037 has merged (see "To re-check at
-dispatch"). **Acceptance** = fails on base; **guard** = passes on base and joined.
+§6). Every child process has a hard timeout of 10 s and every `control` response is awaited at
+most 10 s (test hygiene, not a property of the product; no AC asserts a duration). No test
+returns early or skips. Base = main after T-037 has merged (see "To re-check at dispatch"). **Acceptance** = fails on base; **guard** = passes on base and joined.
 
 What a test may assert (golden rule 9; this task is about published texts): the **set** of
 published kinds per command, `error_kinds.rejected` as the union of `refusals` in `ALL` order,
@@ -470,8 +471,8 @@ that already hold wording are restated by the implementer (Pinned (f)); no new t
   example gives no problem. `standard_registry().audit()` is empty and `kiln-cli commands
   --audit` exits 0. Fails on base.
 - **AC-4 (acceptance; `acceptance_t038_cli.rs::every_refusal_example_refuses_through_the_binary`).**
-  For every refusal example in `commands --schema`: write a manifest from its `files` (PENDING
-  Q-6: copied as the manifest's `files`), a script of its `setup` then the request, and run
+  For every refusal example in `commands --schema`: write a manifest from its `files` (copied as
+  the manifest's `files`, ruling Q-6), a script of its `setup` then the request, and run
   `kiln-cli run s.jsonl --memory-seed m.json`; when `initial_text` is not empty (the example has
   no setup), run `kiln-cli exec <name> <params> --text <initial_text> --memory-seed m.json`
   instead. Every setup response is `ok:true`; the last is `rejected` with the example's `kind`.
@@ -503,7 +504,8 @@ that already hold wording are restated by the implementer (Pinned (f)); no new t
   a 1,001-char query and with a regex of 101 groups, `search.replace` with `$3` for a 2-group
   regex → `invalid_pattern`; `project.tree {}` after the root was replaced → `outside_root`.
   Passes on base. The wording of the texts is the reviewer's check, and the restated merged
-  pins of Pinned (f) 1, 2, 4, 5 hold it (PENDING Q-9: this AC has no fail-on-base test).
+  pins of Pinned (f) 1, 2, 4, 5 hold it (ruling Q-9, D-128: this AC has no fail-on-base test,
+  by design).
 - **AC-8 (documents; acceptance; `acceptance_t038_cli.rs::protocol_docs_state_the_published_set`).**
   The table of "Error codes and kinds" in `docs/control-protocol.md` has no row with code
   `rejected` and kind `other`, and every `rejected` row's kind is published in `error_kinds`;
@@ -539,6 +541,15 @@ that already hold wording are restated by the implementer (Pinned (f)); no new t
 - Implementer's own tests: unit tests in `registry.rs` and the command modules. Determinism:
   refusal examples run on `MemoryFs`, like examples.
 
+### Implementer's report (in the log entry, not criteria)
+- The time the refusal examples add to the gate's `schema` step (`cargo xtask schema`, which runs
+  `kiln-cli commands --audit`): the step's elapsed time on the base and on the branch, same
+  machine, two runs each, with the command; the `too_large` examples' share if measurable
+  (ruling Q-7, D-128). A measured figure, not a bound; no document states it.
+- Each merged pin edited under Pinned (f), by item number (golden rule 4).
+- Any `docs/` sentence stating a guarantee or a limit that this spec lacks, with the command and
+  output that show it (METHODOLOGY §6).
+
 ## Conflicts and dispatch
 - Every command module, `registry.rs` and `reason.rs` are in `touches`: no other task that edits
   `crates/kiln-commands/src/` may be in flight with this one (METHODOLOGY §5.2). Today that is
@@ -552,16 +563,16 @@ that already hold wording are restated by the implementer (Pinned (f)); no new t
   kind (AC-1 checks `doc.save` as a superset).
 - D-091 (bundling): see Q-3 and "Spec check R-209" finding 16.
 
-## ADR-0006 (proposed text, for the director to accept or not)
+## ADR-0006 (accepted, D-128; the director files it as `docs/adr/0006-declared-refusal-kinds.md`, this text)
 ```
 ---
 id: ADR-0006
 title: "Each command declares the refusal kinds it can report; only declared kinds are published"
-status: proposed
+status: accepted
 date: 2026-11-14
 task: T-038
 charter_section: "§3 decision 2"
-approval: null           # director: the D-NNN row that accepts it
+approval: D-128
 supersedes: null
 superseded_by: null
 ---
@@ -663,7 +674,7 @@ One task; no data or file format depends on declarations.
   although nothing is wrong in Kiln, and `docs/protocol/nav.md` "Errors" (which lists the four
   walk kinds) becomes wider than the published list. Consequences: (a) adds 2 pairs and one guard
   test; (b) needs a sentence in `nav.md` (outside `touches`) and publishes a bug kind for an
-  outside change. **Recommended (a)**; the spec is written for (a), PENDING.
+  outside change. **Recommended (a)**; ruled (a), D-128.
 - Q-6 (planner, R-209): how does a refusal example hold bytes that are not UTF-8? `Example.files`
   is `Vec<(&'static str, &'static str)>` (UTF-8 text), so no example can give `decode_error`
   (both invalid UTF-8 and a UTF-16 BOM `FF FE` are not valid UTF-8). (a) Refusal examples
@@ -671,33 +682,33 @@ One task; no data or file format depends on declarations.
   directly usable by AC-4 and the evaluator; `examples` are unchanged. (b) Keep the tuple form
   for refusal examples and mark `doc.open`/`decode_error` *disk*-like ("witnessed by tests"),
   weakening the mechanical witness of a pair `MemoryFs` produces deterministically. (c) A new
-  byte form only for refusal examples' tuples. **Recommended (a)**; the spec is written for (a),
-  PENDING.
+  byte form only for refusal examples' tuples. **Recommended (a)**; ruled (a),
+  D-128.
 - Q-7 (planner, R-209): how is `too_large` (a document of more than 1,048,576 chars) witnessed
   by a refusal example? (a) The example's `setup` grows a small file with `search.replace`
   (Interface 3; 0.6–0.7 s per example in debug, five examples); (b) mark `too_large` as
   witnessed by tests (it is not disk-only, so this needs a third marking); (c) a literal of
   1 MiB in `files` (each such example adds over 1 MiB to `docs/commands.json`, five times).
   Consequence of (a): the five examples depend on `search.replace`; a change there fails the
-  audit loudly. **Recommended (a)**; written for (a), PENDING.
+  audit loudly. **Recommended (a)**; ruled (a), D-128.
 - Q-8 (planner, R-209): audit rule (v), a refusal example of a *disk* kind is a problem. With it,
   "a listed kind without a refusal example can occur only on disk" (Interface 5) is mechanical
   and a client can tell the disk-only kinds from the published shape; without it the marking
-  is internal and that sentence must go. **Recommended: keep (v) and the sentence**; written so,
-  PENDING.
+  is internal and that sentence must go. **Recommended: keep (v) and the sentence**; ruled so,
+  D-128.
 - Q-9 (planner, R-209): AC-7 (the changed `when` texts) has no test that fails on base: golden
   rule 9 forbids a test of the wording (the director's instruction for this task), and the
   situations already give their kinds on base. METHODOLOGY §6 asks for a failing test per AC.
   (a) Accept AC-7 as a guard; the wording is checked by the reviewer against the binary, and the
   merged pins restated under Pinned (f) carry the new texts; (b) an acceptance test that each of
   the five texts differs from its base text (fails on base, pins no new wording, but says
-  nothing about truth). **Recommended (a)**; written for (a), PENDING.
+  nothing about truth). **Recommended (a)**; ruled (a), D-128.
 - Q-10 (planner, R-209): `search.rs`:350 raises `RejectReason::Other` for an `apply_edits` failure
   that cannot happen. (a) Leave the code; `search.replace` does not declare `other`, so if it
   ever happened the execute check reports `internal`/`other` (correct: it would be a bug); (b)
   change the site to `CommandError::Internal { reason: InternalReason::Other, .. }` directly
   (same response, clearer code, one more edit in `search.rs`). **Recommended (a)** (no response
-  changes either way); written for (a), PENDING.
+  changes either way); ruled (a), D-128.
 ### Rulings on the spec check R-209 (director, D-128)
 - ADR-0006: accepted as proposed. The director files it as `docs/adr/0006-declared-refusal-kinds.md` with `status: accepted` and `approval: D-128` before dispatch; it amends ADR-0004's bullet as its Decision says.
 - Q-5: yes. Each command that reads the file system declares all four file-system kinds, the two that only a race can produce included, and a guard test witnesses them where a test can.
@@ -707,27 +718,31 @@ One task; no data or file format depends on declarations.
 - Q-9: accepted. The criterion on the changed `when` texts is checked by the reviewer on the diff and against the binary; no test asserts their wording (golden rule 9).
 - Q-10: leave the unreachable raise site in `search.rs` as it is; it stays undeclared.
 - Size: the task is kept whole (the grounds of D-092 Q-3 stand), with 30 commands to declare. The director watches the budget at the round-1 verdict as METHODOLOGY §11 says.
+- On three criteria the planner flagged in R-211 (director, D-130; golden rule 9, as D-094 and D-114): AC-8's check that a phrase no longer appears in `docs/control-protocol.md` is not a test; the reviewer checks that removal on the diff. AC-1's comparison of `commands --schema` with `docs/commands.json` is already the gate's `schema` step and is not written as a test of this task. AC-3's check that each audit line names its command stays (it identifies the line; it asserts no wording).
 
 ## To re-check at dispatch
-Read at this check: main `e0f4daa` (T-023 merged at `1da69fd3433474d8de74bae430a4d7d3d79e290f`,
-which is the head this check read; it merged unchanged); `task/T-037` at
-`2f1d9f86ade442d3345e01f9814c27bfa3dca074` (product code probed at `083cf0d`, identical in
-`crates/` and `apps/*/src`). At dispatch, on main with T-037 merged:
-1. `crates/kiln-commands/src/doc.rs` re-open branch maps `Vfs::check_location` errors through
-   `OpenError::Vfs` → `outside_root`/`io_error` only, and a re-open of a removed file or of a
-   directory still answers `already_open: true` (Pinned (g)); `doc.open`'s row unchanged.
-2. `Vfs::check_location` is a required trait method (`task/T-037` `vfs.rs`:115, no default).
-   `nav.rs`'s test VFS `FailingFs` (merged with T-023) does not implement it, and `nav.rs` is not
-   in T-037's `touches`: T-037's queue run on today's main should fail to compile
-   `kiln-commands`' unit tests unless T-037 gains `nav.rs` or a default body. Check how T-037
-   resolved it; AC-6's test VFS must implement whatever the trait then requires.
-3. No other kind became reachable or unreachable: `grep -n "RejectReason::" crates/*/src
-   apps/*/src` and the `From` impls in `reason.rs` match "The kinds each command can report".
-4. The line numbers of Pinned (f) and Interfaces 5–6 (T-037 changes none of those files; any
-   task merged in between may).
-5. `kiln-cli commands` lists the same 30 commands; `docs/commands.json` is current.
-6. The ADR-0006 ruling and Q-5 to Q-10 are answered; the sections marked PENDING are edited to
-   the rulings.
+Read at the spec check: main `e0f4daa` (T-023 merged at `1da69fd3433474d8de74bae430a4d7d3d79e290f`,
+the head the check read); `task/T-037` at `2f1d9f86ade442d3345e01f9814c27bfa3dca074` (product code
+probed at `083cf0d`, identical in `crates/` and `apps/*/src`). At R-211 main is `ee58cd8` (ledger
+commits only since `e0f4daa`); `task/T-037` has had main merged in (head `0946426`, moving) and is
+applying ruling k6. What must hold on main once T-037 has merged (no head is named; read main):
+1. T-023 is on main: `kiln-cli commands` lists the 30 commands of "The kinds each command can
+   report", including the four `nav.*`; `docs/commands.json` is current.
+2. `crates/kiln-commands/src/doc.rs`: the re-open branch maps `Vfs::check_location` errors through
+   `OpenError::Vfs` to `outside_root`/`io_error` only, and a re-open of a removed file or of a
+   directory still answers `already_open: true` (Pinned (g)); `doc.open`'s row is unchanged.
+3. `Vfs::check_location` is on main (a required trait method, as on `task/T-037` `vfs.rs`:115),
+   and `crates/kiln-commands/src/nav.rs`'s test VFS `FailingFs` implements it (T-037 ruling k6,
+   D-128), so `cargo test -p kiln-commands` compiles on main. AC-6's test VFS implements every
+   method the trait then requires, `check_location` included.
+4. No other kind became reachable or unreachable: `grep -n "RejectReason::" crates/*/src
+   apps/*/src` and the `From` impls in `reason.rs` match "The kinds each command can report"
+   (T-037's k6 edit of `nav.rs` is test code and adds none).
+5. The line numbers of Pinned (f) and Interfaces 5–6 (T-037 changes none of those files; it now
+   edits `nav.rs` test code only, which is not a Pinned (f) item; any task merged in between may
+   shift them).
+6. ADR-0006 is filed by the director at `docs/adr/0006-declared-refusal-kinds.md` with `status:
+   accepted`, `approval: D-128` (done or not, it is not a builder path).
 
 ## Spec check R-209
 Checked the draft (R-154, written on `73a8d13`/`d8c4a41` with 20 commands) against main
@@ -791,6 +806,9 @@ Notes:
     included.
 Verdict: not ready as drafted (10 blockers). Rewritten above; ready to dispatch once ADR-0006 and
 Q-5 to Q-10 are ruled, T-037 has merged and "To re-check at dispatch" holds.
+Finalised (R-211) on the rulings of D-128: ADR-0006 accepted, Q-5 to Q-10 as recommended, the
+task kept whole. The PENDING marks are gone; "To re-check at dispatch" names what must hold on
+main after T-037 merges. Ready to dispatch once that list holds.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
@@ -838,6 +856,23 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   QUESTION: Q-5 (VFS kinds incl. race-only pairs), Q-6 (bytes in refusal examples), Q-7
   (`too_large` witness), Q-8 (audit rule (v)), Q-9 (AC-7 without a fail-on-base test), Q-10
   (`search.rs`:350) — see "Questions and rulings".
+- 2026-11-14T07:30Z · R-211 · draft · did: finalised the spec on D-128 (a continuation of R-209;
+  the first attempt was stopped by the usage limit before any edit and the machine restarted,
+  D-129). Acknowledged the rulings: ADR-0006 accepted (filed by the director), Q-5 to Q-10 as
+  recommended, task kept whole; accepted, all applied. Removed every PENDING mark; ADR section
+  now `status: accepted`, `approval: D-128`; front-matter tier comment and Goal say accepted.
+  Q-7: the planner's 0.6–0.7 s figure stays a measurement only; the time the refusal examples add
+  to the `schema` step is an item of a new "Implementer's report" list, not a criterion; the AC
+  timeouts are marked as test hygiene. Re-read as a builder: audit rule (iii) now names a bad
+  `hex` (Q-6 makes it possible); no AC asserts the wording of a `when` text, a message, an audit
+  line beyond the command name, a document sentence or the command list (AC-1's comparison of
+  `commands --schema` with the generated `docs/commands.json` is the existing currency check, and
+  AC-8 checks only that a row and the doc-positions parenthesis are gone). "To re-check at
+  dispatch" rewritten: T-023 on main; T-037's k6 (`FailingFs` implements `check_location`) to
+  hold on main after T-037 merges, by content, not by head (main `ee58cd8` read; only ledger
+  commits since `e0f4daa`). · gate attempts: 0 · not run: cargo, any probe (no behaviour question
+  was open) · missing context: none · next: director re-checks the dispatch list after T-037
+  merges and dispatches.
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
