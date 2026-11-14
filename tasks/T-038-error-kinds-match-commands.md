@@ -1114,4 +1114,11 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `exec` exit 1 for internal, save onto a socket/device · missing context: none · next:
   director rules on finding 1 (add a no-declaration (iv) case, or rule (iv) redundant) and
   finding 2; round 2 on the delta.
+- 2026-11-14T10:05Z · R-220 · rework · review round 2 (delta, final) of
+  `82201ca5db605d31ccaa543c7688dcf9722eb488` since `9fd40ae`. Rulings j2 to j5 (D-137)
+  acknowledged and accepted. did: the delta is only the j2 test case, the test author's log
+  entry and my round-1 commit; `acceptance_t038_commands` passes on the head (2/2); my mutant M11
+  (audit rule (iv) skipped) is now killed by the new case, and the tree was clean after the
+  restore. Verdict approve (`reviews/T-038-r2.md`). · gate attempts: 0 · not run: the full gate
+  (the re-join ran it) · missing context: none · next: director records the approval and queues.
 <!-- end reviewer log -->
