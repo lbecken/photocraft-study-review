@@ -11,6 +11,8 @@
 //! counted to show that it was reached. Passes on base; after T-038 it fails if the execute
 //! check turns one of these declared refusals into `internal`. No message text is asserted.
 
+#![cfg(test)]
+
 use std::cell::Cell;
 use std::rc::Rc;
 

@@ -14,6 +14,8 @@
 //! No message text and no audit wording is asserted: an audit line is identified by the command
 //! name it contains (ruling D-130).
 
+#![cfg(test)]
+
 use kiln_commands::{
     Command, CommandError, Context, Example, Registry, RejectReason, standard_registry,
 };

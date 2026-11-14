@@ -17,6 +17,8 @@
 //! Every child process has a 10 s timeout that only detects hangs; no time is asserted.
 //! Fixtures live in fresh directories removed on drop (success and failure).
 
+#![cfg(test)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Read;

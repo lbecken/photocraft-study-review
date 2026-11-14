@@ -19,6 +19,8 @@
 //! or time is asserted; every child process and every response has a 10 s timeout that only
 //! detects hangs.
 
+#![cfg(test)]
+
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::{FileTypeExt, symlink};
@@ -246,8 +248,11 @@ fn assert_refused(r: &Value, kind: &str, case: &str) {
     );
 }
 
+/// One named case.
+type Case<'a> = (&'a str, &'a dyn Fn(&str));
+
 /// Run every case; fail naming every case that failed.
-fn run_cases(cases: &[(&str, &dyn Fn(&str))]) {
+fn run_cases(cases: &[Case]) {
     let mut failed = Vec::new();
     for (case, run) in cases {
         if catch_unwind(AssertUnwindSafe(|| run(case))).is_err() {
