@@ -5,7 +5,9 @@
 //! to `root.away` (and, moved back, the re-open answers `already_open: true` again), (iv) `root`
 //! removed, (v) `root` removed and replaced by a new directory at the same path that holds
 //! `a.txt` = `alpha\n` (Interface 1, 2; ruling D-092 O1). The refused re-open leaves the document
-//! open and unchanged and adds nothing to the session log. Written by the test author from
+//! open and unchanged and adds nothing to the session log. By ruling D-125 k1 every case runs
+//! with the document edited (`E` inserted) and again with it opened and not edited; "unchanged"
+//! includes the selection (`cursor.get`) and the redo availability (Interface 2, k2). Written by the test author from
 //! `tasks/T-037-reopen-checks-confinement.md` alone.
 //!
 //! Case (v) uses T-036's removal pattern: every test in this file holds the file-level lock
@@ -120,16 +122,23 @@ fn id_of(p: &Path) -> (u64, u64) {
 struct Session {
     reg: Registry,
     ctx: Context,
+    /// Whether `E` was inserted after the open (ruling D-125 k1 adds the cases without).
+    edited: bool,
+    /// `cursor.get {"doc":1}` after the preparation.
+    cursor: Value,
 }
 
 impl Session {
-    /// A context on `DiskFs::new(root)`, `doc.open a.txt` (doc 1) and `doc.insert` of `E` at 0.
-    fn open_and_edit(root: &Path, case: &str) -> Session {
+    /// A context on `DiskFs::new(root)`, `doc.open a.txt` (doc 1) and, when `edited`,
+    /// `doc.insert` of `E` at 0.
+    fn open_and_edit(root: &Path, edited: bool, case: &str) -> Session {
         let reg = standard_registry().unwrap_or_else(|e| panic!("standard_registry: {e}"));
         let disk = DiskFs::new(root).unwrap_or_else(|e| panic!("{case}: DiskFs::new: {e:?}"));
         let mut s = Session {
             reg,
             ctx: Context::with_vfs(Box::new(disk)),
+            edited,
+            cursor: Value::Null,
         };
         let r = s.ok("doc.open", json!({"path": "a.txt"}), case);
         assert_eq!(r["doc"], json!(1), "{case}: first doc.open: {r}");
@@ -138,12 +147,21 @@ impl Session {
             json!(false),
             "{case}: first doc.open: {r}"
         );
-        s.ok(
-            "doc.insert",
-            json!({"doc": 1, "offset": 0, "text": "E"}),
-            case,
-        );
+        if edited {
+            s.ok(
+                "doc.insert",
+                json!({"doc": 1, "offset": 0, "text": "E"}),
+                case,
+            );
+        }
+        s.cursor = s.ok("cursor.get", json!({"doc": 1}), case);
+        s.assert_unchanged(&format!("{case}: fixture"));
         s
+    }
+
+    /// Length in chars of `a.txt`: `alpha\n`, plus `E` when edited.
+    fn len(&self) -> usize {
+        if self.edited { 7 } else { 6 }
     }
 
     fn ok(&mut self, name: &str, params: Value, case: &str) -> Value {
@@ -178,14 +196,19 @@ impl Session {
         );
     }
 
-    /// "Document unchanged": `doc.info` → dirty, `len_chars` 7, the undo history kept;
-    /// `doc.list` → exactly one document, id 1, `a.txt`.
+    /// "Document unchanged": `doc.info` → dirty iff edited, the length, undo available iff
+    /// edited, no redo; `cursor.get` → the same selection; `doc.list` → exactly one document,
+    /// id 1, `a.txt`.
     fn assert_unchanged(&mut self, case: &str) {
+        let (edited, len) = (self.edited, self.len());
         let r = self.ok("doc.info", json!({"doc": 1}), case);
-        assert_eq!(r["dirty"], json!(true), "{case}: doc.info: {r}");
-        assert_eq!(r["len_chars"], json!(7), "{case}: doc.info: {r}");
+        assert_eq!(r["dirty"], json!(edited), "{case}: doc.info: {r}");
+        assert_eq!(r["len_chars"], json!(len), "{case}: doc.info: {r}");
         assert_eq!(r["path"], json!("a.txt"), "{case}: doc.info: {r}");
-        assert_eq!(r["can_undo"], json!(true), "{case}: doc.info: {r}");
+        assert_eq!(r["can_undo"], json!(edited), "{case}: doc.info: {r}");
+        assert_eq!(r["can_redo"], json!(false), "{case}: doc.info: {r}");
+        let r = self.ok("cursor.get", json!({"doc": 1}), case);
+        assert_eq!(r, self.cursor, "{case}: cursor.get: selection changed");
         let r = self.ok("doc.list", json!({}), case);
         let docs = r["docs"].as_array().unwrap();
         assert_eq!(docs.len(), 1, "{case}: doc.list: {r}");
@@ -198,9 +221,9 @@ impl Session {
 // AC-2, Rust API.
 
 /// (i): `root` renamed to `root.away`, then moved back.
-fn renamed_case(case: &str) {
-    let w = Work::new("renamed");
-    let mut s = Session::open_and_edit(&w.at("root"), case);
+fn renamed_case(edited: bool, case: &str) {
+    let w = Work::new(&format!("renamed-{edited}"));
+    let mut s = Session::open_and_edit(&w.at("root"), edited, case);
     fs::rename(w.at("root"), w.at("root.away")).unwrap();
     assert!(
         fs::symlink_metadata(w.at("root")).is_err(),
@@ -220,7 +243,7 @@ fn renamed_case(case: &str) {
     let r = s.ok("doc.open", json!({"path": "a.txt"}), case);
     assert_eq!(
         r,
-        json!({"already_open": true, "doc": 1, "encoding": "utf-8", "len_chars": 7,
+        json!({"already_open": true, "doc": 1, "encoding": "utf-8", "len_chars": s.len(),
                "line_ending": "lf", "mixed_line_endings": false, "path": "a.txt"}),
         "{case}: moved back: re-open"
     );
@@ -228,9 +251,9 @@ fn renamed_case(case: &str) {
 }
 
 /// (iv): `root` removed, nothing in its place.
-fn removed_case(case: &str) {
-    let w = Work::new("removed");
-    let mut s = Session::open_and_edit(&w.at("root"), case);
+fn removed_case(edited: bool, case: &str) {
+    let w = Work::new(&format!("removed-{edited}"));
+    let mut s = Session::open_and_edit(&w.at("root"), edited, case);
     fs::remove_dir_all(w.at("root")).unwrap();
     assert!(
         fs::symlink_metadata(w.at("root")).is_err(),
@@ -243,10 +266,10 @@ fn removed_case(case: &str) {
 }
 
 /// One trial of (v); true iff the replacement got the removed root's (device, inode).
-fn replaced_trial(case: &str, n: usize) -> bool {
-    let w = Work::new(&format!("replaced-{n}"));
+fn replaced_trial(case: &str, edited: bool, n: usize) -> bool {
+    let w = Work::new(&format!("replaced-{edited}-{n}"));
     let root = w.at("root");
-    let mut s = Session::open_and_edit(&root, &format!("{case} trial {n}"));
+    let mut s = Session::open_and_edit(&root, edited, &format!("{case} trial {n}"));
 
     let old = id_of(&root);
     fs::remove_dir_all(&root).unwrap();
@@ -293,9 +316,9 @@ fn replaced_trial(case: &str, n: usize) -> bool {
 }
 
 /// Up to [`K`] trials; a trial with reuse ends the loop (it has asserted everything).
-fn replaced_case(case: &str) {
+fn replaced_case(edited: bool, case: &str) {
     for n in 0..K {
-        if replaced_trial(case, n) {
+        if replaced_trial(case, edited, n) {
             break;
         }
     }
@@ -307,16 +330,19 @@ type Case = (&'static str, fn(&str));
 #[test]
 fn reopen_after_the_root_changed_is_refused() {
     let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let cases: [Case; 3] = [
-        (
-            "AC-2 (i) root renamed to root.away, then back",
-            renamed_case,
-        ),
-        ("AC-2 (iv) root removed", removed_case),
-        (
-            "AC-2 (v) root removed, replaced by a new directory",
-            replaced_case,
-        ),
+    let cases: [Case; 6] = [
+        ("AC-2 (i) root renamed to root.away, then back", |c| {
+            renamed_case(true, c)
+        }),
+        ("AC-2 (iv) root removed", |c| removed_case(true, c)),
+        ("AC-2 (v) root removed, replaced by a new directory", |c| {
+            replaced_case(true, c)
+        }),
+        ("AC-2 (i) unedited, then back (k1)", |c| {
+            renamed_case(false, c)
+        }),
+        ("AC-2 (iv) unedited (k1)", |c| removed_case(false, c)),
+        ("AC-2 (v) unedited (k1)", |c| replaced_case(false, c)),
     ];
     let mut failed = Vec::new();
     for (case, f) in cases {
