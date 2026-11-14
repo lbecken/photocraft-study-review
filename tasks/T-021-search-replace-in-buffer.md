@@ -779,6 +779,52 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (full gate left to the join, as instructed) · not run: `cargo xtask ci` · missing context:
   none · next: director: join.
 - 2026-11-13T23:41Z · R-183 · ready (joined, gate red at no-skip) · (entry written by the implementer in its report and recorded here by the director, because the branch then held the director's merge) · did: on `task/T-021-tests` only, removed `#[cfg(unix)]` from `search_memory_is_bounded` (the gate's no-skip rule refuses a cfg-disabled test; the test runs `sh` with `ulimit -v`, Unix only by Pinned (d)/D-014; no skips.toml entry, no other change to the test). Checked both acceptance files against `xtask/src/noskip.rs` rules (lines 1–40): only `#![cfg(test)]`; no `#[ignore]`/`cfg_attr(…, ignore)`, no `skip*` call, no ignored doc fence; every `return` is in a helper, not a test function. `cargo xtask no-skip` PASS in the tests worktree (140 files, 0 allowlisted); `cargo fmt --check` clean; `cargo clippy -p kiln-cli --tests -- -D warnings` clean; on base `search_memory_is_bounded` fails by assertion (`unknown_command` for `search.find`). Commit f48627086b92f166101d2b6533d31dc6ee93e894. · gate attempts: 0 (full gate at the director's next join) · not run: `cargo xtask ci`; the joined suite · missing context: my own gate ran on the code branch without the acceptance files, so the no-skip check never saw them; running `cargo xtask no-skip` in the tests worktree before handing over would have caught it · next: director: re-join.
+- 2026-11-14T03:16Z · R-191 · review r1 request-changes · did: rework per D-116. I read the
+  rulings in the primary checkout's copy of this file, and findings 1–6 of `reviews/T-021-r1.md`.
+  Acknowledged, all accepted: q1 (no `"default": null`), q2 (a case for the default
+  `case_sensitive` on the tests branch; the ruling is the §6 permission), q3 (S4 names its
+  text), q4 (S2 says only what was measured), q5 (typing-group sentence from three probes),
+  q6 (own unit tests compare kinds and variants). Container restarted twice since R-183: no
+  release binary rebuilt, no new figure; the R-173 figures stand, reworded only.
+  q1: `search.rs` publishes the true defaults through schemars field transforms (regex,
+  whole_word, all false; case_sensitive true; limit 10000; from 0); `replacement` and the
+  required params have no `default`. `cargo xtask schema --write` regenerated it. New unit test
+  `optional_params_publish_their_defaults`. Behaviour unchanged: `null` is still refused, by
+  `params_and_document_are_checked_first`.
+  q2: on `task/T-021-tests` a4a8f4e, `case_sensitive_defaults_to_true` (literal and regex;
+  find, replace-all and replace-one with `case_sensitive` omitted on `Foo foo` → only `4..7`,
+  text `Foo x`). On base it fails by assertion (`unknown_command` for `search.find`). On a
+  throwaway join (deleted, never committed on `task/T-021`) all 14 CLI tests pass. With
+  `unwrap_or(true)` → `unwrap_or(false)` (the reviewer's M24) the new test fails: killed. In
+  the tests worktree `cargo fmt --check` is clean, `cargo clippy -p kiln-cli --tests -- -D
+  warnings` is clean, and `cargo xtask no-skip` passes (140 files, 0 allowlisted).
+  q3: S4 now says "(`ab` repeated 500,000 times)".
+  q4: S2 keeps "It keeps one range and one replacement text per match, never the capture
+  groups of more than one match." The rest now reads: in one measurement, a replace-all, its
+  undo step included, grew the process's peak resident memory by about 210 bytes per match.
+  The R-173 conditions are stated with it: release build, `x`×400,000, `()`×100, `-`, peak with
+  `doc.open` plus the replace-all less `doc.open` alone, two runs each, `/usr/bin/time -v`,
+  4-core machine running other builds, not a bound.
+  q5 probes: debug `kiln-cli run` (build products do not differ in behaviour; no release
+  rebuilt) on `abc`. Each probe is: insert `q`, `search.replace {all:true}`, insert `r`, `doc.undo`.
+  (1) `b`→`b`: `replaced 1`, text unchanged; the undo removed only `r` (`abcq`); a second undo
+  undid the no-change step (text still `abcq`): the group ended and an undo step was added.
+  (2) regex `x*`→`""`: `replaced 6`; the undo removed `q` and `r` together: no edit, the
+  group stayed open. (3) `z`→`y`: `replaced 0`; the undo removed both: the group stayed open,
+  and a later undo answered `undone: false`.
+  Sentence committed: "Every replacement counts in `replaced`, also one whose text equals the
+  match. A `search.replace` with at least one replacement that is not an empty match replaced
+  by the empty string ends the document's typing group and adds an undo step, even when the
+  text does not change (a match replaced by identical text). An empty match replaced by the
+  empty string is no edit: when every replacement is of this kind, nothing changes, as with no
+  match at all (no undo step, and an open typing group stays open)."
+  q6: `search.rs` `messages_of_refusals` became `kinds_of_refusals` (code/kind only).
+  `query.rs` `errors_in_order` compares `QueryError` variants, and `replacements` compares the
+  `TemplateError` value. · gate attempts: 1 (last: green; GATE PASSED in 480.2s, 11 steps, 728
+  passed, 0 failed, 0 ignored in 89 suites; fuzz, budgets EMPTY) · not run: release
+  measurements (not asked); the gate on the joined tree with the new case (the code branch
+  holds the director's earlier merge, not a4a8f4e) · missing context: none · next: director:
+  merge the tests branch, round 2.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
