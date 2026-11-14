@@ -32,13 +32,15 @@
 //!   reaches that same directory; if the root path or a directory above it has been
 //!   replaced since (for example by a symlink to another directory), or leads nowhere, the
 //!   call is refused with `OutsideRoot` before anything else is looked at.
-//! - Every `read`, `write_atomic`, `is_file` and `list_dir` first computes the *location* of its
-//!   path (for `list_dir` of the root: the root itself) by
+//! - Every `read`, `write_atomic`, `is_file`, `list_dir` and `check_location` first computes the
+//!   *location* of its path (for `list_dir` of the root: the root itself) by
 //!   walking it from the root one component at a time, as the kernel does: each symlink is
 //!   read and its target's components are walked in its place (an absolute target from `/`),
 //!   and `..` pops the directory actually reached so far (physically, never lexically). The
 //!   walk ends at an existing entry that is not a symlink, or at the first missing (or
-//!   non-directory) component.
+//!   non-directory) component. `check_location` (T-037) stops after the walk: it answers
+//!   `Ok(())` for an inside location of any kind (a file, a directory, a FIFO or other special
+//!   file, nothing, or a missing parent) and opens nothing.
 //! - The location is inside the root iff it equals the root or lies below it, compared
 //!   component by component (`Path::starts_with` on symlink-free absolute paths, so a sibling
 //!   `<root>x` is not inside). Only the final location decides. A location outside is refused
@@ -520,6 +522,13 @@ impl Vfs for DiskFs {
             .entries
             .sort_unstable_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
         Ok(listing)
+    }
+
+    /// The root check and the walk (`locate`), and nothing after them: `Ok(())` for an inside
+    /// location of any kind (file, directory, special file, nothing, missing parent); nothing
+    /// is opened.
+    fn check_location(&self, path: &RelPath) -> Result<(), VfsError> {
+        self.locate(path).map(|_| ())
     }
 }
 

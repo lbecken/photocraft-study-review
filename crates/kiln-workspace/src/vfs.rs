@@ -108,4 +108,9 @@ pub trait Vfs: std::fmt::Debug {
     /// location is a file or another non-directory, and for `DiskFs` `OutsideRoot` and `Io` as
     /// for `read`. An error about the root itself names the placeholder path `(root)`.
     fn list_dir(&self, dir: Option<&RelPath>) -> Result<DirListing, VfsError>;
+    /// The location check of `path` (`docs/protocol/paths.md`, "The root" and "Location"):
+    /// `Ok(())` iff the root is still the root and the location of `path` is inside it,
+    /// whatever is or is not there. Errors: `OutsideRoot`, then `Io` (the walk failed inside the
+    /// root), as for `read`. Opens, reads, creates and removes nothing.
+    fn check_location(&self, path: &RelPath) -> Result<(), VfsError>;
 }

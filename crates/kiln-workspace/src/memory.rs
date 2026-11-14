@@ -131,6 +131,12 @@ impl Vfs for MemoryFs {
             skipped: 0,
         })
     }
+
+    /// Always `Ok(())`: an in-memory file system has no root identity and no links, so every
+    /// path's location is inside, whatever is or is not stored there.
+    fn check_location(&self, _path: &RelPath) -> Result<(), VfsError> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

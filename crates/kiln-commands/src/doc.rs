@@ -8,7 +8,9 @@
 //! - **Ids.** An id is assigned only by a successful first open of a path. A `doc.open` that
 //!   fails (invalid path, missing file, file that does not decode) consumes no id, and
 //!   re-opening a path that is already open returns its existing id with
-//!   `already_open: true`. So after failed opens of `missing.txt`, an undecodable `bad.txt`
+//!   `already_open: true` (unless the path now resolves outside the root, or where it leads
+//!   cannot be determined: then the re-open is refused like a first open and changes nothing).
+//!   So after failed opens of `missing.txt`, an undecodable `bad.txt`
 //!   and `../x`, opening `a.txt` gives doc 1, opening it again gives doc 1 again, and
 //!   opening `b.txt` gives doc 2.
 //! - **Mutating flag.** `mutating` is a property of the command, not of one invocation:
@@ -19,7 +21,7 @@
 //!   still be redone after it (the document is then dirty again).
 
 use kiln_text::{Buffer, LineCol, LineEnding, LineEndings, PositionError};
-use kiln_workspace::{Document, Encoding, RelPath};
+use kiln_workspace::{Document, Encoding, OpenError, RelPath};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -114,7 +116,8 @@ pub(crate) struct OpenParams {
 pub(crate) struct OpenResult {
     /// Id of the document.
     doc: u64,
-    /// True iff the path was already open (the existing document is returned, unchanged).
+    /// True iff the path was already open (the existing document is returned, unchanged; only
+    /// where the path leads was checked, and the file was not read).
     already_open: bool,
     /// The document's path.
     path: String,
@@ -133,7 +136,10 @@ pub(crate) struct Open;
 impl Command for Open {
     const NAME: &'static str = "doc.open";
     const DOC: &'static str = "Open a file as a document and return its id. Opening a path that \
-        is already open returns the existing document unchanged, with `already_open: true`.";
+        is already open returns the existing document unchanged, with `already_open: true`, and \
+        reads nothing; such a re-open is still refused, like a first open, when the root path no \
+        longer leads to the root or the path now resolves outside it (`outside_root`), or when \
+        where it leads cannot be determined (`io_error`).";
     const MUTATING: bool = true;
     type Params = OpenParams;
     type Output = OpenResult;
@@ -175,7 +181,15 @@ impl Command for Open {
             .find(|(_, d)| d.path() == &path)
             .map(|(id, _)| *id);
         let (id, already_open) = match existing {
-            Some(id) => (id, true),
+            Some(id) => {
+                // A re-open checks only where the path leads (T-037, ruling D-092 O1): the root
+                // check and the walk, refused exactly as a first open; nothing is read.
+                ctx.vfs().check_location(&path).map_err(|e| {
+                    let e = OpenError::Vfs(e);
+                    CommandError::rejected((&e).into(), e.to_string())
+                })?;
+                (id, true)
+            }
             None => {
                 let doc = Document::open(ctx.vfs(), &path)
                     .map_err(|e| CommandError::rejected((&e).into(), e.to_string()))?;

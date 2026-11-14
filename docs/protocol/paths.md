@@ -17,12 +17,13 @@ while the session runs (below), and it does not start a session on a root it can
 `kiln-cli` then exits 2 with a `bad --root` message on stderr, and no request runs.
 
 The root is that directory, not its path. Kiln keeps it open while the session runs, only so
-that no other directory can take its identity. Before each request Kiln resolves `--root` again,
-as it was given, and goes on only if it still leads to that same directory. Once the root path
+that no other directory can take its identity. Before each request that uses the file system
+(`doc.open`, also of a path that is already open, `doc.save` and `project.tree`), Kiln resolves
+`--root` again, as it was given, and goes on only if it still leads to that same directory. Once the root path
 stops leading to the root directory (the root, or a directory above it, was replaced, for
 example by a symlink to another directory), the session refuses every path with `outside_root`,
-at open and at save, including the save of a document opened before; nothing is read or written
-in the other directory. `project.tree` is refused with `outside_root` as well. The same refusal
+at open and at save, including the save of a document opened before and `doc.open` of a path
+that is already open; nothing is read or written in the other directory. `project.tree` is refused with `outside_root` as well. The same refusal
 is given while the root path leads nowhere (the root renamed or removed with nothing in its
 place). If the path leads to the root directory again (moved back, or a link at that path
 pointed at it), the session works there again.
@@ -48,7 +49,8 @@ counts: a chain of links that leaves the root and comes back inside is inside.
 
 ## The rule
 
-At open and at save (and whenever Kiln checks whether a file exists):
+At open and at save (and whenever Kiln checks whether a file exists), except as the last item
+below says for a path that is already open:
 
 - **A path whose location is outside the root is refused** as `rejected` / `outside_root`, with
   the message `cannot open <path>: resolves outside the root` or
@@ -72,9 +74,20 @@ At open and at save (and whenever Kiln checks whether a file exists):
   `doc.save`: if the file, a directory on its path, the root or a directory above the root
   was replaced in between by a link that leads outside, or the file by a FIFO, the save is
   refused, and the document stays modified.
+- **A path that is already open is checked again, for where it leads only.** A `doc.open` of a
+  path that is open in the session (the same path text) reads nothing. It is refused with
+  `outside_root` when the root path no longer leads to the root or the path's location is now
+  outside the root, and with `io_error` when its location cannot be determined inside the root
+  (for example more than 40 symlinks, or a directory on the way that cannot be searched).
+  Otherwise it returns the open document unchanged with `already_open: true`, even if the file
+  has since been deleted, replaced by a directory, a FIFO or a link that stays inside the root,
+  made unreadable, or no longer decodes. A refused re-open leaves the document open and
+  unchanged.
 
 When several of these apply, the first in this order is reported: `invalid_path`,
-`outside_root`, `not_found`, `not_a_file`, any other failure (`io_error`). A path that follows
+`outside_root`, `not_found`, `not_a_file`, any other failure (`io_error`). For a path that is
+already open, only `invalid_path`, `outside_root` and `io_error` can be reported, in this order.
+A path that follows
 more than 40 symlinks is `io_error` (`too many levels of symbolic links`). A link whose target
 ends in `/` must lead to a directory, as the kernel requires; a file reached that way is
 `not_found`.
@@ -94,5 +107,6 @@ error object on stderr.
   the write) can slip through, so a file outside can be read or written and a temporary file
   can be left behind, and a FIFO swapped in during that window can make the request block.
   Changes made between two requests, to the path or to the root and the directories above it,
-  are always caught.
+  are always caught: the next request checks the path again (`doc.open` of a path that is
+  already open checks only where it leads, see The rule).
 - Unix only.
