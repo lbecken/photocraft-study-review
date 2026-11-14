@@ -783,4 +783,28 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### test author
 <!-- end test author log -->
 ### reviewer
+- 2026-11-14 · R-187 · tests_joined · did: round 1 full review of `9dcd59d41b4763a2b9eedc19239fbe867dfc6d52`
+  (arm: implementer). Rulings acknowledged, all accepted: c1–c7, D-044, D-101 Q-1 to Q-3, both
+  readings of D-102, D-106 (read in the primary checkout's copy).
+  History: tests `f7a77b8` (child of base) come before code `9044413` (also a child of base).
+  The second tests commit `46bc135` weakens no assertion: the empty-pattern generator fix, the
+  line-break typing case and model-side corpus thresholds. The third commit `f486270` only
+  drops `#[cfg(unix)]`.
+  Every AC was checked through `kiln-cli run/control/exec`: worked examples, options,
+  refusals, their order, `null`, limits, CRLF/multibyte, the typing group, undo/redo,
+  selection mapping (own Python model: 360 cases, 0 mismatches), and log replay. I ran AC-8
+  under `ulimit -v 524288` myself (debug: 23.5 s, 97,452 KiB, exit 0).
+  24 mutants: 22 killed by acceptance tests, 1 equivalent (empty `apply_edits`), 1 survived
+  (default `case_sensitive`, also against 280 tests in kiln-commands, kiln-control and
+  kiln-cli). Docs were checked against the binary.
+  Verdict request-changes: defect 1 (`commands.json` publishes `"default": null` for every
+  optional param); test gap 1 (default `case_sensitive` untested); spec gaps 2 (S4 does not
+  name its `ab` text; S2's figure covers more than the plan); nits 2 (the "changes anything"
+  typing-group sentence; unit tests pin messages against Pinned (f)). Review:
+  `reviews/T-021-r1.md`.
+  · gate attempts: 0 (ran `cargo xtask no-skip` PASS, `cargo xtask hygiene` at commit, the
+  acceptance files 13 + 3 passed) · not run: `cargo xtask ci`, a release build, re-measuring
+  S2/S4, Windows, the full suite per mutant · missing context: none · next: implementer
+  fixes findings 1–2 (2 needs the director's ruling to add a test after the join); director
+  rules on spec gaps 3–4; round 2.
 <!-- end reviewer log -->
