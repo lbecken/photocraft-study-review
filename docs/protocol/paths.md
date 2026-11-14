@@ -18,16 +18,16 @@ while the session runs (below), and it does not start a session on a root it can
 
 The root is that directory, not its path. Kiln keeps it open while the session runs, only so
 that no other directory can take its identity. Before each request that uses the file system
-(`doc.open`, also of a path that is already open, `doc.save` and `project.tree`), Kiln resolves
-`--root` again, as it was given, and goes on only if it still leads to that same directory.
-Once the root path stops leading to the root directory (the root, or a directory above it, was
-replaced, for example by a symlink to another directory), the session refuses every path with
-`outside_root`, at open and at save, including the save of a document opened before and
-`doc.open` of a path that is already open; nothing is read or written in the other directory.
-`project.tree` is refused with `outside_root` as well. The same refusal is given while the root
-path leads nowhere (the root renamed or removed with nothing in its place). If the path leads
-to the root directory again (moved back, or a link at that path pointed at it), the session
-works there again.
+(`doc.open`, also of a path that is already open, `doc.save`, `project.tree` and
+`nav.workspace-symbols`), Kiln resolves `--root` again, as it was given, and goes on only if it
+still leads to that same directory. Once the root path stops leading to the root directory (the
+root, or a directory above it, was replaced, for example by a symlink to another directory),
+the session refuses every path with `outside_root`, at open and at save, including the save of
+a document opened before and `doc.open` of a path that is already open; nothing is read or
+written in the other directory. `project.tree` and `nav.workspace-symbols` are refused with
+`outside_root` as well. The same refusal is given while the root path leads nowhere (the root
+renamed or removed with nothing in its place). If the path leads to the root directory again
+(moved back, or a link at that path pointed at it), the session works there again.
 
 ## Lexical refusals (unchanged)
 
