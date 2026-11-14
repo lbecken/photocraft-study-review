@@ -681,6 +681,44 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
       take the first document out of view at 200×200 (w3 d).
   - gate attempts: 0 this run (clippy, fmt, `no-skip`, `hygiene` and `cargo test -p kiln` run on
     their own) · missing context: none · next: director, join.
+- 2026-11-14T21:02Z · R-233 · after the third join · did: applied D-151 w7, which I
+  acknowledged and accepted before acting on it. The test's assumption was mine: at 200×200,
+  `Open` is offscreen in both snapshots, and w1 rightly gives it no rows. I read only the ruling
+  in the task file on main.
+  - `w3d_scrolled_list_reports_only_visible_text`:
+    - removed the "Open lost its rows" assertion;
+    - removed the preconditions that the first document is visible before the scroll and
+      offscreen after it, which assumed a layout at 200×200;
+    - kept: every node outside `Documents` has the same rows after the scroll as before (none
+      for a node offscreen in both), and `Path` shows the typed `zz`, since the test focused and
+      typed into it;
+    - kept the w1 checks: offscreen documents have no rows, and no row under `Documents` holds an
+      offscreen document's path. The one remaining precondition is that the 100-document list
+      overflows (some document is offscreen), the same area argument as the n8 case.
+  - Same kind of assumption found and removed in two other tests:
+    - `w3c_typed_text_is_painted_with_structured_colours`: it required at least 3 painted runs,
+      "Path, Open, a document". It now requires only `Path`'s own painted run, which the test
+      typed.
+    - `w3e_more_steps_scroll_further`:
+      - it required document 0 visible at 200×200; it now runs at the default size, where
+        100 documents also overflow;
+      - its only precondition is that the list overflows and that some document is visible after
+        each scroll, without which the comparison cannot be made.
+  - Checked and unchanged: `w2` (its precondition is only that the list overflows), `w3a`,
+    `w3b`, `w3f` (all at the default size, as AC-2 to AC-7), and the n8 case (it finds its
+    offscreen node in the snapshot).
+  - Base: 26 acceptance tests fail by assertion; both guards pass. Clippy, `cargo fmt --all
+    --check`, `no-skip` and `hygiene` PASS.
+  - Self-check:
+    - The stub was rebuilt (never committed, deleted afterwards). It now also places `Open`
+      offscreen with no rows in a window narrower than 400 points, as the director measured.
+    - All 26 acceptance tests and both guards pass against it.
+    - B40 (rows by full rectangle) and B41 (`Path` loses its rows after a scroll) are still
+      killed by `w3d`.
+    - Every other seeded bug (B1–B23, B30–B32, B42–B47, B50) and the naive mode are still killed.
+  - Not run: the full gate. Unchecked until the join: whether a document is visible at the
+    default size after 1 and 4 steps of scrolling (w3e).
+  - gate attempts: 0 this run · missing context: none · next: director, join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
