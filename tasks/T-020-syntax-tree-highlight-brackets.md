@@ -659,6 +659,48 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   gate attempts: 0 this run (full gate left to the join, as instructed; last full gate green in
   R-167). · not run: `cargo xtask ci`; no new measurement. · missing context: the ruling was not
   in this worktree's copy of the task file. · next: director; join.
+- 2026-11-14T02:20Z · R-184 · in_progress (review r1 request-changes, base `b34107c`) ·
+  rulings acknowledged before acting: D-110 r1 (read in the primary checkout's copy of this
+  file; the Memory section replaced by the director's text with my two release figures, no
+  sentence on the cause unless shown by a run; the first Time sentence replaced) accept; r4
+  (one sentence that an inserted bracket is never a partner, after running the reviewer's case;
+  the `syntax.match-bracket` description states the rule or points to `syntax.md`; schema
+  regenerated) accept; r2 and r3 are the test author's (r2 confirms the exclusion of `MISSING`
+  leaves, which `brackets.rs` already has), noted. · did: r4 case first, debug `kiln-cli run
+  --root` on `fn f() { g(1; }`: `syntax.tree` has one error `{kind: missing, start: 12, end:
+  12}` (`(MISSING ")"@12..12)` in `arguments@10..12`); match-bracket 10 → `{"bracket":null}`,
+  12 → null, 7 and 14 → `{open:7, close:14}`. `syntax.md`: added "A bracket the parser
+  inserted to recover (a `MISSING` node, which holds no char) is never a partner: in `fn f() {
+  g(1; }` the `(` at 10 gives `null`."; Time's first sentence now exactly "No time bound exists
+  for any `syntax.*` command: the size limit bounds the length of the text a command accepts,
+  not the time a parse takes or the memory it needs."; Memory section is r1's text with 689 MiB
+  (`a;`) and 2,073 MiB (`1;`), plus "Without the `syntax.highlight` call, the same script on
+  `1;` repeated peaked at 566 MiB; with it, the `syntax.highlight` reply held 1,048,575
+  spans." (both shown by the runs below). `syntax.rs`: the `syntax.match-bracket` DOC now
+  states the rule (same kind, direct children of the same node, stack, inserted brackets never
+  partners) and points to `docs/protocol/syntax.md`; `docs/commands.json` regenerated
+  (`cargo xtask schema --write`: `PASS schema: 23 commands; audit ok`). Commits `5dcbc98`,
+  `ef16572`. · measurements: one `cargo build --release -p kiln-cli` at `5dcbc98` (114.7 s);
+  inputs under `target/t020-m/` (1,048,576 bytes each: `a;`×524,288, `1;`×524,288); each run
+  alone under `timeout 600 /usr/bin/time -f '%e s %M KB' release/kiln-cli run <script> --root
+  t020-m` (cwd `target/`), load average about 7 on 4 cores from other builders. Script:
+  `doc.open {path}`, `syntax.tree {doc:1}`, `doc.replace {doc:1, start:0, end:1, text:" "}`,
+  `syntax.tree {doc:1}`, `syntax.highlight {doc:1}`. Outputs: `a;` `3.95 s 705700 KB`, exit
+  0, all five `ok`, tree 2 `full`, tree 4 `incremental`, 1 span → 705,700 / 1024 = 689.16 MiB;
+  `1;` `6.94 s 2123024 KB`, exit 0, all five `ok`, tree 2 `full`, tree 4 `incremental`,
+  1,048,575 spans → 2,123,024 / 1024 = 2,073.27 MiB. Same script without the
+  `syntax.highlight` call (its first four lines): `1;` `2.95 s 579576 KB` → 566.0 MiB; `a;`
+  `3.49 s 705708 KB` (not used in the document). Not killed for memory. `target/release`, the
+  inputs and the r4 probe files were deleted before the gate. · interruption: a usage limit
+  stopped the run at about 23:54Z after the commits above and a green gate (`GATE PASSED in
+  276.5s`, test `722 passed, 0 failed, 0 ignored in 88 suites`) but before this entry; the
+  machine restarted at 02:11Z. Afterwards: worktree clean at `ef16572`, no input left; no
+  rebuild, no re-measurement (the figures above are the outputs I saw before the stop). ·
+  gate attempts: 2 (both green; last after the restart: `GATE PASSED in 396.6s (11 steps; 2
+  step(s) EMPTY (nothing registered): fuzz, budgets)`, test `722 passed, 0 failed, 0 ignored
+  in 88 suites`). · not run: no figure re-measured after the restart; the reviewer's other
+  probes. · missing context: the D-110 rulings are not in this worktree's copy of the file. ·
+  next: director; review round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-13T22:39Z · R-169 · ready · rulings acknowledged, all accepted and acted on: D-044
