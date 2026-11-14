@@ -383,8 +383,11 @@ fn assert_unchanged(s: &mut Session, path: &str, case: &str) {
     assert_eq!(docs[0]["path"], json!(path), "{case}: doc.list: {r}");
 }
 
+/// A named case: the closure gets the name for its assertion messages.
+type Case<'a> = (&'a str, &'a dyn Fn(&str));
+
 /// Run every case; fail naming every case that failed.
-fn run_cases(cases: &[(&str, &dyn Fn(&str))]) {
+fn run_cases(cases: &[Case]) {
     let mut failed = Vec::new();
     for (case, f) in cases {
         if catch_unwind(AssertUnwindSafe(|| f(case))).is_err() {
