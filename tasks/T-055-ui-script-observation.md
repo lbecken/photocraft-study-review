@@ -2,7 +2,7 @@
 id: T-055
 title: "Run the Kiln UI without a window from a script of control requests and UI requests, and read back what each frame shows"
 tier: high              # ADR-0002: adds dependencies (egui; kiln-control as an edge of kiln-ui); a new file write (--log); a gate path if Q-1 is answered A (xtask/ui-allowlist.toml)
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # an interface task: no ui.* item can be observed before it; T-056 claims the first items through it
 depends_on: []          # nothing unmerged; T-054 is deferred (D-147) and rebases on this task's change of the root Cargo.toml
@@ -357,6 +357,33 @@ The first join failed one acceptance test of 18, `ac6_frame_counts_add_up` (21 f
 - **n11 (question 8).** Painted text belongs to the deepest node whose rectangle contains the centre of each char,
   and a space takes the colour of its neighbour. Accepted as the published rule; `docs/protocol/ui.md` states it
   with that limit.
+
+### Rulings on review round 1 (director, D-150; `reviews/T-055-r1.md` at `789b54772db60d1d093a73b50e037ac4fedf93f9`; told to both builders)
+- **w1 (finding 1, defect; corrects n11; implementer).** A painted char belongs to the deepest node whose **visible
+  part** contains its centre, the visible part of a node being its rectangle cut by the window and by every scroll
+  area above it. A node marked `offscreen` therefore has no `rows`, and a scrolled list never takes the text of a
+  node outside it. (n11 said "rectangle"; the reviewer showed that after `Documents` is scrolled the `Path` label
+  loses its rows to the list.) `docs/protocol/ui.md` says this in the place of the old sentence, in agreement with
+  its definition of `rows`.
+- **w2 (finding 2 and spec gap 10; implementer for the sentence, test author for the test).** The sentence "Every
+  interactive node has a non-empty label" is replaced by what holds: every node of role `button` or `text_input`
+  has a non-empty `label`; the scroll bar the toolkit adds to an overflowing scroll area is a node of role
+  `scroll_bar` without a label, and scripts scroll with `scroll` on the `scroll_view`. AC-10 is checked also on a
+  snapshot whose `Documents` list overflows.
+- **w3 (findings 3 to 8, test gaps; test author).** Tests are added for: the `settled` flag of a `frames` request;
+  a target given by `label_contains`; colours as structure, not as values (every `color` has the form `#rrggbb`,
+  no two adjacent runs of a row have the same colour, and text typed into `Path` is reported in its rows); after a
+  `scroll` of `Documents`: nodes outside the visible part are `offscreen` and have no `rows`, the `Path` label
+  keeps its rows, and the rows of `Documents` hold only visible documents (this is the test of w1); more `steps`
+  scroll further than fewer; after a control `doc.close` and one frame `Documents` has lost that child. No test
+  pins a colour value (golden rule 9: T-056 adds highlight colours).
+- **w4 (spec gap 9; test author).** The guard `kiln_without_subcommand_exits_1_with_a_message` pins exit status 1,
+  which T-056 changes. It asserts instead what stays true: bare `kiln` with no display exits with a non-zero
+  status, a message on stderr and nothing on stdout. The test is renamed to say so.
+- **w5 (spec gap 11; implementer).** A `click` without `at` is delivered at the centre of the target's visible
+  part. The implementer adds a unit test; the reviewer checks it in round 2.
+- **w6 (nit 12; implementer).** `docs/protocol/ui.md` "Limits" says that a FIFO given as the script or as `--log`
+  blocks until its other end is opened, as with `kiln-cli run`; the implementer logs the command that shows it.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
