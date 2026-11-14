@@ -596,7 +596,6 @@ fn command_line_errors_exit_2_with_nothing_on_stdout() {
         &["script", "s.jsonl", "--size", "1280*800"],
         &["script", "s.jsonl", "--log", "a", "--log", "b"],
         &["script"],
-        &["script", "s.jsonl", "t.jsonl"],
         &["script", "missing.jsonl", "--root", "proj"],
         &["script", "s.jsonl", "--root", "nowhere"],
         &[
@@ -623,6 +622,11 @@ fn command_line_errors_exit_2_with_nothing_on_stdout() {
         assert_eq!(out.status.code(), Some(0), "{args:?}");
         assert!(!out.stdout.is_empty(), "{args:?}");
     }
+    // A second positional argument is a start path (T-056, Q-6 A), not a usage error: a
+    // refused one (`t.jsonl` is not there) gets no response line and leaves the exit code.
+    let out = kiln_in(&dir, &["script", "s.jsonl", "t.jsonl"], &[]);
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(lines(&out).len(), 1);
     // Options after or before the positional; --memory and --size accepted.
     let out = kiln_in(
         &dir,
