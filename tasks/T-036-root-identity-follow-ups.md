@@ -1078,4 +1078,17 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   · gate attempts: 0 (ran `cargo test --workspace` on head: 770 passed; `no-skip` PASS; `hygiene`
   PASS) · not run: `cargo xtask ci`, ACL/LSM denial, EMFILE on the root open, the non-root
   identity branch, TG-2 · missing context: none · next: implementer fixes finding 1; round 2.
+- 2026-11-14T04:20Z · R-199 · tests_joined · did: round 2 (final) of the delta from
+  `29c1f40` to `5b2bffb677b6f8ad89b38ca27cfc47dbbb3243ef`; verdict approve, merge recommended
+  (`reviews/T-036-r2.md`, commit `66842ee`). Rulings D-119 p1–p3 acknowledged and accepted
+  (read from the primary checkout's copy).
+  - The delta is the test guard, the wait after kill and the C1 pointer sentence; no `src`
+    change, no assertion changed.
+  - Finding 1 resolved: M2, M5, a hanging child and an aborting child each made the test fail,
+    and each left 0 `/tmp/k8i-*-t036-*` and no process; so did the precondition panic.
+  - Finding 2 resolved: the sentence matches the binary as 65534 (`invalid_json` before the
+    root check for `exec`; `bad --root` for valid JSON, `run` and `control`).
+  - Finding 3 accepted by p3.
+  · gate attempts: 0 (`hygiene` PASS) · not run: `cargo xtask ci`, full suite, non-root branch ·
+  missing context: none · next: director records the approval.
 <!-- end reviewer log -->
