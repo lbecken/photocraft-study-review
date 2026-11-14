@@ -168,8 +168,10 @@ kiln-cli --help | -h | <subcommand> --help
   then the usage text, and exits 2.
 - `--root <dir>` (default: the current directory) is the root of the disk file system the
   commands act on; paths in requests are relative to it (see Paths for what is and is not
-  refused). A root that does not exist or is not a directory is a usage error whose message
-  names the path.
+  refused). A root that does not exist, is not a directory, or cannot be opened for reading
+  (see `docs/protocol/paths.md`, The root) is refused before any request runs: a
+  `kiln-cli: bad --root:` message naming the root as given is written on stderr, nothing on
+  stdout, and the exit code is 2; the usage text is not printed.
 - `--memory` (for tests) uses an empty in-memory file system instead.
 - `--memory-seed <manifest>` (`run` and `exec`) uses an in-memory file system holding exactly
   the files of a JSON manifest, read once at start; saves change the in-memory files only. The
@@ -194,8 +196,8 @@ kiln-cli --help | -h | <subcommand> --help
 
 | Subcommand | 0 | 1 | 2 | 3 |
 |---|---|---|---|---|
-| `run` | every response `ok:true` | writing stdout failed | usage error, unreadable script, root not a directory, bad `--memory-seed` manifest, log file not writable (message on stderr, nothing on stdout) | at least one response `ok:false` |
-| `control` | end of input, whatever the responses | reading stdin or writing stdout failed | usage error, root not a directory | — |
+| `run` | every response `ok:true` | writing stdout failed | usage error, unreadable script, bad root (see `--root`), bad `--memory-seed` manifest, log file not writable (message on stderr, nothing on stdout) | at least one response `ok:false` |
+| `control` | end of input, whatever the responses | reading stdin or writing stdout failed | usage error, bad root (see `--root`) | — |
 | `exec` | success | internal error, or writing stdout failed | usage error, bad root, bad `--memory-seed` manifest, invalid JSON, command error | — |
 | `commands` | success | audit problems, or writing stdout failed | usage error | — |
 | `--help`, `-h` | usage printed | writing stdout failed | — | — |
