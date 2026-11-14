@@ -2,7 +2,7 @@
 id: T-020
 title: "Report a document's syntax tree with incremental reparse, highlight spans that partition the text, and bracket matching that ignores strings and comments"
 tier: medium            # ADR-0002 default: in-memory behaviour, new command group; tree-sitter and the oracle dev-deps were added by T-016
-state: queued
+state: merged
 owner_role: planner
 scorecard_items: [syntax.parse, syntax.incremental, syntax.highlight, syntax.brackets]
 depends_on: [T-015, T-016, T-032]   # all merged (spec check R-157 on main 891ae13; re-read R-165 on c538ef8)
