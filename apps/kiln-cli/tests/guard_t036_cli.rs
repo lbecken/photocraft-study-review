@@ -189,7 +189,11 @@ impl Drop for Session {
 /// `r` answers request `id` with `rejected` / `outside_root` and names no host work path.
 fn assert_outside(r: &Value, id: u64, w: &Work, note: &str) {
     assert_eq!(r["id"], json!(id), "{note}: {r}");
-    assert_eq!(r["ok"], json!(false), "{note}: request {id} not refused: {r}");
+    assert_eq!(
+        r["ok"],
+        json!(false),
+        "{note}: request {id} not refused: {r}"
+    );
     assert_eq!(r["error"]["code"], json!("rejected"), "{note}: {r}");
     assert_eq!(r["error"]["kind"], json!("outside_root"), "{note}: {r}");
     assert!(

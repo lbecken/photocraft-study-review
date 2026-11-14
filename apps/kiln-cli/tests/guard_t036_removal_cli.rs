@@ -265,7 +265,10 @@ impl Session {
             .stderr(Stdio::null());
         id.apply(&mut cmd);
         let mut child = cmd.spawn().unwrap_or_else(|e| {
-            panic!("precondition: cannot spawn kiln-cli control as uid {}: {e}", id.uid)
+            panic!(
+                "precondition: cannot spawn kiln-cli control as uid {}: {e}",
+                id.uid
+            )
         });
         let stdout = child.stdout.take().unwrap();
         let (tx, out) = mpsc::channel();
@@ -409,7 +412,11 @@ fn trial(case: &str, link: bool, unreadable_after_start: bool, n: usize) -> bool
     );
     eprintln!("{line}");
     // The replacement really is what the root path reaches now.
-    assert_eq!(fs::read(root.join("secret.txt")).unwrap(), SECRET, "[{line}]");
+    assert_eq!(
+        fs::read(root.join("secret.txt")).unwrap(),
+        SECRET,
+        "[{line}]"
+    );
     assert!(!root.join("f.txt").exists(), "[{line}]");
     let before = snapshot(&w.dir);
     let replacement_before = snapshot(&replacement);
@@ -423,7 +430,11 @@ fn trial(case: &str, link: bool, unreadable_after_start: bool, n: usize) -> bool
         let id = request["id"].clone();
         let r = s.ask(request);
         assert_eq!(r["id"], id, "[{line}] {r}");
-        assert_eq!(r["ok"], json!(false), "[{line}] request {id} not refused: {r}");
+        assert_eq!(
+            r["ok"],
+            json!(false),
+            "[{line}] request {id} not refused: {r}"
+        );
         assert_eq!(r["error"]["code"], json!("rejected"), "[{line}] {r}");
         assert_eq!(r["error"]["kind"], json!("outside_root"), "[{line}] {r}");
         assert!(

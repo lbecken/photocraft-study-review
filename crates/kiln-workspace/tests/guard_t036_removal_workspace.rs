@@ -165,7 +165,11 @@ fn trial(case: &str, link: bool, n: usize) -> bool {
     );
     eprintln!("{line}");
     // The replacement really is what the root path reaches now.
-    assert_eq!(fs::read(root.join("secret.txt")).unwrap(), SECRET, "[{line}]");
+    assert_eq!(
+        fs::read(root.join("secret.txt")).unwrap(),
+        SECRET,
+        "[{line}]"
+    );
     assert!(!root.join("f.txt").exists(), "[{line}]");
     let before = snapshot(&w.dir);
     let replacement_before = snapshot(&replacement);
