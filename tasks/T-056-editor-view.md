@@ -671,6 +671,17 @@ their AC numbers and touches are the old ones).
   T-065 and T-056 share `crates/kiln-ui/src/`, `apps/kiln/src/` and `docs/protocol/ui.md`:
   sequential (`depends_on`).
 
+### Rulings on the test author's questions of R-240 (director, D-157; told to both builders)
+- **x1 (T1).** After Enter the caret is at the start of the line that follows the break Enter made. Where the
+  inserted line ending and the char after it form one line break together (a `cr` document, Enter typed with a
+  `\n` right after the selection's end), the caret is after that whole break; the UI sends no `cursor.set` that
+  the session would refuse, and `Message` shows no refusal. The acceptance tests avoid the case; the implementer
+  covers it with a test of its own and the reviewer checks it.
+- **x2 (T2).** The `doc.open` of each start path is sent by the invocation: it is in the session log, in the order
+  of the command line, before the script's first request, and counts as input of the session for `ui.dispatch-only`
+  (the log replayed with `kiln-cli run` reproduces the files with them included).
+- **x3 (T3).** In a row that holds only blanks (spaces, tabs), the blanks are reported in the colour of `plain`.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
