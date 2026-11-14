@@ -492,3 +492,5 @@
 {"kind":"transition","task":"T-023","iteration":2,"at":"2026-11-14T03:58:42Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-023","iteration":2,"at":"2026-11-14T03:58:42Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-023","iteration":2,"at":"2026-11-14T03:58:48Z","from":"ready","to":"in_progress"}
+{"kind":"run","task":"T-036","iteration":2,"run":"R-195","role":"implementer","tier":"high","started_at":"2026-11-14T03:59:45Z","ended_at":"2026-11-14T04:08:03Z","wall_s":498,"tokens":24815,"tool_calls":17,"gate_attempts":1,"outcome":"completed","missing_context":"none","note":"rework after review round 1 (rulings p1 to p3): the implementer's test now removes its fixture on every exit path (proved by a deliberate failure against a temporary mutant: nothing left in /tmp) and waits for a killed child; one pointer sentence added after C1, probed as uid 65534; gate green on attempt 1 (770 tests); head 5b2bffb677b6f8ad89b38ca27cfc47dbbb3243ef; tokens = agent total minus 190,019 at the end of R-189"}
+{"kind":"transition","task":"T-036","iteration":2,"at":"2026-11-14T04:08:18Z","from":"in_progress","to":"self_verified"}
