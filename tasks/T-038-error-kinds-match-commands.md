@@ -1050,6 +1050,37 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   commands file asserts `standard_registry().audit()` is empty); `run` of a refusal example
   exits 3 and `exec` exits 2 (the documented exit codes); D-130's "phrase" ruling read as
   covering AC-8's `doc-positions.md` check (the only phrase check of AC-8).
+- 2026-11-14T08:16Z · R-217 · ready · did: acknowledged ruling j1 (D-136; read in the director's
+  copy of this file): the public declaration API is pinned (`Witness`, `Refusal::{example,
+  disk}`, `SeedFile::{text, hex}`, `RefusalExample`, provided `Command::refusals` default `None`
+  and `Command::refusal_examples` default empty); my R-216 interpretations accepted. Accepted;
+  acted on it. Rewrote `crates/kiln-commands/tests/acceptance_t038_commands.rs` on that API:
+  AC-2 `undeclared_refusal_is_internal` now has the declared half (`t38.declared` declares
+  `not_found`: `not_found` → `Rejected{NotFound}`, `decode_error` → `Internal{Other}`, nothing
+  logged; `describe()` lists `["not_found"]` for it, `[]` for the undeclared `t38.alpha`, whose
+  `decode_error` stays `Rejected`, and `error_kinds.rejected` = `[not_found]`; plus `Some(vec![])`
+  refusing → `internal`, a declared *disk* `io_error` → `rejected` and published); AC-3
+  `audit_requires_a_witness_for_every_declared_kind` now has, one registry of one test command
+  each, exactly one line naming the command for (i), (ii), (iii) ×6 (succeeds, another declared
+  kind, params fail the schema, setup fails, invalid `files` path, odd `hex`), (iv), (v); zero
+  lines for a sound declaration, a *disk* kind without an example, `Some(vec![])`, a disk-only
+  declaration; the two-command name-order case and the empty standard audit stay. Test commands'
+  `examples()` keep the `Example` literal of `acceptance_t032.rs` (empty `files`/`setup`), which
+  Interface 3 requires to keep compiling; `register` refuses an empty `examples()` on base, so an
+  empty vector was not used. Base: this file no longer compiles (E0407 `refusals`/
+  `refusal_examples` not trait members, E0432 `Refusal`/`RefusalExample`/`SeedFile`): weak
+  evidence; its R-216 version (`667d77a`) failed by assertion. Every other T-038 file is
+  unchanged and keeps its base result. Scratch stub of exactly the j1 signatures plus a
+  prototype of the execute check, `describe()` and audit rules (i)–(v) in `registry.rs`/`lib.rs`
+  (removed with `git checkout`, never committed): both commands-crate files pass; kills: no
+  execute check (undeclared refusal stays `rejected`) → AC-2; rule (i) skipped → AC-3; (ii)
+  skipped → AC-3; (iii) accepting any `rejected` kind → AC-3; (v) skipped → AC-3. Not
+  distinguishable by count: a prototype that skips (iv) but runs the example still reports one
+  line (via (iii)), which AC-3's "exactly one line" accepts. `rustfmt --check` on the four files
+  clean; `cargo clippy -p kiln-commands -p kiln-cli --tests -- -D warnings` clean with the stub
+  (stub-only lints `missing_docs` etc. allowed for the scratch code); `cargo xtask no-skip`
+  PASS. · gate attempts: 0 · not run: `cargo xtask ci`; the CLI files against the stub (unchanged
+  since R-216) · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
