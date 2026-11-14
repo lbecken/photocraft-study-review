@@ -1,10 +1,11 @@
 //! T-037 AC-2 (iv)–(vi) through `kiln-cli control`, in a test binary of its own: the root
 //! directory removed between two requests of one session, (iv) with nothing in its place, (v)
 //! replaced by a new directory at the same path that holds `a.txt` = `alpha\n`, (vi) replaced by
-//! a link to such a directory. `doc.open` of the open, edited `a.txt` is then refused
-//! `rejected` / `outside_root`, the document stays as it was, and nothing is read or written in
-//! the replacement (Interface 1, 2; ruling D-092 O1). Written by the test author from
-//! `tasks/T-037-reopen-checks-confinement.md` alone.
+//! a link to such a directory. `doc.open` of the open `a.txt` is then refused `rejected` /
+//! `outside_root`, the document stays as it was, and nothing is read or written in the
+//! replacement (Interface 1, 2; ruling D-092 O1). Each case runs with the document edited (`E`
+//! inserted) and, by ruling D-125 k1, again with it opened and not edited. Written by the test
+//! author from `tasks/T-037-reopen-checks-confinement.md` alone.
 //!
 //! T-036's removal pattern (AC-2, required for (v) and (vi)):
 //! - the test holds the file-level lock [`LOCK`] for its whole body, so no two
@@ -246,17 +247,14 @@ impl Drop for Session {
 // ---------------------------------------------------------------------------------------------
 // Assertions shared by the cases.
 
-/// Length in chars of the open document after the insert of `E` (AC: 7, 9 for `sub/c.txt`).
-fn edited_len(path: &str) -> usize {
-    match path {
-        "a.txt" => 7,
-        "sub/c.txt" => 9,
-        other => panic!("no fixture length for {other}"),
-    }
+/// Length in chars of `a.txt` as opened (`alpha\n`), and after the insert of `E` (AC: 7).
+fn doc_len(edited: bool) -> usize {
+    if edited { 7 } else { 6 }
 }
 
-/// `doc.open <path>` (doc 1) and `doc.insert` of `E` at 0.
-fn open_and_edit(s: &mut Session, path: &str, case: &str) {
+/// `doc.open <path>` (doc 1) and, when `edited`, `doc.insert` of `E` at 0 (ruling D-125 k1 adds
+/// the cases with the document not edited).
+fn open_and_edit(s: &mut Session, path: &str, edited: bool, case: &str) {
     let r = s.ask("doc.open", json!({ "path": path }));
     assert_eq!(r["ok"], json!(true), "{case}: first doc.open: {r}");
     assert_eq!(r["result"]["doc"], json!(1), "{case}: first doc.open: {r}");
@@ -265,8 +263,10 @@ fn open_and_edit(s: &mut Session, path: &str, case: &str) {
         json!(false),
         "{case}: first doc.open: {r}"
     );
-    let r = s.ask("doc.insert", json!({"doc": 1, "offset": 0, "text": "E"}));
-    assert_eq!(r["ok"], json!(true), "{case}: doc.insert: {r}");
+    if edited {
+        let r = s.ask("doc.insert", json!({"doc": 1, "offset": 0, "text": "E"}));
+        assert_eq!(r["ok"], json!(true), "{case}: doc.insert: {r}");
+    }
 }
 
 /// `r` is `rejected` / `kind`, and names no part of the work path.
@@ -280,21 +280,21 @@ fn assert_refused(r: &Value, kind: &str, w: &Work, case: &str) {
     );
 }
 
-/// "Document unchanged": `doc.info` → dirty, the edited length, the undo history kept;
+/// "Document unchanged": `doc.info` → dirty iff `edited`, the length, the undo history kept;
 /// `doc.list` → exactly one document, id 1, with `path`.
-fn assert_unchanged(s: &mut Session, path: &str, case: &str) {
+fn assert_unchanged(s: &mut Session, path: &str, edited: bool, case: &str) {
     let r = s.ask("doc.info", json!({"doc": 1}));
     assert_eq!(r["ok"], json!(true), "{case}: doc.info: {r}");
-    assert_eq!(r["result"]["dirty"], json!(true), "{case}: doc.info: {r}");
+    assert_eq!(r["result"]["dirty"], json!(edited), "{case}: doc.info: {r}");
     assert_eq!(
         r["result"]["len_chars"],
-        json!(edited_len(path)),
+        json!(doc_len(edited)),
         "{case}: doc.info: {r}"
     );
     assert_eq!(r["result"]["path"], json!(path), "{case}: doc.info: {r}");
     assert_eq!(
         r["result"]["can_undo"],
-        json!(true),
+        json!(edited),
         "{case}: doc.info: {r}"
     );
     let r = s.ask("doc.list", json!({}));
@@ -331,10 +331,10 @@ fn id_of(p: &Path) -> (u64, u64) {
 // AC-2 (iv)–(vi).
 
 /// (iv): `root` removed with `remove_dir_all`, nothing in its place.
-fn removed_case(case: &str) {
-    let w = Work::new("removed", "root");
+fn removed_case(edited: bool, case: &str) {
+    let w = Work::new(&format!("removed-{edited}"), "root");
     let mut s = Session::start(&w.dir, "root");
-    open_and_edit(&mut s, "a.txt", case);
+    open_and_edit(&mut s, "a.txt", edited, case);
     fs::remove_dir_all(w.root()).unwrap();
     assert!(
         fs::symlink_metadata(w.root()).is_err(),
@@ -344,7 +344,7 @@ fn removed_case(case: &str) {
 
     let r = s.ask("doc.open", json!({"path": "a.txt"}));
     assert_refused(&r, "outside_root", &w, case);
-    assert_unchanged(&mut s, "a.txt", case);
+    assert_unchanged(&mut s, "a.txt", edited, case);
     assert_eq!(snapshot(&w.dir), before, "{case}: work/ changed");
     assert!(
         fs::symlink_metadata(w.root()).is_err(),
@@ -355,14 +355,14 @@ fn removed_case(case: &str) {
 
 /// One trial of (v) (`link` false) or (vi) (`link` true); true iff the replacement got the
 /// removed root's (device, inode).
-fn replaced_trial(case: &str, link: bool, n: usize) -> bool {
+fn replaced_trial(case: &str, link: bool, edited: bool, n: usize) -> bool {
     let w = Work::new(
-        &format!("{}-{n}", if link { "link" } else { "dir" }),
+        &format!("{}-{edited}-{n}", if link { "link" } else { "dir" }),
         "root",
     );
     let root = w.root();
     let mut s = Session::start(&w.dir, "root");
-    open_and_edit(&mut s, "a.txt", &format!("{case} trial {n}"));
+    open_and_edit(&mut s, "a.txt", edited, &format!("{case} trial {n}"));
 
     // Between two requests: remove the root, then search for a directory that gets its number.
     let old = id_of(&root);
@@ -410,7 +410,7 @@ fn replaced_trial(case: &str, link: bool, n: usize) -> bool {
 
     let r = s.ask("doc.open", json!({"path": "a.txt"}));
     assert_refused(&r, "outside_root", &w, &format!("[{line}]"));
-    assert_unchanged(&mut s, "a.txt", &format!("[{line}]"));
+    assert_unchanged(&mut s, "a.txt", edited, &format!("[{line}]"));
 
     let replacement_after = snapshot(&replacement);
     assert_eq!(
@@ -428,9 +428,9 @@ fn replaced_trial(case: &str, link: bool, n: usize) -> bool {
 }
 
 /// Up to [`K`] trials; a trial with reuse ends the loop (it has asserted everything).
-fn replaced_case(case: &str, link: bool) {
+fn replaced_case(case: &str, link: bool, edited: bool) {
     for n in 0..K {
-        if replaced_trial(case, link, n) {
+        if replaced_trial(case, link, edited, n) {
             break;
         }
     }
@@ -441,19 +441,28 @@ fn reopen_after_the_root_was_removed_is_refused() {
     let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     run_cases(&[
         ("AC-2 (iv) root removed, nothing in its place", &|case| {
-            removed_case(case);
+            removed_case(true, case);
         }),
         (
             "AC-2 (v) root removed, replaced by a new directory",
             &|case| {
-                replaced_case(case, false);
+                replaced_case(case, false, true);
             },
         ),
         (
             "AC-2 (vi) root removed, replaced by a link to a new directory",
             &|case| {
-                replaced_case(case, true);
+                replaced_case(case, true, true);
             },
         ),
+        ("AC-2 (iv) unedited (k1)", &|case| {
+            removed_case(false, case);
+        }),
+        ("AC-2 (v) unedited (k1)", &|case| {
+            replaced_case(case, false, false);
+        }),
+        ("AC-2 (vi) unedited (k1)", &|case| {
+            replaced_case(case, true, false);
+        }),
     ]);
 }
