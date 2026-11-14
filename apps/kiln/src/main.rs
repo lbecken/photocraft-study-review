@@ -1,13 +1,14 @@
 //! # kiln — desktop application (thin binary)
 //!
 //! ```text
-//! kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>]
+//! kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>…]
 //! kiln --help | -h | script --help
 //! ```
 //!
 //! `kiln script` runs the Kiln UI without a window from a script of control requests and UI
-//! requests (`docs/protocol/ui.md`). Without a subcommand the binary still only says that the
-//! desktop window is not built and exits with a failure status (the window is T-056).
+//! requests (`docs/protocol/ui.md`); the paths after the script are opened at start, in order,
+//! as if each were opened through `Path`. Without a subcommand the binary still only says that
+//! the desktop window is not built and exits with a failure status (the window is T-065).
 //!
 //! Exit codes of `script`: 0 every response `ok:true`; 3 at least one `ok:false`; 2 usage
 //! error, unreadable script, bad root, log file not writable (message on stderr, nothing on
@@ -20,12 +21,13 @@ use std::process::ExitCode;
 use kiln_ui::{DEFAULT_SIZE, Files, SIZE_RANGE, Script, parse_size, response_ok};
 
 const USAGE: &str = "usage:
-  kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>]
+  kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>...]
   kiln --help | -h | script --help
 
   script  run the Kiln UI without a window: each line of <script> is a control request
           (answered as `kiln-cli control` answers it) or a UI request (an object with a
-          key `ui`); one response line per request on stdout
+          key `ui`); one response line per request on stdout. Each <path> (relative to
+          the root) is opened at start, in order, as if opened through the UI's `Path`
 
   --root <dir>      root of the files the session acts on (default: current directory)
   --memory          an empty in-memory file system instead
@@ -132,17 +134,16 @@ fn wants_help(args: &[String]) -> bool {
 }
 
 /// `kiln script`, in the order of checks of `docs/protocol/ui.md`: usage, script readable,
-/// root, log writable, requests. Responses are buffered so that a late failure (writing the
+/// root, log writable, start paths, the first frames, requests. Responses are buffered so that a late failure (writing the
 /// log) leaves stdout empty.
 fn script(args: &[String]) -> Outcome {
     let (positional, opts) = match parse_opts(args) {
         Ok(parsed) => parsed,
         Err(reason) => return Outcome::usage(reason),
     };
-    let script_path = match positional.as_slice() {
+    let (script_path, start_paths) = match positional.as_slice() {
         [] => return Outcome::usage("missing argument <script>"),
-        [one] => *one,
-        [_, extra, ..] => return Outcome::usage(format!("unexpected argument `{extra}`")),
+        [script, paths @ ..] => (*script, paths),
     };
     let size = match &opts.size {
         None => DEFAULT_SIZE,
@@ -185,6 +186,8 @@ fn script(args: &[String]) -> Outcome {
             Err(e) => return Outcome::err(2, format!("kiln: cannot write log `{path}`: {e}\n")),
         },
     };
+    // Start paths get no response line and do not change the exit code.
+    session.start(start_paths);
     let mut stdout = String::new();
     let mut failed = false;
     for line in bytes.split(|b| *b == b'\n') {

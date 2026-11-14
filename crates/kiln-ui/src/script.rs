@@ -1,25 +1,24 @@
 //! `kiln script`: the Kiln UI run without a window from a script of control requests and UI
 //! requests (`docs/protocol/ui.md`, ADR-0008, T-055).
 //!
-//! The runner owns one egui context, the shell and one session. Frames are run with simulated
+//! The runner owns one egui context and one [`App`] (the shell, the editor view and the
+//! session), and draws every frame with [`crate::draw_frame`]. Frames are run with simulated
 //! time only: frame `n` (from 0) has time `n / 60` s; no clock is read. After every action and
-//! before the first request, frames are run until the UI asks for no further frame (egui's repaint delay is "never"), at most [`SETTLE_CAP`].
+//! before the first request (after the start paths, [`Script::start`]), frames are run until
+//! the UI asks for no further frame (egui's repaint delay is "never"), at most [`SETTLE_CAP`].
 
 use std::path::Path;
 use std::time::Duration;
 
 use egui::accesskit::{Action, ActionRequest, NodeId, TreeId, TreeUpdate};
 use egui::epaint::ClippedShape;
-use egui::{
-    Event, Key, Modifiers, PointerButton, Pos2, RawInput, Rect, Theme, ViewportId, ViewportInfo,
-};
+use egui::{Event, Key, Modifiers, PointerButton, Pos2, RawInput, Rect, ViewportId, ViewportInfo};
 use kiln_control::Host;
 use serde_json::{Map, Value, json};
 
 use crate::json::{canonical, cap};
 use crate::observe::{Observation, role_name};
-use crate::session::Session;
-use crate::shell::Shell;
+use crate::{App, apply_style, draw_frame};
 
 /// The most frames one action (or one control request, or the start) runs while settling.
 pub const SETTLE_CAP: u64 = 60;
@@ -110,8 +109,9 @@ pub enum Files<'a> {
 /// A `kiln script` session: the UI, its session and the frames run so far.
 pub struct Script {
     ctx: egui::Context,
-    shell: Shell,
-    session: Session,
+    app: App,
+    /// Whether the start paths were opened and the first frames run.
+    started: bool,
     screen: Rect,
     frames: u64,
     last_update: Option<TreeUpdate>,
@@ -123,9 +123,9 @@ pub struct Script {
 type Refusal = (&'static str, String);
 
 impl Script {
-    /// A session over `files` with a UI of `size` (width, height) points, after its first
-    /// frames have run. Fails, with the host's message (naming a root as given), when the root
-    /// cannot be used.
+    /// A session over `files` with a UI of `size` (width, height) points; no frame has run
+    /// yet ([`Script::start`] runs the first ones). Fails, with the host's message (naming a
+    /// root as given), when the root cannot be used.
     pub fn new(files: Files<'_>, size: (u32, u32)) -> Result<Script, String> {
         let host = match files {
             Files::Disk(root) => Host::on_disk(root),
@@ -134,24 +134,37 @@ impl Script {
         .map_err(|e| e.to_string())?;
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
-        ctx.set_theme(Theme::Dark);
-        ctx.all_styles_mut(|style| style.visuals.text_cursor.blink = false);
-        let mut script = Script {
+        apply_style(&ctx);
+        Ok(Script {
             ctx,
-            shell: Shell::default(),
-            session: Session::new(host),
+            app: App::new(host),
+            started: false,
             screen: Rect::from_min_size(Pos2::ZERO, egui::vec2(size.0 as f32, size.1 as f32)),
             frames: 0,
             last_update: None,
             last_shapes: Vec::new(),
             observation: None,
-        };
-        script.settle(Vec::new());
-        Ok(script)
+        })
+    }
+
+    /// Open the start paths in order, each as if it were typed into `Path` and opened (no
+    /// response; a refused one sets `Message`), then run the frames before the first request
+    /// until the UI settles. Runs once; the first request line runs it (without paths) if it has
+    /// not run.
+    pub fn start(&mut self, paths: &[&str]) {
+        if self.started {
+            return;
+        }
+        self.started = true;
+        for path in paths {
+            self.app.open(path);
+        }
+        self.settle(Vec::new());
     }
 
     /// One script line in; its response line (without `"\n"`) out, `None` for a blank line.
     pub fn handle_line(&mut self, line: &[u8]) -> Option<String> {
+        self.start(&[]);
         let parsed = std::str::from_utf8(line)
             .ok()
             .and_then(|text| serde_json::from_str::<Value>(text).ok());
@@ -161,13 +174,13 @@ impl Script {
             }
             // Control requests, and every line-level error, are the host's (same bytes). They
             // run no frame (D-149 n4): what they change is shown from the next frame on.
-            _ => self.session.handle_line(line),
+            _ => self.app.handle_line(line),
         }
     }
 
     /// The session log as a script (the format of `kiln-cli run --log`).
     pub fn log_script(&self) -> String {
-        self.session.log_script()
+        self.app.log_script()
     }
 
     /// The number of frames run so far.
@@ -320,9 +333,8 @@ impl Script {
             focused: true,
             ..RawInput::default()
         };
-        let shell = &mut self.shell;
-        let session = &mut self.session;
-        let mut output = self.ctx.run_ui(input, |ui| shell.ui(ui, session));
+        let app = &mut self.app;
+        let mut output = self.ctx.run_ui(input, |ui| draw_frame(ui, app));
         // No renderer: the font atlas updates are not needed (nothing is drawn as pixels).
         output.textures_delta.clear();
         self.frames += 1;
@@ -692,6 +704,8 @@ mod tests {
     #[test]
     fn only_ui_actions_run_frames() {
         let mut script = Script::new(Files::Memory, DEFAULT_SIZE).unwrap();
+        assert_eq!(script.frames(), 0, "no frame before the start");
+        script.start(&[]);
         let start = script.frames();
         assert!(start >= 1);
         script.handle_line(br#"{"command":"doc.open","params":{"path":"missing.rs"}}"#);
@@ -711,7 +725,7 @@ mod tests {
         let files: Vec<(&str, &[u8])> = names.iter().map(|p| (p.as_str(), &b"x\n"[..])).collect();
         let host = Host::in_memory(&files).unwrap();
         let mut script = Script::new(Files::Memory, size).unwrap();
-        script.session = Session::new(host);
+        script.app = App::new(host);
         for name in &names {
             let line = format!("{{\"command\":\"doc.open\",\"params\":{{\"path\":\"{name}\"}}}}");
             assert!(response_ok(&script.handle_line(line.as_bytes()).unwrap()));
