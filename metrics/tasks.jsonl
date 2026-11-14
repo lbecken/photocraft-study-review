@@ -559,3 +559,6 @@
 {"kind":"transition","task":"T-038","iteration":2,"at":"2026-11-14T09:48:21Z","from":"in_progress","to":"self_verified"}
 {"kind":"join","task":"T-038","at":"2026-11-14T09:48:28Z","acc_total":5,"acc_fail_base":5,"base_fail_kind":"mixed","acc_fail_first_join":0,"acc_defects":null,"impl_tests_green":true,"gate_green":true,"tests_sha":"9e95d3674e6f8325f74f9726e4794dec6dbbf787","joined_sha":"82201ca5db605d31ccaa543c7688dcf9722eb488","result":"joined","guard_total":3,"guard_fail_base":0,"guard_fail_join":0}
 {"kind":"transition","task":"T-038","iteration":2,"at":"2026-11-14T10:07:01Z","from":"self_verified","to":"tests_joined"}
+{"kind":"run","task":"T-038","iteration":2,"run":"R-220","role":"reviewer","tier":"high","started_at":"2026-11-14T10:07:16Z","ended_at":"2026-11-14T10:08:23Z","wall_s":67,"tokens":7359,"tool_calls":6,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"review round 2 (final) at 82201ca: approve, merge recommended; the delta is the j2 test case and log entries only; mutant M11 (audit rule (iv) skipped) is now killed by the acceptance test; the test passes on the head"}
+{"kind":"transition","task":"T-038","iteration":2,"at":"2026-11-14T10:08:46Z","from":"tests_joined","to":"reviewed"}
+{"kind":"transition","task":"T-038","iteration":2,"at":"2026-11-14T10:08:46Z","from":"reviewed","to":"queued"}
