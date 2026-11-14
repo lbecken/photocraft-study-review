@@ -1,6 +1,7 @@
 //! Implementer's integration tests for `kiln_syntax::outline` (T-023), through the public API:
 //! the worked examples of the task's Pinned (g), the item rules on small private sources, and
 //! deep nesting on the default test-thread stack.
+#![cfg(test)]
 
 use kiln_syntax::SyntaxTree;
 use kiln_syntax::outline::{ItemKind, OutlineItem, outline};
