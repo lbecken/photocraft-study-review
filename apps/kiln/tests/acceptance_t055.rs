@@ -779,6 +779,12 @@ fn click_open() -> String {
     r#"{"id":"click","target":{"label":"Open"},"ui":"click"}"#.to_owned()
 }
 
+/// `{"ui":"frames","count":1}`: a control request's effect is shown from the next frame on
+/// (D-149 n4), so a script that wants to see it in a snapshot runs a frame first.
+fn one_frame(id: &str) -> String {
+    format!(r#"{{"count":1,"id":{},"ui":"frames"}}"#, q(id))
+}
+
 fn snapshot(id: &str) -> String {
     format!(r#"{{"id":{},"ui":"snapshot"}}"#, q(id))
 }
@@ -1093,6 +1099,7 @@ fn ac2_script() -> Vec<String> {
         snapshot("s0"),
         open(1, "src/a.rs"),
         open(2, "b.txt"),
+        one_frame("frame"),
         snapshot("s1"),
         control(3, "doc.list", "{}"),
     ]
@@ -1110,8 +1117,9 @@ fn check_ac2(r: &[J]) {
     assert_eq!(message_value(s0), "", "Message of a fresh session");
     assert_eq!(r[1].get("ok"), Some(&J::Bool(true)), "{}", r[1].show());
     assert_eq!(r[2].get("ok"), Some(&J::Bool(true)), "{}", r[2].show());
-    let (s1, _) = snap(&r[3]);
-    let listed: Vec<String> = doc_list(&r[4]).into_iter().map(|(_, p)| p).collect();
+    action_ok(&r[3], Some(1));
+    let (s1, _) = snap(&r[4]);
+    let listed: Vec<String> = doc_list(&r[5]).into_iter().map(|(_, p)| p).collect();
     assert_eq!(listed, ["src/a.rs", "b.txt"], "doc.list in the session");
     assert_eq!(documents(s1), listed, "Documents vs doc.list");
 }
@@ -1283,6 +1291,7 @@ fn ac4_refusals_shown() {
 
         let script = vec![
             open(1, "b.txt"),
+            one_frame("frame"),
             snapshot("s0"),
             focus_path(),
             type_text("type", path),
@@ -1291,7 +1300,10 @@ fn ac4_refusals_shown() {
             control(2, "doc.list", "{}"),
         ];
         let sess = run_script(&dir, "s", &script);
-        let r = sess.responses(script.len());
+        let mut r = sess.responses(script.len());
+        action_ok(&r[1], Some(1));
+        // Index as before the frame line: r[0] the open, r[1] the snapshot.
+        r.remove(1);
         let (s0, _) = snap(&r[1]);
         assert_eq!(documents(s0), ["b.txt"], "{name}: Documents before");
         assert_eq!(message_value(s0), "", "{name}: Message before");
@@ -1337,20 +1349,26 @@ fn idle_case(name: &str, prefix: &[String]) {
     let idle = r#"{"count":600,"id":"idle","ui":"frames"}"#.to_owned();
     let mut with = prefix.to_vec();
     with.extend([
+        one_frame("frame"),
         snapshot("s0"),
         idle,
         snapshot("s1"),
         control(9, "doc.list", "{}"),
     ]);
     let mut without = prefix.to_vec();
-    without.extend([snapshot("s0"), snapshot("s1"), control(9, "doc.list", "{}")]);
+    without.extend([
+        one_frame("frame"),
+        snapshot("s0"),
+        snapshot("s1"),
+        control(9, "doc.list", "{}"),
+    ]);
 
     let a = run_script(&dir, "with", &with);
     let ra = a.responses(with.len());
     fixture(&dir); // the same initial files for the second run
     let b = run_script(&dir, "without", &without);
     let rb = b.responses(without.len());
-    let n = prefix.len();
+    let n = prefix.len() + 1;
     let (s0, f0) = snap(&ra[n]);
     assert_eq!(action_ok(&ra[n + 1], Some(600)), 600);
     let (s1, f1) = snap(&ra[n + 2]);
@@ -1530,12 +1548,17 @@ fn ac6_frame_counts_add_up() {
 fn ac7_ui_refusals() {
     let dir = case_dir("ac7");
     fixture(&dir);
-    let setup = vec![open(1, "src/a.rs"), open(2, "b.txt"), snapshot("s0")];
+    let setup = vec![
+        open(1, "src/a.rs"),
+        open(2, "b.txt"),
+        one_frame("frame"),
+        snapshot("s0"),
+    ];
 
     // The setup alone: the state the refusals must leave, and Open's painted rows.
     let base = run_script(&dir, "base", &setup);
     let rb = base.responses(setup.len());
-    let (b0, _) = snap(&rb[2]);
+    let (b0, _) = snap(&rb[setup.len() - 1]);
     assert!(
         all_nodes(b0).iter().all(|n| n.get("focused").is_none()),
         "precondition of `type` with nothing focused: a node is focused in a fresh session"
@@ -1591,7 +1614,7 @@ fn ac7_ui_refusals() {
     fixture(&dir);
     let sess = run_script(&dir, "s", &script);
     let r = sess.responses(script.len());
-    let (s0, f0) = snap(&r[2]);
+    let (s0, f0) = snap(&r[setup.len() - 1]);
     // The ambiguous target matches two nodes (the two documents).
     let dotted = all_nodes(s0)
         .iter()
@@ -1601,7 +1624,7 @@ fn ac7_ui_refusals() {
         dotted >= 2,
         "precondition: two nodes with a `.` in their value"
     );
-    for ((line, kind), resp) in refusals.iter().zip(&r[3..]) {
+    for ((line, kind), resp) in refusals.iter().zip(&r[setup.len()..]) {
         let id = parse_json(line).at("id").clone();
         assert_eq!(resp.get("id"), Some(&id), "id echoed for {line}");
         ui_refusal(resp, kind, line);
@@ -1612,6 +1635,107 @@ fn ac7_ui_refusals() {
     assert_eq!(sess.log, base.log, "a refused UI request changed the log");
     assert!(!sess.log.is_empty(), "the setup's opens are logged");
     assert_eq!(sess.out.code, 3, "exit code with refusals");
+    let _ = fs::remove_dir_all(&dir);
+    click_offscreen_is_refused();
+}
+
+/// D-149 n8: a `click` whose target is `offscreen` is refused `not_actionable` and changes
+/// nothing. 100 open documents in a 200×200 window overflow `Documents` (AC-2: one child per
+/// open document, each showing its 20-char path), so some document node lies outside the
+/// visible part; it is found by its `offscreen` state, not by position.
+fn click_offscreen_is_refused() {
+    let dir = case_dir("ac7-offscreen");
+    let root = dir.join("proj");
+    let paths: Vec<String> = (0..100)
+        .map(|i| format!("docs/document-{i:03}.txt"))
+        .collect();
+    for p in &paths {
+        write(&root.join(p), b"x\n");
+    }
+    let mut setup: Vec<String> = paths.iter().zip(1..).map(|(p, id)| open(id, p)).collect();
+    setup.push(one_frame("frame"));
+    setup.push(snapshot("b0"));
+    let size = ["--root", "proj", "--size", "200x200"];
+    let base = run_script_bytes(&dir, "base", &as_bytes(&setup), &size);
+    let rb = base.responses(setup.len());
+    let (b0, _) = snap(&rb[setup.len() - 1]);
+    assert_eq!(
+        documents(b0),
+        paths,
+        "precondition: Documents lists the 100 documents"
+    );
+    let nodes = all_nodes(b0);
+    let target = nodes
+        .iter()
+        .filter(|n| n.get("offscreen") == Some(&J::Bool(true)))
+        .filter_map(|n| value(n))
+        .find(|v| nodes.iter().filter(|m| value(m) == Some(*v)).count() == 1)
+        .unwrap_or_else(|| {
+            panic!(
+                "precondition: no offscreen node with a unique value among 100 open documents \
+                 in a 200x200 window"
+            )
+        })
+        .to_owned();
+    let click = format!(
+        r#"{{"id":"off","target":{{"value":{}}},"ui":"click"}}"#,
+        q(&target)
+    );
+    let mut script = setup.clone();
+    script.push(click.clone());
+    script.push(snapshot("b1"));
+    let sess = run_script_bytes(&dir, "s", &as_bytes(&script), &size);
+    let r = sess.responses(script.len());
+    let (s0, f0) = snap(&r[setup.len() - 1]);
+    ui_refusal(&r[setup.len()], "not_actionable", &click);
+    let (s1, f1) = snap(&r[setup.len() + 1]);
+    assert_eq!(
+        s1, s0,
+        "a refused click on an offscreen node changed the snapshot"
+    );
+    assert_eq!(f1, f0, "a refused click on an offscreen node ran frames");
+    assert_eq!(
+        sess.log, base.log,
+        "a refused click on an offscreen node changed the log"
+    );
+    assert_eq!(sess.out.code, 3, "exit code with the refusal");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// D-149 n4: a control request runs no frame and a snapshot runs none; what a control request
+/// changed is shown from the next frame on (oracle: `doc.list` in the same session).
+#[test]
+fn ac6_control_effect_shown_from_the_next_frame() {
+    let dir = case_dir("ac6-next-frame");
+    fixture(&dir);
+    let script = vec![
+        snapshot("s0"),
+        open(1, "src/a.rs"),
+        snapshot("s1"),
+        control(2, "doc.list", "{}"),
+        one_frame("frame"),
+        snapshot("s2"),
+    ];
+    let sess = run_script(&dir, "s", &script);
+    let r = sess.responses(script.len());
+    let (s0, f0) = snap(&r[0]);
+    assert!(documents(s0).is_empty(), "no document in a fresh session");
+    assert_eq!(r[1].get("ok"), Some(&J::Bool(true)), "{}", r[1].show());
+    let (s1, f1) = snap(&r[2]);
+    assert_eq!(f1, f0, "a control request or a snapshot ran a frame");
+    assert_eq!(
+        s1, s0,
+        "the snapshot before any frame shows the control request's effect"
+    );
+    assert_eq!(doc_list(&r[3]), [(1, "src/a.rs".to_owned())], "doc.list");
+    action_ok(&r[4], Some(1));
+    let (s2, f2) = snap(&r[5]);
+    assert_eq!(f2, f0 + 1, "frames after one frame");
+    assert_eq!(
+        documents(s2),
+        ["src/a.rs"],
+        "Documents after the next frame"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -2006,6 +2130,7 @@ fn ac10_accessible_names() {
         snapshot("fresh"),
         open(1, "src/a.rs"),
         open(2, "notes/c.md"),
+        one_frame("frame"),
         snapshot("two-docs"),
         focus_path(),
         type_text("type", "u.txt"),
