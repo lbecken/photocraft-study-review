@@ -95,9 +95,12 @@ toolkit's (100 points).
 `{"id":…,"ok":true,"result":{"frames":<n>,"settled":<bool>}}`. After an action the runner runs
 frames until the UI asks for no further frame, at most 60, and reports how many it ran and
 whether it settled (`frames` runs exactly `count`). `n` counts the frames that carried the input
-too. Before the first request of a script the runner runs frames the same way, and so it does
-after every control request that succeeded, so that the next snapshot shows its effect; a
-refused control request runs no frame.
+too. Before the first request of a script the runner runs frames the same way.
+
+A control request runs no frame and a `snapshot` runs none: what a control request changed is
+shown from the next frame on (run `{"ui":"frames","count":1}` or any action before the snapshot),
+and between two snapshots the `frames` total grows by exactly the frames the UI requests between
+them reported.
 
 Each frame advances the UI's time by exactly 1/60 s.
 
@@ -132,14 +135,15 @@ How the fields are read from the toolkit's output:
   reported as nodes: their text is the parent's `value` and `rows`, and the parent's `selection`
   is computed from them.
 - A node's rectangle is its bounds, or, for a node without bounds, the union of its children's.
-  A scrollable area is a node of role `scroll_view` whose bounds are the visible part of the
-  area; the visible part of the window around a node is the window cut by every `scroll_view`
+  Every scrollable area is reported as a node of role `scroll_view` whose bounds are the
+  visible part of the area; the visible part of the window around a node is the window cut by every `scroll_view`
   above it.
 - A painted character counts when its centre lies inside its clip rectangle and the window; it
   belongs to the deepest node whose rectangle contains its centre (the root when none does).
   Its colour is the colour it was painted with; a character that paints no pixels (a space)
   takes the colour of the character before it in the painted row (at the start of a row, of the
-  first one after it that paints pixels).
+  first one after it that paints pixels), so the colour reported for a space is its neighbour's,
+  not necessarily the one its text was given.
 
 ### Refusals
 
@@ -151,7 +155,7 @@ How the fields are read from the toolkit's output:
 | `unknown_action` | `ui` is not one of the table |
 | `no_target` | no node matches |
 | `ambiguous_target` | more than one node matches |
-| `not_actionable` | the action cannot apply: `focus` or `type` with no node that takes text input, `scroll` with no scrollable area around the target, `at` on a target without `rows` or beyond its painted rows or a row's length |
+| `not_actionable` | the action cannot apply: `focus` or `type` with no node that takes text input, `click` on an `offscreen` target (scroll first), `scroll` with no scrollable area around the target, `at` on a target without `rows` or beyond its painted rows or a row's length |
 
 Line-level errors come first, exactly as in the control protocol (`invalid_json` / `not_utf8`,
 `syntax`; `invalid_request` / `not_an_object`, `bad_id`); then the order above. Control requests

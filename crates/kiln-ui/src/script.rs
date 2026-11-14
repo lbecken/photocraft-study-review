@@ -2,9 +2,8 @@
 //! requests (`docs/protocol/ui.md`, ADR-0008, T-055).
 //!
 //! The runner owns one egui context, the shell and one session. Frames are run with simulated
-//! time only: frame `n` (from 0) has time `n / 60` s; no clock is read. After every action, after
-//! every successful control request and before the first request, frames are run until the UI
-//! asks for no further frame (egui's repaint delay is "never"), at most [`SETTLE_CAP`].
+//! time only: frame `n` (from 0) has time `n / 60` s; no clock is read. After every action and
+//! before the first request, frames are run until the UI asks for no further frame (egui's repaint delay is "never"), at most [`SETTLE_CAP`].
 
 use std::path::Path;
 use std::time::Duration;
@@ -160,14 +159,9 @@ impl Script {
             Some(Value::Object(request)) if request.contains_key("ui") && valid_id(&request) => {
                 Some(self.ui_request(&request))
             }
-            // Control requests, and every line-level error, are the host's (same bytes).
-            _ => {
-                let response = self.session.handle_line(line)?;
-                if response_ok(&response) {
-                    self.settle(Vec::new());
-                }
-                Some(response)
-            }
+            // Control requests, and every line-level error, are the host's (same bytes). They
+            // run no frame (D-149 n4): what they change is shown from the next frame on.
+            _ => self.session.handle_line(line),
         }
     }
 
@@ -247,6 +241,10 @@ impl Script {
                 at,
             } => {
                 let node = find(observation, &target)?;
+                if observation.nodes[node].offscreen {
+                    // A user cannot click what is not visible (D-149 n8): scroll first.
+                    return Err(not_actionable("the target is offscreen"));
+                }
                 let pos = click_point(observation, node, at)?;
                 let press = |pressed| Event::PointerButton {
                     pos,
@@ -691,18 +689,58 @@ mod tests {
     }
 
     #[test]
-    fn frames_run_after_successful_control_requests_only() {
+    fn only_ui_actions_run_frames() {
         let mut script = Script::new(Files::Memory, DEFAULT_SIZE).unwrap();
         let start = script.frames();
         assert!(start >= 1);
         script.handle_line(br#"{"command":"doc.open","params":{"path":"missing.rs"}}"#);
-        assert_eq!(script.frames(), start);
         script.handle_line(br#"{"command":"doc.list"}"#);
-        assert!(script.frames() > start);
-        let before = script.frames();
+        script.handle_line(br#"{"ui":"snapshot"}"#);
+        assert_eq!(script.frames(), start);
         script.handle_line(br#"{"ui":"frames","count":0}"#);
         script.handle_line(br#"{"ui":"type","text":"x"}"#);
-        assert_eq!(script.frames(), before);
+        assert_eq!(script.frames(), start);
+        script.handle_line(br#"{"ui":"frames","count":3}"#);
+        assert_eq!(script.frames(), start + 3);
+    }
+
+    /// A session over an in-memory file system with `n` open documents, after one frame.
+    fn with_documents(n: usize, size: (u32, u32)) -> Script {
+        let names: Vec<String> = (0..n).map(|i| format!("f{i:02}.txt")).collect();
+        let files: Vec<(&str, &[u8])> = names.iter().map(|p| (p.as_str(), &b"x\n"[..])).collect();
+        let host = Host::in_memory(&files).unwrap();
+        let mut script = Script::new(Files::Memory, size).unwrap();
+        script.session = Session::new(host);
+        for name in &names {
+            let line = format!("{{\"command\":\"doc.open\",\"params\":{{\"path\":\"{name}\"}}}}");
+            assert!(response_ok(&script.handle_line(line.as_bytes()).unwrap()));
+        }
+        script.handle_line(br#"{"ui":"frames","count":1}"#);
+        script
+    }
+
+    #[test]
+    fn a_click_on_an_offscreen_target_is_refused_and_runs_no_frame() {
+        let mut script = with_documents(40, (400, 300));
+        let snapshot = |s: &mut Script| s.handle_line(br#"{"ui":"snapshot"}"#).unwrap();
+        let before = snapshot(&mut script);
+        assert!(before.contains(r#""offscreen":true"#));
+        let frames = script.frames();
+        let refused = script
+            .handle_line(br#"{"ui":"click","target":{"value":"f39.txt"}}"#)
+            .unwrap();
+        assert!(refused.contains(r#""kind":"not_actionable""#), "{refused}");
+        let refused = script
+            .handle_line(br#"{"ui":"click","target":{"value":"f39.txt"},"at":{"row":0,"col":0}}"#)
+            .unwrap();
+        assert!(refused.contains(r#""kind":"not_actionable""#), "{refused}");
+        assert_eq!(script.frames(), frames);
+        assert_eq!(snapshot(&mut script), before);
+        // A visible one is clicked.
+        let ok = script
+            .handle_line(br#"{"ui":"click","target":{"value":"f00.txt"}}"#)
+            .unwrap();
+        assert!(response_ok(&ok), "{ok}");
     }
 
     #[test]

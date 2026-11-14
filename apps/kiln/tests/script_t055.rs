@@ -267,6 +267,8 @@ fn the_shell_shows_documents_opened_by_control_requests() {
             "\n",
             r#"{"command":"doc.open","params":{"path":"b.txt"}}"#,
             "\n",
+            r#"{"ui":"frames","count":1}"#,
+            "\n",
             r#"{"id":"s1","ui":"snapshot"}"#,
         ),
     );
@@ -395,6 +397,8 @@ fn idle_frames_change_nothing() {
     let base = concat!(
         r#"{"command":"doc.open","params":{"path":"src/a.rs"}}"#,
         "\n",
+        r#"{"ui":"frames","count":1}"#,
+        "\n",
         r#"{"id":"a","ui":"snapshot"}"#,
         "\n"
     );
@@ -508,6 +512,8 @@ fn ui_refusals_have_their_kind_and_change_nothing() {
         r#"{"command":"doc.open","params":{"path":"src/a.rs"}}"#,
         "\n",
         r#"{"command":"doc.open","params":{"path":"b.txt"}}"#,
+        "\n",
+        r#"{"ui":"frames","count":1}"#,
         "\n",
         r#"{"id":"before","ui":"snapshot"}"#,
         "\n"
