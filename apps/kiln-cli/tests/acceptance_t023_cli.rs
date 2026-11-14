@@ -655,10 +655,23 @@ fn worked_examples() -> Vec<(&'static str, Vec<Value>)> {
                 item("impl", "Send for X", 29, 48, 44, 45, 0),
             ],
         ),
+        // D-124 m2 (ruling Q-2 confirmed): the unclosed `fn b` is `ERROR@21..49` under
+        // `source_file`, and the `mod n` inside it is listed because `ERROR` is a container.
+        // Expected items derived from the `syntax.tree` node dump and the outline rules.
+        (
+            "mod m { fn a() { } } fn b() { mod n { fn c() {} }",
+            vec![
+                item("mod", "m", 0, 20, 4, 5, 0),
+                item("fn", "a", 8, 18, 11, 12, 1),
+                item("mod", "n", 30, 49, 34, 35, 0),
+                item("fn", "c", 38, 47, 41, 42, 1),
+            ],
+        ),
     ]
 }
 
-/// AC-2 (`syntax.outline`): examples 1 to 5 of Pinned (g) exactly; `nav.*` leave the tree that
+/// AC-2 (`syntax.outline`): examples 1 to 5 of Pinned (g) and the `ERROR` example of D-124 m2
+/// exactly; `nav.*` leave the tree that
 /// `syntax.*` keep alone (N7); on every corpus file the name range of every non-`impl` item
 /// slices out its name.
 #[test]
@@ -688,7 +701,12 @@ fn outline_worked_examples() {
     for (i, ((_, want), (open, outline))) in examples.iter().zip(calls).enumerate() {
         ok(&resp[open], "doc.open");
         let got = items_of(ok(&resp[outline], &format!("example {}", i + 1)), "example");
-        assert_eq!(&got, want, "Pinned (g) example {}", i + 1);
+        assert_eq!(
+            &got,
+            want,
+            "worked example {} (Pinned (g) 1 to 5; 6: D-124 m2)",
+            i + 1
+        );
     }
     assert_eq!(ok(&resp[t1], "syntax.tree 1")["mode"], json!("full"));
     assert_eq!(
@@ -1416,6 +1434,8 @@ fn workspace_symbols_match_naive_model() {
     fx.write("target/copy.rs", first.as_bytes());
     fx.write("notes.txt", first.as_bytes());
     fx.write("bad.rs", b"fn \xff() {}");
+    // D-124 m3: a name ending in `.RS` does not end in `.rs` (compared exactly): not searched.
+    fx.write("src/UPPER.RS", b"fn upper_only_symbol() {}\n");
     symlink(format!("src/{}.rs", stems[0]), fx.root().join("link.rs")).unwrap();
 
     let model = build_model(&fx.root());
@@ -1500,6 +1520,18 @@ fn workspace_symbols_match_naive_model() {
         nonempty >= 28,
         "too few queries matched anything: {nonempty}"
     );
+    let r = c.ok(
+        "nav.workspace-symbols",
+        json!({"query": "upper_only_symbol"}),
+    );
+    assert_eq!(r["items"], json!([]), "a `.RS` file was searched");
+    for q in ["upper", "UPPER_ONLY", "symbol"] {
+        let r = c.ok("nav.workspace-symbols", json!({ "query": q }));
+        for it in items_of(&r, q) {
+            let p = it["path"].as_str().unwrap();
+            assert!(p.ends_with(".rs"), "query {q}: searched {p}");
+        }
+    }
     assert!(
         queries.iter().any(|(q, l)| model_answer(&model, q, *l).1),
         "no query was truncated"
@@ -1666,6 +1698,48 @@ fn workspace_symbols_limits_and_refusals() {
     let r = ok(&resp[top], "shallow");
     assert_eq!(r["items"][0]["path"], json!("top.rs"));
     assert_eq!(r["too_deep"], json!(1));
+}
+
+/// D-124 m4 (also guards m1): the search walks beyond the 50,000 entries `project.tree {}`
+/// lists (ruling Q-3: limit 1,000,000). A root with 50,000 empty files in `a/` and `zz.rs` after
+/// them: `project.tree {}` stops before `zz.rs`, the search still finds its symbol.
+#[test]
+fn workspace_symbols_search_beyond_project_tree_default() {
+    let fx = Fixture::new("beyond-default");
+    let dir = fx.root().join("a");
+    fs::create_dir_all(&dir).unwrap();
+    for i in 0..50_000 {
+        fs::write(dir.join(format!("e{i:05}")), b"").unwrap();
+    }
+    fx.write("zz.rs", b"fn hit_beyond() {}\n");
+    let mut s = Script::default();
+    let tree = s.push("project.tree", json!({}));
+    let full = s.push("project.tree", json!({"limit": 1_000_000}));
+    let ws = s.push("nav.workspace-symbols", json!({"query": "hit"}));
+    let (resp, _) = s.run(&fx, "beyond-default");
+    let has_zz = |r: &Value| {
+        r["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["path"] == json!("zz.rs"))
+    };
+    let t = ok(&resp[tree], "project.tree {}");
+    assert_eq!(t["truncated"], json!(true));
+    assert!(
+        !has_zz(t),
+        "project.tree {{}} reached zz.rs: the case tests nothing"
+    );
+    let t = ok(&resp[full], "project.tree limit 1000000");
+    assert_eq!(t["truncated"], json!(false));
+    assert!(has_zz(t));
+    let r = ok(&resp[ws], "nav.workspace-symbols beyond the default");
+    assert_eq!(
+        r,
+        &json!({"items": [{"path": "zz.rs", "kind": "fn", "name": "hit_beyond", "start": 0,
+            "end": 18, "name_start": 3, "name_end": 13, "line": 0, "col": 3}],
+            "truncated": false, "skipped": [], "walk_truncated": false, "too_deep": 0})
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
