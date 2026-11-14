@@ -416,6 +416,150 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### implementer
 <!-- end implementer log -->
 ### test author
+- 2026-11-14T19:25Z · R-227 · ready · did: wrote `apps/kiln/tests/acceptance_t055.rs` (18 tests)
+  and `apps/kiln/tests/guard_t055.rs` (2 tests) from this spec alone, on `task/T-055-tests`
+  (base `9d5f6d6`). I did not read `task/T-055` or its worktree.
+  - Rulings acknowledged and accepted before acting on them:
+    - D-147 Q-1 A: the UI runs a `kiln_control::Host`. No test depends on how it does. AC-1 and
+      AC-7 compare the `--log` with `Host::log_script()`.
+    - D-147 Q-3 A: every test drives `kiln script` of the desktop binary (`CARGO_BIN_EXE_kiln`).
+  - Dev-dependency: I added `kiln-control.workspace = true` under a new `[dev-dependencies]` in
+    `apps/kiln/Cargo.toml`, with the one generated line in `Cargo.lock`. The spec allows it
+    ("`apps/kiln` may take `kiln-control` as a dev-dependency for this"), but `touches` gives the
+    file to no role in particular. See QUESTION 1. The tests need no other dependency: responses
+    are read by a small JSON reader inside the test file, not by `serde_json`.
+  - Tests per criterion, and their result on base. Every acceptance test fails on base by
+    assertion; none fails to compile. On base `kiln` prints its not-built line on stderr and
+    exits 1.
+    - AC-1 `ac1_control_pass_through`: the Pinned (g) example, the worked example of
+      `docs/control-protocol.md`, three seeded random sequences of 90 lines each, a 300 kB line,
+      and `--memory`. Malformed lines are included: syntax, not an object, `bad_id`,
+      `unknown_key`, non-UTF-8, blank, `\r`. Compared with `Host` on a copy of the root: stdout
+      bytes, exit code, `--log` against `log_script()`, and the files afterwards. Base: stdout
+      differs (0 lines against 4).
+    - AC-2 `ac2_shell_shown`: base fails at the count assertion (0 response lines).
+    - AC-3 `ac3_ui_dispatches_on_click` and `ac3_ui_dispatches_on_enter`:
+      - checked: Path focused, its value and caret {8,8} after `type`; `Documents`; `doc.list`;
+        the logged `doc.open`; a control insert and save through doc 1;
+      - the log is replayed with `Host` on a copy of the initial root: same `doc.list`, same files.
+      - Base: 0 response lines.
+    - AC-4 `ac4_refusals_shown`: four cases (missing file, directory, symlink out of the root,
+      `../x`). The control `doc.open` in a second `Host` session is the oracle and must report
+      exactly the listed kind. The test first shows that each forbidden target exists, and
+      afterwards that nothing changed. Base: 0 response lines.
+    - AC-5 `ac5_idle_frames_add_nothing`: 600 idle frames, on a fresh shell and after a UI open.
+      The log equals the log of the same script without the `frames` line. The `root`s of the
+      two snapshots are equal, and their `frames` differ by exactly 600. Base: 0 response lines.
+    - AC-6 `ac6_determinism`: every UI action plus control requests, on five roots at different
+      depths. Two runs alone, then three at once while two busy threads load the machine. Stdout,
+      log, exit code and files must be byte-equal. Base: 0 response lines (the outputs are first
+      checked to be real responses, so an empty run cannot pass).
+    - AC-6 `ac6_frame_counts_add_up`: Interface "Responses" and S6, beyond AC-6's text. Between
+      two snapshots `frames` grows by the sum of the actions' `frames`. Refusals and control
+      requests add 0. Each action reports `frames` from 1 to 60, and `settled` can be false only
+      at 60. Base: 0 response lines.
+    - AC-7 `ac7_ui_refusals`: 21 refusals, each with `ok:false`, code `ui`, its kind, the id
+      echoed and a message of at most 200 chars:
+      - every listed `bad_request` case, plus an empty target, an unknown key name, a wrongly
+        typed `count` and a key that does not belong to the action;
+      - `unknown_action`, `no_target` (one with a 1000-char label), `ambiguous_target`, and
+        `not_actionable` for `type` with nothing focused and for `at` beyond the rows and beyond
+        a row's length;
+      - five precedence pairs.
+      - Afterwards the snapshot `root` and `frames` are unchanged, the log equals the setup's own
+        log, and the exit code is 3. Base: 0 response lines.
+    - AC-7 `ac7_line_level_errors_first`: Pinned (a). Lines that carry `ui` but have a line-level
+      fault (bad id, not an object, syntax, not UTF-8) get exactly `Host`'s response bytes. Base:
+      0 response lines.
+    - AC-8, base exit 1 where 2 or 0 is expected:
+      - `ac8_usage_errors`: 19 command lines.
+      - `ac8_unreadable_script_bad_root_unwritable_log`: the bad root is named as given on
+        stderr; no request runs; `--log /dev/full` exits 2 with empty stdout.
+      - `ac8_order_of_checks_keeps_the_log`: Pinned (c). An existing log survives a usage error,
+        an unreadable script and a bad root; a good run truncates it.
+      - `ac8_help`.
+      - `ac8_accepted_command_lines`: options in any order; `--size` 200 and 8192 accepted; the
+        default root is the current directory; `--memory`.
+      - `ac8_stdout_write_failure_exits_1`: stdout on `/dev/full`. It is made to fail on base by a
+        control run that must exit 0.
+    - AC-9 `ac9_no_display`: AC-2's script with `DISPLAY` and `WAYLAND_DISPLAY` removed. It must
+      give the AC-2 results and the same stdout as with both set to unusable values. `HOME` and
+      `XDG_CONFIG_HOME` are temporary directories and must stay empty (Pinned (b)). Base: 0
+      response lines.
+    - AC-10:
+      - `ac10_accessible_names`: snapshots in five states, each with at least one `button` and
+        one `text_input`. Base: 0 response lines.
+      - The same tree walk runs on every snapshot of the AC-2 to AC-7 tests (`snap`).
+    - Guards, both pass on base:
+      - `kiln_without_subcommand_exits_1_with_a_message`: exit 1, empty stdout, a message on
+        stderr, no panic. The text is not pinned.
+      - `host_answers_the_pinned_worked_example`: the oracle's own Pinned (g) behaviour:
+        ok-pattern, `rejected`/`not_found`, and a log of 3 entries renumbered 1–3.
+    - No scorecard item (`scorecard_items: []`), so there are no item-to-test lines.
+  - Self-check:
+    - The stub was a model of the interface without the toolkit: Host pass-through, the shell
+      as a model, the refusal order, the CLI checks. I swapped it into `apps/kiln/src/main.rs`
+      with temporary `kiln-control` and `serde_json` dependencies, never committed it, and
+      restored those three files with `git checkout`.
+    - Against it all 18 acceptance tests pass. That confirms the AC-4 oracle kinds, the guard's
+      log format and the frame accounting.
+    - Naive mode (control lines passed through, every UI line answered `ok:true` with an empty
+      result): 11 fail. The 7 that pass are AC-1 and AC-8, which test no UI request.
+    - Seeded bugs, each with the tests that killed it:
+      - B1, a refusal runs a frame: `ac7_ui_refusals`, `ac6_frame_counts_add_up`.
+      - B2, `unknown_action` checked before `bad_request`: `ac7_ui_refusals`.
+      - B3, `frames` sends a `doc.list`: `ac5`.
+      - B4, a `doc.list` at start-up: `ac1`, `ac8_order_of_checks_keeps_the_log`.
+      - B5, Documents in reverse order: `ac2`, `ac9`.
+      - B6, Message without the kind: `ac4`.
+      - B7, `--size` cap 8191: `ac8_accepted_command_lines`.
+      - B8, log opened for append: `ac8_order_of_checks_keeps_the_log`.
+      - B9, stdout streamed before the log is written: `ac8_unreadable_script_bad_root_unwritable_log`,
+        `ac8_stdout_write_failure_exits_1`.
+      - B10, `type` with nothing focused accepted: `ac7_ui_refusals`.
+      - B11, `frames` runs `count`−1: `ac5`, `ac6_determinism`, `ac6_frame_counts_add_up`.
+      - B12, Enter ignored: `ac3_ui_dispatches_on_enter`.
+      - B13, absolute root in a node label: `ac6_determinism`.
+      - B15, `DISPLAY` read: `ac9`.
+      - B16, log truncated before the root check: `ac8_order_of_checks_keeps_the_log`.
+      - B17, an unlabelled button: AC-10 and 10 more.
+      - B18, a UI line with a bad id answered as a UI `bad_request`: `ac7_line_level_errors_first`.
+      - B20, the first of several matches taken: `ac7_ui_refusals`.
+      - B21, `col` up to len+1 accepted: `ac7_ui_refusals`.
+      - B22, the UI opens through a second session: both `ac3`, `ac4`.
+      - B23, `settled` false below the cap: both `ac3`, `ac4`, both `ac6`.
+    - 21 of 21 bugs were killed. Clippy (`-D warnings`) and rustfmt pass on both files, on base
+      and with the stub.
+  - QUESTION 1 (dev-dependency): `touches` names `apps/kiln/Cargo.toml` without a role, and the
+    spec allows `kiln-control` as a dev-dependency. I took it, as `[dev-dependencies]
+    kiln-control.workspace = true`. If the implementer adds the same line, or makes kiln-control a
+    normal dependency, the join may conflict in this file and in the `kiln` entry of
+    `Cargo.lock`. Proposed ruling: the test branch's line stands, and the implementer's edit
+    merges around it.
+  - QUESTION 2 (AC-7 "type with nothing focused"): I assume a fresh shell focuses nothing. The
+    test asserts this as a precondition and panics, saying so, if a node is `focused`. If the
+    shell may autofocus `Path`, the criterion needs another way to reach "nothing focused".
+    Proposed wording: "a fresh session has no focused node".
+  - QUESTION 3 (an unwritable log found late): `--log /dev/full` can be created but not written.
+    I test it as exit 2 with nothing on stdout, as `kiln-cli run` behaves. The spec says "log file
+    not writable … nothing on stdout", which implies that stdout is held until the log is
+    written. Please confirm.
+  - Interpretations, not questions:
+    - The shell nodes `Path`, `Open`, `Documents` and `Message` are each the only node with that
+      label.
+    - A `Message` value that is absent counts as empty.
+    - "begins with the kind" is a prefix check.
+    - The caret after typing 8 chars into an empty `Path` is `{"anchor":8,"head":8}`.
+    - A duplicate option, a `--size` without a value, `-1x800`, `1280.5x800`, `1280x800x2` and
+      `wxh` are usage errors.
+  - Not run or not checkable before the join:
+    - nothing against the real toolkit: roles as egui reports them, `rows` and colours,
+      `offscreen`, settle counts, real determinism under load;
+    - a successful `scroll`: the spec's shell need not have a scrollable area, so `scroll` only
+      appears in AC-6, compared byte for byte;
+    - any effect of `--size` beyond whether it is accepted: the shell's layout is not pinned;
+    - a real `kiln-cli` binary: the tests use `Host` only, so build order does not matter.
+  - gate attempts: 1 (last: GATE_RESULT) · missing context: none · next: director (Q 1–3), join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
