@@ -387,7 +387,7 @@ impl SeedFile {
 /// Bytes from an even number of hex digits (either case).
 fn decode_hex(hex: &str) -> Result<Vec<u8>, String> {
     let digits = hex.as_bytes();
-    if digits.len() % 2 != 0 {
+    if !digits.len().is_multiple_of(2) {
         return Err(format!("bad hex: odd number of digits ({})", digits.len()));
     }
     let digit = |c: u8| match c {
