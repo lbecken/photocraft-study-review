@@ -1081,6 +1081,15 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (stub-only lints `missing_docs` etc. allowed for the scratch code); `cargo xtask no-skip`
   PASS. · gate attempts: 0 · not run: `cargo xtask ci`; the CLI files against the stub (unchanged
   since R-216) · missing context: none · next: join.
+- 2026-11-14T09:47Z · R-219 · rework · did: acknowledged ruling j2 (D-137, review round 1
+  finding 1; read in the director's copy of this file): accepted (my (iv) case had a declaration,
+  so rule (iii) alone gave its one line). Added inside
+  `audit_requires_a_witness_for_every_declared_kind` one case: a registry of one command
+  `t38.undeclared-with-example` with no declaration (`refusals()` = `None`) and one refusal
+  example of `not_found` whose run refuses `not_found`; `audit()` → exactly 2 lines, each naming
+  the command (rules (i) and (iv)). No other case or name changed. · gate attempts: 0 · ran:
+  `cargo fmt --check` clean, `cargo xtask hygiene` PASS · not run: compiling or running the test
+  (it needs the new API; the join compiles it) · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-14T09:45Z · R-218 · tests_joined · review round 1 (high, independent) of
