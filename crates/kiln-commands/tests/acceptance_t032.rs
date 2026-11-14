@@ -737,12 +737,12 @@ const REJECTED: &[(RejectReason, &str, &str)] = &[
     (
         RejectReason::NotFound,
         "not_found",
-        "the file (or, for a save, its directory) does not exist",
+        "the path leads to nothing, or a component on its way that must be a directory is missing or is not a directory (a save creates a missing file, never a missing directory)",
     ),
     (
         RejectReason::NotAFile,
         "not_a_file",
-        "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed",
+        "the path leads to a directory, FIFO, socket or device where a regular file is needed, or to a file, FIFO, socket or device where a directory is needed",
     ),
     (
         RejectReason::IoError,
@@ -757,7 +757,7 @@ const REJECTED: &[(RejectReason, &str, &str)] = &[
     (
         RejectReason::OutOfRange,
         "out_of_range",
-        "an offset beyond the end of the text",
+        "an offset beyond the end of the text (in chars, bytes or UTF-16 code units), a line beyond the last line, a column beyond the end of its line, or an outline item index beyond the last item",
     ),
     (
         RejectReason::InvertedRange,
@@ -768,7 +768,7 @@ const REJECTED: &[(RejectReason, &str, &str)] = &[
     (
         RejectReason::InvalidPattern,
         "invalid_pattern",
-        "the search pattern is empty or is not a valid regular expression",
+        "the search pattern is empty, longer than 1,000 chars, or in regex mode not accepted by the regex engine or with more than 100 capture groups; or a regex replacement refers to a capture group the pattern does not have",
     ),
     (
         RejectReason::StalePreview,
@@ -919,8 +919,16 @@ fn describe_publishes_error_kinds_from_all() {
         .map(String::as_str)
         .collect();
     assert_eq!(keys, BTreeSet::from(["commands", "error_kinds"]));
+    let declared: BTreeSet<&str> = d["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .flat_map(|c| c["refusals"].as_array().expect("refusals").iter())
+        .map(|k| k.as_str().expect("kind string"))
+        .collect();
     let rejected: Vec<Value> = RejectReason::ALL
         .iter()
+        .filter(|r| declared.contains(r.as_str()))
         .map(|r| json!({"kind": r.as_str(), "when": r.description()}))
         .collect();
     let internal: Vec<Value> = InternalReason::ALL

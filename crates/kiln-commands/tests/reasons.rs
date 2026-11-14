@@ -174,8 +174,16 @@ fn error_kinds(described: &Value, code: &str) -> Vec<(String, String)> {
 #[test]
 fn describe_publishes_every_reason_in_all_order() {
     let d = reg().describe();
+    let declared: std::collections::BTreeSet<&str> = d["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|c| c["refusals"].as_array().unwrap().iter())
+        .map(|k| k.as_str().unwrap())
+        .collect();
     let want: Vec<(String, String)> = RejectReason::ALL
         .iter()
+        .filter(|r| declared.contains(r.as_str()))
         .map(|r| (r.as_str().to_owned(), r.description().to_owned()))
         .collect();
     assert_eq!(error_kinds(&d, "rejected"), want);
@@ -232,7 +240,7 @@ fn table_rows_are_published_kinds_with_their_when_text() {
         assert!(!desc.trim().is_empty(), "{code}/{kind}: empty description");
     }
     assert_eq!(
-        rows, 13,
-        "the table keeps its 10 rejected and 3 internal rows"
+        rows, 12,
+        "the table keeps its 9 rejected and 3 internal rows"
     );
 }

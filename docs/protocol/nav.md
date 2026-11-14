@@ -112,11 +112,12 @@ reports.
 `nav.workspace-symbols {query, limit?}` searches the outlines of the project's Rust files.
 
 `nav.workspace-symbols` searches the entries of kind `file` whose name ends in `.rs` that the
-walk of `project.tree` with `limit` 1,000,000 would list; it does not follow symbolic links, and files that `project.tree`
-ignores or does not reach are not searched. For a file that is open as a document, the
-document's current text is searched, saved or not, and the file is not read. Any other file is
-read and decoded as `doc.open` decodes it (UTF-8, UTF-8 with BOM, UTF-16 LE/BE by BOM). A file
-with syntax errors is searched; its outline is what the rules above give.
+walk of `project.tree` with `limit` 1,000,000 would list; it does not follow symbolic links,
+and files that `project.tree` ignores or does not reach are not searched. For a file that is
+open as a document, the document's current text is searched, saved or not, and the file is not
+read. Any other file is read and decoded as `doc.open` decodes it (UTF-8, UTF-8 with BOM,
+UTF-16 LE/BE by BOM). A file with syntax errors is searched; its outline is what the rules
+above give.
 
 The search covers at most the first 1,000,000 entries of the walk, the largest `limit` of
 `project.tree`; `walk_truncated` is true when the walk stopped there, and `too_deep` counts the

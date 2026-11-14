@@ -28,8 +28,9 @@ use serde_json::{Value, json};
 const SECRET: &[u8] = b"s3cr3t-content\n";
 /// Upper bound for one `kiln-cli` invocation or one `control` response (AC-6: 10 seconds).
 const TIMEOUT: Duration = Duration::from_secs(10);
-const NOT_A_FILE_WHEN: &str = "the path names a directory or another non-regular file where a \
-                               file is needed, or a file where a directory is needed";
+const NOT_A_FILE_WHEN: &str = "the path leads to a directory, FIFO, socket or device where a \
+                               regular file is needed, or to a file, FIFO, socket or device \
+                               where a directory is needed";
 
 // ---------------------------------------------------------------------------------------------
 // Fixtures.
@@ -537,7 +538,10 @@ fn documents_state_the_confinement_rule() {
     };
     assert_eq!(
         when("outside_root"),
-        Some(json!("the path resolves outside the root"))
+        Some(json!(
+            "the path resolves outside the root, or the root path no longer leads to the \
+             directory the session started on"
+        ))
     );
     assert_eq!(when("not_a_file"), Some(json!(NOT_A_FILE_WHEN)));
 

@@ -76,55 +76,26 @@ const REJECTED: &[(&str, &str)] = &[
     ),
     (
         "not_found",
-        "the file (or, for a save, its directory) does not exist",
+        "the path leads to nothing, or a component on its way that must be a directory is missing or is not a directory (a save creates a missing file, never a missing directory)",
     ),
     (
         "not_a_file",
-        "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed",
+        "the path leads to a directory, FIFO, socket or device where a regular file is needed, or to a file, FIFO, socket or device where a directory is needed",
     ),
     (
         "io_error",
         "any other file-system failure (permissions, name too long, …)",
     ),
     ("decode_error", "the file is not valid UTF-8 / UTF-16 text"),
-    ("out_of_range", "an offset beyond the end of the text"),
+    (
+        "out_of_range",
+        "an offset beyond the end of the text (in chars, bytes or UTF-16 code units), a line beyond the last line, a column beyond the end of its line, or an outline item index beyond the last item",
+    ),
     ("inverted_range", "a range whose start is after its end"),
-    ("other", "any other refusal"),
     (
         "invalid_pattern",
-        "the search pattern is empty or is not a valid regular expression",
+        "the search pattern is empty, longer than 1,000 chars, or in regex mode not accepted by the regex engine or with more than 100 capture groups; or a regex replacement refers to a capture group the pattern does not have",
     ),
-    (
-        "stale_preview",
-        "a file of a replace preview changed or was removed since the preview",
-    ),
-    ("no_such_preview", "no stored replace preview has this id"),
-    (
-        "tool_unavailable",
-        "external tools are off for this session (the default)",
-    ),
-    (
-        "tool_not_found",
-        "the external tool's program was not found",
-    ),
-    (
-        "tool_timeout",
-        "the external tool ran longer than its limit and was stopped",
-    ),
-    (
-        "tool_failed",
-        "the external tool failed or gave no usable result",
-    ),
-    (
-        "no_recording",
-        "the replayed tool recording has no output for this request",
-    ),
-    ("format_error", "rustfmt could not format the text"),
-    (
-        "changed_on_disk",
-        "the file changed or was removed on disk since it was read",
-    ),
-    ("invalid_keymap", "the keymap file or chord is not valid"),
 ];
 
 const INTERNAL: &[(&str, &str)] = &[
@@ -220,7 +191,7 @@ fn schema_dump_publishes_the_generated_kind_list() {
         assert_eq!(unique.len(), list.len(), "duplicate kind: {list:?}");
     }
     let rows = table_rows(&repo_file("docs/control-protocol.md"));
-    assert_eq!(rows.len(), 23, "{rows:?}");
+    assert_eq!(rows.len(), 22, "{rows:?}");
     for (code, kind) in &rows {
         let list = match code.as_str() {
             "rejected" => &rejected,
@@ -249,10 +220,16 @@ const NEW_PARAGRAPH: &str = "The `kind` of a `rejected` or `internal` error come
     request-level rows of this table (codes `invalid_json`, `invalid_request`, \
     `unknown_command`, `invalid_params`) and the `rejected`/`internal` kinds in `error_kinds` \
     of `docs/commands.json` (`kiln-cli commands --schema`, generated from code) are the \
-    specified set; no other pair is produced. The `rejected` and `internal` rows above are the \
-    kinds of iteration 0; kinds added since are listed only in `error_kinds`. Where a row's \
-    'When' text differs from `error_kinds`, `error_kinds` governs; later tasks do not edit \
-    table cells.";
+    specified set; no other pair is produced. `error_kinds` lists only the `rejected` kinds \
+    that some command of this build can report, and each command's entry lists the kinds it \
+    can report as its `refusals`; a listed kind for which the command has no entry in \
+    `refusal_examples` can occur only in a session on disk (`--root`). A command that refuses \
+    with a kind it does not list reports `internal` / `other` instead. A 'When' text says what \
+    a kind means; which commands report it, and for which params, is given by their \
+    `refusals` and descriptions. The `internal` kinds report bugs and can come from any \
+    command. The `rejected` and `internal` rows above are the kinds of iteration 0; kinds \
+    added since are listed only in `error_kinds`. Where a row's 'When' text differs from \
+    `error_kinds`, `error_kinds` governs; later tasks do not edit table cells.";
 
 /// AC-7: between the table and the next paragraph, `docs/control-protocol.md` holds exactly the
 /// two replacement sentences (any line wrapping); the two old sentences are gone. (That nothing

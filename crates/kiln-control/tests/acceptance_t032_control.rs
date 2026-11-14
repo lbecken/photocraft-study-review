@@ -165,8 +165,16 @@ fn generated_kind_list_matches_reasons_and_table() {
     };
     let rejected = entries("rejected");
     let internal = entries("internal");
+    let declared: BTreeSet<&str> = d["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .flat_map(|c| c["refusals"].as_array().expect("refusals").iter())
+        .map(|k| k.as_str().expect("kind string"))
+        .collect();
     let want_rejected: Vec<(String, String)> = RejectReason::ALL
         .iter()
+        .filter(|r| declared.contains(r.as_str()))
         .map(|r| (r.as_str().to_owned(), r.description().to_owned()))
         .collect();
     let want_internal: Vec<(String, String)> = InternalReason::ALL
@@ -186,7 +194,7 @@ fn generated_kind_list_matches_reasons_and_table() {
     let rejected_kinds: BTreeSet<&str> = rejected.iter().map(|(k, _)| k.as_str()).collect();
     let internal_kinds: BTreeSet<&str> = internal.iter().map(|(k, _)| k.as_str()).collect();
     let rows = table_rows(&repo_file("docs/control-protocol.md"));
-    assert_eq!(rows.len(), 23, "the table keeps its 23 rows: {rows:?}");
+    assert_eq!(rows.len(), 22, "the table keeps its 22 rows: {rows:?}");
     let mut checked = 0;
     for (code, kind) in &rows {
         let set = match code.as_str() {
@@ -200,7 +208,7 @@ fn generated_kind_list_matches_reasons_and_table() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 13, "10 rejected and 3 internal rows");
+    assert_eq!(checked, 12, "9 rejected and 3 internal rows");
     for kind in [
         "invalid_path",
         "no_such_document",

@@ -91,8 +91,7 @@ for an unknown or closed id, including `0`), then the line or position. A refusa
 | `InsideSurrogatePair` | `not_a_boundary` | `invalid position: UTF-16 offset 6 is inside a surrogate pair` |
 | `InsideLineBreak` | `not_a_boundary` | `invalid position: char index 2 is between the \r and \n of a CRLF` |
 
-An offset, a line or a column beyond the end is refused with `out_of_range` (its published
-description in `error_kinds` still reads "an offset beyond the end of the text"). A position
+An offset, a line or a column beyond the end is refused with `out_of_range`. A position
 inside a character, a surrogate pair or a CRLF line break is refused with `not_a_boundary`,
 whichever unit names it (`{"byte": 2}` on the example text is `InsideLineBreak`). The schema
 accepts any `u64`; a huge value is refused with `out_of_range`, never a panic.

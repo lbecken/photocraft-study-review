@@ -97,13 +97,23 @@ Failure:
 | `rejected` | `decode_error` | the file is not valid UTF-8 / UTF-16 text | echoed |
 | `rejected` | `out_of_range` | an offset beyond the end of the text | echoed |
 | `rejected` | `inverted_range` | a range whose start is after its end | echoed |
-| `rejected` | `other` | any other refusal | echoed |
 | `internal` | `panic` | a command panicked (a bug in Kiln) | echoed |
 | `internal` | `result_schema` | a command's result violates its own schema (a bug in Kiln) | echoed |
 | `internal` | `other` | any other internal error | echoed |
 
-The `kind` of a `rejected` or `internal` error comes from a structured reason set where the error is raised; no message text is consulted.
-The request-level rows of this table (codes `invalid_json`, `invalid_request`, `unknown_command`, `invalid_params`) and the `rejected`/`internal` kinds in `error_kinds` of `docs/commands.json` (`kiln-cli commands --schema`, generated from code) are the specified set; no other pair is produced. The `rejected` and `internal` rows above are the kinds of iteration 0; kinds added since are listed only in `error_kinds`. Where a row's 'When' text differs from `error_kinds`, `error_kinds` governs; later tasks do not edit table cells.
+The `kind` of a `rejected` or `internal` error comes from a structured reason set where the error is
+raised; no message text is consulted. The request-level rows of this table (codes `invalid_json`,
+`invalid_request`, `unknown_command`, `invalid_params`) and the `rejected`/`internal` kinds in
+`error_kinds` of `docs/commands.json` (`kiln-cli commands --schema`, generated from code) are the
+specified set; no other pair is produced. `error_kinds` lists only the `rejected` kinds that some
+command of this build can report, and each command's entry lists the kinds it can report as its
+`refusals`; a listed kind for which the command has no entry in `refusal_examples` can occur only in
+a session on disk (`--root`). A command that refuses with a kind it does not list reports `internal`
+/ `other` instead. A 'When' text says what a kind means; which commands report it, and for which
+params, is given by their `refusals` and descriptions. The `internal` kinds report bugs and can come
+from any command. The `rejected` and `internal` rows above are the kinds of iteration 0; kinds added
+since are listed only in `error_kinds`. Where a row's 'When' text differs from `error_kinds`,
+`error_kinds` governs; later tasks do not edit table cells.
 
 A request that fails validation, or a command that returns an error, is not recorded in the
 session log; commands are written so that a refused request leaves the session unchanged.

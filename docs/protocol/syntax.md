@@ -101,9 +101,9 @@ anonymous bracket leaves of the same kind that are direct children of the same p
 Partners: those leaves are taken left to right, and each closing leaf pairs with the nearest
 unpaired opening leaf before it; a leaf left unpaired has no partner. A bracket the parser
 inserted to recover (a `MISSING` node, which holds no char) is never a partner: in
-`fn f() { g(1; }` the `(` at 10 gives `null`. `<` and `>` are not brackets. Brackets inside strings, character literals and comments are never matched; a
-bracket without a partner gives `null`. Any other char, and `offset` equal to the text's
-length, also give `null`.
+`fn f() { g(1; }` the `(` at 10 gives `null`. `<` and `>` are not brackets. Brackets inside
+strings, character literals and comments are never matched; a bracket without a partner gives
+`null`. Any other char, and `offset` equal to the text's length, also give `null`.
 
 ```json
 {"command": "syntax.match-bracket", "params": {"doc": 1, "offset": 7}}   // text "fn f() { let s: u8 = 1; } // c"

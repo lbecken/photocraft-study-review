@@ -65,7 +65,6 @@ const ERROR_KINDS: &[(&str, &str)] = &[
     ("rejected", "decode_error"),
     ("rejected", "out_of_range"),
     ("rejected", "inverted_range"),
-    ("rejected", "other"),
     ("internal", "panic"),
     ("internal", "result_schema"),
     ("internal", "other"),

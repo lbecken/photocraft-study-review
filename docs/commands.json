@@ -55,6 +55,22 @@
         "title": "InsertParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "an offset beyond the end of the empty buffer",
+          "files": [],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "offset": 5,
+            "text": "x"
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "out_of_range"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `buffer.insert`.",
@@ -97,6 +113,8 @@
         "title": "TextParams",
         "type": "object"
       },
+      "refusal_examples": [],
+      "refusals": [],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `buffer.text`.",
@@ -190,6 +208,21 @@
         "title": "GetParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
@@ -390,6 +423,23 @@
         "title": "MoveParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "by": "char",
+            "doc": 9,
+            "forward": true
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
@@ -550,6 +600,71 @@
         "title": "SetParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "anchor": 0,
+            "doc": 9
+          },
+          "setup": []
+        },
+        {
+          "description": "an anchor beyond the end of the text",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "anchor": 99,
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a head between the CR and LF of a CRLF",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "not_a_boundary",
+          "params": {
+            "anchor": 0,
+            "doc": 1,
+            "head": 4
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "not_a_boundary"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
@@ -698,6 +813,52 @@
         "title": "CloseParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        },
+        {
+          "description": "a document with unsaved changes, without discard",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "unsaved_changes",
+          "params": {
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "x"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "unsaved_changes"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.close`.",
@@ -787,6 +948,73 @@
         "title": "DeleteParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "end": 0,
+            "start": 0
+          },
+          "setup": []
+        },
+        {
+          "description": "an end beyond the end of the text",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "end": 99,
+            "start": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a start after the end",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "inverted_range",
+          "params": {
+            "doc": 1,
+            "end": 1,
+            "start": 3
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "inverted_range"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.delete` and `doc.replace`.",
@@ -880,6 +1108,21 @@
         "title": "DocParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$defs": {
           "EncodingName": {
@@ -1062,6 +1305,48 @@
         "title": "InsertParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "offset": 0,
+            "text": "x"
+          },
+          "setup": []
+        },
+        {
+          "description": "an offset beyond the end of the text",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "offset": 99,
+            "text": "x"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.insert`.",
@@ -1174,6 +1459,46 @@
         "title": "LineParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "line": 0
+          },
+          "setup": []
+        },
+        {
+          "description": "a line beyond the last line",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "line": 3
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range"
+      ],
       "result_schema": {
         "$defs": {
           "LineBreakName": {
@@ -1307,6 +1632,8 @@
         "title": "ListParams",
         "type": "object"
       },
+      "refusal_examples": [],
+      "refusals": [],
       "result_schema": {
         "$defs": {
           "ListItem": {
@@ -1436,6 +1763,81 @@
         "title": "OpenParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "a path that leaves the root",
+          "files": [],
+          "initial_text": "",
+          "kind": "invalid_path",
+          "params": {
+            "path": "../x"
+          },
+          "setup": []
+        },
+        {
+          "description": "a missing file",
+          "files": [],
+          "initial_text": "",
+          "kind": "not_found",
+          "params": {
+            "path": "missing.txt"
+          },
+          "setup": []
+        },
+        {
+          "description": "a component on the way is a file",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "x"
+            }
+          ],
+          "initial_text": "",
+          "kind": "not_found",
+          "params": {
+            "path": "f.txt/x"
+          },
+          "setup": []
+        },
+        {
+          "description": "a directory",
+          "files": [
+            {
+              "path": "d/a.txt",
+              "text": "x"
+            }
+          ],
+          "initial_text": "",
+          "kind": "not_a_file",
+          "params": {
+            "path": "d"
+          },
+          "setup": []
+        },
+        {
+          "description": "bytes that are not UTF-8",
+          "files": [
+            {
+              "hex": "ff",
+              "path": "bad.txt"
+            }
+          ],
+          "initial_text": "",
+          "kind": "decode_error",
+          "params": {
+            "path": "bad.txt"
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "invalid_path",
+        "not_found",
+        "not_a_file",
+        "io_error",
+        "decode_error",
+        "outside_root"
+      ],
       "result_schema": {
         "$defs": {
           "EncodingName": {
@@ -1751,6 +2153,79 @@
         "title": "PositionParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "at": {
+              "char": 0
+            },
+            "doc": 9
+          },
+          "setup": []
+        },
+        {
+          "description": "a column beyond the end of its line",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "at": {
+              "line_col": {
+                "col": 4,
+                "line": 0
+              }
+            },
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a char offset between the CR and LF of a CRLF",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "not_a_boundary",
+          "params": {
+            "at": {
+              "char": 4
+            },
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "not_a_boundary"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.position`: every form of the same position.",
@@ -1861,6 +2336,21 @@
         "title": "DocParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.redo`.",
@@ -1961,6 +2451,76 @@
         "title": "ReplaceParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "end": 0,
+            "start": 0,
+            "text": "x"
+          },
+          "setup": []
+        },
+        {
+          "description": "an end beyond the end of the text",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "end": 99,
+            "start": 1,
+            "text": "x"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a start after the end",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "inverted_range",
+          "params": {
+            "doc": 1,
+            "end": 1,
+            "start": 3,
+            "text": "x"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "inverted_range"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.delete` and `doc.replace`.",
@@ -2047,6 +2607,25 @@
         "title": "DocParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "not_found",
+        "not_a_file",
+        "io_error",
+        "outside_root"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.save`.",
@@ -2126,6 +2705,21 @@
         "title": "DocParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.text`.",
@@ -2241,6 +2835,21 @@
         "title": "DocParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of `doc.undo`.",
@@ -2321,6 +2930,21 @@
         "title": "CountsParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$defs": {
           "LineEndingName": {
@@ -2495,6 +3119,21 @@
         "title": "NormalizeParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$defs": {
           "LineEndingName": {
@@ -2658,6 +3297,22 @@
         "title": "GotoLineParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "line": 0
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "no_such_document"
+      ],
       "result_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
@@ -2791,6 +3446,108 @@
         "title": "GotoSymbolParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "index": 0
+          },
+          "setup": []
+        },
+        {
+          "description": "a document of 1,048,577 chars",
+          "files": [
+            {
+              "path": "g.rs",
+              "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "initial_text": "",
+          "kind": "too_large",
+          "params": {
+            "doc": 1,
+            "index": 0
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "g.rs"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "b"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "an index beyond the last outline item",
+          "files": [
+            {
+              "path": "a.rs",
+              "text": "fn f() {}"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "index": 5
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "too_large"
+      ],
       "result_schema": {
         "$defs": {
           "CursorResult": {
@@ -3053,6 +3810,82 @@
         "title": "DocParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        },
+        {
+          "description": "a document of 1,048,577 chars",
+          "files": [
+            {
+              "path": "g.rs",
+              "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "initial_text": "",
+          "kind": "too_large",
+          "params": {
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "g.rs"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "b"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "too_large"
+      ],
       "result_schema": {
         "$defs": {
           "ItemOut": {
@@ -3266,6 +4099,25 @@
         "title": "WorkspaceParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "an empty query",
+          "files": [],
+          "initial_text": "",
+          "kind": "invalid_pattern",
+          "params": {
+            "query": ""
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "not_found",
+        "not_a_file",
+        "io_error",
+        "invalid_pattern",
+        "outside_root"
+      ],
       "result_schema": {
         "$defs": {
           "KindName": {
@@ -3595,6 +4447,50 @@
         "title": "TreeParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "a path that leaves the root",
+          "files": [],
+          "initial_text": "",
+          "kind": "invalid_path",
+          "params": {
+            "path": "../x"
+          },
+          "setup": []
+        },
+        {
+          "description": "a missing directory",
+          "files": [],
+          "initial_text": "",
+          "kind": "not_found",
+          "params": {
+            "path": "missing"
+          },
+          "setup": []
+        },
+        {
+          "description": "a file where a directory is needed",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "x"
+            }
+          ],
+          "initial_text": "",
+          "kind": "not_a_file",
+          "params": {
+            "path": "f.txt"
+          },
+          "setup": []
+        }
+      ],
+      "refusals": [
+        "invalid_path",
+        "not_found",
+        "not_a_file",
+        "io_error",
+        "outside_root"
+      ],
       "result_schema": {
         "$defs": {
           "KindName": {
@@ -3813,6 +4709,46 @@
         "title": "FindParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "query": "a"
+          },
+          "setup": []
+        },
+        {
+          "description": "an empty pattern",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "invalid_pattern",
+          "params": {
+            "doc": 1,
+            "query": ""
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "invalid_pattern"
+      ],
       "result_schema": {
         "$defs": {
           "Span": {
@@ -4012,6 +4948,75 @@
         "title": "ReplaceParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "query": "a",
+            "replacement": "b"
+          },
+          "setup": []
+        },
+        {
+          "description": "a replacement that refers to a group the regex does not have",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "invalid_pattern",
+          "params": {
+            "doc": 1,
+            "query": "(a)(b)",
+            "regex": true,
+            "replacement": "$3"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a from beyond the end of the text",
+          "files": [
+            {
+              "path": "f.txt",
+              "text": "abc\r\ndef\n"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "from": 99,
+            "query": "a",
+            "replacement": "b"
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "f.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "invalid_pattern"
+      ],
       "result_schema": {
         "$defs": {
           "Span": {
@@ -4232,6 +5237,131 @@
         "title": "HighlightParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        },
+        {
+          "description": "a document of 1,048,577 chars",
+          "files": [
+            {
+              "path": "g.rs",
+              "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "initial_text": "",
+          "kind": "too_large",
+          "params": {
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "g.rs"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "b"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a start beyond the end of the text",
+          "files": [
+            {
+              "path": "a.rs",
+              "text": "fn f() { let s: u8 = 1; }"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "start": 99
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a start after the end",
+          "files": [
+            {
+              "path": "a.rs",
+              "text": "fn f() { let s: u8 = 1; }"
+            }
+          ],
+          "initial_text": "",
+          "kind": "inverted_range",
+          "params": {
+            "doc": 1,
+            "end": 2,
+            "start": 5
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "inverted_range",
+        "too_large"
+      ],
       "result_schema": {
         "$defs": {
           "SpanKind": {
@@ -4404,6 +5534,108 @@
         "title": "MatchBracketParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9,
+            "offset": 0
+          },
+          "setup": []
+        },
+        {
+          "description": "a document of 1,048,577 chars",
+          "files": [
+            {
+              "path": "g.rs",
+              "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "initial_text": "",
+          "kind": "too_large",
+          "params": {
+            "doc": 1,
+            "offset": 0
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "g.rs"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "b"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "an offset beyond the end of the text",
+          "files": [
+            {
+              "path": "a.rs",
+              "text": "fn f() { let s: u8 = 1; }"
+            }
+          ],
+          "initial_text": "",
+          "kind": "out_of_range",
+          "params": {
+            "doc": 1,
+            "offset": 99
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "out_of_range",
+        "too_large"
+      ],
       "result_schema": {
         "$defs": {
           "BracketOut": {
@@ -4576,6 +5808,82 @@
         "title": "DocParams",
         "type": "object"
       },
+      "refusal_examples": [
+        {
+          "description": "no open document has id 9",
+          "files": [],
+          "initial_text": "",
+          "kind": "no_such_document",
+          "params": {
+            "doc": 9
+          },
+          "setup": []
+        },
+        {
+          "description": "a document of 1,048,577 chars",
+          "files": [
+            {
+              "path": "g.rs",
+              "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "initial_text": "",
+          "kind": "too_large",
+          "params": {
+            "doc": 1
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "g.rs"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "search.replace",
+              {
+                "all": true,
+                "doc": 1,
+                "limit": 1,
+                "query": "a",
+                "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            [
+              "doc.insert",
+              {
+                "doc": 1,
+                "offset": 0,
+                "text": "b"
+              }
+            ]
+          ]
+        }
+      ],
+      "refusals": [
+        "no_such_document",
+        "too_large"
+      ],
       "result_schema": {
         "$defs": {
           "ErrorSpanKind": {
@@ -4712,11 +6020,11 @@
       },
       {
         "kind": "not_found",
-        "when": "the file (or, for a save, its directory) does not exist"
+        "when": "the path leads to nothing, or a component on its way that must be a directory is missing or is not a directory (a save creates a missing file, never a missing directory)"
       },
       {
         "kind": "not_a_file",
-        "when": "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed"
+        "when": "the path leads to a directory, FIFO, socket or device where a regular file is needed, or to a file, FIFO, socket or device where a directory is needed"
       },
       {
         "kind": "io_error",
@@ -4728,59 +6036,15 @@
       },
       {
         "kind": "out_of_range",
-        "when": "an offset beyond the end of the text"
+        "when": "an offset beyond the end of the text (in chars, bytes or UTF-16 code units), a line beyond the last line, a column beyond the end of its line, or an outline item index beyond the last item"
       },
       {
         "kind": "inverted_range",
         "when": "a range whose start is after its end"
       },
       {
-        "kind": "other",
-        "when": "any other refusal"
-      },
-      {
         "kind": "invalid_pattern",
-        "when": "the search pattern is empty or is not a valid regular expression"
-      },
-      {
-        "kind": "stale_preview",
-        "when": "a file of a replace preview changed or was removed since the preview"
-      },
-      {
-        "kind": "no_such_preview",
-        "when": "no stored replace preview has this id"
-      },
-      {
-        "kind": "tool_unavailable",
-        "when": "external tools are off for this session (the default)"
-      },
-      {
-        "kind": "tool_not_found",
-        "when": "the external tool's program was not found"
-      },
-      {
-        "kind": "tool_timeout",
-        "when": "the external tool ran longer than its limit and was stopped"
-      },
-      {
-        "kind": "tool_failed",
-        "when": "the external tool failed or gave no usable result"
-      },
-      {
-        "kind": "no_recording",
-        "when": "the replayed tool recording has no output for this request"
-      },
-      {
-        "kind": "format_error",
-        "when": "rustfmt could not format the text"
-      },
-      {
-        "kind": "changed_on_disk",
-        "when": "the file changed or was removed on disk since it was read"
-      },
-      {
-        "kind": "invalid_keymap",
-        "when": "the keymap file or chord is not valid"
+        "when": "the search pattern is empty, longer than 1,000 chars, or in regex mode not accepted by the regex engine or with more than 100 capture groups; or a regex replacement refers to a capture group the pattern does not have"
       },
       {
         "kind": "not_a_boundary",
@@ -4788,7 +6052,7 @@
       },
       {
         "kind": "outside_root",
-        "when": "the path resolves outside the root"
+        "when": "the path resolves outside the root, or the root path no longer leads to the directory the session started on"
       },
       {
         "kind": "too_large",

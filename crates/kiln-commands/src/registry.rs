@@ -994,6 +994,9 @@ mod tests {
                 result: json!({"n": 1}),
             }]
         }
+        fn refusals() -> Option<Vec<Refusal>> {
+            Some(vec![])
+        }
         fn run(_: &mut Context, p: EchoParams) -> Result<EchoOut, CommandError> {
             Ok(EchoOut { n: p.n })
         }
@@ -1016,6 +1019,9 @@ mod tests {
                 result: json!({"n": 2}),
             }]
         }
+        fn refusals() -> Option<Vec<Refusal>> {
+            Some(vec![])
+        }
         fn run(_: &mut Context, p: EchoParams) -> Result<EchoOut, CommandError> {
             Ok(EchoOut { n: p.n })
         }
@@ -1030,6 +1036,9 @@ mod tests {
         const MUTATING: bool = false;
         fn examples() -> Vec<Example> {
             Echo::examples()
+        }
+        fn refusals() -> Option<Vec<Refusal>> {
+            Some(vec![])
         }
         fn run(_: &mut Context, p: EchoParams) -> Result<EchoOut, CommandError> {
             Ok(EchoOut { n: p.n })
@@ -1070,6 +1079,9 @@ mod tests {
                     result: json!({"n": 1}),
                 },
             ]
+        }
+        fn refusals() -> Option<Vec<Refusal>> {
+            Some(vec![])
         }
         fn run(_: &mut Context, p: EchoParams) -> Result<EchoOut, CommandError> {
             Ok(EchoOut { n: p.n })
@@ -1191,6 +1203,358 @@ mod tests {
         assert!(!valid_name("insert"));
         assert!(!valid_name("Buffer.insert"));
         assert!(!valid_name("buffer..insert"));
+    }
+}
+
+/// Declared refusal kinds (ADR-0006): the execute check, `describe` and audit rules (i)–(v).
+#[cfg(test)]
+mod refusal_tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Deserialize, JsonSchema)]
+    #[serde(deny_unknown_fields)]
+    struct NParams {
+        n: u32,
+    }
+
+    #[derive(Serialize, JsonSchema)]
+    struct NOut {
+        n: u32,
+    }
+
+    /// 0 succeeds; 1 refuses with `not_found`; anything else with `decode_error`.
+    fn refuse_as(n: u32) -> Result<NOut, CommandError> {
+        match n {
+            0 => Ok(NOut { n }),
+            1 => Err(CommandError::rejected(RejectReason::NotFound, "nf")),
+            _ => Err(CommandError::rejected(RejectReason::DecodeError, "de")),
+        }
+    }
+
+    fn example() -> Vec<Example> {
+        vec![Example {
+            description: "succeeds",
+            initial_text: "",
+            files: vec![],
+            setup: vec![],
+            params: json!({"n": 0}),
+            result: json!({"n": 0}),
+        }]
+    }
+
+    fn rex(kind: RejectReason, params: Value) -> RefusalExample {
+        RefusalExample {
+            description: "refuses",
+            initial_text: "",
+            files: vec![],
+            setup: vec![],
+            params,
+            kind,
+        }
+    }
+
+    /// One command per `V`; each variant but 0, 11 and 12 has exactly one audit problem.
+    struct Variant<const V: u8>;
+
+    impl<const V: u8> Command for Variant<V> {
+        const NAME: &'static str = match V {
+            0 => "test.no-declaration",
+            1 => "test.no-refusal-example",
+            2 => "test.example-succeeds",
+            3 => "test.example-undeclared-result",
+            4 => "test.example-other-declared-kind",
+            5 => "test.example-bad-params",
+            6 => "test.example-failing-setup",
+            7 => "test.example-bad-path",
+            8 => "test.example-bad-hex",
+            9 => "test.example-undeclared-kind",
+            10 => "test.example-disk-kind",
+            11 => "test.disk-kind-without-example",
+            _ => "test.sound",
+        };
+        const DOC: &'static str = "A refusal declaration variant.";
+        const MUTATING: bool = false;
+        type Params = NParams;
+        type Output = NOut;
+
+        fn examples() -> Vec<Example> {
+            example()
+        }
+
+        fn refusals() -> Option<Vec<Refusal>> {
+            match V {
+                0 => None,
+                4 => Some(vec![
+                    Refusal::example(RejectReason::NotFound),
+                    Refusal::example(RejectReason::DecodeError),
+                ]),
+                10 => Some(vec![
+                    Refusal::example(RejectReason::NotFound),
+                    Refusal::disk(RejectReason::DecodeError),
+                ]),
+                11 => Some(vec![
+                    Refusal::example(RejectReason::NotFound),
+                    Refusal::disk(RejectReason::IoError),
+                ]),
+                _ => Some(vec![Refusal::example(RejectReason::NotFound)]),
+            }
+        }
+
+        fn refusal_examples() -> Vec<RefusalExample> {
+            let nf = rex(RejectReason::NotFound, json!({"n": 1}));
+            let extra = match V {
+                0 | 1 => return vec![],
+                2 => rex(RejectReason::NotFound, json!({"n": 0})),
+                3 => rex(RejectReason::NotFound, json!({"n": 2})),
+                4 => {
+                    let de = rex(RejectReason::DecodeError, json!({"n": 2}));
+                    return vec![nf, de, rex(RejectReason::NotFound, json!({"n": 2}))];
+                }
+                5 => rex(RejectReason::NotFound, json!({"n": "one"})),
+                6 => RefusalExample {
+                    setup: vec![("test.sound", json!({"n": 1}))],
+                    ..rex(RejectReason::NotFound, json!({"n": 1}))
+                },
+                7 => RefusalExample {
+                    files: vec![SeedFile::text("../x", "x")],
+                    ..rex(RejectReason::NotFound, json!({"n": 1}))
+                },
+                8 => RefusalExample {
+                    files: vec![SeedFile::hex("a.txt", "abc")],
+                    ..rex(RejectReason::NotFound, json!({"n": 1}))
+                },
+                9 => rex(RejectReason::DecodeError, json!({"n": 2})),
+                10 => rex(RejectReason::DecodeError, json!({"n": 2})),
+                _ => return vec![nf],
+            };
+            vec![nf, extra]
+        }
+
+        fn run(_: &mut Context, p: NParams) -> Result<NOut, CommandError> {
+            refuse_as(p.n)
+        }
+    }
+
+    /// No declaration: refusals are not checked.
+    struct Unchecked;
+
+    impl Command for Unchecked {
+        const NAME: &'static str = "test.unchecked";
+        const DOC: &'static str = "Refuses without a declaration.";
+        const MUTATING: bool = false;
+        type Params = NParams;
+        type Output = NOut;
+
+        fn examples() -> Vec<Example> {
+            example()
+        }
+
+        fn run(_: &mut Context, p: NParams) -> Result<NOut, CommandError> {
+            refuse_as(p.n)
+        }
+    }
+
+    /// A registry of `C` alone (for its own variant, `test.sound` too: variant 6's setup).
+    fn alone<C: Command + 'static>() -> Registry {
+        let mut r = Registry::new();
+        r.register::<C>().unwrap();
+        if C::NAME != "test.sound" {
+            r.register::<Variant<12>>().unwrap();
+        }
+        r
+    }
+
+    #[test]
+    fn a_refusal_of_an_undeclared_kind_is_internal_other() {
+        let r = alone::<Variant<12>>();
+        let mut ctx = Context::new();
+        let err = r
+            .execute(&mut ctx, "test.sound", json!({"n": 1}))
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                CommandError::Rejected {
+                    reason: RejectReason::NotFound,
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
+        let err = r
+            .execute(&mut ctx, "test.sound", json!({"n": 2}))
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                CommandError::Internal {
+                    reason: InternalReason::Other,
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
+        assert!(ctx.log().is_empty());
+        // Params are still checked first: invalid params stay `invalid_params`.
+        let err = r.execute(&mut ctx, "test.sound", json!({})).unwrap_err();
+        assert!(matches!(err, CommandError::InvalidParams { .. }), "{err:?}");
+        // Without a declaration a refusal passes unchecked.
+        let mut r = Registry::new();
+        r.register::<Unchecked>().unwrap();
+        let err = r
+            .execute(&mut ctx, "test.unchecked", json!({"n": 2}))
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                CommandError::Rejected {
+                    reason: RejectReason::DecodeError,
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
+        assert!(ctx.log().is_empty());
+    }
+
+    #[test]
+    fn describe_publishes_only_declared_kinds() {
+        let mut r = alone::<Variant<11>>();
+        r.register::<Unchecked>().unwrap();
+        let d = r.describe();
+        let kinds: Vec<&str> = d["error_kinds"]["rejected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["not_found", "io_error"]);
+        assert_eq!(d["error_kinds"]["internal"].as_array().unwrap().len(), 3);
+        let by_name = |name: &str| {
+            d["commands"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["name"] == name)
+                .unwrap()
+                .clone()
+        };
+        let c = by_name("test.disk-kind-without-example");
+        assert_eq!(c["refusals"], json!(["not_found", "io_error"]));
+        assert_eq!(c["refusal_examples"].as_array().unwrap().len(), 1);
+        assert_eq!(c["refusal_examples"][0]["kind"], "not_found");
+        assert_eq!(by_name("test.unchecked")["refusals"], json!([]));
+        assert_eq!(by_name("test.unchecked")["refusal_examples"], json!([]));
+    }
+
+    #[test]
+    fn refusal_example_files_publish_in_manifest_form() {
+        let ex = RefusalExample {
+            files: vec![SeedFile::text("a.txt", "x"), SeedFile::hex("b.txt", "ff")],
+            ..rex(RejectReason::NotFound, json!({}))
+        };
+        let v = serde_json::to_value(&ex).unwrap();
+        assert_eq!(
+            v["files"],
+            json!([{"path": "a.txt", "text": "x"}, {"path": "b.txt", "hex": "ff"}])
+        );
+        let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        assert_eq!(
+            keys,
+            [
+                "description",
+                "files",
+                "initial_text",
+                "kind",
+                "params",
+                "setup"
+            ]
+        );
+        assert_eq!(decode_hex("EFbb00"), Ok(vec![0xef, 0xbb, 0]));
+        assert_eq!(decode_hex(""), Ok(vec![]));
+        assert!(decode_hex("abc").is_err());
+        assert!(decode_hex("zz").is_err());
+    }
+
+    fn problems<C: Command + 'static>() -> Vec<String> {
+        alone::<C>().audit()
+    }
+
+    #[test]
+    fn audit_reports_each_refusal_problem_once_naming_its_command() {
+        fn one<C: Command + 'static>() {
+            let p = problems::<C>();
+            assert_eq!(p.len(), 1, "{}: {p:?}", C::NAME);
+            assert!(p[0].contains(&format!("`{}`", C::NAME)), "{p:?}");
+        }
+        one::<Variant<0>>();
+        one::<Variant<1>>();
+        one::<Variant<2>>();
+        one::<Variant<3>>();
+        one::<Variant<4>>();
+        one::<Variant<5>>();
+        one::<Variant<6>>();
+        one::<Variant<7>>();
+        one::<Variant<8>>();
+        one::<Variant<9>>();
+        one::<Variant<10>>();
+        assert_eq!(problems::<Variant<11>>(), Vec::<String>::new());
+        assert_eq!(problems::<Variant<12>>(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn register_refuses_a_kind_declared_twice() {
+        struct Twice;
+        impl Command for Twice {
+            const NAME: &'static str = "test.twice";
+            const DOC: &'static str = "Declares a kind twice.";
+            const MUTATING: bool = false;
+            type Params = NParams;
+            type Output = NOut;
+            fn examples() -> Vec<Example> {
+                example()
+            }
+            fn refusals() -> Option<Vec<Refusal>> {
+                Some(vec![
+                    Refusal::example(RejectReason::NotFound),
+                    Refusal::disk(RejectReason::NotFound),
+                ])
+            }
+            fn run(_: &mut Context, p: NParams) -> Result<NOut, CommandError> {
+                refuse_as(p.n)
+            }
+        }
+        let err = Registry::new().register::<Twice>().unwrap_err();
+        assert!(err.0.contains("twice"), "{err}");
+    }
+
+    /// The standard registry: every command declares, `error_kinds.rejected` is the union of
+    /// the `refusals` in `ALL` order, and each refusal example's kind is declared *example*.
+    #[test]
+    fn standard_registry_publishes_the_union_of_its_declarations() {
+        let r = crate::standard_registry().unwrap();
+        assert!(r.entries.values().all(|e| e.refusals.is_some()));
+        let d = r.describe();
+        let union: Vec<RejectReason> = RejectReason::ALL
+            .iter()
+            .copied()
+            .filter(|k| r.entries.values().any(|e| e.declared().contains(k)))
+            .collect();
+        let published: Vec<&str> = d["error_kinds"]["rejected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["kind"].as_str().unwrap())
+            .collect();
+        let want: Vec<&str> = union.iter().map(|k| k.as_str()).collect();
+        assert_eq!(published, want);
+        for (name, e) in &r.entries {
+            for ex in &e.refusal_examples {
+                assert_eq!(e.witness(ex.kind), Some(Witness::Example), "{name}");
+            }
+        }
+        assert_eq!(r.audit(), Vec::<String>::new());
     }
 }
 
