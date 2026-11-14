@@ -523,6 +523,38 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   passed, 5 failed, the same five) · not run: the test author's n4 revision of its scripts (not
   on this branch) · missing context: none · next: director (merge the test author's revised
   scripts, rerun the gate).
+- 2026-11-14 · R-231 · rework after review round 1 (head seen 789b547) · **Rulings acknowledged
+  (D-150):** w1 accepted (it corrects n11; the reviewer's finding 1 is right). w2 accepted (sentence
+  only). w5 accepted. w6 accepted. w3, w4: the test author's; I did not touch
+  `acceptance_t055.rs` or `guard_t055.rs`.
+  did: **w1** — `observe.rs` now stores each node's visible part (rectangle ∩ window ∩ every
+  `scroll_view` above it; none when `offscreen`), and a glyph's owner is the deepest node whose
+  visible part contains its centre. Unit test `after_a_scroll_text_belongs_to_visible_nodes_only`
+  (40 documents, 400×300, scroll down 2): the `Path` label keeps rows `Path`, `Documents` has no
+  rows, no `offscreen` node has rows, every document with rows shows its own path; it fails with
+  the old owner rule (checked by reverting the line: 1 failed). **w5** — a click without `at` lands
+  at the centre of the visible part; unit test `a_click_lands_at_the_centre_of_the_visible_part`
+  (the overflowing `Documents` list: whole-rectangle centre y > 300, click point = visible centre,
+  inside the window; every visible node's click point lies in its visible part); fails with the
+  old rule (checked: 1 failed). **ui.md:** the ownership sentence replaced (visible part, so an
+  `offscreen` node has no rows and a scrolled list never takes outside text); the `click` row says
+  "the centre of its visible part"; "Every interactive node …" replaced per w2; Limits gains the
+  FIFO sentence. **Checked against the binary** (40 docs, `--size 400x300`, then `frames 1`,
+  snapshot, `scroll` `{"role":"scroll_view"}` down 2, snapshot, `scroll` `f01.txt` down 100,
+  snapshot, `click` `Documents`): in all three snapshots the `Path` label's rows are `Path`,
+  `Documents` has no rows, no offscreen node has rows, every button/text input is labelled;
+  documents with rows f01–f13, then f12–f24, then f28–f40; after the first scroll there is one
+  node `scroll_bar` with no label (none before any scroll: egui shows the bar only once it has
+  scrolled or been hovered, so the sentence does not claim it is always there); `scroll` on the
+  `scroll_view` itself answered ok and scrolled; the click on `Documents` answered ok. **w6
+  evidence:** `mkfifo fifo`; `timeout 3 kiln script fifo --memory` → exit 124 (blocked), stdout 0 B;
+  `timeout 3 kiln script s.jsonl --memory --log fifo` → 124, 0 B; `kiln-cli run` the same two →
+  124, 0 B each; with a writer (`cat s.jsonl > fifo`) or a reader (`cat fifo`) on the other end,
+  `kiln script` finishes with exit 0 and the expected line / log.
+  · gate attempts: 4 in all (this run: 1, **green** 551.6 s at 843ed80, 909 tests passed in 115
+  suites, acceptance tests of the merged branch included) · not run: the test author's w3/w4 tests
+  (not on this branch) · missing context: none · next: director (merge the test author's w3/w4
+  work; review round 2).
 <!-- end implementer log -->
 ### test author
 - 2026-11-14T19:25Z · R-227 · ready · did: wrote `apps/kiln/tests/acceptance_t055.rs` (18 tests)
