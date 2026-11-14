@@ -795,6 +795,52 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   23.12 s → 23 s): it stands. Checks: `cargo fmt --check` and `cargo xtask hygiene` (results in
   the report). · gate attempts: 0 (as instructed; the join runs the gate) · not run: full gate,
   release build (as instructed) · missing context: none · next: director join.
+- 2026-11-14 · R-204 · review round 1 request-changes (R-203) · rulings acknowledged (D-124):
+  m1 accepted (N8 was wrong: the search walks with `limit` 1,000,000, not `project.tree {}`'s
+  50,000); m2 accepted (Q-2 confirmed; example added from a node dump, not from my code); m3
+  accepted; m4 accepted; m5 accepted. · did: m1 run first (debug `target/debug/kiln-cli` of
+  this worktree at `334619a`; root = `a/` holding 50,000 empty files `e00000`..`e49999` plus
+  `zz.rs` = `fn hit_beyond() {}\n`; script `project.tree {}`, `nav.workspace-symbols
+  {query:"hit"}`): `project.tree {}` → 50,000 entries, `truncated: true`, `zz.rs` not listed;
+  `nav.workspace-symbols` → `[{path: "zz.rs", kind: "fn", name: "hit_beyond", start: 0, end: 18,
+  name_start: 3, name_end: 13, line: 0, col: 3}]`, `truncated: false`, `skipped: []`,
+  `walk_truncated: false`, `too_deep: 0`; root removed. Then N8 in `nav.md` and the
+  `nav.workspace-symbols` description now name "the walk of `project.tree` with `limit`
+  1,000,000" (description: "1000000"); rest unchanged; `docs/commands.json` regenerated.
+  m2 node dump (`syntax.tree` through the same binary; `syntax.rs`/`tree.rs` as on main) of
+  `mod m { fn a() { } } fn b() { mod n { fn c() {} }`: `(source_file@0..49 (mod_item@0..20
+  name:(identifier@4..5) body:(declaration_list@6..20 (function_item@8..18
+  name:(identifier@11..12) parameters:(parameters@12..14) body:(block@15..18)))) (ERROR@21..49
+  (identifier@24..25) (parameters@25..27) (mod_item@30..49 name:(identifier@34..35)
+  body:(declaration_list@36..49 (function_item@38..47 name:(identifier@41..42)
+  parameters:(parameters@42..44) body:(block@45..47))))))`. By the rules: `mod m` 0..20 4..5
+  depth 0; `fn a` 8..18 11..12 depth 1; `mod n` 30..49 34..35 depth 0 (only `ERROR` between it
+  and the root); `fn c` 38..47 41..42 depth 1; `fn b` has no `function_item` node, so not
+  listed. Added as worked example 6 of `outline_worked_examples` (tests branch); my code agreed
+  on the throwaway join; then the sentence beside N3 in `nav.md`. m3: `src/UPPER.RS` (`fn
+  upper_only_symbol() {}`) added to AC-5's project; `upper_only_symbol` → `items: []`, and no
+  item of three more queries has a path not ending in `.rs`. m4: new test
+  `workspace_symbols_search_beyond_project_tree_default` (the m1 case; fixture under
+  `CARGO_TARGET_TMPDIR`, removed by `Drop` also on failure; asserts `project.tree {}` does not
+  reach `zz.rs`, `project.tree {limit: 1000000}` does, and the exact search reply; no time
+  asserted; timeout only the hang detector). m5: N11's parenthesis gains "The file is at the
+  limit, so it was parsed, not skipped; other texts can need more." Tests branch: commit
+  `f8c207460818be68005d6180156d193933ddb139` (added cases only; no expected value changed or
+  weakened); `cargo fmt --check` ok, `cargo clippy -p kiln-cli --tests -- -D warnings` clean,
+  `cargo xtask no-skip` PASS; on base 0 passed / 11 failed, the changed and new tests at
+  `unknown_command` (`outline_worked_examples` at example 1's `nav.outline`,
+  `workspace_symbols_match_naive_model` at its model's `nav.outline`,
+  `workspace_symbols_search_beyond_project_tree_default` at its `nav.workspace-symbols`, after
+  its `project.tree` checks passed); tests `target/` deleted. Throwaway join (`tmp/T-023-r204`,
+  deleted): 11 passed; the reviewer's survivors are now killed: O1 (`ERROR` not a container) by
+  `outline_worked_examples`, N15 (`.rs` ignoring case) by `workspace_symbols_match_naive_model`,
+  N19 (walk limit 50,000) by `workspace_symbols_search_beyond_project_tree_default`. Code
+  branch: `30d2ee67566677134026d369c51b22cf4615cce2`. No behaviour change. · gate attempts: 1
+  (green: "GATE PASSED in 470.8s (11 steps; 2 step(s) EMPTY (nothing registered): fuzz,
+  budgets)", test step "824 passed, 0 failed, 0 ignored in 97 suites"; the new acceptance
+  cases are not on this branch, so the gate does not run them). · not run: release build (as
+  instructed; figures stand); the director's join · missing context: none · next: director join;
+  review round 2.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
