@@ -2,7 +2,7 @@
 id: T-037
 title: "Check the root and the path's location when `doc.open` names a path that is already open, and say so in paths.md and in doc.open's description"
 tier: high              # ADR-0002: a confinement boundary that docs/protocol/paths.md states ("At open and at save … a path whose location is outside the root is refused")
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # existing item, strengthened (no new item)
 depends_on: [T-036]     # not merged at the spec check R-196 (branch task/T-036 read at cbcfdbbf87b36dd0b8fb70244c4e90b8adf46ddb); T-008 (d4915606) and T-039 (c538ef8) merged. Never in flight with T-036 (shared disk.rs, paths.md).
