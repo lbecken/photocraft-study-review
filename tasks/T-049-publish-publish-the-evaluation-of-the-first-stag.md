@@ -2,7 +2,7 @@
 id: T-049
 title: "Publish the evaluation of the first stage of iteration 2"
 tier: low
-state: queued
+state: merged
 owner_role: director
 scorecard_items: []
 depends_on: []
