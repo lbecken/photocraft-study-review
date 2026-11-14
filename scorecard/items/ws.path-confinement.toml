@@ -27,4 +27,11 @@ tests = [
     "kiln_workspace::guard_t036_workspace::vanished_root_is_refused",
     "kiln_cli::guard_t036_cli::retargeted_root_link_is_refused_through_control",
     "kiln_cli::guard_t036_cli::vanished_root_is_refused_through_control",
+    "kiln_cli::acceptance_t037_cli::reopen_of_a_path_now_outside_is_refused",
+    "kiln_cli::acceptance_t037_cli::reopen_after_the_root_moved_is_refused",
+    "kiln_cli::acceptance_t037_cli::reopen_whose_walk_fails_inside_is_io_error",
+    "kiln_cli::acceptance_t037_removal_cli::reopen_after_the_root_was_removed_is_refused",
+    "kiln_commands::acceptance_t037_commands::reopen_after_the_root_changed_is_refused",
+    "kiln_cli::guard_t037_cli::reopen_does_not_need_the_file",
+    "kiln_cli::guard_t037_cli::reopen_in_a_memory_session_is_unchanged",
 ]
