@@ -1,8 +1,8 @@
 ---
 id: T-056
 title: "Show the current document in an editor view with syntax colours, a caret and scrolling, and edit, undo and save it by dispatching commands only, observed through kiln script"
-tier: medium            # ADR-0002: a behaviour change with no dependency, gate path, persistence code or contract change (split by D-156; the window is T-065)
-state: in_progress
+tier: high              # re-tiered by D-158: it claims `ui.dispatch-only`, a high-tier scorecard item; the spec check (R-238) had set medium for the absence of dependency and gate-path changes
+state: self_verified
 owner_role: planner
 scorecard_items: [ui.editor-view, ui.dispatch-only]
 depends_on: [T-055]     # merged at e34ba1f (D-155); spec checks R-237 (main 197617c) and R-238 (main e0926ae)
@@ -16,7 +16,7 @@ touches:                # D-153: every path belongs to one role; the role is nam
   - docs/protocol/ui-editor.md          # implementer · new
   - apps/kiln/tests/acceptance_t056.rs  # test author
   - apps/kiln/tests/guard_t056.rs       # test author · optional (no guard is required, Pinned (f))
-budget_tokens: 800000   # medium (v1.3)
+budget_tokens: 1100000 # high (v1.3), D-158
 iteration: 2
 found_by: planner
 origin_task: null
@@ -681,6 +681,26 @@ their AC numbers and touches are the old ones).
   of the command line, before the script's first request, and counts as input of the session for `ui.dispatch-only`
   (the log replayed with `kiln-cli run` reproduces the files with them included).
 - **x3 (T3).** In a row that holds only blanks (spaces, tabs), the blanks are reported in the colour of `plain`.
+
+### Rulings on the implementer's questions of R-239 and re-tiering (director, D-158)
+- **Tier: high.** The task claims `ui.dispatch-only`, whose scorecard tier is high; a task's tier is not below the
+  tier of an item it claims. Consequences: an approval row before the queue; the reviewer's round 1 includes the
+  high-tier probing; budget 1,100,000. The independent test author is already in place.
+- **y1 (question 1).** A start path is opened as if it had been opened through `Path`, but its text is not put
+  into the `Path` field. Confirmed.
+- **y2 (question 2).** The settle figure in the "Limits" sentence is re-measured on the acceptance scripts by the
+  implementer after the join (it may then read the acceptance tests), and the sentence carries the measured figure.
+- **y3 (question 3).** "A script of control requests only runs no read" holds for an invocation without start
+  paths; with a start path the frames before the first request read. The narrowed sentence stands.
+- **y4 (deviation).** `Title`'s value is the path followed by ` — Kiln`, or by ` — modified — Kiln` when the
+  document is dirty, so that it never equals a `Documents` entry. Accepted; `docs/protocol/ui-editor.md` states it,
+  and the spec's sentence on `Title` reads so from here on.
+- **y5 (defect seen in merged code).** The implementer saw a snapshot report the painted text of `Title` with two
+  letters exchanged (`modifeid` for `modified`), in the row-merging code of T-055's observation. A row's text must
+  be the chars as painted, in reading order. It is fixed in this task (the file is in the implementer's
+  `touches`), after the reviewer has reproduced it; the test author adds a test that, for every node that shows
+  text in proportional type (`Title`, `Path`, `Open`, `Message`, `Documents`' children), the text of its rows
+  equals the text it shows.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
