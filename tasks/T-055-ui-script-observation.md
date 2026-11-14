@@ -889,4 +889,5 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   the reworded guard holds on base's source. Verdict **approve** (0 defects; 2 test gaps and 1
   nit as follow-ups). · gate attempts: 0 (kiln and kiln-ui tests 51 passed; `hygiene`) · not
   run: full `cargo xtask ci`; a base build · missing context: none · next: director.
+- 2026-11-14 · R-236 · round 3 record: tree identity only, no new review · did: `reviews/T-055-r3.md`; the tree of the rebuilt head `96d91e0827bbfe1b6a3609dd40963dc31318e70c` is identical to the round-2 approved branch `backup/T-055-joined` (empty `git diff`); tests branch is an ancestor; approve carried over · gate attempts: 0 · next: director.
 <!-- end reviewer log -->
