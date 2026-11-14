@@ -2,7 +2,7 @@
 id: T-036
 title: "Refuse a root Kiln cannot hold open, and pin root removal, a retargeted root link and a vanished root with reliable tests"
 tier: high              # ADR-0002: a confinement/security boundary that docs/protocol/paths.md states (the root's identity between requests) and the persistence path (DiskFs construction, read, write_atomic)
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # existing item, strengthened (no new item)
 depends_on: [T-008, T-019, T-039]   # all merged: T-008 d4915606f9a789b42b99a1eea053554f1f9dd8a7, T-019 3b1a95d865619dead945cbf1ed857afdfc8fe99e, T-039 c538ef8c28f973fcc55974844fc7ccaf550fb307 (D-092 order)
@@ -652,6 +652,7 @@ Item 5 (link targets ending in `/.`, T-008 r2 N-1) moved to `tasks/T-044-dot-in-
 - Order (director, D-092): after T-019 (shared `disk.rs`) and after T-039; before T-037. The planner brings the file to iteration 2 and to the v1.2 ceiling when it applies these rulings; a pre-dispatch check follows (D-091 change 7).
 - Ruling on Q-4 of the spec check R-181 (director, D-111): (A). Construction refuses every root that cannot be opened for reading, a mode-0000 root included; any other failure to open the root is refused with its own error kind. The ruling on Q-1 in D-092 named only roots that can be searched but not read, which left the mode-0000 root accepted and unprotected; the spec check showed that by a probe (such a root was removed and replaced and the session read, listed and wrote in the replacement).
 - Split (director, D-111): yes. This task keeps items 1 to 4 (the root's identity between requests). Item 5 (link targets ending in `/.`) becomes its own task, T-044, filed by the planner from the section "Split-off item 5"; it runs after this task and after T-037 and is never in flight with either (shared `disk.rs`, `docs/protocol/paths.md`, `confinement.rs`).
+- Ruling on AC-6 (director, D-114; AGENTS.md golden rule 9). AC-6 is not a test: a test that asserts that a document does not contain given words pins document text that T-037, T-044 and later tasks edit, and would fail any later sentence that legitimately uses those words. The implementer removes and replaces the sentences exactly as Pinned (i) lists them (R1 to R6, S1 to S3, C1 to C3), and the reviewer checks on the diff that each listed removal was made and runs each added sentence against the binary. `acceptance_t036_cli.rs` therefore holds AC-1 only, and the test `documents_drop_the_unreadable_root_limit` is not written.
 
 ### Spec check R-181 (planner, 2026-11-13, against main `d162413e14236111c9bb6d7c5503d29c1dd1cb87`; code identical to T-019's merge `3b1a95d`)
 The check is recorded here, as the director asked, rather than in `tasks/spec-checks/`.
