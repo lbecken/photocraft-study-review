@@ -1707,6 +1707,37 @@ fn params_and_document_are_checked_first() {
 // AC-5
 // =============================================================================================
 
+/// The default `case_sensitive: true` (Interface), for both commands and both modes: with the
+/// param omitted, `foo` in `Foo foo` matches only `4..7` (review r1 finding 2, D-116 q2).
+#[test]
+fn case_sensitive_defaults_to_true() {
+    let (work, mut r) = session("default-case", "Foo foo");
+    for regex in [false, true] {
+        r.push(
+            "search.find",
+            json!({"doc": 1, "query": "foo", "regex": regex}),
+            find_result(&[(4, 7)], 10_000),
+        );
+        r.push(
+            "search.replace",
+            json!({"doc": 1, "query": "foo", "regex": regex, "replacement": "x", "all": true}),
+            Expect::Result(json!({"replaced": 1, "len_chars": 5,
+                "ranges": ranges_json(&[(4, 5)]), "truncated": false})),
+        );
+        r.push("doc.text", json!({"doc": 1}), text_result("Foo x"));
+        r.push("doc.undo", json!({"doc": 1}), Expect::AnyOk);
+        r.push(
+            "search.replace",
+            json!({"doc": 1, "query": "foo", "regex": regex, "replacement": "x"}),
+            Expect::Result(json!({"replaced": 1, "len_chars": 5,
+                "ranges": ranges_json(&[(4, 5)]), "truncated": false})),
+        );
+        r.push("doc.text", json!({"doc": 1}), text_result("Foo x"));
+        r.push("doc.undo", json!({"doc": 1}), Expect::AnyOk);
+    }
+    r.run_control(&work.join("root"));
+}
+
 /// AC-5: every worked example of Pinned (g) holds exactly.
 #[test]
 fn worked_examples_hold() {
