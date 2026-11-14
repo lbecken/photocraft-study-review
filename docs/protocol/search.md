@@ -90,8 +90,13 @@ default 0); `limit` (integer 1 to 100,000, default 10,000).
 
 `search.replace` with `all: true` replaces every match, however many, as one undo step: one
 `doc.undo` restores the text and one `doc.redo` re-applies it. It keeps one range and one
-replacement text per match, never the capture groups of more than one match: about 210 bytes
-per match, measured with a release build on 400,001 matches of 100 empty groups.
+replacement text per match, never the capture groups of more than one match. In one
+measurement, with a release build on 400,001 matches of 100 empty groups (`x` repeated
+400,000 times, regex `()` repeated 100 times, replacement `-`), a replace-all, its undo step
+included, grew the process's peak resident memory by about 210 bytes per match (peak of
+`doc.open` then the replace-all, less that of `doc.open` alone, two runs each with
+`/usr/bin/time -v`, on a 4-core machine running other builds at the same time; a measured
+figure, not a bound).
 
 The reply of `search.replace` lists the ranges of the first `limit` replacements (default
 10,000) and sets `truncated` when there were more; `replaced` is the exact number of
@@ -102,9 +107,13 @@ group stays open.
 
 The selection moves through each replacement by the mapping rule of `cursor.md`.
 
-A replacement that changes anything ends the document's typing group and is never merged with
-typing. The replacements are applied, for the selection, from the last to the first, as for
-`eol.normalize` (see `cursor.md`).
+Every replacement counts in `replaced`, also one whose text equals the match. A
+`search.replace` with at least one replacement that is not an empty match replaced by the
+empty string ends the document's typing group and adds an undo step, even when the text does
+not change (a match replaced by identical text). An empty match replaced by the empty string
+is no edit: when every replacement is of this kind, nothing changes, as with no match at all
+(no undo step, and an open typing group stays open). The replacements are applied, for the
+selection, from the last to the first, as for `eol.normalize` (see `cursor.md`).
 
 ### The replacement text
 
@@ -143,9 +152,9 @@ before any matching: a bad template is refused even when nothing matches.
 
 A pattern may have at most 1,000 chars and, in regex mode, at most 100 capture groups.
 These limits do not bound the time a search takes: a counted repetition is short to write
-but can be slow to run. Measured with a release build on texts of 1,000,000 chars,
-`[ab]{5000}[^ab]` (15 chars, no match) took 41 to 42 s, `[ab]{3000}` (10 chars, 333 matches)
-12 s and `([ab]*)` repeated 100 times (700 chars, one match) 5.6 to 5.8 s. Kiln sets no time
+but can be slow to run. Measured with a release build on texts of 1,000,000 chars
+(`ab` repeated 500,000 times), `[ab]{5000}[^ab]` (15 chars, no match) took 41 to 42 s,
+`[ab]{3000}` (10 chars, 333 matches) 12 s and `([ab]*)` repeated 100 times (700 chars, one match) 5.6 to 5.8 s. Kiln sets no time
 limit on a search. (Elapsed time of `kiln-cli run` minus that of a `doc.open`-only script, two
 runs each, on a 4-core machine running other builds at the same time; measured figures, not
 bounds.)

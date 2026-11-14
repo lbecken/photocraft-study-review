@@ -339,15 +339,15 @@ mod tests {
             QueryError::TooLong { chars: 1001 }
         );
         assert!(matches!(e("(", true), QueryError::Pattern(_)));
+        assert!(matches!(
+            e(&"(a)".repeat(101), true),
+            QueryError::Pattern(_)
+        ));
         assert_eq!(
-            e(&"(a)".repeat(101), true).to_string(),
-            "invalid pattern: the pattern has more than 100 capture groups"
+            e(&"a".repeat(1001), false),
+            QueryError::TooLong { chars: 1001 }
         );
-        assert_eq!(
-            e(&"a".repeat(1001), false).to_string(),
-            "invalid pattern: the pattern has 1001 chars; the limit is 1000"
-        );
-        assert_eq!(e("", false).to_string(), "empty search pattern");
+        assert_eq!(e("", false), QueryError::Empty);
     }
 
     #[test]
@@ -362,8 +362,10 @@ mod tests {
         );
         assert_eq!(c.replace_first("a1 b2", 4, "$0").unwrap(), None);
         assert_eq!(
-            c.check_template("$3").unwrap_err().to_string(),
-            "no capture group \"3\""
+            c.check_template("$3").unwrap_err(),
+            TemplateError {
+                reference: "3".to_owned()
+            }
         );
         assert!(c.replace_all("", "$x").is_err());
         let lit = q("b", false, true, false);

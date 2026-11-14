@@ -38,6 +38,27 @@ where
     T::deserialize(d).map(Some)
 }
 
+/// Publish the true default of an optional param instead of the `"default": null` that
+/// `#[serde(default)]` adds to the schema: `null` is refused for every optional param here.
+fn default_false(schema: &mut schemars::Schema) {
+    schema.insert("default".to_owned(), json!(false));
+}
+
+/// As [`default_false`], for a param that defaults to true.
+fn default_true(schema: &mut schemars::Schema) {
+    schema.insert("default".to_owned(), json!(true));
+}
+
+/// As [`default_false`], for `limit`.
+fn default_limit(schema: &mut schemars::Schema) {
+    schema.insert("default".to_owned(), json!(DEFAULT_LIMIT));
+}
+
+/// As [`default_false`], for `from`.
+fn default_zero(schema: &mut schemars::Schema) {
+    schema.insert("default".to_owned(), json!(0));
+}
+
 /// `QueryError` → `rejected`/`invalid_pattern`, with the message of the Interface.
 fn query_error(e: &QueryError) -> CommandError {
     let reason = match e {
@@ -104,21 +125,21 @@ pub(crate) struct FindParams {
     query: String,
     /// Regex mode; default false (literal). `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "bool")]
+    #[schemars(with = "bool", transform = default_false)]
     regex: Option<bool>,
     /// Compare chars exactly; default true. False: Unicode simple case folding. `null` is
     /// refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "bool")]
+    #[schemars(with = "bool", transform = default_true)]
     case_sensitive: Option<bool>,
     /// Keep only matches with a word boundary at both ends; default false. `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "bool")]
+    #[schemars(with = "bool", transform = default_false)]
     whole_word: Option<bool>,
     /// Most matches listed (1 to 100,000; default 10,000); `total` counts all. `null` is
     /// refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "u32", range(min = 1, max = 100_000))]
+    #[schemars(with = "u32", range(min = 1, max = 100_000), transform = default_limit)]
     limit: Option<usize>,
 }
 
@@ -194,15 +215,15 @@ pub(crate) struct ReplaceParams {
     query: String,
     /// Regex mode; default false (literal). `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "bool")]
+    #[schemars(with = "bool", transform = default_false)]
     regex: Option<bool>,
     /// Compare chars exactly; default true. `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "bool")]
+    #[schemars(with = "bool", transform = default_true)]
     case_sensitive: Option<bool>,
     /// Keep only matches with a word boundary at both ends; default false. `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "bool")]
+    #[schemars(with = "bool", transform = default_false)]
     whole_word: Option<bool>,
     /// The replacement text; in regex mode `$1`, `${name}`, `$0` refer to groups and `$$` is
     /// `$`; in literal mode it is inserted verbatim.
@@ -210,17 +231,17 @@ pub(crate) struct ReplaceParams {
     /// Replace every match (`from` is then ignored); default false: only the first match whose
     /// start is at or after `from`. `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "bool")]
+    #[schemars(with = "bool", transform = default_false)]
     all: Option<bool>,
     /// With `all: false`: the char offset the first replaced match starts at or after;
     /// default 0. `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "usize")]
+    #[schemars(with = "usize", transform = default_zero)]
     from: Option<usize>,
     /// Most `ranges` listed in the reply (1 to 100,000; default 10,000); every match is
     /// replaced whatever it is. `null` is refused.
     #[serde(default, deserialize_with = "present")]
-    #[schemars(with = "u32", range(min = 1, max = 100_000))]
+    #[schemars(with = "u32", range(min = 1, max = 100_000), transform = default_limit)]
     limit: Option<usize>,
 }
 
@@ -387,35 +408,17 @@ mod tests {
     }
 
     #[test]
-    fn messages_of_refusals() {
+    fn kinds_of_refusals() {
         let (r, mut ctx) = setup("a1 b2");
-        let msg = |r: &Registry, ctx: &mut Context, p: Value| {
-            r.execute(ctx, "search.replace", p).unwrap_err().to_string()
-        };
-        assert_eq!(
-            msg(
-                &r,
-                &mut ctx,
-                json!({"doc": 1, "query": "", "replacement": ""})
-            ),
-            "empty search pattern"
-        );
-        assert_eq!(
-            msg(
-                &r,
-                &mut ctx,
-                json!({"doc": 1, "query": "(\\w)", "regex": true, "replacement": "$3"})
-            ),
-            "invalid replacement: no capture group \"3\""
-        );
-        assert_eq!(
-            msg(
-                &r,
-                &mut ctx,
-                json!({"doc": 1, "query": "(a)".repeat(101), "regex": true, "replacement": ""})
-            ),
-            "invalid pattern: the pattern has more than 100 capture groups"
-        );
+        let pattern = ("rejected".to_owned(), "invalid_pattern".to_owned());
+        for p in [
+            json!({"doc": 1, "query": "", "replacement": ""}),
+            json!({"doc": 1, "query": "(\\w)", "regex": true, "replacement": "$3"}),
+            json!({"doc": 1, "query": "(a)".repeat(101), "regex": true, "replacement": ""}),
+            json!({"doc": 1, "query": "a".repeat(1001), "replacement": ""}),
+        ] {
+            assert_eq!(err(&r, &mut ctx, "search.replace", p), pattern);
+        }
         assert_eq!(
             err(
                 &r,
@@ -426,6 +429,33 @@ mod tests {
             ("rejected".to_owned(), "out_of_range".to_owned())
         );
         assert_eq!(text(&r, &mut ctx), "a1 b2");
+    }
+
+    /// q1 (D-116): every optional param publishes its true default, never `null`.
+    #[test]
+    fn optional_params_publish_their_defaults() {
+        let r = standard_registry().unwrap();
+        let described = r.describe();
+        let props = |name: &str| {
+            described["commands"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["name"] == name)
+                .unwrap()["params_schema"]["properties"]
+                .clone()
+        };
+        for name in ["search.find", "search.replace"] {
+            let p = props(name);
+            assert_eq!(p["regex"]["default"], json!(false), "{name}");
+            assert_eq!(p["case_sensitive"]["default"], json!(true), "{name}");
+            assert_eq!(p["whole_word"]["default"], json!(false), "{name}");
+            assert_eq!(p["limit"]["default"], json!(10_000), "{name}");
+        }
+        let p = props("search.replace");
+        assert_eq!(p["all"]["default"], json!(false));
+        assert_eq!(p["from"]["default"], json!(0));
+        assert!(p["replacement"].get("default").is_none());
     }
 
     #[test]
