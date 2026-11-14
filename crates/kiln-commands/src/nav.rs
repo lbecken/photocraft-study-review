@@ -675,6 +675,9 @@ mod tests {
         fn list_dir(&self, dir: Option<&RelPath>) -> Result<DirListing, VfsError> {
             self.inner.list_dir(dir)
         }
+        fn check_location(&self, _path: &RelPath) -> Result<(), VfsError> {
+            Ok(())
+        }
     }
 
     fn p(s: &str) -> RelPath {
