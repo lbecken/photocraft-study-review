@@ -6,10 +6,13 @@
 //! refused re-open leaves the document as it was (Interface 2). Written by the test author from
 //! `tasks/T-037-reopen-checks-confinement.md` alone.
 //!
-//! Each case runs in its own fixture and session: `doc.open` of the path (doc 1),
-//! `doc.insert {"doc":1,"offset":0,"text":"E"}`, the change (made by the test, between two
-//! requests, and checked through `std::fs` to be in place), the re-open, then `doc.info` and
-//! `doc.list`. Every case of a test runs even when an earlier one fails; the test then fails
+//! Each case runs in its own fixture and session: `doc.open` of the path (doc 1), then by
+//! default `doc.insert {"doc":1,"offset":0,"text":"E"}`, the change (made by the test, between
+//! two requests, and checked through `std::fs` to be in place), the re-open, then `doc.info`,
+//! `cursor.get` and `doc.list`. Ruling D-125 k1 adds each AC-1 and AC-2 case with the document
+//! opened and not edited; k2 adds, in one case of AC-1, AC-2 and AC-4, a selection set with
+//! `cursor.set` and a pending redo step (an insert undone), and "document unchanged" then also
+//! means the same `cursor.get` result and `can_redo: true`. Every case of a test runs even when an earlier one fails; the test then fails
 //! naming every failed case (each case's own panic message is printed above it).
 //!
 //! Refusals are asserted by `ok`, `error.code` and `error.kind`, plus one absence check: the
@@ -303,35 +306,120 @@ impl Drop for Session {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Assertions shared by the cases.
+// Preparing the document, and the assertions shared by the cases.
 
-/// Length in chars of the open document after the insert of `E` (AC: 7, 9 for `sub/c.txt`).
-fn edited_len(path: &str) -> usize {
+/// What is done to document 1 after it is opened and before the change (rulings D-125 k1, k2).
+#[derive(Clone, Copy, Debug)]
+enum Prep {
+    /// `doc.insert` of `E` at 0 (the ACs' default).
+    Edited,
+    /// Nothing: the document is open and not modified (k1).
+    Unedited,
+    /// `E` inserted at 0, `cursor.set` (ending the typing group), `XY` inserted at 1 and undone
+    /// (a pending redo step), then the selection set to anchor 2, head 5 (k2).
+    Selection,
+}
+
+impl Prep {
+    fn tag(self) -> &'static str {
+        match self {
+            Prep::Edited => "edited",
+            Prep::Unedited => "unedited",
+            Prep::Selection => "selection",
+        }
+    }
+}
+
+/// Length in chars of the file as opened (`alpha\n`, `charlie\n`).
+fn original_len(path: &str) -> usize {
     match path {
-        "a.txt" => 7,
-        "sub/c.txt" => 9,
+        "a.txt" => 6,
+        "sub/c.txt" => 8,
         other => panic!("no fixture length for {other}"),
     }
 }
 
-/// The exact result of a re-open that succeeds (AC-2 (i), Pins).
-fn reopened(path: &str) -> Value {
-    json!({"already_open": true, "doc": 1, "encoding": "utf-8", "len_chars": edited_len(path),
-           "line_ending": "lf", "mixed_line_endings": false, "path": path})
+/// What "document unchanged" (Interface 2) is checked against.
+#[derive(Debug)]
+struct Expect {
+    path: String,
+    len_chars: usize,
+    dirty: bool,
+    can_undo: bool,
+    can_redo: bool,
+    /// `cursor.get {"doc":1}`'s result after the preparation.
+    cursor: Value,
 }
 
-/// `doc.open <path>` (doc 1) and `doc.insert` of `E` at 0.
-fn open_and_edit(s: &mut Session, path: &str, case: &str) {
-    let r = s.ask("doc.open", json!({ "path": path }));
-    assert_eq!(r["ok"], json!(true), "{case}: first doc.open: {r}");
-    assert_eq!(r["result"]["doc"], json!(1), "{case}: first doc.open: {r}");
+/// The exact result of a re-open that succeeds (AC-2 (i), Pins).
+fn reopened(e: &Expect) -> Value {
+    json!({"already_open": true, "doc": 1, "encoding": "utf-8", "len_chars": e.len_chars,
+           "line_ending": "lf", "mixed_line_endings": false, "path": e.path})
+}
+
+fn ask_ok(s: &mut Session, command: &str, params: Value, case: &str) -> Value {
+    let r = s.ask(command, params);
+    assert_eq!(r["ok"], json!(true), "{case}: {command}: {r}");
+    r["result"].clone()
+}
+
+/// `doc.open <path>` (doc 1), then `prep`; returns what the document must still be.
+fn open_and_prepare(s: &mut Session, path: &str, prep: Prep, case: &str) -> Expect {
+    let r = ask_ok(s, "doc.open", json!({ "path": path }), case);
+    assert_eq!(r["doc"], json!(1), "{case}: first doc.open: {r}");
     assert_eq!(
-        r["result"]["already_open"],
+        r["already_open"],
         json!(false),
         "{case}: first doc.open: {r}"
     );
-    let r = s.ask("doc.insert", json!({"doc": 1, "offset": 0, "text": "E"}));
-    assert_eq!(r["ok"], json!(true), "{case}: doc.insert: {r}");
+    let insert = |s: &mut Session, offset: usize, text: &str| {
+        ask_ok(
+            s,
+            "doc.insert",
+            json!({"doc": 1, "offset": offset, "text": text}),
+            case,
+        );
+    };
+    let (len_chars, dirty, can_undo, can_redo) = match prep {
+        Prep::Unedited => (original_len(path), false, false, false),
+        Prep::Edited => {
+            insert(s, 0, "E");
+            (original_len(path) + 1, true, true, false)
+        }
+        Prep::Selection => {
+            insert(s, 0, "E");
+            ask_ok(s, "cursor.set", json!({"doc": 1, "anchor": 1}), case);
+            insert(s, 1, "XY");
+            ask_ok(s, "doc.undo", json!({"doc": 1}), case);
+            ask_ok(
+                s,
+                "cursor.set",
+                json!({"doc": 1, "anchor": 2, "head": 5}),
+                case,
+            );
+            (original_len(path) + 1, true, true, true)
+        }
+    };
+    let cursor = ask_ok(s, "cursor.get", json!({"doc": 1}), case);
+    if let Prep::Selection = prep {
+        assert_eq!(
+            cursor["anchor"],
+            json!(2),
+            "{case}: fixture: cursor {cursor}"
+        );
+        assert_eq!(cursor["head"], json!(5), "{case}: fixture: cursor {cursor}");
+    }
+    let e = Expect {
+        path: path.to_owned(),
+        len_chars,
+        dirty,
+        can_undo,
+        can_redo,
+        cursor,
+    };
+    // The preparation did what it says (else the case would test nothing).
+    assert_unchanged(s, &e, &format!("{case}: fixture"));
+    e
 }
 
 /// The negative control of the unprivileged cases: a first `doc.open` of the mode-0000 file
@@ -358,29 +446,23 @@ fn assert_refused(r: &Value, kind: &str, w: &Work, case: &str) {
     );
 }
 
-/// "Document unchanged": `doc.info` → dirty, the edited length, the undo history kept;
-/// `doc.list` → exactly one document, id 1, with `path`.
-fn assert_unchanged(s: &mut Session, path: &str, case: &str) {
-    let r = s.ask("doc.info", json!({"doc": 1}));
-    assert_eq!(r["ok"], json!(true), "{case}: doc.info: {r}");
-    assert_eq!(r["result"]["dirty"], json!(true), "{case}: doc.info: {r}");
-    assert_eq!(
-        r["result"]["len_chars"],
-        json!(edited_len(path)),
-        "{case}: doc.info: {r}"
-    );
-    assert_eq!(r["result"]["path"], json!(path), "{case}: doc.info: {r}");
-    assert_eq!(
-        r["result"]["can_undo"],
-        json!(true),
-        "{case}: doc.info: {r}"
-    );
-    let r = s.ask("doc.list", json!({}));
-    assert_eq!(r["ok"], json!(true), "{case}: doc.list: {r}");
-    let docs = r["result"]["docs"].as_array().unwrap();
+/// "Document unchanged" (Interface 2): `doc.info` → path, length, dirty flag, undo and redo
+/// availability as expected; `cursor.get` → the same selection; `doc.list` → exactly one
+/// document, id 1, with the path.
+fn assert_unchanged(s: &mut Session, e: &Expect, case: &str) {
+    let r = ask_ok(s, "doc.info", json!({"doc": 1}), case);
+    assert_eq!(r["path"], json!(e.path), "{case}: doc.info: {r}");
+    assert_eq!(r["len_chars"], json!(e.len_chars), "{case}: doc.info: {r}");
+    assert_eq!(r["dirty"], json!(e.dirty), "{case}: doc.info: {r}");
+    assert_eq!(r["can_undo"], json!(e.can_undo), "{case}: doc.info: {r}");
+    assert_eq!(r["can_redo"], json!(e.can_redo), "{case}: doc.info: {r}");
+    let r = ask_ok(s, "cursor.get", json!({"doc": 1}), case);
+    assert_eq!(r, e.cursor, "{case}: cursor.get: selection changed");
+    let r = ask_ok(s, "doc.list", json!({}), case);
+    let docs = r["docs"].as_array().unwrap();
     assert_eq!(docs.len(), 1, "{case}: doc.list: {r}");
     assert_eq!(docs[0]["doc"], json!(1), "{case}: doc.list: {r}");
-    assert_eq!(docs[0]["path"], json!(path), "{case}: doc.list: {r}");
+    assert_eq!(docs[0]["path"], json!(e.path), "{case}: doc.list: {r}");
 }
 
 /// A named case: the closure gets the name for its assertion messages.
@@ -400,23 +482,24 @@ fn run_cases(cases: &[Case]) {
     );
 }
 
-/// One refused re-open case: fixture with the root at `root_rel`, session as `id` (U when
-/// `unprivileged`), open and edit `path`, `change` (which also checks itself through `std::fs`),
-/// re-open → `rejected` / `kind`, document unchanged. When `snapshot_work`, the snapshot of
-/// `work/` taken after the change is unchanged by the requests. Returns the session and fixture
-/// for any follow-up.
+/// One refused re-open case: fixture with the root at `root_rel` (directory name from `name`
+/// and the preparation), session as U when `unprivileged`, open `path` and `prep`, `change`
+/// (which also checks itself through `std::fs`), re-open → `rejected` / `kind`, document
+/// unchanged. When `snapshot_work`, the snapshot of `work/` taken after the change is unchanged
+/// by the requests. Returns the session, fixture and expectation for any follow-up.
 struct Refused<'a> {
     name: &'a str,
     root_rel: &'a str,
     path: &'a str,
+    prep: Prep,
     unprivileged: bool,
     snapshot_work: bool,
     kind: &'a str,
     change: &'a dyn Fn(&Work),
 }
 
-fn refused_case(c: &Refused, case: &str) -> (Session, Work) {
-    let w = Work::new(c.name, c.root_rel);
+fn refused_case(c: &Refused, case: &str) -> (Session, Work, Expect) {
+    let w = Work::new(&format!("{}-{}", c.name, c.prep.tag()), c.root_rel);
     let id = if c.unprivileged {
         let id = Identity::unprivileged(&w.dir);
         w.file(&format!("{}/locked.txt", c.root_rel), b"locked\n");
@@ -427,7 +510,7 @@ fn refused_case(c: &Refused, case: &str) -> (Session, Work) {
         Identity::SELF
     };
     let mut s = Session::start(id, &w.dir, c.root_rel);
-    open_and_edit(&mut s, c.path, case);
+    let e = open_and_prepare(&mut s, c.path, c.prep, case);
     if c.unprivileged {
         negative_control(&mut s, id, case);
     }
@@ -436,22 +519,33 @@ fn refused_case(c: &Refused, case: &str) -> (Session, Work) {
 
     let r = s.ask("doc.open", json!({"path": c.path}));
     assert_refused(&r, c.kind, &w, case);
-    assert_unchanged(&mut s, c.path, case);
+    assert_unchanged(&mut s, &e, case);
     if let Some(before) = before {
         assert_eq!(snapshot(&w.dir), before, "{case}: work/ changed");
     }
-    (s, w)
+    (s, w, e)
+}
+
+fn replace_by_link(w: &Work, at: &str, target: &Path) {
+    let p = w.in_root(at);
+    if fs::symlink_metadata(&p).unwrap().is_dir() {
+        fs::remove_dir_all(&p).unwrap();
+    } else {
+        fs::remove_file(&p).unwrap();
+    }
+    symlink(target, &p).unwrap();
 }
 
 // ---------------------------------------------------------------------------------------------
 // AC-1: the path now leads outside the root.
 
-fn outside_case(name: &str, path: &str, change: &dyn Fn(&Work), case: &str) {
-    let (s, w) = refused_case(
+fn outside_case(name: &str, path: &str, prep: Prep, change: &dyn Fn(&Work), case: &str) {
+    let (s, w, _e) = refused_case(
         &Refused {
             name,
             root_rel: "root",
             path,
+            prep,
             unprivileged: false,
             snapshot_work: true,
             kind: "outside_root",
@@ -466,210 +560,230 @@ fn outside_case(name: &str, path: &str, change: &dyn Fn(&Work), case: &str) {
     assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
 }
 
-fn replace_by_link(w: &Work, at: &str, target: &Path) {
-    let p = w.in_root(at);
-    if fs::symlink_metadata(&p).unwrap().is_dir() {
-        fs::remove_dir_all(&p).unwrap();
-    } else {
-        fs::remove_file(&p).unwrap();
-    }
-    symlink(target, &p).unwrap();
+fn link_relative(w: &Work) {
+    replace_by_link(w, "a.txt", Path::new("../outside/secret.txt"));
+    assert_eq!(fs::read(w.in_root("a.txt")).unwrap(), SECRET, "fixture");
+}
+
+fn link_absolute(w: &Work) {
+    let target = w.at("outside/secret.txt");
+    assert!(target.is_absolute(), "fixture");
+    replace_by_link(w, "a.txt", &target);
+    assert_eq!(fs::read(w.in_root("a.txt")).unwrap(), SECRET, "fixture");
+}
+
+fn link_dangling(w: &Work) {
+    replace_by_link(w, "a.txt", Path::new("../outside/none.txt"));
+    let meta = fs::symlink_metadata(w.in_root("a.txt")).unwrap();
+    assert!(meta.file_type().is_symlink(), "fixture");
+    assert!(fs::metadata(w.in_root("a.txt")).is_err(), "fixture");
+}
+
+fn sub_outside(w: &Work) {
+    replace_by_link(w, "sub", Path::new("../outside"));
+    assert_eq!(
+        fs::read(w.in_root("sub/c.txt")).unwrap(),
+        OUTSIDE_C,
+        "fixture"
+    );
 }
 
 #[test]
 fn reopen_of_a_path_now_outside_is_refused() {
+    use Prep::{Edited, Selection, Unedited};
+    let ac1 = |name: &'static str, path: &'static str, prep: Prep, change: fn(&Work)| {
+        move |case: &str| outside_case(name, path, prep, &change, case)
+    };
     run_cases(&[
-        ("AC-1 (i) a.txt -> ../outside/secret.txt", &|case| {
-            outside_case(
-                "ac1-rel",
-                "a.txt",
-                &|w| {
-                    replace_by_link(w, "a.txt", Path::new("../outside/secret.txt"));
-                    assert_eq!(fs::read(w.in_root("a.txt")).unwrap(), SECRET, "fixture");
-                },
-                case,
-            );
-        }),
-        ("AC-1 (ii) a.txt -> <abs>/outside/secret.txt", &|case| {
-            outside_case(
-                "ac1-abs",
-                "a.txt",
-                &|w| {
-                    let target = w.at("outside/secret.txt");
-                    assert!(target.is_absolute(), "fixture");
-                    replace_by_link(w, "a.txt", &target);
-                    assert_eq!(fs::read(w.in_root("a.txt")).unwrap(), SECRET, "fixture");
-                },
-                case,
-            );
-        }),
+        (
+            "AC-1 (i) a.txt -> ../outside/secret.txt",
+            &ac1("ac1-rel", "a.txt", Edited, link_relative),
+        ),
+        (
+            "AC-1 (ii) a.txt -> <abs>/outside/secret.txt",
+            &ac1("ac1-abs", "a.txt", Edited, link_absolute),
+        ),
         (
             "AC-1 (iii) a.txt -> ../outside/none.txt (dangling)",
-            &|case| {
-                outside_case(
-                    "ac1-dangling",
-                    "a.txt",
-                    &|w| {
-                        replace_by_link(w, "a.txt", Path::new("../outside/none.txt"));
-                        assert!(
-                            fs::symlink_metadata(w.in_root("a.txt"))
-                                .unwrap()
-                                .file_type()
-                                .is_symlink(),
-                            "fixture"
-                        );
-                        assert!(fs::metadata(w.in_root("a.txt")).is_err(), "fixture");
-                    },
-                    case,
-                );
-            },
+            &ac1("ac1-dangling", "a.txt", Edited, link_dangling),
         ),
-        ("AC-1 (iv) sub/c.txt open, sub -> ../outside", &|case| {
-            outside_case(
-                "ac1-sub",
-                "sub/c.txt",
-                &|w| {
-                    replace_by_link(w, "sub", Path::new("../outside"));
-                    assert_eq!(
-                        fs::read(w.in_root("sub/c.txt")).unwrap(),
-                        OUTSIDE_C,
-                        "fixture"
-                    );
-                },
-                case,
-            );
-        }),
+        (
+            "AC-1 (iv) sub/c.txt open, sub -> ../outside",
+            &ac1("ac1-sub", "sub/c.txt", Edited, sub_outside),
+        ),
+        (
+            "AC-1 (i) unedited (k1)",
+            &ac1("ac1-rel", "a.txt", Unedited, link_relative),
+        ),
+        (
+            "AC-1 (ii) unedited (k1)",
+            &ac1("ac1-abs", "a.txt", Unedited, link_absolute),
+        ),
+        (
+            "AC-1 (iii) unedited (k1)",
+            &ac1("ac1-dangling", "a.txt", Unedited, link_dangling),
+        ),
+        (
+            "AC-1 (iv) unedited (k1)",
+            &ac1("ac1-sub", "sub/c.txt", Unedited, sub_outside),
+        ),
+        (
+            "AC-1 (i) with a selection and a pending redo (k2)",
+            &ac1("ac1-rel", "a.txt", Selection, link_relative),
+        ),
     ]);
 }
 
 // ---------------------------------------------------------------------------------------------
 // AC-2 (i)–(iii): the root path no longer leads to the root.
 
+fn root_renamed(w: &Work) {
+    fs::rename(w.at("root"), w.at("root.away")).unwrap();
+    assert!(fs::symlink_metadata(w.at("root")).is_err(), "fixture");
+    assert_eq!(
+        fs::read(w.at("root.away/a.txt")).unwrap(),
+        b"alpha\n",
+        "fixture"
+    );
+}
+
+fn root_linked_outside(w: &Work) {
+    fs::rename(w.at("root"), w.at("root.away")).unwrap();
+    symlink("outside", w.at("root")).unwrap();
+    assert_eq!(
+        fs::read(w.at("root/secret.txt")).unwrap(),
+        SECRET,
+        "fixture"
+    );
+}
+
+fn parent_renamed(w: &Work) {
+    fs::rename(w.at("p"), w.at("p.away")).unwrap();
+    assert!(fs::symlink_metadata(w.at("p")).is_err(), "fixture");
+    assert_eq!(
+        fs::read(w.at("p.away/root/a.txt")).unwrap(),
+        b"alpha\n",
+        "fixture"
+    );
+}
+
+/// (i): renamed away, refused; moved back, the re-open answers the open document again.
+fn renamed_and_back(prep: Prep, case: &str) {
+    let (mut s, w, e) = refused_case(
+        &Refused {
+            name: "ac2-rename",
+            root_rel: "root",
+            path: "a.txt",
+            prep,
+            unprivileged: false,
+            snapshot_work: true,
+            kind: "outside_root",
+            change: &root_renamed,
+        },
+        case,
+    );
+    fs::rename(w.at("root.away"), w.at("root")).unwrap();
+    let r = s.ask("doc.open", json!({"path": "a.txt"}));
+    assert_eq!(r["ok"], json!(true), "{case}: moved back: {r}");
+    assert_eq!(r["result"], reopened(&e), "{case}: moved back: {r}");
+    assert_unchanged(&mut s, &e, &format!("{case}: moved back"));
+    assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
+}
+
+fn moved_case(name: &str, root_rel: &str, prep: Prep, change: &dyn Fn(&Work), case: &str) {
+    let (s, _w, _e) = refused_case(
+        &Refused {
+            name,
+            root_rel,
+            path: "a.txt",
+            prep,
+            unprivileged: false,
+            snapshot_work: true,
+            kind: "outside_root",
+            change,
+        },
+        case,
+    );
+    assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
+}
+
 #[test]
 fn reopen_after_the_root_moved_is_refused() {
+    use Prep::{Edited, Selection, Unedited};
+    let linked = |prep: Prep| {
+        move |case: &str| moved_case("ac2-link", "root", prep, &root_linked_outside, case)
+    };
+    let parent = |prep: Prep| {
+        move |case: &str| moved_case("ac2-parent", "p/root", prep, &parent_renamed, case)
+    };
     run_cases(&[
         ("AC-2 (i) root renamed to root.away, then back", &|case| {
-            let (mut s, w) = refused_case(
-                &Refused {
-                    name: "ac2-rename",
-                    root_rel: "root",
-                    path: "a.txt",
-                    unprivileged: false,
-                    snapshot_work: true,
-                    kind: "outside_root",
-                    change: &|w| {
-                        fs::rename(w.at("root"), w.at("root.away")).unwrap();
-                        assert!(fs::symlink_metadata(w.at("root")).is_err(), "fixture");
-                        assert_eq!(
-                            fs::read(w.at("root.away/a.txt")).unwrap(),
-                            b"alpha\n",
-                            "fixture"
-                        );
-                    },
-                },
-                case,
-            );
-            // Moved back: the re-open answers the open document again.
-            fs::rename(w.at("root.away"), w.at("root")).unwrap();
-            let r = s.ask("doc.open", json!({"path": "a.txt"}));
-            assert_eq!(r["ok"], json!(true), "{case}: moved back: {r}");
-            assert_eq!(r["result"], reopened("a.txt"), "{case}: moved back: {r}");
-            assert_unchanged(&mut s, "a.txt", &format!("{case}: moved back"));
-            assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
+            renamed_and_back(Edited, case)
         }),
         (
             "AC-2 (ii) root renamed to root.away, root -> outside",
-            &|case| {
-                let (s, _w) = refused_case(
-                    &Refused {
-                        name: "ac2-link",
-                        root_rel: "root",
-                        path: "a.txt",
-                        unprivileged: false,
-                        snapshot_work: true,
-                        kind: "outside_root",
-                        change: &|w| {
-                            fs::rename(w.at("root"), w.at("root.away")).unwrap();
-                            symlink("outside", w.at("root")).unwrap();
-                            assert_eq!(
-                                fs::read(w.at("root/secret.txt")).unwrap(),
-                                SECRET,
-                                "fixture"
-                            );
-                        },
-                    },
-                    case,
-                );
-                assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
-            },
+            &linked(Edited),
         ),
-        ("AC-2 (iii) --root p/root, p renamed to p.away", &|case| {
-            let (s, _w) = refused_case(
-                &Refused {
-                    name: "ac2-parent",
-                    root_rel: "p/root",
-                    path: "a.txt",
-                    unprivileged: false,
-                    snapshot_work: true,
-                    kind: "outside_root",
-                    change: &|w| {
-                        fs::rename(w.at("p"), w.at("p.away")).unwrap();
-                        assert!(fs::symlink_metadata(w.at("p")).is_err(), "fixture");
-                        assert_eq!(
-                            fs::read(w.at("p.away/root/a.txt")).unwrap(),
-                            b"alpha\n",
-                            "fixture"
-                        );
-                    },
-                },
-                case,
-            );
-            assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
+        (
+            "AC-2 (iii) --root p/root, p renamed to p.away",
+            &parent(Edited),
+        ),
+        ("AC-2 (i) unedited, then back (k1)", &|case| {
+            renamed_and_back(Unedited, case)
         }),
+        ("AC-2 (ii) unedited (k1)", &linked(Unedited)),
+        ("AC-2 (iii) unedited (k1)", &parent(Unedited)),
+        (
+            "AC-2 (i) with a selection and a pending redo, then back (k2)",
+            &|case| renamed_and_back(Selection, case),
+        ),
     ]);
 }
 
 // ---------------------------------------------------------------------------------------------
 // AC-4: the walk fails inside the root.
 
+fn link_loop(w: &Work) {
+    replace_by_link(w, "a.txt", Path::new("loop2"));
+    symlink("a.txt", w.in_root("loop2")).unwrap();
+    let meta = fs::symlink_metadata(w.in_root("a.txt")).unwrap();
+    assert!(meta.file_type().is_symlink(), "fixture");
+    assert!(
+        fs::metadata(w.in_root("a.txt")).is_err(),
+        "fixture: no loop"
+    );
+}
+
+fn loop_case(prep: Prep, case: &str) {
+    let (s, _w, _e) = refused_case(
+        &Refused {
+            name: "ac4-loop",
+            root_rel: "root",
+            path: "a.txt",
+            prep,
+            unprivileged: false,
+            snapshot_work: true,
+            kind: "io_error",
+            change: &link_loop,
+        },
+        case,
+    );
+    assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
+}
+
 #[test]
 fn reopen_whose_walk_fails_inside_is_io_error() {
     run_cases(&[
         ("AC-4 (i) a.txt -> loop2, loop2 -> a.txt", &|case| {
-            let (s, _w) = refused_case(
-                &Refused {
-                    name: "ac4-loop",
-                    root_rel: "root",
-                    path: "a.txt",
-                    unprivileged: false,
-                    snapshot_work: true,
-                    kind: "io_error",
-                    change: &|w| {
-                        replace_by_link(w, "a.txt", Path::new("loop2"));
-                        symlink("a.txt", w.in_root("loop2")).unwrap();
-                        assert!(
-                            fs::symlink_metadata(w.in_root("a.txt"))
-                                .unwrap()
-                                .file_type()
-                                .is_symlink(),
-                            "fixture"
-                        );
-                        assert!(
-                            fs::metadata(w.in_root("a.txt")).is_err(),
-                            "fixture: no loop"
-                        );
-                    },
-                },
-                case,
-            );
-            assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
+            loop_case(Prep::Edited, case)
         }),
         ("AC-4 (ii) as U: sub/c.txt open, sub made 0600", &|case| {
-            let (s, w) = refused_case(
+            let (s, w, _e) = refused_case(
                 &Refused {
                     name: "ac4-sub",
                     root_rel: "root",
                     path: "sub/c.txt",
+                    prep: Prep::Edited,
                     unprivileged: true,
                     snapshot_work: false,
                     kind: "io_error",
@@ -685,11 +799,12 @@ fn reopen_whose_walk_fails_inside_is_io_error() {
             assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
         }),
         ("AC-4 (iii) as U: root made 0000 after the start", &|case| {
-            let (s, w) = refused_case(
+            let (s, w, _e) = refused_case(
                 &Refused {
                     name: "ac4-root",
                     root_rel: "root",
                     path: "a.txt",
+                    prep: Prep::Edited,
                     unprivileged: true,
                     snapshot_work: false,
                     kind: "io_error",
@@ -704,5 +819,9 @@ fn reopen_whose_walk_fails_inside_is_io_error() {
             set_mode(&w.root(), 0o755);
             assert_eq!(s.finish().code(), Some(0), "{case}: control exit");
         }),
+        (
+            "AC-4 (i) with a selection and a pending redo (k2)",
+            &|case| loop_case(Prep::Selection, case),
+        ),
     ]);
 }
