@@ -615,6 +615,72 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
     overflows at 200×200 as the n8 case assumes.
   - gate attempts: 0 this run (`no-skip`, `hygiene`, clippy and `cargo test -p kiln` run on
     their own) · missing context: none · next: director, join.
+- 2026-11-14T20:50Z · R-232 · after review round 1 · did: added the tests of D-150 w2, w3 and
+  w4. I read only the rulings in the task file on main, not the review file, the implementation
+  or `task/T-055`.
+  - Rulings acknowledged and accepted before acting on them:
+    - D-150 w1: the test of w1 is w3 (d).
+    - D-150 w2, w3 and w4: done as below.
+    - D-150 w5 and w6: noted. Not tested for w5: from the spec, a click at the centre of a
+      target's visible part cannot be told apart from one at the centre of its rectangle without
+      assuming the layout.
+  - Added to `acceptance_t055.rs`:
+    - `check_colours`, run in `snap` on every snapshot of every test (w3 c):
+      - each run has a string `text` and a `color` of the form `#` plus 6 hex digits;
+      - no two adjacent runs of a row share a colour;
+      - no colour value is pinned.
+    - w3 (a) `w3a_frames_on_an_idle_shell_is_settled`: `frames` 5 and 1 on an idle shell answer
+      `settled:true`.
+    - w3 (b) `w3b_target_by_label_contains`:
+      - `focus` uses `{"label_contains":"Pat"}` and `click` uses `{"label_contains":"Ope"}`;
+      - the test checks in a snapshot that each substring names exactly one node;
+      - the open then shows in `Documents`, in `doc.list` and in the log.
+    - w3 (c) `w3c_typed_text_is_painted_with_structured_colours`: the text typed into `Path` is
+      in its rows, with at least 3 painted runs to check.
+    - w3 (d), the test of w1, `w3d_scrolled_list_reports_only_visible_text`:
+      - setup: 100 documents at `--size 200x200`, `zz` typed into `Path`, `scroll` down 4 steps
+        on the first document;
+      - the first document becomes `offscreen`, and some documents stay visible;
+      - offscreen documents have no rows;
+      - no row of any node under `Documents` contains the path of an offscreen document;
+      - the painted text of every node outside `Documents` is unchanged by the scroll, `Path`
+        still shows `zz`, and `Open` keeps its rows.
+    - w3 (e) `w3e_more_steps_scroll_further`: after 4 steps the first visible document is
+      strictly later than after 1 step. Each run is its own session from the unscrolled state.
+    - w3 (f) `w3f_doc_close_removes_the_child`: after a control `doc.close` and one frame,
+      `Documents` equals `doc.list` (`["b.txt"]`).
+    - w2 `w2_ac10_accessible_names_with_an_overflowing_list`: AC-10 (button and text_input
+      labels) holds on an overflowing list, before and after a scroll. A `scroll_bar` is not
+      required to have a label.
+  - w4: the guard is renamed `kiln_without_subcommand_and_display_exits_nonzero_with_a_message`.
+    - It removes `DISPLAY` and `WAYLAND_DISPLAY`.
+    - It asserts a non-zero exit, empty stdout, a message on stderr and no panic.
+    - Exit 1 is no longer pinned.
+  - Base: all 26 acceptance tests fail by assertion; both guards pass. Clippy, `cargo fmt --all
+    --check`, `no-skip` and `hygiene` PASS.
+  - Self-check:
+    - A new scratch stub (never committed, deleted afterwards) has a scroll model: offset,
+      visibility by visible part, and a `scroll_bar` node without a label when the list
+      overflows.
+    - Against it all 26 acceptance tests and both guards pass.
+    - New seeded bugs, each with the tests that killed it:
+      - B40, rows by full rectangle (offscreen documents keep their rows): `w3d`.
+      - B41, `Path` loses its rows after a scroll: `w3d`.
+      - B42, `frames` reports `settled:false`: `w3a`.
+      - B43, `*_contains` matched exactly: `w3b`, `ac7_ui_refusals`.
+      - B44, adjacent runs of one colour not merged: `w3c`, `w3d` and 8 more.
+      - B45, `steps` ignored: `w3e`.
+      - B46, `doc.close` not reflected: `w3f`.
+      - B47, a colour as `#fff`: 18 tests.
+      - B50, bare `kiln` exits 0: the guard.
+    - All earlier bugs (B1–B23, B30–B32) and the naive mode are still killed.
+  - Not run:
+    - the full `cargo xtask ci`;
+    - anything against the real toolkit, in particular: whether one `scroll` step of `Documents`
+      moves at least one row, so that 4 steps reach further than 1 (w3 e); and whether 4 steps
+      take the first document out of view at 200×200 (w3 d).
+  - gate attempts: 0 this run (clippy, fmt, `no-skip`, `hygiene` and `cargo test -p kiln` run on
+    their own) · missing context: none · next: director, join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
