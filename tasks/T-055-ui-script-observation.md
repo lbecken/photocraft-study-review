@@ -414,6 +414,86 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (not needed by this task) · next: director (Q-1, Q-3).
 <!-- end planner log -->
 ### implementer
+- 2026-11-14 19:00–20:30Z · R-226 · ready · did: **Criteria restated:** `kiln script` runs the
+  shell headless; control lines are the host's bytes and log (AC-1); the shell shows `Path`,
+  `Open`, `Documents`, `Message` (AC-2); the UI opens only through `doc.open` control requests,
+  replayable (AC-3); UI refusals of opens show the kind in `Message`, unlogged (AC-4); idle frames
+  log nothing (AC-5); output and log are byte-deterministic (AC-6); UI refusals have their kind in
+  the (a) order and change nothing (AC-7); command-line errors exit 2 with empty stdout (AC-8); no
+  display needed (AC-9); every button/text input named (AC-10).
+  **Rulings acknowledged:** D-147 Q-1 A (accepted: `kiln-ui` runs one `kiln_control::Host`;
+  `xtask/ui-allowlist.toml` gained exactly that entry) and Q-3 A (accepted: `kiln script` in
+  `apps/kiln`). D-148 n1 (accepted and acted on: my `kiln-control` dev-dependency of
+  `apps/kiln` is removed; my binary tests use no `Host`; the byte-for-byte `Host` differential is a
+  `kiln-ui` unit test instead, where `kiln-control` is a normal dependency), n2 (accepted; already
+  so: nothing is focused at start, `type` first is `not_actionable`, test
+  `ui_refusals_have_their_kind_and_change_nothing`), n3 (accepted; already so: responses are
+  buffered and stdout written only after the log; `kiln script one.jsonl --memory --log /dev/full`
+  with one `doc.list` → stderr `kiln: cannot write log `/dev/full`: No space left on device (os
+  error 28)`, 0 bytes on stdout, exit 2).
+  **Built:** `crates/kiln-ui/src/` `session.rs` (the Host; the UI's list of open documents is
+  read from the responses of successful `doc.open`/`doc.close`, so the UI sends no request of its
+  own to read state), `shell.rs` (egui shell: visible label `Path` + `TextEdit` labelled by it,
+  `Open` button, `Message` label with accessible name, `Documents` list node inside a
+  `scroll_view` node), `observe.rs` (snapshot from egui's `accesskit_update` and `FullOutput.shapes`:
+  glyph colours from the row mesh vertices as the tessellator computes them), `script.rs` (runner:
+  parsing/validation in the (a) order, targets, input events, settling by egui's repaint delay,
+  simulated time `n/60`), `json.rs` (sorted compact JSON, 200-char cap); `apps/kiln/src/main.rs`
+  (`script` subcommand, usage, checks in the (c) order, exit codes; bare `kiln` unchanged:
+  message, exit 1); `docs/protocol/ui.md`; one line in `docs/control-protocol.md`'s host list.
+  Tests: kiln-ui unit tests (11) and `apps/kiln/tests/script_t055.rs` (9, through the binary).
+  **Dependencies:** `egui =0.37.0`, no default features, feature `default_fonts` (workspace);
+  `kiln-ui` → `kiln-control`, `egui`, `serde_json`; `apps/kiln` dev → `serde_json`. No
+  egui_kittest, eframe, wgpu, wayland. `Cargo.lock` 122 → 156 packages, 34 added, **no existing
+  package changed version** (`git diff 9d5f6d6 -- Cargo.lock | grep '^-' | grep -v '^---'` prints
+  nothing).
+  **Measured:** settle counts (S6), over my probe scripts and tests (`kiln script` on s2/s3/s5/mix,
+  frames per action other than `frames`): 3 (8×), 4 (11×), 14 (1×, scroll), 20 (2×, scroll); all
+  settled; largest **20** (scroll animation); click and key take 4 (2 input frames + settle). I could
+  not measure the acceptance scripts (not visible to me). Cost: 3000 idle frames with 40 documents
+  4.03 s, 29 MB (`/usr/bin/time -f "%e s %M KB" kiln script big.jsonl --root many`), debug.
+  Determinism: the same mixed script on `c1` and `deep/x/y/c2`, and once with 4 busy-loop processes
+  running, gave stdout md5 `fe32a8d5…` and log md5 `a3412a49…` all three times.
+  **Sentences of ui.md not from Pinned, with evidence:** "`ctrl` and `command` both press Ctrl"
+  (code `modifiers()`; `{"ui":"key","key":"A","modifiers":["ctrl"]}` on focused `Path` gave
+  `selection` 0..14 = select all); "a key request delivers no typed text" (`key` `A` and `Space` on
+  focused empty `Path` left it empty); "a step is 100 points" (egui `context.rs` `DISTANCE: f32 =
+  100.0`; 2 steps moved the first visible document of 40 from `f01` to `f12`, rows ≈18 pt);
+  "click presses then releases in the next frame, pointer stays" (code; `Open` painted `#f5f5f5`
+  (hover) after a click, `#d7d7d7` before); "frames after every successful control request, none
+  after a refused one" (unit test `frames_run_after_successful_control_requests_only`); "`Path`
+  keeps its text; a successful open clears `Message`" (probe s3; test
+  `refused_opens_are_shown_with_the_kind_and_not_logged`); the text-run, rectangle, `scroll_view`,
+  glyph-ownership and space-colour rules (code `observe.rs`; probe: `"a b"` typed shows one run
+  `#d7d7d7`; scrolled documents get `offscreen` and lose `rows`). Every sentence was checked
+  against the built binary by the probes above or the tests.
+  QUESTION: (1) After a control request the spec runs no frame, but AC-2 expects a snapshot right
+  after control `doc.open`s to show them. I run frames (as after an action, unreported) after every
+  successful control request and none after a refused one; the response bytes are unchanged. Right?
+  QUESTION: (2) egui reports text widgets' rows as child nodes of role `text_run`; I fold them into
+  the parent (its `value`, `rows`, `selection`) and do not report them as nodes, else every text
+  input would have a duplicate child and own no `rows`. Accept?
+  QUESTION: (3) egui's accessibility tree has no scroll semantics. A scrollable area is therefore
+  a node of role `scroll_view` that the shell's one scroll helper puts inside each `ScrollArea`
+  with the area's clip rectangle as bounds; `scroll` needs one around the target, and `offscreen`
+  uses its bounds. Later UI tasks must use the same helper (`shell::scroll_view`). Accept?
+  QUESTION: (4) "`focus` … with no node that takes text input" read literally: `focus` on a
+  button is `not_actionable`. Intended, or should `focus` take any focusable node?
+  QUESTION: (5) `click` on an offscreen target is delivered at its centre (ok:true, usually no
+  effect); the spec does not list it as `not_actionable`. Right?
+  QUESTION: (6) AC-5 says the snapshots before and after `frames 600` are equal; their `frames`
+  totals differ by 600 by definition, so only `root` can be equal (my test compares `root`).
+  QUESTION: (7) `serde_json` is a new direct dependency of `kiln-ui` (to parse script lines and
+  responses) and a dev-dependency of `apps/kiln`; it is already a workspace dependency, no lock
+  change. Acceptable as "a dependency the spec names" in spirit?
+  QUESTION: (8) Rows: a glyph belongs to the deepest node whose rectangle contains its centre;
+  a space (no pixels) takes its neighbour's colour (vertex colours are what was painted, and
+  egui's per-glyph section index is private). Accept as the published rule?
+  · gate attempts: 2 (1: green 639 s, with my then `kiln-control` dev-dependency; 2: green 551 s at ff0fbd0, 885 tests
+  passed; only this log entry was committed after it) · not run: the acceptance tests (not visible); a real window (none in this task); CI
+  runner; release build · missing context: none · next: director (questions; join with
+  `task/T-055-tests`; resolve the `apps/kiln/Cargo.toml` merge per n1). Disk: worktree `target/`
+  9.9 GB after the gate (whole-workspace test build).
 <!-- end implementer log -->
 ### test author
 - 2026-11-14T19:25Z · R-227 · ready · did: wrote `apps/kiln/tests/acceptance_t055.rs` (18 tests)
