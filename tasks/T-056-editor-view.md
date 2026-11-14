@@ -776,6 +776,94 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### implementer
 <!-- end implementer log -->
 ### test author
+- 2026-11-14 · R-240 · ready · did: wrote `apps/kiln/tests/acceptance_t056.rs` (22 tests, all
+  through `kiln script` under a 300 s hang detector; `serde_json` and `kiln_control::Host` only;
+  no guard file: L1–L8 are covered by the merged T-055 tests, Pinned (f)). Rulings acknowledged
+  and accepted: Q-2, Q-4 A (Enter = `doc.info` line ending), D-152 follow-ups (AC-2 colours
+  against the table, AC-3 centre click, AC-8 `settled:false`), Q-5 A, Q-6 A (positional start
+  paths), Q-8 A (the seven colours copied from the spec), Q-9 A (view reads logged; AC-7 counts
+  them as read-only), Q-10 A, B1–B11; T-055 w7 (no layout assumed: rows mapped to lines by text
+  as a consecutive run of non-empty lines, never by index).
+  Tests per criterion (scorecard: `ui.editor-view` = AC-1..AC-6, `ui.dispatch-only` = AC-7, AC-8):
+  - AC-1: `ac1_start_path_shows_the_document`, `ac1_path_and_open_show_the_document`,
+    `ac1_control_open_shows_the_document_after_one_frame`,
+    `ac1_start_paths_in_order_last_success_is_current` (a.rs b.rs missing.rs, options between
+    paths, exit 0/3, Message cleared by a later success, `--memory` refuses),
+    `ac1_current_document_rule` (re-open → current; close → highest id, not the previous current;
+    none → no Title/Editor), `ac1_title_of_a_path_containing_modified` (B7),
+    `ac1_editor_is_focused_by_focus_or_click`, `ac1_long_line_is_cut_not_wrapped` (3000-char line
+    one cut row, empty line no row, horizontal scroll changes no row).
+  - AC-2: `ac2_colours_of_rust_files` (20 files, CRLF, tabs, é λ ж, a selection, after a scroll;
+    Pinned (g)'s first row run by run), `ac2_plain_documents` (.txt; 1,048,577-char .rs, Message
+    stays empty).
+  - AC-3: `ac3_click_at_row_and_col_moves_the_caret` (9 clicks, rows/cols drawn from the
+    snapshot of a probe run of the session so far; type after a click; shift-click keeps anchor;
+    oracle `doc.line` start + col), `ac3_click_lands_in_the_visible_part`.
+  - AC-4: `ac4_keys_follow_the_input_table` (LF, CRLF, CR, no-break, mixed × 2 seeds × 45 steps;
+    every step: Editor value/selection vs `doc.text`/`cursor.get` and vs a naive model; final
+    `eol.counts` vs model; LF/CRLF stay single-kind).
+  - AC-5: `ac5_scroll_steps_move_the_view_only` (1, 2, 5 steps), `ac5_caret_line_stays_in_view`
+    (ArrowDown ×200 checked at 50/120/200; control `cursor.set` to line 250 and to 0, one frame).
+  - AC-6: `ac6_undo_redo_save_agree_with_a_second_session` (16 checkpoints; the script's reads are
+    found in the log by read-only `project.tree {limit: 900000+i}` markers and compared with the
+    replay's answers; file bytes vs the text at save and vs the replay), `ac6_refused_save_is_shown`.
+  - AC-7: `ac7_replay_of_the_click_session`, `ac7_replay_of_the_key_sessions`,
+    `ac7_replay_of_the_undo_save_session` (replay with `Host` on a copy: doc.text, cursor.get,
+    doc.info dirty/can_undo/can_redo, files; every logged request the script did not send is
+    `mutating:false` in `docs/commands.json` or one of the 8 Input-table commands; the UI logged
+    at least one mutating command), `ac7_idle_frames_add_nothing` (after an action; one frame
+    after a control request).
+  - AC-8: `ac8_settled_false_after_a_control_request`.
+  Base evidence (`cargo test -p kiln --test acceptance_t056` on this branch): 0 passed, 22 failed,
+  all by assertion or command error, none by compile: start-path tests by command error (exit 2,
+  `unexpected argument`, 0 response lines); the others by assertion (no node labelled
+  `Title`/`Editor`, or UI action on `Editor` → `no_target`); AC-8 by `settled: true` after the
+  control request (as R-237 E-f). Nothing is `compile`-only.
+  Self-check: a scratch stub of the editor view (kiln-ui editor module, current-document and
+  start-path handling, never committed, removed) passed all 22, and with it the T-055 tests
+  stayed green except `script_t055.rs`'s two-positional exit-2 case (the case Q-6 A gives to the
+  implementer). Seeded bugs → killing tests: M01 keyword colour channels swapped → ac2_colours;
+  M02 selected text painted `#c0deff` → ac2_colours; M03 click one char right → ac3_click, ac7_click;
+  M04 shift-click collapses → ac3_click; M05 Enter always `\n` → ac4; M06 Backspace splits CRLF →
+  ac4; M07 no `cursor.set` after typing over a selection → ac4; M08 ctrl ignored on arrows → ac4;
+  M09 shift+Home/End collapses → ac4; M10 ctrl+Y inert → ac6_undo; M11 ctrl+shift+Z undoes →
+  ac6_undo, ac7_undo; M12 stale dirty → ac6_undo; M13 refusal not in Message → ac6_refused; M14 no
+  extra frame after a read → ac8; M15 reads every frame → ac7_idle, ac8; M16 view reads with
+  `doc.open` (mutating, not in the table) → ac7 ×3, ac1 ×2; M17 no scroll to caret → ac5_caret;
+  M18 close makes the lowest id current → ac1_current; M19 refused start path not shown →
+  ac1_start_paths; M20 only first start path opened → ac1_start_paths; M21 Title never
+  `modified` → ac1_title, ac6 ×2; M22 click without `at` at the centre of the whole rect (T-055
+  runner) → ac3_centre; M23 `frames` always settled (T-055 M2) → ac8; M24 Editor value without
+  `\r` → ac3_click, ac4; M25 highlight kinds off by one → ac2_colours; M26 .txt highlighted →
+  ac2_plain; M27 shift ignored on Up/Down → ac4; M28 a scroll moves the caret → ac5_scroll;
+  M29 Delete deletes backwards → ac4; M30 Enter in a no-break doc inserts `\r\n` → ac4; M31 ctrl+S
+  inert → ac6 ×2, ac7_undo; M33 typing over a selection inserts at the head → ac4; M34 close of the
+  current document keeps it current → ac1_current. 33 of 33 killed (a contrived M32 that only
+  fired after a typed `Q` survived and was replaced; it is no missing test). Clippy
+  (`--all-targets -D warnings`) clean on the file with the stub in place and on base.
+  Assumptions, stated rather than asked (each follows a sentence of the spec): (A1) `selection`
+  of `Editor` is reported also while it is unfocused ("selection is its selection … as cursor.get
+  reports"), checked in AC-1; (A2) at the default size a line of at most 14 chars is not cut
+  (AC-1 says the rows "equal" the lines, AC-5 "rows are lines 0..k"); exact row equality is
+  required only there, elsewhere a row is a non-empty prefix of its line; (A3) `focus` on
+  `Editor` changes no selection (it is not in the Input table); (A4) the first snapshot of a
+  fresh session shows the document from its first line (AC-1, AC-5).
+  QUESTION: (T1) Enter typed over a selection whose end is followed by `\n` in a document whose
+  `line_ending` is `cr`: the Input table's `cursor.set {anchor: start + 1}` lands between `\r` and
+  `\n` and is refused (`not_a_boundary`), so Message would show a refusal of the UI's own
+  follow-up. Proposed: "the caret goes to start + n, moved before the `\r` if that lies inside a
+  CRLF" or leave it unspecified; my AC-4 model avoids pressing Enter where the inserted break
+  would join a `\r` and `\n` (also with an empty selection), so the tests do not depend on it.
+  QUESTION: (T2) AC-7 "every logged request that the script did not send": start paths' `doc.open`
+  are logged, not sent by the script and not in the Input table. Proposed: count start paths as
+  sent by the invocation. My AC-7 sessions open documents with control requests only.
+  QUESTION: (T3, minor) a line of only spaces or tabs has a row but no char that paints pixels, so
+  the colour rule gives its blanks no colour. Proposed: "plain" for such a row. Fixtures avoid it.
+  · gate attempts: 0 full `cargo xtask ci` (it must be red on this branch in exactly these 22
+  tests); steps run: `fmt`, `clippy`, `ui-commands`, `hygiene`, `no-skip` PASS; `cargo test -p
+  kiln --test acceptance_t056` red 22/22 as intended · not run: the full gate; the tests against
+  the real implementation (join); Q-6 A's `script_t055` change · missing context: none · next:
+  director (T1–T3), join with `task/T-056`.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
