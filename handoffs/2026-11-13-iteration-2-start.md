@@ -50,3 +50,10 @@ them and one check), then T-037. T-038 after the four feature tasks. Deferred dr
 - **Specs final, not yet ready:** T-023 (make ready after T-020 and T-021 merge; check its "To re-check at dispatch" list on main) and T-036 (items 1 to 4; make ready when a slot and disk are free). T-044 is a new draft (split from T-036), outside the first stage.
 - **Then:** T-037 (pre-dispatch check after T-036 merges), T-038 (after the feature tasks), tooling T-033, T-043, T-041; the follow-up on deterministic limits is still to be filed (parse work, search work, `.gitignore` cost, the size of a highlight reply).
 - Runs are booked through R-186 (R-184 and R-187 are running). Check-in scheduled for 07:15Z.
+
+## Addendum 2026-11-14 03:02 UTC (director) — after the second restart (D-116)
+- **Merged in iteration 2:** T-039, T-042, T-019, T-020 (`04a8fdf9c9b0d759eb131b6a7eae851cfa46708b`).
+- **T-021:** review round 1 request-changes (`reviews/T-021-r1.md` on the branch at `7c06ca338239e2334087af29fdc1e457efeac2ff`); rulings q1 to q6 in the task file; cap row `Extend T-021 to 780000` (D-115). State `in_progress`; the implementer was resumed for the rework (run R-191): code on `task/T-021`, one new acceptance case on `task/T-021-tests`. Then: book R-191; in `.worktrees/T-021` merge the tests branch again, regenerate the scorecard page if the test list changed, commit as director; `self_verified`; join; round 2 by the reviewer of R-187 (resume it; delta from `9dcd59d`); `reviewed`, `queued`, queue.
+- **T-036:** state `in_progress`; implementer (R-189) and independent test author (R-190) were resumed after the restart. Then: answers to both builders, book each run, merge + tie tests to `ws.path-confinement` + regenerate on the branch, join, a fresh reviewer for round 1 (high tier; it checks the removals R1 to R6 on the diff, D-114), approval row at merge.
+- **Next dispatches:** T-023 when T-021 has merged (make ready after checking its "To re-check at dispatch" list); T-037's pre-dispatch check when T-036 has merged; then T-038; tooling T-033, T-043, T-041.
+- Runs are booked through R-188 and R-187 (R-189, R-190, R-191 running). Check-in scheduled for 07:15Z.
