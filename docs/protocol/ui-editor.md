@@ -103,9 +103,9 @@ follows neither.
   (`docs/control-protocol.md`), and replaying them changes nothing. Which reads it sends is not
   part of this interface.
 - **Idle** means no request and no input since the view's last read; on an idle frame it sends
-  nothing, so frames on an idle UI add nothing to the log. A script of control requests only
-  runs no read (it runs no frame after the first request) and its `--log` stays
-  `Host::log_script()`.
+  nothing, so frames on an idle UI add nothing to the log. A script of control requests only,
+  without start paths, runs no read (it runs no frame after the first request) and its `--log`
+  stays `Host::log_script()`.
 - In the frame in which it re-read after a script's control request, the view asks for one
   further frame: `{"ui":"frames","count":1}` right after a successful control request answers
   `settled: false`; the following `{"ui":"frames","count":1}` answers `settled: true` unless

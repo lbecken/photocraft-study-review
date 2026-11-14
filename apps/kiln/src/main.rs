@@ -21,7 +21,7 @@ use std::process::ExitCode;
 use kiln_ui::{DEFAULT_SIZE, Files, SIZE_RANGE, Script, parse_size, response_ok};
 
 const USAGE: &str = "usage:
-  kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>...]
+  kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>…]
   kiln --help | -h | script --help
 
   script  run the Kiln UI without a window: each line of <script> is a control request
