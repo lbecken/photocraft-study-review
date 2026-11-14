@@ -1029,4 +1029,21 @@ not run: … · tokens (if known) · missing context: none|… · next: …` (+ 
   `outside_root`; through the Rust API, `read` of `f.txt` and `missing.txt` → `OutsideRoot`".
 <!-- end test author log -->
 ### reviewer
+- 2026-11-14T03:58Z · R-192 · tests_joined · did: round 1 (full, high) of head
+  `29c1f401e6a266db6012feb7cfb25f1bc096fd11`, verdict request-changes (`reviews/T-036-r1.md`,
+  commit `8c323b0`). Rulings acknowledged and accepted: D-092 Q-1 to Q-3, D-111 Q-4 (A) and the
+  split, D-114, D-117 (read from the primary checkout's copy; this copy lacks D-117).
+  - Every AC checked through `kiln-cli` as uid 65534 (`setpriv`) and as uid 0 without DAC caps
+    (`capsh`): 7 unreadable modes refused, held roots protected after chmod, removal,
+    replacement (link, directory, file, bind mount, lazy unmount, cycles); nothing written.
+  - Mutants 15: 14 killed (all by this task's acceptance/guard files), 1 equivalent (M7), 0
+    survived. Mutant M: every removal test failed in 20/20 runs, reuse in every trial; head
+    20/20 passes per binary, 0 reuse.
+  - Documents: S1–S3, C1–C3 verbatim, R1–R6 removed exactly; all sentences true except NEW-1
+    (listed for T-037).
+  - Findings: 1 test gap (`confinement.rs` T-036 test leaves its `/tmp` fixture on failure),
+    2 nits.
+  · gate attempts: 0 (ran `cargo test --workspace` on head: 770 passed; `no-skip` PASS; `hygiene`
+  PASS) · not run: `cargo xtask ci`, ACL/LSM denial, EMFILE on the root open, the non-root
+  identity branch, TG-2 · missing context: none · next: implementer fixes finding 1; round 2.
 <!-- end reviewer log -->
