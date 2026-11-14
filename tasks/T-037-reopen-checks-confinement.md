@@ -2,7 +2,7 @@
 id: T-037
 title: "Check the root and the path's location when `doc.open` names a path that is already open, and say so in paths.md and in doc.open's description"
 tier: high              # ADR-0002: a confinement boundary that docs/protocol/paths.md states ("At open and at save … a path whose location is outside the root is refused")
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: [ws.path-confinement]   # existing item, strengthened (no new item)
 depends_on: [T-036]     # not merged at the spec check R-196 (branch task/T-036 read at cbcfdbbf87b36dd0b8fb70244c4e90b8adf46ddb); T-008 (d4915606) and T-039 (c538ef8) merged. Never in flight with T-036 (shared disk.rs, paths.md).
@@ -571,6 +571,7 @@ D-091: one item (the re-open check, NEW-1) and its documents; P1 (Q-3) documents
 check. Not a bundle.
 
 ### To re-check at dispatch (facts read on `task/T-036` at `cbcfdbbf87b36dd0b8fb70244c4e90b8adf46ddb`; re-read at R-198 against its head `5b2bffb677b6f8ad89b38ca27cfc47dbbb3243ef`: `git diff cbcfdbb..5b2bffb --stat` changes only `crates/kiln-workspace/tests/confinement.rs` (`c779361`), `docs/control-protocol.md` (`09d96d9`, one sentence after the `--root` bullet's C1 on `exec`'s `invalid_json`-before-root order) and T-036's task file; none of the facts below depends on them)
+Checked by the director on main `e42b5e5` on 2026-11-14, after T-036 merged at `1a808c9ac5c8cf9d0f392ada13526bbeab906376`: facts 1 to 5 and 7 to 9 hold (`git diff cbcfdbb..e42b5e5 --stat` is empty for `docs/protocol/paths.md`, `crates/kiln-workspace/src` and `crates/kiln-commands/src/doc.rs`; `_root_handle: fs::File` at `disk.rs`:115; the trait has `read`, `write_atomic`, `is_file`, `list_dir`; `Vfs for` only `DiskFs` and `MemoryFs`; `control` refuses `--memory-seed`; only `doc.open` and `project.tree` take a `path`). Fact 6 was established by the spec check on the same code; T-023 is not merged yet and adds no command that takes a path.
 1. T-036 merged; base for the acceptance tests = that main.
 2. `docs/protocol/paths.md` on main reads as on `cbcfdbb` at the lines Pinned (i) names
    (:20–21, :21–24, :25–27, :51, :71–74, :76–77, :96–97); T-036's rework p2 (`09d96d9`) edits
