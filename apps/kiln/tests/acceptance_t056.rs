@@ -325,7 +325,10 @@ impl Sess {
     }
 
     fn text(&self, id: &str) -> String {
-        self.ok(id)["text"].as_str().expect("doc.text text").to_owned()
+        self.ok(id)["text"]
+            .as_str()
+            .expect("doc.text text")
+            .to_owned()
     }
 
     /// `(anchor, head)` of a `cursor.get` response.
@@ -343,8 +346,11 @@ impl Sess {
 }
 
 fn as_usize(v: &Value) -> usize {
-    usize::try_from(v.as_u64().unwrap_or_else(|| panic!("not an unsigned integer: {v}")))
-        .expect("fits usize")
+    usize::try_from(
+        v.as_u64()
+            .unwrap_or_else(|| panic!("not an unsigned integer: {v}")),
+    )
+    .expect("fits usize")
 }
 
 /// Run `kiln script <name>.jsonl <args…> --log <name>.log.jsonl` in `dir`. Panics unless
@@ -408,9 +414,7 @@ fn root_args() -> [&'static str; 2] {
 // ---------------------------------------------------------------------------------------------
 
 fn children(n: &Value) -> &[Value] {
-    n["children"]
-        .as_array()
-        .map_or(&[][..], Vec::as_slice)
+    n["children"].as_array().map_or(&[][..], Vec::as_slice)
 }
 
 fn all_nodes(root: &Value) -> Vec<&Value> {
@@ -835,7 +839,11 @@ fn replay(root: &Path, log: &[Value]) -> (Host, Vec<Value>) {
             .handle_line(line.as_bytes())
             .expect("a response per line");
         let v: Value = serde_json::from_str(&resp).expect("JSON");
-        assert_eq!(v["ok"], json!(true), "replaying the log: {line} answered {resp}");
+        assert_eq!(
+            v["ok"],
+            json!(true),
+            "replaying the log: {line} answered {resp}"
+        );
         out.push(v);
     }
     (host, out)
@@ -850,9 +858,8 @@ fn host_req(host: &mut Host, command: &str, params: Value) -> Value {
 /// `mutating` of every command, from `docs/commands.json`.
 fn mutating_flags() -> HashMap<String, bool> {
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/commands.json");
-    let v: Value =
-        serde_json::from_str(&fs::read_to_string(&p).expect("read docs/commands.json"))
-            .expect("commands.json is JSON");
+    let v: Value = serde_json::from_str(&fs::read_to_string(&p).expect("read docs/commands.json"))
+        .expect("commands.json is JSON");
     v["commands"]
         .as_array()
         .expect("commands")
@@ -979,7 +986,12 @@ fn check_dispatch_only(s: &Sess, root: &Path, initial: &Path, docs: &[u64]) {
             );
         }
     }
-    assert_eq!(tree(&copy), tree(root), "{}: files after the replay", s.name);
+    assert_eq!(
+        tree(&copy),
+        tree(root),
+        "{}: files after the replay",
+        s.name
+    );
     let _ = fs::remove_dir_all(&copy);
 }
 
@@ -988,7 +1000,11 @@ fn end_reads(docs: &[u64]) -> Vec<String> {
     let mut out = vec![ctl("end-list", "doc.list", json!({}))];
     for d in docs {
         out.push(ctl(&format!("end-text-{d}"), "doc.text", json!({"doc": d})));
-        out.push(ctl(&format!("end-cur-{d}"), "cursor.get", json!({"doc": d})));
+        out.push(ctl(
+            &format!("end-cur-{d}"),
+            "cursor.get",
+            json!({"doc": d}),
+        ));
         out.push(ctl(&format!("end-info-{d}"), "doc.info", json!({"doc": d})));
     }
     out
@@ -1055,7 +1071,11 @@ fn check_a_rs_shown(s: &Sess, snap_id: &str, text_id: &str, line_ids: &[String],
     );
     check_editor_in_scroll_view(root);
     let cur = s.sel("cur");
-    assert_eq!(editor_sel(ed), cur, "{what}: Editor selection vs cursor.get");
+    assert_eq!(
+        editor_sel(ed),
+        cur,
+        "{what}: Editor selection vs cursor.get"
+    );
 }
 
 fn ac1_fixture(dir: &Path) -> PathBuf {
@@ -1102,7 +1122,10 @@ fn ac1_start_path_shows_the_document() {
         .collect();
     assert_eq!(opens.len(), 1, "the start path is logged as one doc.open");
     assert_eq!(opens[0]["params"], json!({"path": "src/a.rs"}));
-    assert_eq!(s.out.code, 0, "exit code of a script whose responses are all ok");
+    assert_eq!(
+        s.out.code, 0,
+        "exit code of a script whose responses are all ok"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -1154,8 +1177,14 @@ fn ac1_start_paths_in_order_last_success_is_current() {
         ctl("list", "doc.list", json!({})),
     ];
     for (name, args) in [
-        ("before", vec!["--root", "proj", "a.rs", "b.rs", "missing.rs"]),
-        ("between", vec!["a.rs", "--root", "proj", "b.rs", "missing.rs"]),
+        (
+            "before",
+            vec!["--root", "proj", "a.rs", "b.rs", "missing.rs"],
+        ),
+        (
+            "between",
+            vec!["a.rs", "--root", "proj", "b.rs", "missing.rs"],
+        ),
     ] {
         let s = run(&dir, name, &script, &args);
         let root = s.snap("s");
@@ -1183,8 +1212,15 @@ fn ac1_start_paths_in_order_last_success_is_current() {
             .filter(|e| e["command"] == json!("doc.open"))
             .map(|e| e["params"]["path"].clone())
             .collect();
-        assert_eq!(opens, [json!("a.rs"), json!("b.rs")], "{name}: logged opens");
-        assert_eq!(s.out.code, 0, "{name}: a refused start path does not change the exit code");
+        assert_eq!(
+            opens,
+            [json!("a.rs"), json!("b.rs")],
+            "{name}: logged opens"
+        );
+        assert_eq!(
+            s.out.code, 0,
+            "{name}: a refused start path does not change the exit code"
+        );
     }
     // A refused control request of the script makes the exit code 3, start paths or not.
     let bad = vec![snapshot("s"), open("o", "nope.rs")];
@@ -1192,8 +1228,17 @@ fn ac1_start_paths_in_order_last_success_is_current() {
     assert_eq!(s.r("o")["ok"], json!(false));
     assert_eq!(s.out.code, 3, "exit code with a refused control request");
     // A successful start path after a refused one clears Message.
-    let s = run(&dir, "clear", &[snapshot("s")], &["--root", "proj", "missing.rs", "a.rs"]);
-    assert_eq!(message(s.snap("s")), "", "Message after a successful start path");
+    let s = run(
+        &dir,
+        "clear",
+        &[snapshot("s")],
+        &["--root", "proj", "missing.rs", "a.rs"],
+    );
+    assert_eq!(
+        message(s.snap("s")),
+        "",
+        "Message after a successful start path"
+    );
     check_title(s.snap("s"), "a.rs", false, "clear");
     // With --memory every start path is refused (not_found).
     let s = run(&dir, "memory", &[snapshot("s")], &["--memory", "a.rs"]);
@@ -1259,7 +1304,11 @@ fn ac1_current_document_rule() {
     ] {
         let root = s.snap(snap);
         check_title(root, path, false, snap);
-        assert_eq!(editor_value(editor(root)), files[path], "{snap}: Editor shows {path}");
+        assert_eq!(
+            editor_value(editor(root)),
+            files[path],
+            "{snap}: Editor shows {path}"
+        );
     }
     no_editor(s.snap("s-none"), "after closing every document");
     let _ = fs::remove_dir_all(&dir);
@@ -1274,7 +1323,11 @@ fn ac1_title_of_a_path_containing_modified() {
     let script = vec![
         snapshot("s0"),
         ctl("i0", "doc.info", json!({"doc": 1})),
-        ctl("ins", "doc.insert", json!({"doc": 1, "offset": 0, "text": "x"})),
+        ctl(
+            "ins",
+            "doc.insert",
+            json!({"doc": 1, "offset": 0, "text": "x"}),
+        ),
         frames("f", 1),
         snapshot("s1"),
         ctl("i1", "doc.info", json!({"doc": 1})),
@@ -1295,14 +1348,28 @@ fn ac1_editor_is_focused_by_focus_or_click() {
     ac1_fixture(&dir);
     for (name, act) in [
         ("focus", focus_editor("a")),
-        ("click", ui("a", "click", json!({"target": editor_target()}))),
+        (
+            "click",
+            ui("a", "click", json!({"target": editor_target()})),
+        ),
     ] {
-        let script = vec![open("o", "src/a.rs"), frames("f", 1), snapshot("s0"), act, snapshot("s1")];
+        let script = vec![
+            open("o", "src/a.rs"),
+            frames("f", 1),
+            snapshot("s0"),
+            act,
+            snapshot("s1"),
+        ];
         let s = run(&dir, name, &script, &root_args());
         nothing_focused(s.snap("s0"), name);
         s.act("a");
         let ed = editor(s.snap("s1"));
-        assert_eq!(ed["focused"], json!(true), "{name}: Editor focused: {}", short(ed));
+        assert_eq!(
+            ed["focused"],
+            json!(true),
+            "{name}: Editor focused: {}",
+            short(ed)
+        );
     }
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1313,7 +1380,9 @@ fn ac1_editor_is_focused_by_focus_or_click() {
 fn ac1_long_line_is_cut_not_wrapped() {
     let dir = case_dir("ac1-long");
     let root = dir.join("proj");
-    let long: String = (0..3000).map(|i| char::from(b'a' + (i % 26) as u8)).collect();
+    let long: String = (0..3000)
+        .map(|i| char::from(b'a' + (i % 26) as u8))
+        .collect();
     let text = format!("short line\n\n{long}\nend line\n");
     write(&root.join("long.txt"), text.as_bytes());
     let script = vec![
@@ -1328,7 +1397,11 @@ fn ac1_long_line_is_cut_not_wrapped() {
     let texts = row_texts(ed);
     let lines = lines_of(&chars(&text));
     let m = check_rows_from_line0(&texts, &lines, false, "long line");
-    assert_eq!(m, [0, 2, 3], "rows: one per non-empty line, no wrapped row: {texts:?}");
+    assert_eq!(
+        m,
+        [0, 2, 3],
+        "rows: one per non-empty line, no wrapped row: {texts:?}"
+    );
     assert_eq!(texts[0], "short line");
     assert!(
         texts[1].chars().count() < 3000,
@@ -1461,7 +1534,11 @@ fn ac2_colours_of_rust_files() {
             let (a, h) = s.sel(&format!("c{d}"));
             assert_ne!(a, h, "{p}: precondition: shift+arrows selected text");
             let ed = editor(s.snap(&format!("sel{d}")));
-            assert_eq!(editor_sel(ed), (a, h), "{p}: Editor selection vs cursor.get");
+            assert_eq!(
+                editor_sel(ed),
+                (a, h),
+                "{p}: Editor selection vs cursor.get"
+            );
             check_colours(ed, &lines, &kind_at, &format!("{p} with a selection"));
         }
         s.act(&format!("sc{d}"));
@@ -1471,15 +1548,15 @@ fn ac2_colours_of_rust_files() {
     // The worked example of Pinned (g): the first painted row of src/a.rs, runs exactly.
     let ed = editor(s.snap("s1"));
     let first = &rows(ed)[0];
-    let want: Vec<(String, String)> = [
-        ("fn ", "#569cd6"),
-        ("main", "#dcdcaa"),
-        ("() {", "#dcdcdc"),
-    ]
-    .iter()
-    .map(|(t, c)| ((*t).to_owned(), (*c).to_owned()))
-    .collect();
-    assert_eq!(first, &want, "Pinned (g): the first painted row of src/a.rs");
+    let want: Vec<(String, String)> =
+        [("fn ", "#569cd6"), ("main", "#dcdcaa"), ("() {", "#dcdcdc")]
+            .iter()
+            .map(|(t, c)| ((*t).to_owned(), (*c).to_owned()))
+            .collect();
+    assert_eq!(
+        first, &want,
+        "Pinned (g): the first painted row of src/a.rs"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -1505,7 +1582,11 @@ fn ac2_plain_documents() {
         open("o2", "big.rs"),
         frames("f2", 1),
         snapshot("s2"),
-        ctl("h2", "syntax.highlight", json!({"doc": 2, "start": 0, "end": 10})),
+        ctl(
+            "h2",
+            "syntax.highlight",
+            json!({"doc": 2, "start": 0, "end": 10}),
+        ),
         ctl("i2", "doc.info", json!({"doc": 2})),
         scroll_editor("sc", "down", 3),
         snapshot("s3"),
@@ -1536,7 +1617,11 @@ fn ac2_plain_documents() {
             row_texts(ed)
         );
         check_all_plain(ed, &format!("big.rs {id}"));
-        assert_eq!(message(root), "", "{id}: a refused read is not shown in Message");
+        assert_eq!(
+            message(root),
+            "",
+            "{id}: a refused read is not shown in Message"
+        );
     }
     s.act("sc");
     let _ = fs::remove_dir_all(&dir);
@@ -1552,8 +1637,18 @@ fn click_fixture() -> String {
     let ends = ["\n", "\r\n", "\r", "\n"];
     let mut t = String::new();
     for k in 0..24 {
-        let lead = if k % 5 == 1 { "\t" } else if k % 5 == 3 { "    " } else { "" };
-        t.push_str(&format!("{lead}{k:02} {} λ ж  {}", words[k % 6], "x".repeat(k % 7)));
+        let lead = if k % 5 == 1 {
+            "\t"
+        } else if k % 5 == 3 {
+            "    "
+        } else {
+            ""
+        };
+        t.push_str(&format!(
+            "{lead}{k:02} {} λ ж  {}",
+            words[k % 6],
+            "x".repeat(k % 7)
+        ));
         t.push_str(ends[k % 4]);
     }
     t
@@ -1584,7 +1679,11 @@ fn ac3_step_lines(k: usize, st: &ClickStep) -> Vec<String> {
         click_at(&format!("click{k}"), st.row, st.col, st.shift),
         snapshot(&format!("post{k}")),
         ctl(&format!("cur{k}"), "cursor.get", json!({"doc": 1})),
-        ctl(&format!("line{k}"), "doc.line", json!({"doc": 1, "line": st.line})),
+        ctl(
+            &format!("line{k}"),
+            "doc.line",
+            json!({"doc": 1, "line": st.line}),
+        ),
     ];
     if st.typed {
         l.push(type_text(&format!("type{k}"), "Q"));
@@ -1666,7 +1765,10 @@ fn ac3_click_at_row_and_col_moves_the_caret() {
     let (s, steps) = ac3_session(&dir);
     let mut prev_head = 0;
     for (k, st) in steps.iter().enumerate() {
-        let what = format!("click {k} at row {} col {} (shift {})", st.row, st.col, st.shift);
+        let what = format!(
+            "click {k} at row {} col {} (shift {})",
+            st.row, st.col, st.shift
+        );
         assert_eq!(
             row_texts(editor(s.snap(&st.pre)))[st.row],
             st.row_text,
@@ -1682,7 +1784,10 @@ fn ac3_click_at_row_and_col_moves_the_caret() {
         );
         assert_eq!(h, st.head, "{what}: head");
         let want_anchor = if st.shift { st.anchor } else { h };
-        assert_eq!(a, want_anchor, "{what}: anchor (shift keeps the old anchor)");
+        assert_eq!(
+            a, want_anchor,
+            "{what}: anchor (shift keeps the old anchor)"
+        );
         if st.shift {
             assert_eq!(a, prev_head, "{what}: shift-click keeps the anchor");
         }
@@ -1701,10 +1806,18 @@ fn ac3_click_at_row_and_col_moves_the_caret() {
                 "{what}: typing `Q` inserts it at the clicked offset {h}"
             );
             let (ta, th) = s.sel(&format!("tcur{k}"));
-            assert_eq!((ta, th), (h + 1, h + 1), "{what}: caret after the typed char");
+            assert_eq!(
+                (ta, th),
+                (h + 1, h + 1),
+                "{what}: caret after the typed char"
+            );
             let ed = editor(s.snap(&format!("tsnap{k}")));
             assert_eq!(editor_value(ed), text, "{what}: Editor value vs doc.text");
-            assert_eq!(editor_sel(ed), (ta, th), "{what}: Editor selection after typing");
+            assert_eq!(
+                editor_sel(ed),
+                (ta, th),
+                "{what}: Editor selection after typing"
+            );
             prev_head = th;
         }
     }
@@ -1814,7 +1927,11 @@ impl Model {
             let (s, e) = self.sorted();
             self.edit(s, e, text);
             let c = s + text.chars().count();
-            assert_eq!(self.snap(c), c, "model: cursor.set to a non-boundary (a test bug)");
+            assert_eq!(
+                self.snap(c),
+                c,
+                "model: cursor.set to a non-boundary (a test bug)"
+            );
             self.a = c;
             self.h = c;
         }
@@ -2023,8 +2140,12 @@ fn ac4_session(path: &str, initial: &str, seed: u64, n: usize) -> (Vec<String>, 
                     m.key("Delete", false, false);
                     break key(&id, "Delete", &[]);
                 }
-                5 | 6 | 7 => {
-                    let name = if rng.flag() { "ArrowLeft" } else { "ArrowRight" };
+                5..=7 => {
+                    let name = if rng.flag() {
+                        "ArrowLeft"
+                    } else {
+                        "ArrowRight"
+                    };
                     let (ctrl, shift) = (rng.flag(), rng.flag());
                     m.key(name, ctrl, shift);
                     let mods: Vec<&str> = [("ctrl", ctrl), ("shift", shift)]
@@ -2061,8 +2182,14 @@ fn ac4_session(path: &str, initial: &str, seed: u64, n: usize) -> (Vec<String>, 
 
 /// The documents of AC-4: LF, CRLF, CR-only, no break, mixed.
 const AC4_DOCS: [(&str, &str); 5] = [
-    ("lf.txt", "fn main() {\nlet x = 1;\n  indented é\n}\nlast λ line\n"),
-    ("crlf.txt", "alpha beta\r\ngamma_delta\r\n  eps λ\r\nzeta\r\n"),
+    (
+        "lf.txt",
+        "fn main() {\nlet x = 1;\n  indented é\n}\nlast λ line\n",
+    ),
+    (
+        "crlf.txt",
+        "alpha beta\r\ngamma_delta\r\n  eps λ\r\nzeta\r\n",
+    ),
     ("cr.txt", "one two\rthree\rfour ж\r"),
     ("nobreak.txt", "no break here é"),
     ("mixed.txt", "a\r\nb\nc\rd\r\n\re f\n"),
@@ -2095,7 +2222,11 @@ fn ac4_keys_follow_the_input_table() {
                 let text = s.text(&format!("t{k}"));
                 let sel = s.sel(&format!("c{k}"));
                 assert_eq!(editor_value(ed), text, "{what}: Editor value vs doc.text");
-                assert_eq!(editor_sel(ed), sel, "{what}: Editor selection vs cursor.get");
+                assert_eq!(
+                    editor_sel(ed),
+                    sel,
+                    "{what}: Editor selection vs cursor.get"
+                );
                 assert_eq!(
                     chars(&text),
                     m.t,
@@ -2108,13 +2239,20 @@ fn ac4_keys_follow_the_input_table() {
             let eol = s.ok("eol");
             let (lf, crlf, cr) = last.eol_counts();
             assert_eq!(
-                (as_usize(&eol["lf"]), as_usize(&eol["crlf"]), as_usize(&eol["cr"])),
+                (
+                    as_usize(&eol["lf"]),
+                    as_usize(&eol["crlf"]),
+                    as_usize(&eol["cr"])
+                ),
                 (lf, crlf, cr),
                 "{name}: eol.counts vs the model"
             );
             if p == "lf.txt" || p == "crlf.txt" {
                 let kinds = [lf, crlf, cr].iter().filter(|n| **n > 0).count();
-                assert!(kinds <= 1, "{name}: a single-kind document became mixed: {eol}");
+                assert!(
+                    kinds <= 1,
+                    "{name}: a single-kind document became mixed: {eol}"
+                );
                 assert_eq!(eol["mixed_line_endings"], json!(false), "{name}");
             }
         }
@@ -2137,7 +2275,11 @@ fn ac5_scroll_steps_move_the_view_only() {
     for steps in [1, 2, 5] {
         let script = vec![
             open("o", "l.txt"),
-            ctl("set", "cursor.set", json!({"doc": 1, "anchor": 3, "head": 5})),
+            ctl(
+                "set",
+                "cursor.set",
+                json!({"doc": 1, "anchor": 3, "head": 5}),
+            ),
             frames("f", 1),
             snapshot("s0"),
             ctl("t0", "doc.text", json!({"doc": 1})),
@@ -2154,14 +2296,25 @@ fn ac5_scroll_steps_move_the_view_only() {
         s.act("sc");
         let ed = editor(s.snap("s1"));
         let m1 = map_rows(&row_texts(ed), &lines, true, &what);
-        assert!(m1[0] > 0, "{what}: the first row is still line 0 after scrolling down");
+        assert!(
+            m1[0] > 0,
+            "{what}: the first row is still line 0 after scrolling down"
+        );
         assert_eq!(
             m1,
             (m1[0]..m1[0] + m1.len()).collect::<Vec<_>>(),
             "{what}: rows are consecutive lines"
         );
-        assert_eq!(s.text("t1"), s.text("t0"), "{what}: the scroll changed the text");
-        assert_eq!(s.sel("c1"), s.sel("c0"), "{what}: the scroll changed the selection");
+        assert_eq!(
+            s.text("t1"),
+            s.text("t0"),
+            "{what}: the scroll changed the text"
+        );
+        assert_eq!(
+            s.sel("c1"),
+            s.sel("c0"),
+            "{what}: the scroll changed the selection"
+        );
         assert_eq!(editor_sel(ed), s.sel("c1"), "{what}: Editor selection");
         assert_eq!(editor_value(ed), s.text("t1"), "{what}: Editor value");
         firsts.push(m1[0]);
@@ -2206,7 +2359,12 @@ fn ac5_caret_line_stays_in_view() {
         s.act(&format!("down{k}"));
         let cur = s.ok(&format!("c{k}"));
         assert_eq!(as_usize(&cur["line"]), k, "{k} ArrowDowns from line 0");
-        let m = map_rows(&row_texts(editor(s.snap(&format!("s{k}")))), &lines, true, "keys");
+        let m = map_rows(
+            &row_texts(editor(s.snap(&format!("s{k}")))),
+            &lines,
+            true,
+            "keys",
+        );
         assert!(
             m.contains(&k),
             "after {k} ArrowDowns line {k} (the caret's) is not among the rows {}..={}",
@@ -2214,7 +2372,11 @@ fn ac5_caret_line_stays_in_view() {
             m[m.len() - 1]
         );
     }
-    assert_eq!(as_usize(&s.ok("l250")["start"]) + 2, line250, "doc.line 250");
+    assert_eq!(
+        as_usize(&s.ok("l250")["start"]) + 2,
+        line250,
+        "doc.line 250"
+    );
     s.ok("set");
     for (snap, cur, line) in [("s250", "c250", 250), ("s0", "", 0)] {
         if !cur.is_empty() {
@@ -2300,7 +2462,11 @@ fn ac6_undo_redo_save_agree_with_a_second_session() {
         let text = s.text(&format!("t{i}"));
         let info = s.ok(&format!("i{i}"));
         let dirty = info["dirty"].as_bool().expect("dirty");
-        assert_eq!(editor_value(editor(root_node)), text, "{what}: Editor value vs doc.text");
+        assert_eq!(
+            editor_value(editor(root_node)),
+            text,
+            "{what}: Editor value vs doc.text"
+        );
         check_title(root_node, "src/a.rs", dirty, &what);
         // Where the script's reads are in the log: right before the marker.
         let m = log
@@ -2310,8 +2476,16 @@ fn ac6_undo_redo_save_agree_with_a_second_session() {
                     && e["params"]["limit"] == json!(900_000 + i as u64)
             })
             .unwrap_or_else(|| panic!("{what}: the marker is not in the log"));
-        assert_eq!(log[m - 2]["command"], json!("doc.text"), "{what}: log order");
-        assert_eq!(log[m - 1]["command"], json!("doc.info"), "{what}: log order");
+        assert_eq!(
+            log[m - 2]["command"],
+            json!("doc.text"),
+            "{what}: log order"
+        );
+        assert_eq!(
+            log[m - 1]["command"],
+            json!("doc.info"),
+            "{what}: log order"
+        );
         assert_eq!(
             replayed[m - 2]["result"]["text"],
             json!(text),
@@ -2328,7 +2502,11 @@ fn ac6_undo_redo_save_agree_with_a_second_session() {
         }
     }
     // The undo/redo keys did something: the text went back to the file's and forward again.
-    assert_eq!(s.text("t11"), A_RS, "four undos and one more restore the file's text");
+    assert_eq!(
+        s.text("t11"),
+        A_RS,
+        "four undos and one more restore the file's text"
+    );
     assert_eq!(s.ok("i11")["can_redo"], json!(true), "undo: can_redo");
     assert_ne!(s.text("t4"), s.text("t3"), "ctrl+Z changed the text");
     assert_ne!(s.text("t6"), s.text("t5"), "ctrl+shift+Z changed the text");
@@ -2356,20 +2534,38 @@ fn ac6_refused_save_is_shown() {
     let root = dir.join("proj");
     write(&root.join("src/a.rs"), A_RS.as_bytes());
     for n in 0..100 {
-        write(&root.join(format!("src/.kiln-tmp-{n}")), format!("tmp {n}").as_bytes());
+        write(
+            &root.join(format!("src/.kiln-tmp-{n}")),
+            format!("tmp {n}").as_bytes(),
+        );
     }
     // The second session (control requests only) names the kind.
     let second = dir.join("second");
     copy_dir(&root, &second);
     let mut host = Host::on_disk(&second).expect("Host");
-    assert_eq!(host_req(&mut host, "doc.open", json!({"path": "src/a.rs"}))["ok"], json!(true));
-    host_req(&mut host, "doc.insert", json!({"doc": 1, "offset": 0, "text": "x"}));
+    assert_eq!(
+        host_req(&mut host, "doc.open", json!({"path": "src/a.rs"}))["ok"],
+        json!(true)
+    );
+    host_req(
+        &mut host,
+        "doc.insert",
+        json!({"doc": 1, "offset": 0, "text": "x"}),
+    );
     let refused = host_req(&mut host, "doc.save", json!({"doc": 1}));
-    assert_eq!(refused["ok"], json!(false), "precondition: the save is refused: {refused}");
+    assert_eq!(
+        refused["ok"],
+        json!(false),
+        "precondition: the save is refused: {refused}"
+    );
     let kind = refused["error"]["kind"].as_str().expect("kind").to_owned();
     assert_eq!(kind, "io_error", "Pinned (a), (g): the refused save's kind");
     let before = tree(&root);
-    assert_eq!(before.len(), 102, "precondition: src, a.rs and the 100 temporary files exist");
+    assert_eq!(
+        before.len(),
+        102,
+        "precondition: src, a.rs and the 100 temporary files exist"
+    );
     let script = vec![
         open("o", "src/a.rs"),
         frames("f", 1),
@@ -2387,11 +2583,22 @@ fn ac6_refused_save_is_shown() {
     }
     check_title(s.snap("s0"), "src/a.rs", true, "before the save");
     let r = s.snap("s1");
-    assert_eq!(s.ok("info")["dirty"], json!(true), "the refused save left the document dirty");
-    assert_eq!(s.text("text"), format!("x{A_RS}"), "text after the refused save");
+    assert_eq!(
+        s.ok("info")["dirty"],
+        json!(true),
+        "the refused save left the document dirty"
+    );
+    assert_eq!(
+        s.text("text"),
+        format!("x{A_RS}"),
+        "text after the refused save"
+    );
     check_title(r, "src/a.rs", true, "after the refused save");
     let m = message(r);
-    assert!(m.starts_with(&kind), "Message `{m}` does not begin with `{kind}`");
+    assert!(
+        m.starts_with(&kind),
+        "Message `{m}` does not begin with `{kind}`"
+    );
     assert_eq!(tree(&root), before, "the refused save changed files");
     assert_eq!(s.out.code, 0, "a UI refusal does not change the exit code");
     let _ = fs::remove_dir_all(&dir);
@@ -2466,7 +2673,11 @@ fn ac7_idle_frames_add_nothing() {
             vec![
                 open("o", "src/a.rs"),
                 frames("f", 1),
-                ctl("ins", "doc.insert", json!({"doc": 1, "offset": 0, "text": "z"})),
+                ctl(
+                    "ins",
+                    "doc.insert",
+                    json!({"doc": 1, "offset": 0, "text": "z"}),
+                ),
                 frames("f1", 1),
             ],
         ),
@@ -2512,7 +2723,11 @@ fn ac8_settled_false_after_a_control_request() {
         script.push(frames(&format!("idle{k}"), 1));
     }
     script.push(snapshot("s-idle"));
-    script.push(ctl("ins", "doc.insert", json!({"doc": 1, "offset": 0, "text": "q"})));
+    script.push(ctl(
+        "ins",
+        "doc.insert",
+        json!({"doc": 1, "offset": 0, "text": "q"}),
+    ));
     for k in 0..=61 {
         script.push(frames(&format!("f{k}"), 1));
         script.push(snapshot(&format!("s{k}")));
@@ -2523,7 +2738,10 @@ fn ac8_settled_false_after_a_control_request() {
         assert_eq!(r["frames"], json!(1), "`frames` count 1 runs one frame");
         r["settled"].as_bool().expect("settled")
     };
-    assert!(settled("idle9"), "precondition: the UI is idle before the insert");
+    assert!(
+        settled("idle9"),
+        "precondition: the UI is idle before the insert"
+    );
     s.ok("ins");
     assert!(
         !settled("f0"),
