@@ -880,4 +880,13 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `ui-commands`, `layers`, `no-skip`, `hygiene` PASS and the `kiln`/`kiln-ui` tests, 42 passed) ·
   not run: full `cargo xtask ci`; permission-denied reads (sandbox is root) · missing context:
   none · next: director (findings 1–8 to the implementer and test author; spec gaps 9–11).
+- 2026-11-14 · R-234 · round 2 (delta, final) at `fad3aa58baccbe84b21cdd1f46ec4553fcd811dd` ·
+  **Rulings acknowledged:** D-150 w1–w6 and D-151 w7 accepted (read on main); w1 and w5 are the
+  corrections my round 1 asked for. · did: `reviews/T-055-r2.md`: delta inside `touches`; the
+  round-1 survivors re-run (M3, M6, M7, M12, M13 now killed by acceptance tests; M2 and M5
+  survive, follow-ups); finding 1's reproduction clean through the binary; the 7 changed ui.md
+  sentences hold (w5's click point only by code and unit test, not observable in this shell);
+  the reworded guard holds on base's source. Verdict **approve** (0 defects; 2 test gaps and 1
+  nit as follow-ups). · gate attempts: 0 (kiln and kiln-ui tests 51 passed; `hygiene`) · not
+  run: full `cargo xtask ci`; a base build · missing context: none · next: director.
 <!-- end reviewer log -->
