@@ -252,7 +252,10 @@ fn kinds_of(list: &Value) -> Vec<&str> {
     list.as_array()
         .unwrap_or_else(|| panic!("a list of kinds: {list}"))
         .iter()
-        .map(|k| k.as_str().unwrap_or_else(|| panic!("a kind is a string: {k}")))
+        .map(|k| {
+            k.as_str()
+                .unwrap_or_else(|| panic!("a kind is a string: {k}"))
+        })
         .collect()
 }
 
@@ -276,7 +279,8 @@ fn entry<'a>(d: &'a Value, name: &str) -> &'a Value {
 #[test]
 fn undeclared_refusal_is_internal() {
     let mut r = Registry::new();
-    r.register::<DeclaresNotFound>().expect("t38.declared registers");
+    r.register::<DeclaresNotFound>()
+        .expect("t38.declared registers");
     r.register::<Alpha>().expect("t38.alpha registers");
 
     let run = |name: &str, kind: &str| {
@@ -292,7 +296,13 @@ fn undeclared_refusal_is_internal() {
 
     let got = run("t38.declared", "not_found");
     assert!(
-        matches!(got, Err(CommandError::Rejected { reason: NotFound, .. })),
+        matches!(
+            got,
+            Err(CommandError::Rejected {
+                reason: NotFound,
+                ..
+            })
+        ),
         "a declared refusal is returned unchanged (Interface 2): {got:?}"
     );
     let got = run("t38.declared", "decode_error");
@@ -382,7 +392,13 @@ fn undeclared_refusal_is_internal() {
     let mut ctx = Context::new();
     let got = disk.execute(&mut ctx, "t38.disk", json!({"kind": "io_error"}));
     assert!(
-        matches!(got, Err(CommandError::Rejected { reason: IoError, .. })),
+        matches!(
+            got,
+            Err(CommandError::Rejected {
+                reason: IoError,
+                ..
+            })
+        ),
         "a declared *disk* refusal is returned unchanged: {got:?}"
     );
     assert!(ctx.log().is_empty());
@@ -453,12 +469,7 @@ fn audit_requires_a_witness_for_every_declared_kind() {
         "t38.never",
         0,
     );
-    audit_case(
-        "disk kind only",
-        &one::<DeclaresDisk>(),
-        "t38.disk",
-        0,
-    );
+    audit_case("disk kind only", &one::<DeclaresDisk>(), "t38.disk", 0);
 
     // One problem each.
     audit_case("(i) no declaration", &one::<Alpha>(), "t38.alpha", 1);
