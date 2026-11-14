@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::reason::RejectReason;
-use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
+use crate::registry::{
+    Command, CommandError, Context, Example, Refusal, RefusalExample, Registry, RegistryError,
+    SeedFile, no_such_document_example,
+};
 
 /// Register the `search.*` commands.
 pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
@@ -189,6 +192,27 @@ impl Command for Find {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::InvalidPattern),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "query": "a"})),
+            RefusalExample {
+                description: "an empty pattern",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "query": ""}),
+                kind: RejectReason::InvalidPattern,
+            },
+        ]
+    }
+
     fn run(ctx: &mut Context, p: FindParams) -> Result<FindResult, CommandError> {
         let buffer = ctx.doc(p.doc)?.buffer();
         let query = compile(&p.query, p.regex, p.case_sensitive, p.whole_word)?;
@@ -292,6 +316,36 @@ impl Command for Replace {
                 params: json!({"doc": 1, "query": "aa", "replacement": "x", "from": 1}),
                 result: json!({"replaced": 1, "len_chars": 7,
                     "ranges": [{"start": 6, "end": 7}], "truncated": false}),
+            },
+        ]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::InvalidPattern),
+            Refusal::example(RejectReason::OutOfRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "query": "a", "replacement": "b"})),
+            RefusalExample {
+                description: "a replacement that refers to a group the regex does not have",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "query": "(a)(b)", "regex": true, "replacement": "$3"}),
+                kind: RejectReason::InvalidPattern,
+            },
+            RefusalExample {
+                description: "a from beyond the end of the text",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "query": "a", "replacement": "b", "from": 99}),
+                kind: RejectReason::OutOfRange,
             },
         ]
     }

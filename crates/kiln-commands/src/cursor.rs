@@ -12,8 +12,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::reason::InternalReason;
-use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
+use crate::reason::{InternalReason, RejectReason};
+use crate::registry::{
+    Command, CommandError, Context, Example, Refusal, RefusalExample, Registry, RegistryError,
+    SeedFile, no_such_document_example,
+};
 
 /// Register the `cursor.*` commands.
 pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
@@ -122,6 +125,14 @@ impl Command for Get {
         }]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
+    }
+
     fn run(ctx: &mut Context, p: GetParams) -> Result<CursorResult, CommandError> {
         cursor_result(p.doc, ctx.doc(p.doc)?.buffer())
     }
@@ -178,6 +189,36 @@ impl Command for Set {
                 params: json!({"doc": 1, "anchor": 2}),
                 result: json!({"doc": 1, "anchor": 2, "head": 2, "start": 2, "end": 2,
                     "line": 0, "col": 2}),
+            },
+        ]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::OutOfRange),
+            Refusal::example(RejectReason::NotABoundary),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "anchor": 0})),
+            RefusalExample {
+                description: "an anchor beyond the end of the text",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "anchor": 99}),
+                kind: RejectReason::OutOfRange,
+            },
+            RefusalExample {
+                description: "a head between the CR and LF of a CRLF",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "anchor": 0, "head": 4}),
+                kind: RejectReason::NotABoundary,
             },
         ]
     }
@@ -270,6 +311,16 @@ impl Command for Move {
                     "line": 1, "col": 2}),
             },
         ]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(
+            json!({"doc": 9, "by": "char", "forward": true}),
+        )]
     }
 
     fn run(ctx: &mut Context, p: MoveParams) -> Result<CursorResult, CommandError> {

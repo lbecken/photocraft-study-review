@@ -27,7 +27,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::reason::RejectReason;
-use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
+use crate::registry::{
+    Command, CommandError, Context, Example, Refusal, RefusalExample, Registry, RegistryError,
+    SeedFile, no_such_document_example,
+};
 
 /// Register the `doc.*` commands.
 pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
@@ -172,6 +175,62 @@ impl Command for Open {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::InvalidPath),
+            Refusal::example(RejectReason::NotFound),
+            Refusal::example(RejectReason::NotAFile),
+            Refusal::disk(RejectReason::IoError),
+            Refusal::example(RejectReason::DecodeError),
+            Refusal::disk(RejectReason::OutsideRoot),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            RefusalExample {
+                description: "a path that leaves the root",
+                initial_text: "",
+                files: vec![],
+                setup: vec![],
+                params: json!({"path": "../x"}),
+                kind: RejectReason::InvalidPath,
+            },
+            RefusalExample {
+                description: "a missing file",
+                initial_text: "",
+                files: vec![],
+                setup: vec![],
+                params: json!({"path": "missing.txt"}),
+                kind: RejectReason::NotFound,
+            },
+            RefusalExample {
+                description: "a component on the way is a file",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "x")],
+                setup: vec![],
+                params: json!({"path": "f.txt/x"}),
+                kind: RejectReason::NotFound,
+            },
+            RefusalExample {
+                description: "a directory",
+                initial_text: "",
+                files: vec![SeedFile::text("d/a.txt", "x")],
+                setup: vec![],
+                params: json!({"path": "d"}),
+                kind: RejectReason::NotAFile,
+            },
+            RefusalExample {
+                description: "bytes that are not UTF-8",
+                initial_text: "",
+                files: vec![SeedFile::hex("bad.txt", "ff")],
+                setup: vec![],
+                params: json!({"path": "bad.txt"}),
+                kind: RejectReason::DecodeError,
+            },
+        ]
+    }
+
     fn run(ctx: &mut Context, p: OpenParams) -> Result<OpenResult, CommandError> {
         let path = RelPath::new(&p.path)
             .map_err(|e| CommandError::rejected(RejectReason::InvalidPath, e.to_string()))?;
@@ -258,6 +317,20 @@ impl Command for Save {
         }]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::disk(RejectReason::NotFound),
+            Refusal::disk(RejectReason::NotAFile),
+            Refusal::disk(RejectReason::IoError),
+            Refusal::disk(RejectReason::OutsideRoot),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
+    }
+
     fn run(ctx: &mut Context, p: DocParams) -> Result<SaveResult, CommandError> {
         let (doc, vfs) = ctx.doc_and_vfs_mut(p.doc)?;
         let bytes_written = doc
@@ -329,6 +402,30 @@ impl Command for Close {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::UnsavedChanges),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9})),
+            RefusalExample {
+                description: "a document with unsaved changes, without discard",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![
+                    ("doc.open", json!({"path": "f.txt"})),
+                    ("doc.insert", json!({"doc": 1, "offset": 0, "text": "x"})),
+                ],
+                params: json!({"doc": 1}),
+                kind: RejectReason::UnsavedChanges,
+            },
+        ]
+    }
+
     fn run(ctx: &mut Context, p: CloseParams) -> Result<CloseResult, CommandError> {
         if ctx.doc(p.doc)?.is_dirty() && !p.discard {
             return Err(CommandError::rejected(
@@ -392,6 +489,27 @@ impl Command for Insert {
         }]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::OutOfRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "offset": 0, "text": "x"})),
+            RefusalExample {
+                description: "an offset beyond the end of the text",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "offset": 99, "text": "x"}),
+                kind: RejectReason::OutOfRange,
+            },
+        ]
+    }
+
     fn run(ctx: &mut Context, p: InsertParams) -> Result<InsertResult, CommandError> {
         let doc = ctx.doc_mut(p.doc)?;
         doc.buffer_mut()
@@ -447,6 +565,36 @@ impl Command for Delete {
         }]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::OutOfRange),
+            Refusal::example(RejectReason::InvertedRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "start": 0, "end": 0})),
+            RefusalExample {
+                description: "an end beyond the end of the text",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "start": 1, "end": 99}),
+                kind: RejectReason::OutOfRange,
+            },
+            RefusalExample {
+                description: "a start after the end",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "start": 3, "end": 1}),
+                kind: RejectReason::InvertedRange,
+            },
+        ]
+    }
+
     fn run(ctx: &mut Context, p: DeleteParams) -> Result<RemovedResult, CommandError> {
         let doc = ctx.doc_mut(p.doc)?;
         let removed = doc
@@ -494,6 +642,36 @@ impl Command for Replace {
             params: json!({"doc": 1, "start": 3, "end": 4, "text": "main"}),
             result: json!({"removed": "a", "len_chars": 13, "dirty": true}),
         }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::OutOfRange),
+            Refusal::example(RejectReason::InvertedRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "start": 0, "end": 0, "text": "x"})),
+            RefusalExample {
+                description: "an end beyond the end of the text",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "start": 1, "end": 99, "text": "x"}),
+                kind: RejectReason::OutOfRange,
+            },
+            RefusalExample {
+                description: "a start after the end",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "start": 3, "end": 1, "text": "x"}),
+                kind: RejectReason::InvertedRange,
+            },
+        ]
     }
 
     fn run(ctx: &mut Context, p: ReplaceParams) -> Result<RemovedResult, CommandError> {
@@ -561,6 +739,14 @@ impl Command for Undo {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
+    }
+
     fn run(ctx: &mut Context, p: DocParams) -> Result<UndoResult, CommandError> {
         let doc = ctx.doc_mut(p.doc)?;
         let undone = doc.buffer_mut().undo();
@@ -610,6 +796,14 @@ impl Command for Redo {
         }]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
+    }
+
     fn run(ctx: &mut Context, p: DocParams) -> Result<RedoResult, CommandError> {
         let doc = ctx.doc_mut(p.doc)?;
         let redone = doc.buffer_mut().redo();
@@ -651,6 +845,14 @@ impl Command for Text {
             params: json!({"doc": 1}),
             result: json!({"text": "a\r\nb", "len_chars": 4}),
         }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
     }
 
     fn run(ctx: &mut Context, p: DocParams) -> Result<TextResult, CommandError> {
@@ -711,6 +913,14 @@ impl Command for Info {
                 "line_ending": "crlf", "mixed_line_endings": false, "len_chars": 7,
                 "len_lines": 3, "dirty": true, "can_undo": true, "can_redo": false}),
         }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
     }
 
     fn run(ctx: &mut Context, p: DocParams) -> Result<InfoResult, CommandError> {
@@ -779,6 +989,10 @@ impl Command for List {
                 {"doc": 2, "path": "b.txt", "dirty": true},
             ]}),
         }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![])
     }
 
     fn run(ctx: &mut Context, _: ListParams) -> Result<ListResult, CommandError> {
@@ -916,6 +1130,27 @@ impl Command for Line {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::OutOfRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "line": 0})),
+            RefusalExample {
+                description: "a line beyond the last line",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "line": 3}),
+                kind: RejectReason::OutOfRange,
+            },
+        ]
+    }
+
     fn run(ctx: &mut Context, p: LineParams) -> Result<LineResult, CommandError> {
         let buffer = ctx.doc(p.doc)?.buffer();
         line_of(buffer, index(p.line)).map_err(|e| line_refusal(&e))
@@ -1033,6 +1268,36 @@ impl Command for Position {
                 setup: vec![("doc.open", json!({"path": "a.txt"}))],
                 params: json!({"doc": 1, "at": {"line_col": {"line": 2, "col": 1}}}),
                 result: json!({"char": 8, "byte": 12, "utf16": 9, "line": 2, "col": 1}),
+            },
+        ]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::OutOfRange),
+            Refusal::example(RejectReason::NotABoundary),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "at": {"char": 0}})),
+            RefusalExample {
+                description: "a column beyond the end of its line",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "at": {"line_col": {"line": 0, "col": 4}}}),
+                kind: RejectReason::OutOfRange,
+            },
+            RefusalExample {
+                description: "a char offset between the CR and LF of a CRLF",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "abc\r\ndef\n")],
+                setup: vec![("doc.open", json!({"path": "f.txt"}))],
+                params: json!({"doc": 1, "at": {"char": 4}}),
+                kind: RejectReason::NotABoundary,
             },
         ]
     }

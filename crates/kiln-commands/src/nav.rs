@@ -21,8 +21,11 @@ use serde_json::json;
 
 use crate::cursor::{CursorResult, cursor_result};
 use crate::reason::{InternalReason, RejectReason};
-use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
-use crate::syntax::MAX_CHARS;
+use crate::registry::{
+    Command, CommandError, Context, Example, Refusal, RefusalExample, Registry, RegistryError,
+    SeedFile, no_such_document_example,
+};
+use crate::syntax::{MAX_CHARS, too_large_example};
 
 /// Register the `nav.*` commands.
 pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
@@ -222,6 +225,20 @@ impl Command for Outline {
         }]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::TooLarge),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9})),
+            too_large_example(json!({"doc": 1})),
+        ]
+    }
+
     fn run(ctx: &mut Context, p: DocParams) -> Result<OutlineResult, CommandError> {
         let items = doc_outline(ctx, p.doc)?;
         Ok(OutlineResult {
@@ -296,6 +313,14 @@ impl Command for GotoLine {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9, "line": 0}))]
+    }
+
     fn run(ctx: &mut Context, p: GotoLineParams) -> Result<CursorResult, CommandError> {
         let buffer = ctx.doc_mut(p.doc)?.buffer_mut();
         let head = clamped(buffer, index(p.line), p.col.map_or(0, index))?;
@@ -355,6 +380,29 @@ impl Command for GotoSymbol {
                     "line": 0, "col": 35},
             }),
         }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::TooLarge),
+            Refusal::example(RejectReason::OutOfRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "index": 0})),
+            too_large_example(json!({"doc": 1, "index": 0})),
+            RefusalExample {
+                description: "an index beyond the last outline item",
+                initial_text: "",
+                files: vec![SeedFile::text("a.rs", "fn f() {}")],
+                setup: vec![("doc.open", json!({"path": "a.rs"}))],
+                params: json!({"doc": 1, "index": 5}),
+                kind: RejectReason::OutOfRange,
+            },
+        ]
     }
 
     fn run(ctx: &mut Context, p: GotoSymbolParams) -> Result<GotoSymbolResult, CommandError> {
@@ -542,6 +590,29 @@ impl Command for WorkspaceSymbols {
                 "walk_truncated": false,
                 "too_deep": 0,
             }),
+        }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::InvalidPattern),
+            // The walk's kinds (`docs/protocol/nav.md` "Errors"): `not_found` and `not_a_file`
+            // only when another process changes the tree during the request (ruling Q-5).
+            Refusal::disk(RejectReason::NotFound),
+            Refusal::disk(RejectReason::NotAFile),
+            Refusal::disk(RejectReason::IoError),
+            Refusal::disk(RejectReason::OutsideRoot),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![RefusalExample {
+            description: "an empty query",
+            initial_text: "",
+            files: vec![],
+            setup: vec![],
+            params: json!({"query": ""}),
+            kind: RejectReason::InvalidPattern,
         }]
     }
 

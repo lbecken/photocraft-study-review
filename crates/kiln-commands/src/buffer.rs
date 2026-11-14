@@ -4,7 +4,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
+use crate::reason::RejectReason;
+use crate::registry::{
+    Command, CommandError, Context, Example, Refusal, RefusalExample, Registry, RegistryError,
+};
 
 /// Register the `buffer.*` commands.
 pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
@@ -61,6 +64,21 @@ impl Command for Insert {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::OutOfRange)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![RefusalExample {
+            description: "an offset beyond the end of the empty buffer",
+            initial_text: "",
+            files: vec![],
+            setup: vec![],
+            params: json!({"offset": 5, "text": "x"}),
+            kind: RejectReason::OutOfRange,
+        }]
+    }
+
     fn run(ctx: &mut Context, p: InsertParams) -> Result<InsertResult, CommandError> {
         let buffer = ctx.buffer_mut();
         buffer
@@ -104,6 +122,10 @@ impl Command for Text {
             params: json!({}),
             result: json!({"text": "let x = 1;", "len_chars": 10}),
         }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![])
     }
 
     fn run(ctx: &mut Context, _: TextParams) -> Result<TextResult, CommandError> {

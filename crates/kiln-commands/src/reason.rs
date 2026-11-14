@@ -3,12 +3,15 @@
 //! Every [`CommandError::Rejected`](crate::CommandError::Rejected) and
 //! [`CommandError::Internal`](crate::CommandError::Internal) carries a reason, set where the
 //! error is raised. The control protocol reports `kind = reason.as_str()` and never reads the
-//! message. [`Registry::describe`](crate::Registry::describe) publishes every reason with its
-//! description as `error_kinds`, so the list in `docs/commands.json` is generated from these
-//! enums.
+//! message. [`Registry::describe`](crate::Registry::describe) publishes, as `error_kinds`,
+//! every [`InternalReason`] and the [`RejectReason`]s that some registered command declares
+//! ([`Command::refusals`](crate::Command::refusals), ADR-0006), each with its description, so
+//! the list in `docs/commands.json` is generated from these enums and the declarations. A
+//! reason may exist before any command declares it; it is then not published.
 //!
-//! Adding a kind: add one row to the table of [`RejectReason`] (or [`InternalReason`]) below,
-//! then run `cargo xtask schema --write`. The row is the only place a variant is declared: the
+//! Adding a kind: add one row to the table of [`RejectReason`] (or [`InternalReason`]) below;
+//! it is published once a command declares it (in that command's module), then run
+//! `cargo xtask schema --write`. The row is the only place a variant is declared: the
 //! enum, `ALL`, `as_str` and `description` are all generated from the table, so a variant
 //! cannot exist without its `ALL` entry and its description. A lower-layer error enum maps to
 //! reasons by an exhaustive `From` without a catch-all arm, so a new lower-layer variant does
@@ -69,25 +72,28 @@ reasons! {
         /// `doc.close` of a modified document without `discard`.
         UnsavedChanges = "unsaved_changes" =>
             "`doc.close` of a modified document without `discard`",
-        /// The file (or, for a save, its directory) does not exist.
-        NotFound = "not_found" => "the file (or, for a save, its directory) does not exist",
-        /// The path names a directory or another non-regular file where a file is needed, or a
-        /// file where a directory is needed.
+        /// The path leads to nothing, or a component on its way that must be a directory is
+        /// missing or is not a directory.
+        NotFound = "not_found" =>
+            "the path leads to nothing, or a component on its way that must be a directory is missing or is not a directory (a save creates a missing file, never a missing directory)",
+        /// The path leads to a directory or special file where a regular file is needed, or to
+        /// a file or special file where a directory is needed.
         NotAFile = "not_a_file" =>
-            "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed",
+            "the path leads to a directory, FIFO, socket or device where a regular file is needed, or to a file, FIFO, socket or device where a directory is needed",
         /// Any other file-system failure.
         IoError = "io_error" => "any other file-system failure (permissions, name too long, …)",
         /// The file is not valid UTF-8 / UTF-16 text.
         DecodeError = "decode_error" => "the file is not valid UTF-8 / UTF-16 text",
-        /// An offset beyond the end of the text.
-        OutOfRange = "out_of_range" => "an offset beyond the end of the text",
+        /// An offset, line, column or outline item index beyond the end.
+        OutOfRange = "out_of_range" =>
+            "an offset beyond the end of the text (in chars, bytes or UTF-16 code units), a line beyond the last line, a column beyond the end of its line, or an outline item index beyond the last item",
         /// A range whose start is after its end.
         InvertedRange = "inverted_range" => "a range whose start is after its end",
         /// Any other refusal.
         Other = "other" => "any other refusal",
-        /// The search pattern is empty or is not a valid regular expression.
+        /// The search pattern or a regex replacement is not accepted.
         InvalidPattern = "invalid_pattern" =>
-            "the search pattern is empty or is not a valid regular expression",
+            "the search pattern is empty, longer than 1,000 chars, or in regex mode not accepted by the regex engine or with more than 100 capture groups; or a regex replacement refers to a capture group the pattern does not have",
         /// A file of a replace preview changed or was removed since the preview.
         StalePreview = "stale_preview" =>
             "a file of a replace preview changed or was removed since the preview",
@@ -116,8 +122,10 @@ reasons! {
         /// A position inside a character, a surrogate pair or a CRLF line break.
         NotABoundary = "not_a_boundary" =>
             "a position inside a character, a surrogate pair or a CRLF line break",
-        /// The path resolves (through symlinks) to a location outside the root.
-        OutsideRoot = "outside_root" => "the path resolves outside the root",
+        /// The path resolves (through symlinks) to a location outside the root, or the root
+        /// path no longer leads to the session's root directory.
+        OutsideRoot = "outside_root" =>
+            "the path resolves outside the root, or the root path no longer leads to the directory the session started on",
         /// The document is longer than the command accepts.
         TooLarge = "too_large" => "the document is longer than the command accepts",
     }
@@ -363,11 +371,11 @@ mod tests {
         assert_eq!(RejectReason::OutsideRoot.as_str(), "outside_root");
         assert_eq!(
             RejectReason::OutsideRoot.description(),
-            "the path resolves outside the root"
+            "the path resolves outside the root, or the root path no longer leads to the directory the session started on"
         );
         assert_eq!(
             RejectReason::NotAFile.description(),
-            "the path names a directory or another non-regular file where a file is needed, or a file where a directory is needed"
+            "the path leads to a directory, FIFO, socket or device where a regular file is needed, or to a file, FIFO, socket or device where a directory is needed"
         );
     }
 

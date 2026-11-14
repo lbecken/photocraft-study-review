@@ -303,6 +303,151 @@ fn example_context(ex: &Example) -> Result<Context, PathError> {
     })
 }
 
+/// How a declared refusal kind is witnessed (ADR-0006).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Witness {
+    /// The in-memory file system can produce it: the command has a [`RefusalExample`] of this
+    /// kind, which [`Registry::audit`] runs.
+    Example,
+    /// Only a session on disk can produce it (a link, a root that moved, a failing read, a
+    /// tree changed by another process); witnessed by tests, never by a refusal example.
+    Disk,
+}
+
+/// One refusal kind a command declares it can report ([`Command::refusals`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Refusal {
+    /// The kind.
+    pub reason: RejectReason,
+    /// How it is witnessed.
+    pub witness: Witness,
+}
+
+impl Refusal {
+    /// A kind the in-memory file system can produce, shown by a refusal example.
+    pub const fn example(reason: RejectReason) -> Self {
+        Refusal {
+            reason,
+            witness: Witness::Example,
+        }
+    }
+
+    /// A kind only a session on disk can produce.
+    pub const fn disk(reason: RejectReason) -> Self {
+        Refusal {
+            reason,
+            witness: Witness::Disk,
+        }
+    }
+}
+
+/// A file of a refusal example's [`MemoryFs`], in the form of a `--memory-seed` manifest entry
+/// (`docs/protocol/cli-memory-seed.md`): `{"path", "text"}` or `{"path", "hex"}`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum SeedFile {
+    /// A file whose bytes are the UTF-8 encoding of `text`.
+    Text {
+        /// Root-relative path.
+        path: &'static str,
+        /// Content.
+        text: &'static str,
+    },
+    /// A file whose bytes are given by an even number of hex digits (either case).
+    Hex {
+        /// Root-relative path.
+        path: &'static str,
+        /// Content as hex digits.
+        hex: &'static str,
+    },
+}
+
+impl SeedFile {
+    /// A file holding the UTF-8 encoding of `text`.
+    pub const fn text(path: &'static str, text: &'static str) -> Self {
+        SeedFile::Text { path, text }
+    }
+
+    /// A file holding the bytes of the hex digits `hex`.
+    pub const fn hex(path: &'static str, hex: &'static str) -> Self {
+        SeedFile::Hex { path, hex }
+    }
+
+    /// The file's path and bytes, or why the entry is not valid.
+    fn decode(&self) -> Result<(RelPath, Vec<u8>), String> {
+        let (path, bytes) = match self {
+            SeedFile::Text { path, text } => (*path, text.as_bytes().to_vec()),
+            SeedFile::Hex { path, hex } => (*path, decode_hex(hex)?),
+        };
+        let path = RelPath::new(path).map_err(|e| format!("bad file path: {e}"))?;
+        Ok((path, bytes))
+    }
+}
+
+/// Bytes from an even number of hex digits (either case).
+fn decode_hex(hex: &str) -> Result<Vec<u8>, String> {
+    let digits = hex.as_bytes();
+    if digits.len() % 2 != 0 {
+        return Err(format!("bad hex: odd number of digits ({})", digits.len()));
+    }
+    let digit = |c: u8| match c {
+        b'0'..=b'9' => Ok(c - b'0'),
+        b'a'..=b'f' => Ok(c - b'a' + 10),
+        b'A'..=b'F' => Ok(c - b'A' + 10),
+        _ => Err(format!("bad hex: `{}` is not a hex digit", char::from(c))),
+    };
+    digits
+        .chunks(2)
+        .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?))
+        .collect()
+}
+
+/// An executable refusal example of a command: run like an [`Example`] (a fresh context with
+/// scratch buffer `initial_text` and a [`MemoryFs`] holding `files`, then every `setup`
+/// command, each of which must succeed), the command with `params` must be `rejected` with
+/// exactly `kind`. Checked by [`Registry::audit`] (`cargo xtask schema`).
+#[derive(Clone, Debug, Serialize)]
+pub struct RefusalExample {
+    /// What the example shows.
+    pub description: &'static str,
+    /// Text of the scratch buffer before the command runs.
+    pub initial_text: &'static str,
+    /// Initial files of the context's [`MemoryFs`], in `--memory-seed` manifest form.
+    pub files: Vec<SeedFile>,
+    /// Commands (name, params) executed before the example; each must succeed.
+    pub setup: Vec<(&'static str, Value)>,
+    /// Params passed to the command.
+    pub params: Value,
+    /// The kind of the refusal the command must return.
+    pub kind: RejectReason,
+}
+
+/// The refusal example of `no_such_document` shared by every command with a `doc` param:
+/// `params` name document 9 of an empty context.
+pub(crate) fn no_such_document_example(params: Value) -> RefusalExample {
+    RefusalExample {
+        description: "no open document has id 9",
+        initial_text: "",
+        files: vec![],
+        setup: vec![],
+        params,
+        kind: RejectReason::NoSuchDocument,
+    }
+}
+
+/// The fresh context a refusal example runs on, or why its `files` are not valid.
+fn refusal_example_context(ex: &RefusalExample) -> Result<Context, String> {
+    let mut fs = MemoryFs::new();
+    for file in &ex.files {
+        let (path, bytes) = file.decode()?;
+        fs.insert(&path, &bytes);
+    }
+    Ok(Context {
+        buffer: Buffer::from_text(ex.initial_text),
+        ..Context::with_vfs(Box::new(fs))
+    })
+}
+
 /// A named command with typed params and result.
 pub trait Command {
     /// Unique dotted name, e.g. `buffer.insert`.
@@ -324,6 +469,20 @@ pub trait Command {
 
     /// At least one executable example.
     fn examples() -> Vec<Example>;
+
+    /// The refusal kinds the command can report, each marked [`Witness::Example`] or
+    /// [`Witness::Disk`] (ADR-0006); `Some(vec![])` declares that it never refuses. `None`
+    /// (the default) is no declaration: such a command's refusals are not checked at execute,
+    /// and [`Registry::audit`] reports it. Every command of the standard registry declares.
+    fn refusals() -> Option<Vec<Refusal>> {
+        None
+    }
+
+    /// Refusal examples: at least one per kind declared [`Witness::Example`], none of a kind
+    /// declared [`Witness::Disk`] or not declared ([`Registry::audit`]).
+    fn refusal_examples() -> Vec<RefusalExample> {
+        Vec::new()
+    }
 
     /// Execute against `ctx`. On error the context must be unchanged.
     fn run(ctx: &mut Context, params: Self::Params) -> Result<Self::Output, CommandError>;
@@ -414,7 +573,36 @@ struct Entry {
     params_validator: jsonschema::Validator,
     result_validator: jsonschema::Validator,
     examples: Vec<Example>,
+    /// The declared refusal kinds (`None`: no declaration), in declaration order.
+    refusals: Option<Vec<Refusal>>,
+    refusal_examples: Vec<RefusalExample>,
     run: Runner,
+}
+
+impl Entry {
+    /// The declared witness of `reason`, or `None` when it is not declared.
+    fn witness(&self, reason: RejectReason) -> Option<Witness> {
+        self.refusals
+            .as_ref()?
+            .iter()
+            .find(|r| r.reason == reason)
+            .map(|r| r.witness)
+    }
+
+    /// True iff a refusal of `reason` may be returned: the command declares it, or it has no
+    /// declaration (unchecked).
+    fn may_refuse(&self, reason: RejectReason) -> bool {
+        self.refusals.is_none() || self.witness(reason).is_some()
+    }
+
+    /// The declared kinds in [`RejectReason::ALL`] order.
+    fn declared(&self) -> Vec<RejectReason> {
+        RejectReason::ALL
+            .iter()
+            .copied()
+            .filter(|r| self.witness(*r).is_some())
+            .collect()
+    }
 }
 
 /// The set of registered commands.
@@ -459,8 +647,8 @@ impl Registry {
         Self::default()
     }
 
-    /// Register `C`. Refuses duplicate or malformed names, empty docs, missing examples and
-    /// schemas that do not compile.
+    /// Register `C`. Refuses duplicate or malformed names, empty docs, missing examples,
+    /// a refusal kind declared twice and schemas that do not compile.
     pub fn register<C: Command + 'static>(&mut self) -> Result<(), RegistryError> {
         let name = C::NAME;
         if !valid_name(name) {
@@ -477,6 +665,17 @@ impl Registry {
         let examples = C::examples();
         if examples.is_empty() {
             return Err(RegistryError(format!("command `{name}` has no example")));
+        }
+        let refusals = C::refusals();
+        if let Some(list) = &refusals {
+            for (i, r) in list.iter().enumerate() {
+                if list[..i].iter().any(|earlier| earlier.reason == r.reason) {
+                    return Err(RegistryError(format!(
+                        "command `{name}` declares the refusal kind `{}` twice",
+                        r.reason.as_str()
+                    )));
+                }
+            }
         }
         let params_schema = schemars::schema_for!(C::Params).to_value();
         let result_schema = schemars::schema_for!(C::Output).to_value();
@@ -511,6 +710,8 @@ impl Registry {
                 params_validator,
                 result_validator,
                 examples,
+                refusals,
+                refusal_examples: C::refusal_examples(),
                 run,
             },
         );
@@ -528,8 +729,10 @@ impl Registry {
     }
 
     /// Execute `name` with JSON `params`: validate params against the params schema, run,
-    /// then validate the result against the result schema. Only a successful command is
-    /// appended to the context's log; a failed one leaves the context unchanged.
+    /// then validate the result against the result schema. A refusal whose kind the command
+    /// does not declare ([`Command::refusals`]) is returned as `internal`/`other` instead
+    /// (ADR-0006). Only a successful command is appended to the context's log; a failed one
+    /// leaves the context unchanged.
     pub fn execute(
         &self,
         ctx: &mut Context,
@@ -550,7 +753,18 @@ impl Registry {
             });
         }
         let logged = params.clone();
-        let result = (entry.run)(ctx, params)?;
+        let result = match (entry.run)(ctx, params) {
+            Err(CommandError::Rejected { reason, message }) if !entry.may_refuse(reason) => {
+                return Err(CommandError::Internal {
+                    reason: InternalReason::Other,
+                    message: format!(
+                        "`{name}` refused with `{}`, a kind it does not declare: {message}",
+                        reason.as_str()
+                    ),
+                });
+            }
+            other => other?,
+        };
         let errors = validation_errors(&entry.result_validator, &result);
         if !errors.is_empty() {
             return Err(CommandError::Internal {
@@ -584,8 +798,11 @@ impl Registry {
 
     /// Machine-readable description of every command and of every error kind a `rejected` or
     /// `internal` error can carry (the content of `docs/commands.json`):
-    /// `{"commands": […], "error_kinds": {"rejected": [{"kind", "when"}, …], "internal": […]}}`,
-    /// each kind list in [`RejectReason::ALL`] / [`InternalReason::ALL`] order.
+    /// `{"commands": […], "error_kinds": {"rejected": [{"kind", "when"}, …], "internal": […]}}`.
+    /// Each command lists its declared kinds as `refusals` (in [`RejectReason::ALL`] order;
+    /// empty without a declaration) and its `refusal_examples`. `error_kinds.rejected` holds,
+    /// in `ALL` order, exactly the kinds some command declares (ADR-0006): a reason no command
+    /// declares is not published. `error_kinds.internal` lists every [`InternalReason`].
     pub fn describe(&self) -> Value {
         let commands: Vec<Value> = self
             .entries
@@ -598,11 +815,14 @@ impl Registry {
                     "params_schema": e.params_schema,
                     "result_schema": e.result_schema,
                     "examples": e.examples,
+                    "refusals": e.declared(),
+                    "refusal_examples": e.refusal_examples,
                 })
             })
             .collect();
         let rejected: Vec<Value> = RejectReason::ALL
             .iter()
+            .filter(|r| self.entries.values().any(|e| e.witness(**r).is_some()))
             .map(|r| json!({"kind": r.as_str(), "when": r.description()}))
             .collect();
         let internal: Vec<Value> = InternalReason::ALL
@@ -618,7 +838,12 @@ impl Registry {
     /// Check every command's contract: each example's params validate, the example runs on a
     /// fresh context (scratch buffer `initial_text`, MemoryFs `files`, then every `setup`
     /// command, each of which must succeed) and returns exactly the expected result, which
-    /// validates against the result schema. Returns one line per problem; empty means sound. An empty registry is a problem.
+    /// validates against the result schema. Then, per command in name order, its refusals
+    /// (ADR-0006): (i) it has a declaration; (ii) each kind declared [`Witness::Example`] has a
+    /// refusal example; per refusal example, (iv) its kind is declared, (v) not as
+    /// [`Witness::Disk`], and (iii) it runs like an example and is `rejected` with exactly its
+    /// kind. Returns one line per problem, each naming its command; empty means sound. An
+    /// empty registry is a problem.
     pub fn audit(&self) -> Vec<String> {
         let mut problems = Vec::new();
         if self.entries.is_empty() {
@@ -661,7 +886,78 @@ impl Registry {
                 }
             }
         }
+        for (name, e) in &self.entries {
+            self.audit_refusals(name, e, &mut problems);
+        }
         problems
+    }
+
+    /// Audit rules (i)–(v) of ADR-0006 for one command, in that order.
+    fn audit_refusals(&self, name: &str, e: &Entry, problems: &mut Vec<String>) {
+        if e.refusals.is_none() {
+            problems.push(format!(
+                "`{name}`: declares no refusal kinds (an empty declaration is one)"
+            ));
+        }
+        for r in RejectReason::ALL {
+            if e.witness(*r) == Some(Witness::Example)
+                && !e.refusal_examples.iter().any(|ex| ex.kind == *r)
+            {
+                problems.push(format!(
+                    "`{name}`: refusal kind `{}` has no refusal example",
+                    r.as_str()
+                ));
+            }
+        }
+        for (i, ex) in e.refusal_examples.iter().enumerate() {
+            let label = format!("`{name}` refusal example {i} ({})", ex.description);
+            if let Some(problem) = self.refusal_example_problem(name, e, ex) {
+                problems.push(format!("{label}: {problem}"));
+            }
+        }
+    }
+
+    /// The one problem of a refusal example, if any: (iv), (v), then (iii) (params, files,
+    /// setup, the refusal itself).
+    fn refusal_example_problem(
+        &self,
+        name: &str,
+        e: &Entry,
+        ex: &RefusalExample,
+    ) -> Option<String> {
+        let kind = ex.kind.as_str();
+        match e.witness(ex.kind) {
+            None => return Some(format!("kind `{kind}` is not declared")),
+            Some(Witness::Disk) => {
+                return Some(format!(
+                    "kind `{kind}` is declared disk-only, so it has no refusal example"
+                ));
+            }
+            Some(Witness::Example) => {}
+        }
+        let errors = validation_errors(&e.params_validator, &ex.params);
+        if !errors.is_empty() {
+            return Some(format!("params invalid: {}", errors.join("; ")));
+        }
+        let mut ctx = match refusal_example_context(ex) {
+            Ok(ctx) => ctx,
+            Err(err) => return Some(err),
+        };
+        for (k, (setup_name, setup_params)) in ex.setup.iter().enumerate() {
+            if let Err(err) = self.execute(&mut ctx, setup_name, setup_params.clone()) {
+                return Some(format!("setup {k} (`{setup_name}`) failed: {err}"));
+            }
+        }
+        match self.execute(&mut ctx, name, ex.params.clone()) {
+            Err(CommandError::Rejected { reason, .. }) if reason == ex.kind => None,
+            Ok(actual) => Some(format!(
+                "succeeded ({actual}), refusal example says `{kind}`"
+            )),
+            Err(err) => Some(format!(
+                "returned {}, refusal example says rejected `{kind}`",
+                err.to_json()
+            )),
+        }
     }
 }
 

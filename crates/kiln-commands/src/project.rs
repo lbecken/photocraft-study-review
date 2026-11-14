@@ -10,7 +10,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::reason::RejectReason;
-use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
+use crate::registry::{
+    Command, CommandError, Context, Example, Refusal, RefusalExample, Registry, RegistryError,
+    SeedFile,
+};
 
 /// Register the `project.*` commands.
 pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
@@ -177,6 +180,45 @@ impl Command for Tree {
                 params: json!({"path": "src", "limit": 1}),
                 result: json!({"entries": [{"kind": "file", "path": "src/a.rs"}],
                     "ignored": 0, "skipped": 0, "too_deep": 0, "truncated": true}),
+            },
+        ]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::InvalidPath),
+            Refusal::example(RejectReason::NotFound),
+            Refusal::example(RejectReason::NotAFile),
+            Refusal::disk(RejectReason::IoError),
+            Refusal::disk(RejectReason::OutsideRoot),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            RefusalExample {
+                description: "a path that leaves the root",
+                initial_text: "",
+                files: vec![],
+                setup: vec![],
+                params: json!({"path": "../x"}),
+                kind: RejectReason::InvalidPath,
+            },
+            RefusalExample {
+                description: "a missing directory",
+                initial_text: "",
+                files: vec![],
+                setup: vec![],
+                params: json!({"path": "missing"}),
+                kind: RejectReason::NotFound,
+            },
+            RefusalExample {
+                description: "a file where a directory is needed",
+                initial_text: "",
+                files: vec![SeedFile::text("f.txt", "x")],
+                setup: vec![],
+                params: json!({"path": "f.txt"}),
+                kind: RejectReason::NotAFile,
             },
         ]
     }

@@ -13,7 +13,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::doc::LineEndingName;
-use crate::registry::{Command, CommandError, Context, Example, Registry, RegistryError};
+use crate::reason::RejectReason;
+use crate::registry::{
+    Command, CommandError, Context, Example, Refusal, RefusalExample, Registry, RegistryError,
+    no_such_document_example,
+};
 
 /// Register the `eol.*` commands.
 pub(crate) fn register(registry: &mut Registry) -> Result<(), RegistryError> {
@@ -93,6 +97,14 @@ impl Command for Counts {
             result: json!({"lf": 1, "crlf": 2, "cr": 1, "line_ending": "crlf",
                 "mixed_line_endings": true}),
         }]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
     }
 
     fn run(ctx: &mut Context, p: CountsParams) -> Result<CountsResult, CommandError> {
@@ -180,6 +192,14 @@ impl Command for Normalize {
                     "mixed_line_endings": false}),
             },
         ]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![Refusal::example(RejectReason::NoSuchDocument)])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![no_such_document_example(json!({"doc": 9}))]
     }
 
     fn run(ctx: &mut Context, p: NormalizeParams) -> Result<NormalizeResult, CommandError> {

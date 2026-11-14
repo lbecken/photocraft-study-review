@@ -8,7 +8,9 @@
 //! obtained. A refused or failed call leaves the cache as it was.
 //!
 //! A document longer than [`MAX_CHARS`] chars is refused by every command with `too_large`
-//! before anything is parsed, updated or cached (D-056). The limit bounds memory, not time.
+//! before anything is parsed, updated or cached (D-056). The limit bounds the length of the
+//! text a command accepts, not the time a parse takes or the memory it needs
+//! (`docs/protocol/syntax.md`).
 //! Protocol description: `docs/protocol/syntax.md`.
 
 use std::collections::BTreeMap;
@@ -18,10 +20,13 @@ use kiln_syntax::highlight::{HighlightKind, highlight};
 use kiln_syntax::{ErrorKind, ParseError, ParseMode, SyntaxTree};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::reason::{InternalReason, RejectReason};
-use crate::registry::{Command, CommandError, Context, Docs, Example, Registry, RegistryError};
+use crate::registry::{
+    Command, CommandError, Context, Docs, Example, Refusal, RefusalExample, Registry,
+    RegistryError, SeedFile, no_such_document_example,
+};
 
 /// The most chars a document may have for a `syntax.*` command (2^20).
 pub(crate) const MAX_CHARS: usize = 1_048_576;
@@ -99,6 +104,34 @@ impl SyntaxState {
             .iter()
             .map(|(id, t)| (*id, t.text().to_owned()))
             .collect()
+    }
+}
+
+/// A file of 32 chars that the setup of [`too_large_example`] grows.
+const GROWN: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+/// The refusal example of `too_large` for a command whose `params` name document 1 (also used
+/// by `nav.*`, ruling Q-7): the setup opens a 32-char file, grows it to 32 × 32 × 32 × 32 =
+/// 1,048,576 chars with three `search.replace` calls and inserts one more char, so the
+/// document has [`MAX_CHARS`] + 1 chars without a megabyte literal.
+pub(crate) fn too_large_example(params: Value) -> RefusalExample {
+    let grow = (
+        "search.replace",
+        json!({"doc": 1, "query": "a", "replacement": GROWN, "all": true, "limit": 1}),
+    );
+    RefusalExample {
+        description: "a document of 1,048,577 chars",
+        initial_text: "",
+        files: vec![SeedFile::text("g.rs", GROWN)],
+        setup: vec![
+            ("doc.open", json!({"path": "g.rs"})),
+            grow.clone(),
+            grow.clone(),
+            grow,
+            ("doc.insert", json!({"doc": 1, "offset": 0, "text": "b"})),
+        ],
+        params,
+        kind: RejectReason::TooLarge,
     }
 }
 
@@ -266,6 +299,20 @@ impl Command for Tree {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::TooLarge),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9})),
+            too_large_example(json!({"doc": 1})),
+        ]
+    }
+
     fn run(ctx: &mut Context, p: DocParams) -> Result<TreeResult, CommandError> {
         let parts = ctx.parts();
         let (text, _) = checked_doc(parts.docs, p.doc)?;
@@ -415,6 +462,38 @@ impl Command for Highlight {
         ]
     }
 
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::TooLarge),
+            Refusal::example(RejectReason::OutOfRange),
+            Refusal::example(RejectReason::InvertedRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9})),
+            too_large_example(json!({"doc": 1})),
+            RefusalExample {
+                description: "a start beyond the end of the text",
+                initial_text: "",
+                files: vec![SeedFile::text("a.rs", "fn f() { let s: u8 = 1; }")],
+                setup: vec![("doc.open", json!({"path": "a.rs"}))],
+                params: json!({"doc": 1, "start": 99}),
+                kind: RejectReason::OutOfRange,
+            },
+            RefusalExample {
+                description: "a start after the end",
+                initial_text: "",
+                files: vec![SeedFile::text("a.rs", "fn f() { let s: u8 = 1; }")],
+                setup: vec![("doc.open", json!({"path": "a.rs"}))],
+                params: json!({"doc": 1, "start": 5, "end": 2}),
+                kind: RejectReason::InvertedRange,
+            },
+        ]
+    }
+
     fn run(ctx: &mut Context, p: HighlightParams) -> Result<HighlightResult, CommandError> {
         let parts = ctx.parts();
         let (text, len_chars) = checked_doc(parts.docs, p.doc)?;
@@ -503,6 +582,29 @@ impl Command for MatchBracket {
                 setup: vec![("doc.open", json!({"path": "a.rs"}))],
                 params: json!({"doc": 1, "offset": 9}),
                 result: json!({"bracket": null}),
+            },
+        ]
+    }
+
+    fn refusals() -> Option<Vec<Refusal>> {
+        Some(vec![
+            Refusal::example(RejectReason::NoSuchDocument),
+            Refusal::example(RejectReason::TooLarge),
+            Refusal::example(RejectReason::OutOfRange),
+        ])
+    }
+
+    fn refusal_examples() -> Vec<RefusalExample> {
+        vec![
+            no_such_document_example(json!({"doc": 9, "offset": 0})),
+            too_large_example(json!({"doc": 1, "offset": 0})),
+            RefusalExample {
+                description: "an offset beyond the end of the text",
+                initial_text: "",
+                files: vec![SeedFile::text("a.rs", "fn f() { let s: u8 = 1; }")],
+                setup: vec![("doc.open", json!({"path": "a.rs"}))],
+                params: json!({"doc": 1, "offset": 99}),
+                kind: RejectReason::OutOfRange,
             },
         ]
     }

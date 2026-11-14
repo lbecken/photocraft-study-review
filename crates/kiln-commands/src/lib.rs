@@ -10,12 +10,17 @@
 //!
 //! Adding a command: implement [`Command`] in the module of its group (one module per group,
 //! CHARTER §3 decision 6), register it in that module's `register`, give it at least one
-//! [`Example`], then run `cargo xtask schema --write` to refresh `docs/commands.json`.
+//! [`Example`], declare the refusal kinds it can report ([`Command::refusals`], each marked
+//! [`Witness::Example`] or [`Witness::Disk`]) with at least one [`RefusalExample`] per
+//! *example* kind ([`Command::refusal_examples`]), then run `cargo xtask schema --write` to
+//! refresh `docs/commands.json`. A command that makes an existing command report a new kind
+//! declares it the same way, in its own module (ADR-0006).
 //!
 //! Errors: a refusal is [`CommandError::rejected`] with a [`RejectReason`] set where it is
-//! raised, and an internal error carries an [`InternalReason`] (ADR-0004). Adding a kind is
-//! one variant with its description in `reason.rs`, then `cargo xtask schema --write`: the
-//! kinds are published as `error_kinds` in `docs/commands.json`.
+//! raised, and an internal error carries an [`InternalReason`] (ADR-0004). A refusal of a kind
+//! the command does not declare is returned by [`Registry::execute`] as `internal`/`other`.
+//! Adding a kind is one variant with its description in `reason.rs`; it is published in
+//! `error_kinds` of `docs/commands.json` once some command declares it (ADR-0006).
 
 mod buffer;
 mod cursor;
@@ -37,7 +42,8 @@ mod tool;
 
 pub use reason::{InternalReason, RejectReason};
 pub use registry::{
-    Command, CommandError, Context, Example, LogEntry, Registry, RegistryError, ReplayError,
+    Command, CommandError, Context, Example, LogEntry, Refusal, RefusalExample, Registry,
+    RegistryError, ReplayError, SeedFile, Witness,
 };
 
 /// The registry with every built-in command group registered.
