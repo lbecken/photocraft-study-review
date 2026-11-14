@@ -47,8 +47,11 @@ Option A.
 - `docs/control-protocol.md` keeps its table of request-level rows and iteration-0 kinds; kinds
   added later are listed only in `error_kinds`. A task that adds a kind adds one variant with a
   description and regenerates `docs/commands.json`.
-- Reason variants may exist before any command raises them. The generated list is the set of
-  kinds the protocol may produce.
+- Reason variants may exist before any command declares them. The generated list is the set of
+  kinds some registered command declares; a declaration is checked at execute and witnessed in
+  the audit. (This bullet was replaced by ADR-0006, accepted in D-128; before it the bullet read:
+  "Reason variants may exist before any command raises them. The generated list is the set of
+  kinds the protocol may produce.")
 
 ## Consequences
 - T-032 carries the change. The director publishes the CHARTER §3 decision 2 sentence
