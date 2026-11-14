@@ -2,7 +2,7 @@
 id: T-055
 title: "Run the Kiln UI without a window from a script of control requests and UI requests, and read back what each frame shows"
 tier: high              # ADR-0002: adds dependencies (egui; kiln-control as an edge of kiln-ui); a new file write (--log); a gate path if Q-1 is answered A (xtask/ui-allowlist.toml)
-state: self_verified
+state: in_progress
 owner_role: planner
 scorecard_items: []     # an interface task: no ui.* item can be observed before it; T-056 claims the first items through it
 depends_on: []          # nothing unmerged; T-054 is deferred (D-147) and rebases on this task's change of the root Cargo.toml
@@ -332,6 +332,31 @@ Questions for the director, before dispatch (from ADR-0008):
   message on stderr, nothing on stdout. Measured by the director on main: `kiln-cli run s.jsonl --memory --log
   /dev/full` with the one request `doc.list` printed `kiln-cli: cannot write log `/dev/full`: No space left on
   device (os error 28)` on stderr, nothing on stdout, exit 2.
+
+### Rulings after the first join (director, D-149; the implementer's questions 1 to 8 of R-226; told to both builders)
+The first join failed one acceptance test of 18, `ac6_frame_counts_add_up` (21 frames between two snapshots against
+20 reported), on the implementer's question 1.
+- **n4 (question 1).** A control request runs no frame, and a `snapshot` runs none: a snapshot reports the last
+  frame. What a control request changed in the session is shown from the next frame on, so a script that wants to
+  see it runs a frame first (`{"ui":"frames","count":1}` or any action). Between two snapshots the session's frame
+  total grows by exactly the frames the UI requests between them reported. The implementer removes the unreported
+  frames; `docs/protocol/ui.md` says this in one sentence. The test author checks that no test takes a snapshot
+  right after a control request and expects its effect without a frame in between (AC-2's wording allows a frame).
+- **n5 (question 2).** A node that shows text reports the text in its own `value`, `rows` and `selection`; the
+  toolkit's per-row child nodes are not reported as nodes. Accepted.
+- **n6 (question 3).** Every scrollable area is reported as a node of role `scroll_view` whose bounds are the
+  visible part. Accepted; `docs/protocol/ui.md` states it, and later UI tasks report scroll areas the same way.
+- **n7 (question 4).** `focus` on a node that does not take text input is refused `not_actionable`. Confirmed.
+- **n8 (question 5).** A `click` whose target is `offscreen` is refused `not_actionable` and changes nothing: a user
+  cannot click what is not visible; the script scrolls first. (The implementer had it delivered and answered ok.)
+  The test author adds a case if this task's shell can show an offscreen node (enough open documents to overflow
+  `Documents`); if it cannot, it says so and the implementer's unit test and the reviewer cover it.
+- **n9 (question 6).** AC-5's "equal snapshots" means equal `root`; the `frames` totals differ by the frames run.
+- **n10 (question 7).** `serde_json` as a direct dependency of `kiln-ui` and a dev-dependency of `apps/kiln` is
+  accepted (already a workspace dependency; the lock does not change by it).
+- **n11 (question 8).** Painted text belongs to the deepest node whose rectangle contains the centre of each char,
+  and a space takes the colour of its neighbour. Accepted as the published rule; `docs/protocol/ui.md` states it
+  with that limit.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
