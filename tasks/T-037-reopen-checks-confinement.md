@@ -737,6 +737,56 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   not remove them.
 <!-- end implementer log -->
 ### test author
+- 2026-11-14T04:49Z · R-202 · ready · Rulings acknowledged and accepted before acting: D-092
+  Q-1 (O1: a re-open checks the root and the location only, reads nothing), D-092 Q-2
+  (`io_error` for a walk that fails inside), D-092 order, D-120 Q-3 (a) and Q-4 (a) (no merged
+  test file touched; the stale comment in `guard_t036_cli.rs` stays); the director's dispatch
+  check on `e42b5e5` read. did: wrote the four files of `touches` from the spec alone (base
+  `38bdf05`): `apps/kiln-cli/tests/acceptance_t037_cli.rs`
+  (`reopen_of_a_path_now_outside_is_refused` AC-1 (i)–(iv);
+  `reopen_after_the_root_moved_is_refused` AC-2 (i) with the move back, (ii), (iii);
+  `reopen_whose_walk_fails_inside_is_io_error` AC-4 (i), (ii) and (iii) as U),
+  `apps/kiln-cli/tests/acceptance_t037_removal_cli.rs`
+  (`reopen_after_the_root_was_removed_is_refused` AC-2 (iv) once, (v) and (vi) with T-036's
+  pattern: one lock, K = 5 trials, reuse search up to B = 64, one stderr line per trial, refusal
+  in every trial), `apps/kiln-cli/tests/guard_t037_cli.rs` (`reopen_does_not_need_the_file`
+  AC-3, 12 cases, three as U; `reopen_in_a_memory_session_is_unchanged` AC-3 through `run
+  --memory-seed`), `crates/kiln-commands/tests/acceptance_t037_commands.rs`
+  (`reopen_after_the_root_changed_is_refused` AC-2 (i) with move back, (iv), (v) with the
+  pattern, through `standard_registry()?.execute` on `Context::with_vfs(DiskFs)`). Each test
+  runs all its cases (each under `catch_unwind`) and fails naming every failed case. Oracles:
+  `ok`/`code`/`kind` (`to_json()` `code`/`reason`), the work path absent from the serialised
+  response, the whole re-open result object, "document unchanged" (`doc.info` dirty,
+  `len_chars`, `can_undo`; `doc.list` one doc, id 1, the path), snapshots of `work/` and of the
+  replacement, fixture checks through `std::fs`; additionally (Interface 2) the Rust API checks
+  `ctx.log()` gains no entry on a refused re-open. U cases: the negative control (first
+  `doc.open locked.txt`, mode 0000, refused `io_error`) runs in the same session after the open
+  and insert and before the change. Base results: `acceptance_t037_cli` 3 tests FAIL by
+  assertion, every one of their 10 cases with `ok: true, already_open: true` where a refusal is
+  expected (the U negative controls passed); `acceptance_t037_removal_cli` FAILS by assertion in
+  (iv), (v) trial 0, (vi) trial 0 (`already_open: true`); `acceptance_t037_commands` FAILS by
+  assertion in (i), (iv), (v) trial 0 (`Ok(already_open: true)`); `guard_t037_cli` both PASS.
+  Removal binary run 20 times on base: 0/20 pass, 40 trial lines, 0 reused, 60 "not refused"
+  assertions (3 per run); 20 times on a scratch O1 prototype: 20/20 pass, 200 trial lines
+  (2 cases × 5 trials), 0 reused (the session holds the root handle, so the inode cannot be
+  reused while it runs; no assertion needs reuse). Self-check: scratch prototype of Interface 5
+  (`check_location` required, `DiskFs` = `locate`, `MemoryFs` Ok, re-open branch mapped as a
+  first open) made all four targets pass; 9 seeded bugs, all killed: skip the check (all three
+  acceptance targets), O2 full open check (guard `reopen_does_not_need_the_file`, 10 of 12
+  cases), refuse when `!is_file` (AC-4 test and the guard), `Io` answered ok (AC-4 test), `Io`
+  reported as `outside_root` (AC-4 test), `OutsideRoot` reported as `io_error` (AC-1, AC-2 cli,
+  removal, commands tests), root check only, no walk (AC-1 and AC-4 tests), document closed on a
+  refused re-open (all acceptance tests via "document unchanged"), `MemoryFs` refusing (guard
+  `reopen_in_a_memory_session_is_unchanged`). Prototype removed with `git checkout`, never
+  committed. `cargo fmt --check` clean; `cargo clippy -p kiln-cli -p kiln-commands --tests -- -D
+  warnings` clean on base and with the prototype; `cargo xtask no-skip` PASS. `/tmp` clean
+  after the deliberately failing runs. Interpreted: (iv) runs once (the pattern is required for
+  (v), (vi)); "gains no file" asserted as the replacement holding only `a.txt`; `doc.list` items
+  asserted by `doc` and `path`, not as whole objects; non-U guard cases also check the `work/`
+  snapshot (Pinned (b)). · gate attempts: 0 (`cargo xtask ci` not run, as instructed: only my
+  four targets) · not run: the non-root identity branch of the U cases (machine is uid 0, only
+  the drop to 65534 ran); the whole gate · missing context: none · next: director joins with
+  `task/T-037` and ties the seven tests to `ws.path-confinement`.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
