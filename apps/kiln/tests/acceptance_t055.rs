@@ -2328,28 +2328,24 @@ fn w3c_typed_text_is_painted_with_structured_colours() {
         "the typed text is not in Path's rows: {}",
         path.show()
     );
-    let runs: usize = all_nodes(s0)
-        .iter()
-        .map(|n| {
-            n.get("rows")
-                .and_then(J::as_arr)
-                .unwrap_or_default()
-                .iter()
-                .map(|row| row.as_arr().map_or(0, <[J]>::len))
-                .sum::<usize>()
-        })
-        .sum();
+    // Path's own rows (asserted above) give the colour check runs to look at; no other node
+    // is assumed visible at this size (D-151 w7).
     assert!(
-        runs >= 3,
-        "precondition: painted runs to check (Path, Open, a document)"
+        path.get("rows").and_then(J::as_arr).is_some_and(|rows| rows
+            .iter()
+            .any(|row| row.as_arr().is_some_and(|runs| !runs.is_empty()))),
+        "Path has no painted run: {}",
+        path.show()
     );
     let _ = fs::remove_dir_all(&dir);
 }
 
 /// w3 (d), the test of w1: after a `scroll` of an overflowing `Documents`, documents outside the
 /// visible part are `offscreen` and have no rows, the rows under `Documents` hold only text of
-/// visible documents, and the text painted outside `Documents` (the `Path` input with its text,
-/// `Open`) is unchanged.
+/// visible documents, and every node outside `Documents` has the same rows after the scroll as
+/// before it (none, for a node offscreen in both); `Path` shows the typed text. No node is
+/// required to be visible at this size except `Path`, which the test focused and typed into
+/// (D-151 w7).
 #[test]
 fn w3d_scrolled_list_reports_only_visible_text() {
     let dir = case_dir("w3d");
@@ -2368,19 +2364,11 @@ fn w3d_scrolled_list_reports_only_visible_text() {
     let (s0, _) = snap(&r[n]);
     action_ok(&r[n + 1], None);
     let (s1, _) = snap(&r[n + 2]);
-    let before = visible_docs(s0);
-    let after = visible_docs(s1);
+    // 100 rows of 20-char paths overflow a 200x200 window (as for the n8 case): some document
+    // is offscreen. Which ones is read from the snapshot.
     assert!(
-        before.contains(&0),
-        "precondition: the first document is visible before"
-    );
-    assert!(
-        !after.is_empty() && after.len() < paths.len(),
-        "after the scroll some documents are visible and some offscreen: {after:?}"
-    );
-    assert!(
-        !after.contains(&0),
-        "the first document is still visible after 4 steps"
+        visible_docs(s1).len() < paths.len(),
+        "precondition: the list overflows"
     );
     let docs = shell(s1).documents;
     let offscreen: Vec<&str> = children(docs)
@@ -2431,7 +2419,6 @@ fn w3d_scrolled_list_reports_only_visible_text() {
         "Path lost its text: {}",
         shell(s1).path.show()
     );
-    assert!(!row_texts(shell(s1).open).is_empty(), "Open lost its rows");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -2444,19 +2431,22 @@ fn w3e_more_steps_scroll_further() {
     for steps in [1, 4] {
         let mut script = open_all(&paths);
         script.extend([snapshot("s0"), scroll_down(steps), snapshot("s1")]);
-        let sess = run_script_bytes(&dir, &format!("s{steps}"), &as_bytes(&script), &SMALL);
+        // The default size: 100 documents overflow it, and no other layout is assumed (w7).
+        let sess = run_script(&dir, &format!("s{steps}"), &script);
         let r = sess.responses(script.len());
         let n = paths.len() + 1;
         let (s0, _) = snap(&r[n]);
-        assert_eq!(
-            visible_docs(s0).first(),
-            Some(&0),
-            "precondition: unscrolled"
+        assert!(
+            visible_docs(s0).len() < paths.len(),
+            "precondition: the list overflows"
         );
         action_ok(&r[n + 1], None);
         let (s1, _) = snap(&r[n + 2]);
         let v = visible_docs(s1);
-        assert!(!v.is_empty(), "{steps} steps: no document visible");
+        assert!(
+            !v.is_empty(),
+            "precondition: after {steps} steps some document is visible"
+        );
         first.push(v[0]);
     }
     assert!(
