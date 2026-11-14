@@ -664,6 +664,77 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   after T-036 merges, the director confirms "To re-check at dispatch" and makes the task ready.
 <!-- end planner log -->
 ### implementer
+- 2026-11-14T05:00Z · R-201 · ready · Rulings acknowledged and accepted: D-092 Q-1 (O1: a
+  re-open applies the root check and the location walk only, reads nothing), D-092 Q-2
+  (`io_error` for a walk that fails inside the root), D-092 order (base `38bdf05` = main with
+  T-036 merged), D-120 Q-3 (a) (P1 is the replacement) and Q-4 (a) (the `guard_t036_cli.rs`
+  comment is left; no merged test file edited). No ruling, Interface line or Pinned sentence
+  contradicted the merged code. Criteria in my words: on a disk session a `doc.open` of an
+  open path runs `current_root` + `locate` once and nothing more; `OutsideRoot` →
+  `outside_root`, `Io` → `io_error`, mapped as a first open (`OpenError::Vfs`); any inside
+  location (file, dir, FIFO, nothing, missing parent, undecodable) → `already_open: true` with
+  the open document; a refusal leaves docs, history and log as they were; memory sessions and
+  first opens unchanged. did: `vfs.rs` adds the required `Vfs::check_location` (doc text as
+  Interface 5); `disk.rs` implements it as `self.locate(path).map(|_| ())` (walk unchanged) and
+  its module-doc bullet names `check_location` with the sentence that it stops after the walk,
+  answers `Ok(())` for an inside location of any kind and opens nothing; `memory.rs` returns
+  `Ok(())`; `doc.rs` calls it in `Open::run`'s re-open branch only, and D1, D2, D3 copied
+  exactly; `paths.md` P1, P2, P4, P6 replaced, P7 and P8 added, P3 and P5 left as written
+  (true, see below); `docs/commands.json` regenerated (`cargo xtask schema --write`: only
+  doc.open's `doc` and the `already_open` description changed). Copy checked by a script that
+  compares each Pinned sentence, whitespace-normalised, with the file: P1–P8 and D1–D3 all
+  present. Unit tests: `disk.rs` `check_location_is_ok_for_every_inside_location` (file, dir,
+  FIFO on a thread with a 10 s hang detector and still a FIFO after, nothing, missing parent,
+  parent a file, link inside, dangling inside, `real/t.txt/`, out-and-back chain, undecodable)
+  and `check_location_refuses_outside_loops_and_a_replaced_root` (relative, absolute, dangling
+  and directory links outside; loop → `Io`; root renamed, linked to another dir, moved back
+  `Ok`, removed, replaced by a new dir); the differential test also compares `check_location`
+  each step (consumes no seed); `memory.rs` `check_location_is_always_ok_and_changes_nothing`;
+  `doc.rs` `reopen_on_disk_is_refused_when_the_location_is_outside_or_unknown` (code/reason,
+  log length unchanged by the refusal, `doc.list`/`doc.info` equal),
+  `reopen_on_disk_follows_the_root_identity`, `reopen_on_disk_does_not_need_the_file`. No
+  message text asserted; fixtures in guards removed on drop — checked by seeding a panicking
+  test in each crate (both fixtures gone afterwards; seed reverted). Evidence through the built
+  binary (debug `kiln-cli` of this branch copied to `/tmp/t037-impl-bin`; `kiln-cli control
+  --root root` run as uid 65534 via `setpriv --reuid=65534 --regid=65534 --clear-groups` on
+  fixtures owned by 65534 under `/tmp/t037-impl-probe`; per case: negative control `doc.open
+  locked.txt` (mode 0000) → `rejected/io_error` in all 26 sessions; open, insert `E`, change,
+  re-open, `doc.info`, `doc.list`, `doc.open b.txt`, `doc.save 1`): re-open `rejected/
+  outside_root` for `a.txt` → `../outside/secret.txt`, → absolute link, → dangling
+  `../outside/none.txt`, `sub` → `../outside` (`sub/c.txt`), root renamed away, renamed and
+  `root -> outside`, removed, removed + new dir, removed + link to new dir, and (session
+  `--root p/root`) `p` renamed; `rejected/io_error` for a loop (`too many levels of symbolic
+  links`), `sub` 0600, `sub` 0000, root 0000; `{"already_open":true,"doc":1,"encoding":"utf-8",
+  "len_chars":7,"line_ending":"lf","mixed_line_endings":false,"path":"a.txt"}` (9 and
+  `sub/c.txt`) for no change, deleted, directory, directory 0000, FIFO (answered within the
+  10 s wait, still a FIFO), file 0000, link to `b.txt`, dangling inside, `real/t.txt/`,
+  `FF FE FF`, `sub` removed, `sub` a file, root 0311. Every session: `doc.info` `dirty: true`,
+  `len_chars` 7 (9), `doc.list` one document; no response contained the fixture path; all 28
+  `outside/` dirs still `c.txt secret.txt` with identical content; `outside/none.txt` absent.
+  Root renamed away and back: re-open `outside_root`, then `already_open: true`, then save
+  wrote `Ealpha\n`. `kiln-cli run s.jsonl --memory-seed m.json` (open, insert, re-open):
+  `already_open: true`, `len_chars` 7. `exec doc.open` of a link to `/etc/hostname` → exit 2,
+  `outside_root` (exec has no re-open). Sentence evidence: P1 — root cases above refuse
+  `doc.open` (re-open and first), `doc.save`; `doc.info`/`doc.list` still answered after the
+  root vanished. P2 — renamed, renamed+linked, removed, removed+replaced: re-open and save
+  `outside_root`, outside unchanged. P3 — renamed away, removed: `outside_root`. P4/P7 — the
+  directory, FIFO, deleted, 0000, undecodable re-opens answered `already_open: true`; the
+  outside and walk-failure re-opens refused; documents unchanged. P5 — saves still refused
+  after every outside case. P6 — directory/FIFO re-open ok, next save `not_a_file`; every
+  outside/root re-open refused. P8 — no re-open gave `not_found`, `not_a_file` or
+  `decode_error`; `invalid_path` comes from the unchanged lexical check before the lookup
+  (code order in `Open::run`). D1–D3 as P7. Probe binary and fixtures removed afterwards
+  (`rm -rf /tmp/t037-impl-probe /tmp/t037-impl-bin`). · gate attempts: 2 (attempt 1 stopped by
+  my own 600 s command limit during the `test` step after 7 steps had passed, not a failure;
+  last: green, `GATE PASSED in 463.2s (11 steps; 2 step(s) EMPTY …)`, `test 811 passed, 0
+  failed, 0 ignored in 102 suites`, `no-skip` 0 skips) · not run: the independent acceptance
+  and guard tests (not visible to me); the `run --root` path with a change between requests
+  (a script cannot change the disk mid-session); the non-root CI identity branch; reads of
+  atime to show nothing is read (shown instead by the FIFO cases and the code: only `lstat`,
+  `readlink` and `canonicalize`) · missing context: none · next: director joins with
+  `task/T-037-tests`. Note: `/tmp` holds about 3,700 `kiln-*` entries left by other suites'
+  fixtures (and possibly the stopped attempt 1); none are this task's unit fixtures, so I did
+  not remove them.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
