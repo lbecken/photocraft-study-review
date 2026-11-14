@@ -173,6 +173,13 @@ A chord is `part(+part)*`, compared case-insensitively.
 
 ## Questions and rulings
 
+## Note from T-038 (director, D-139) — to re-check at dispatch
+T-038 merged at `76422d0ed4dbcecb4366dd019f23c282f160cea6` (ADR-0006). Every command this task adds, and every command it makes
+report a new refusal kind, declares that kind in its own module (`refusals()`) and gives a refusal example for each
+kind that can be shown without a disk (`refusal_examples()`); otherwise the refusal is reported as `internal` and the
+audit fails at the join. A message text, the command list and `error_kinds` are not pinned by a test (golden rule 9).
+The spec check before dispatch adds the matching acceptance criterion.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·

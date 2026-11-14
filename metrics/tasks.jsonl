@@ -562,3 +562,4 @@
 {"kind":"run","task":"T-038","iteration":2,"run":"R-220","role":"reviewer","tier":"high","started_at":"2026-11-14T10:07:16Z","ended_at":"2026-11-14T10:08:23Z","wall_s":67,"tokens":7359,"tool_calls":6,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"review round 2 (final) at 82201ca: approve, merge recommended; the delta is the j2 test case and log entries only; mutant M11 (audit rule (iv) skipped) is now killed by the acceptance test; the test passes on the head"}
 {"kind":"transition","task":"T-038","iteration":2,"at":"2026-11-14T10:08:46Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-038","iteration":2,"at":"2026-11-14T10:08:46Z","from":"reviewed","to":"queued"}
+{"kind":"transition","task":"T-038","iteration":2,"at":"2026-11-14T10:21:31Z","from":"queued","to":"merged"}
