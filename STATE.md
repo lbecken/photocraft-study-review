@@ -1,21 +1,22 @@
 # State
 
-_Last updated: 2026-11-14 08:45 UTC_
+_Last updated: 2026-11-14 10:30 UTC_
 
 ## Now
-Iteration 2, first stage (ADR-0005), under methodology **v1.2** (D-093). Merged in iteration 2: T-039, T-042, T-019
-(project tree), T-020 (syntax), T-021 (search), T-036 (root identity), T-023 (outline and navigation), T-037 (re-open
-check). Scorecard on main: 64 items: 28 verified, 13 implemented, 0 failing, 23 planned. All thirteen items planned
-for the first stage are implemented; the 60% line (39 of 64) is reached only if the evaluator confirms them (D-127).
+Iteration 2, first stage (ADR-0005), under methodology **v1.2** (D-093). Every product task of the stage is merged:
+T-039, T-042, T-019 (project tree), T-020 (syntax), T-021 (search), T-036 (root identity), T-023 (outline and
+navigation), T-037 (re-open check), T-038 (declared refusal kinds, `76422d0`, D-139). Scorecard on main: 64 items:
+28 verified, 13 implemented, 0 failing, 23 planned. The 60% line (39 of 64) is reached only if the evaluator confirms
+at least 11 of the 13 implemented items and no verified item is rejected.
 
-In flight (see the newest addendum in `handoffs/2026-11-13-iteration-2-start.md` for heads and next steps):
-- **T-038** error kinds match commands (high; ADR-0006, D-128, j1 in D-136): joined green on its first join at
-  `9fd40ae2a87d4007c34719e2fb7dd65b8d3684aa`; review round 1 running (run R-218).
+In flight: the **evaluation of the first stage** (run R-221, fresh evaluator, clean clone of `0704b24`, public
+interfaces only, booked to `iter-2`). No worktree exists.
 
-Then: the evaluation of the first stage (after T-038 merges; the brief is prepared), the retrospective, and the UI
-tasks of the second stage. Tooling T-033, T-043, T-041 (in that order; T-041 last, owner told first) after the
-evaluation. Drafted outside the first stage, each needing a spec check before dispatch: T-044, T-045 to T-048
-(deterministic limits, D-131) and the deferred drafts.
+Then: publish `evaluations/iter-2.md` with `cargo xtask publish` (next free task number T-049; file its findings and
+the follow-up of j5, D-137), the retrospective of the stage, decisions on the methodology, and the UI tasks of the
+second stage (the owner's remark on PhotoCraft's order, surface first and depth later, is an input: D-140). Tooling
+T-033, T-043, T-041 (in that order; T-041 last, owner told first). Drafts needing a spec check before dispatch:
+T-044, T-045 to T-048 and the deferred drafts (six of them carry a note from T-038 on declaring refusals).
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
