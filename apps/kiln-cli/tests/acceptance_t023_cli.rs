@@ -771,8 +771,8 @@ fn outline_survives_deep_nesting() {
     s.push("doc.open", json!({"path": "deep.rs"}));
     let outline = s.push("nav.outline", json!({"doc": 1}));
     let (resp, status) = s.run(&fx, "deep");
-    assert_eq!(status.code(), Some(0), "kiln-cli run did not exit normally");
     let items = items_of(ok(&resp[outline], "nav.outline deep"), "deep");
+    assert_eq!(status.code(), Some(0), "kiln-cli run did not exit normally");
     assert_eq!(items.len(), N + 1);
     for (i, it) in items[..N].iter().enumerate() {
         assert_eq!(
