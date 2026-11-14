@@ -853,4 +853,20 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   S2/S4, Windows, the full suite per mutant · missing context: none · next: implementer
   fixes findings 1–2 (2 needs the director's ruling to add a test after the join); director
   rules on spec gaps 3–4; round 2.
+- 2026-11-14 · R-193 · tests_joined (re-joined after the r1 rework) · did: round 2 (final),
+  the delta `9dcd59d..5800312`. D-116 q1–q6 acknowledged, all accepted.
+  Non-test code changes only the published schema (schemars transforms); behaviour is
+  unchanged. `commands --schema` equals `docs/commands.json` and gives the true default for
+  every optional param. Each default was checked through `kiln-cli run` (omitted = published
+  default ≠ another value), and `null` is still refused for all 10.
+  S2, S4 and the new typing-group sentence were checked word by word against the binary: 8
+  cases, including mixed empty-by-empty with identical and changing replacements, plus the
+  redo history. All true.
+  Re-seeded M24: killed by `case_sensitive_defaults_to_true`. Six more mutants, one per
+  changed or new unit test: killed (7/7).
+  All six r1 findings resolved. Verdict approve, no new findings. Review:
+  `reviews/T-021-r2.md`.
+  · gate attempts: 0 (`no-skip` PASS, `hygiene` at commit, CLI acceptance 14 passed) · not
+  run: `cargo xtask ci`, a release build, the r1 mutants outside the delta · missing context:
+  none · next: director: queue.
 <!-- end reviewer log -->
