@@ -2,4 +2,22 @@ id = "ui.editor-view"
 title = "The editor view renders text with syntax colours, a cursor and scrolling"
 crate = "kiln-ui"
 tier = "medium"
-tests = []
+tests = [
+    "kiln::acceptance_t056::ac1_start_path_shows_the_document",
+    "kiln::acceptance_t056::ac1_path_and_open_show_the_document",
+    "kiln::acceptance_t056::ac1_control_open_shows_the_document_after_one_frame",
+    "kiln::acceptance_t056::ac1_start_paths_in_order_last_success_is_current",
+    "kiln::acceptance_t056::ac1_current_document_rule",
+    "kiln::acceptance_t056::ac1_title_of_a_path_containing_modified",
+    "kiln::acceptance_t056::ac1_editor_is_focused_by_focus_or_click",
+    "kiln::acceptance_t056::ac1_long_line_is_cut_not_wrapped",
+    "kiln::acceptance_t056::ac2_colours_of_rust_files",
+    "kiln::acceptance_t056::ac2_plain_documents",
+    "kiln::acceptance_t056::ac3_click_at_row_and_col_moves_the_caret",
+    "kiln::acceptance_t056::ac3_click_lands_in_the_visible_part",
+    "kiln::acceptance_t056::ac4_keys_follow_the_input_table",
+    "kiln::acceptance_t056::ac5_scroll_steps_move_the_view_only",
+    "kiln::acceptance_t056::ac5_caret_line_stays_in_view",
+    "kiln::acceptance_t056::ac6_undo_redo_save_agree_with_a_second_session",
+    "kiln::acceptance_t056::ac6_refused_save_is_shown",
+]
