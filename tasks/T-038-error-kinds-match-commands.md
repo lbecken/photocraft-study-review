@@ -1083,4 +1083,26 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   since R-216) · missing context: none · next: join.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-14T09:45Z · R-218 · tests_joined · review round 1 (high, independent) of
+  `9fd40ae2a87d4007c34719e2fb7dd65b8d3684aa` against the primary copy of this file. Rulings
+  D-092, D-128 (ADR-0006, Q-5 to Q-10), D-130, D-135 and j1 (D-136) acknowledged and accepted.
+  did: `commands --schema` (equal to `docs/commands.json`; 30 commands, 13 kinds = the union
+  of `refusals`, every set equal to the table); `--audit` ok; all 57 refusal examples run by my
+  own script through `run --memory-seed` (57/57 their kind); about 116,000 fuzzed in-memory
+  requests of all 30 commands (0 `internal`); about 150 `control --root` disk sessions (links,
+  loops, FIFO/socket/device, long names and paths, replaced, removed or relinked roots,
+  permission-denied with the DAC capabilities dropped via `capsh`), all 12 D pairs produced,
+  the two R pairs by a real race (0 `internal`); the five `when` texts and the
+  `control-protocol.md` paragraph against the binary (true, no wider or narrower case found);
+  the Pinned (f) edits (exactly as listed); base vs head byte-identical on 16,320 fuzzed
+  requests plus disk and CLI cases (base built from `git archive c82fa63` in scratch, `target/`
+  deleted); schema step 0.03–0.06 s → 2.9–3.0 s for the audit, `cargo xtask schema`
+  3.4–4.0 s; 15 mutants, 14 killed (all by T-038 acceptance tests), 1 survived (audit rule
+  (iv) skipped: masked by (iii) through the execute check; test gap). Verdict request-changes
+  (0 defects, 1 test gap, 1 spec gap: ADR-0004's bullet not replaced, 3 nits): `reviews/T-038-r1.md`.
+  · gate attempts: 0 (not run: `cargo xtask ci`; ran `cargo test -p kiln-commands -p
+  kiln-control -p kiln-cli` 360/360, `no-skip`, `schema`) · not run: a real unprivileged uid,
+  `exec` exit 1 for internal, save onto a socket/device · missing context: none · next:
+  director rules on finding 1 (add a no-declaration (iv) case, or rule (iv) redundant) and
+  finding 2; round 2 on the delta.
 <!-- end reviewer log -->
