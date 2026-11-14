@@ -22,3 +22,7 @@ reason = "the state commands act on; its public API is read-only (Context::buffe
 [[allow]]
 path = "kiln_commands::CommandError"
 reason = "show command failures to the user"
+
+[[allow]]
+path = "kiln_control::Host"
+reason = "the UI's one session (ADR-0008, ruling Q-1 A, T-055): every request goes through Host::handle_line, so each change the UI makes is a control request in the session log"
