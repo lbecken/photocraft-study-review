@@ -796,6 +796,11 @@ fn check_colours(ed: &Value, lines: &[Line], kind_at: &dyn Fn(usize) -> String, 
     for (row, line) in rs.iter().zip(&m) {
         let (cs, got) = row_char_colours(row);
         let start = lines[*line].start;
+        assert!(
+            cs.iter().any(|c| !blank(*c)),
+            "{what}: line {line} (`{}`) painted a row of blanks only: {row:?}",
+            lines[*line].string()
+        );
         let want = expected_row_colours(&cs, |i| colour_of(&kind_at(start + i)).to_owned());
         if let Some(i) = (0..cs.len()).find(|i| got[*i] != want[*i]) {
             panic!(
