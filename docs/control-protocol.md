@@ -171,7 +171,9 @@ kiln-cli --help | -h | <subcommand> --help
   refused). A root that does not exist, is not a directory, or cannot be opened for reading
   (see `docs/protocol/paths.md`, The root) is refused before any request runs: a
   `kiln-cli: bad --root:` message naming the root as given is written on stderr, nothing on
-  stdout, and the exit code is 2; the usage text is not printed.
+  stdout, and the exit code is 2; the usage text is not printed. For `exec`, params that are
+  not JSON are reported first (`invalid_json`), before the root is checked (order of checks:
+  `docs/protocol/cli-memory-seed.md`).
 - `--memory` (for tests) uses an empty in-memory file system instead.
 - `--memory-seed <manifest>` (`run` and `exec`) uses an in-memory file system holding exactly
   the files of a JSON manifest, read once at start; saves change the in-memory files only. The
