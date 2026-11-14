@@ -930,4 +930,19 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (`cargo xtask ci` not run; `no-skip` PASS, T-037 targets green) · not run: base build, whole
   gate, `run` with a mid-session change · missing context: none · next: test author closes
   test gaps 1–2 (director may word them into AC-1/AC-2 "Document unchanged"); round 2.
+- 2026-11-14T08:10Z · R-214 · joined (re-join at 88c5b8c) · review round 2 (final, delta since
+  `8d649e8`). Rulings D-125 k1–k5, D-128 k6, D-132 k7 acknowledged and accepted. did: read
+  `26faa5b`, `083cf0d`, `eec68a1`, `134e005`, `0bc7cee`, `5681435`: source change vs main equal to
+  round 1 plus the three `FailingFs` lines; paths.md word diff = exactly the k3, k4, k7 clauses;
+  no assertion weakened. Round-1 findings 1, 2, 4, 5 resolved; 3 and 6 ruled. Re-seeded M15,
+  M17 and new M18 (redo cleared): all killed by acceptance tests; tree clean after each. As
+  uid 65534: parent of root 0000/0600 → re-open, first open, save, `project.tree`,
+  `nav.workspace-symbols` all `outside_root`. Chain note's re-open form true. P1 list complete:
+  code grep and `strace` of all 30 commands (only doc.open, doc.save, project.tree,
+  nav.workspace-symbols touch the root). Re-open after nav/search use refused, document
+  unchanged; `nav.workspace-symbols` reads and reveals nothing outside. T-023 + T-037 tests
+  green together; T-037 tests green as uid 65534. Verdict approve, merge recommended; nit 1
+  (k3 clause omits nav.workspace-symbols) to follow-ups. Review `reviews/T-037-r2.md`. · gate
+  attempts: 0 (`no-skip` PASS) · not run: whole gate, base · missing context: none · next:
+  director records the approval.
 <!-- end reviewer log -->
