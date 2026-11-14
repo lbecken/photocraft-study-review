@@ -875,4 +875,22 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   of AC-4 and AC-6
   · missing context: D-103 and D-104 are absent from this worktree's copy
   · next: director (rulings on the spec gaps; implementer and test author for findings 1–3)
+- 2026-11-14 · R-188 · round 2 (final), delta `c0c12fc..b0aa0d888d4a6e37ba3e888a553dd24a4846ed97`
+  · rulings acknowledged before acting, read in the primary checkout's copy (absent here):
+  D-110 r1 to r4, all accepted.
+  · did: read every changed line. Only the `syntax.match-bracket` DOC string changed in
+  implementation code: no behaviour change. Acceptance file: 11 passed in 29.45 s. Ran the new
+  MISSING sentence's example and `( ]` through `kiln-cli run`, checked the new description, and
+  confirmed `commands --schema` equals `docs/commands.json`. Memory figures: checked against
+  R-184's logged outputs (705,700 KB → 689 MiB; 2,123,024 KB → 2,073 MiB; 579,576 KB →
+  566 MiB) and my debug runs (`1;`: 2,128,384 KB with highlight, 584,620 KB without,
+  1,048,575 spans), all within 1 %. Re-seeded M3, M3b, M7, M14 and M17: all killed by the
+  acceptance file, the tree clean after each restore.
+  · verdict: approve. Round-1 findings 1–3 and nits 6–7 resolved; spec gaps 4–5 ruled; the
+  M3/M14 note resolved. 2 nits: `syntax.md:104` not re-wrapped; the `syntax.rs:11` rustdoc
+  still says the limit bounds memory (follow-up).
+  · gate attempts: 0 (`cargo xtask hygiene` after the commit)
+  · not run: `cargo xtask ci`; a release build
+  · missing context: the D-110 rulings are not in this worktree's copy
+  · next: director
 <!-- end reviewer log -->
