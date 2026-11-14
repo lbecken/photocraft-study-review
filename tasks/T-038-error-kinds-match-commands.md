@@ -991,6 +991,65 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   missing context: none · next: director joins with `task/T-038-tests`; reviewer.
 <!-- end implementer log -->
 ### test author
+- 2026-11-14T08:09Z · R-216 · ready · did: independent tests on `task/T-038-tests` (base
+  `c82fa63`) from the spec alone. Acknowledged the rulings before acting: D-092 (Q-1 option B,
+  Q-2 row removed, Q-3 kept whole, Q-4, order), notes D-101/D-113/D-126, D-128 (ADR-0006
+  accepted; Q-5 race pairs declared and witnessed by a guard → AC-6; Q-6 manifest-form `files` →
+  AC-4 copies them as the manifest; Q-7 growth by setup; Q-8 audit (v); Q-9 AC-7 a guard with
+  no wording test; Q-10 `search.rs`:350 undeclared), D-130 (AC-8's "phrase gone" check not
+  written; AC-1's comparison with `docs/commands.json` not written; AC-3's "line names its
+  command" kept), D-135 (dispatch facts): all accepted. Wrote
+  `apps/kiln-cli/tests/acceptance_t038_cli.rs` (AC-1 `schema_publishes_each_commands_refusals`,
+  AC-4 `every_refusal_example_refuses_through_the_binary`, AC-8
+  `protocol_docs_state_the_published_set`), `crates/kiln-commands/tests/acceptance_t038_commands.rs`
+  (AC-2 `undeclared_refusal_is_internal`, AC-3 `audit_requires_a_witness_for_every_declared_kind`;
+  partial, see QUESTION), `apps/kiln-cli/tests/guard_t038_cli.rs` (AC-5
+  `disk_refusals_through_control`, AC-7 `situations_of_the_changed_when_texts`),
+  `crates/kiln-commands/tests/guard_t038_commands.rs` (AC-6 `race_refusals_keep_their_kind`).
+  The spec's table is encoded once as data (`TABLE`, command → E, D) and self-checked against
+  the spec's counts (30 commands, 56 E, 12 D, 13 kinds); order is checked against
+  `RejectReason::ALL`. Base results: AC-1 assertion (no `refusals` in any entry); AC-4 assertion
+  (no `refusal_examples`; 60 problems); AC-8 assertion (the `rejected`/`other` row is there);
+  AC-2 assertion (`describe()` has no `refusals`; the unchecked `decode_error` part passes);
+  AC-3 assertion (audit of a command without a declaration: 0 lines, want 1; the standard
+  registry's audit is empty); guards AC-5 (11 cases, the 10 C pairs), AC-6 (4 cases, each with
+  a nothing-fails control and a hit counter), AC-7 (memory and disk cases, each bound with its
+  just-inside request ok) pass. Scratch prototype in `registry.rs` (removed with `git checkout`,
+  never committed): a hard-coded declaration, `describe()` with `refusals`/`refusal_examples`
+  (5 examples: exec path, `hex` decode_error, setup path, `too_large` by growth, one wrong kind),
+  an execute check and audit rule (i): with it AC-1, AC-2, AC-3 and the guards pass and the AC-4
+  runner passes the 4 sound examples. Kills: (1) publish undeclared `other` → AC-1, AC-2; (2)
+  omit `not_a_boundary` from `cursor.set` → AC-1; (3) no execute check (undeclared refusal
+  stays `rejected`) → NOT killed (needs AC-2's declared half, QUESTION); (4) check turns
+  `outside_root`/`io_error` into `internal` → AC-5, AC-7; (5) check turns `not_found`/
+  `not_a_file` into `internal` → AC-5, AC-6, AC-7; (6) audit rule (i) skipped → AC-3; (7) a
+  refusal example producing another kind → AC-4. `cargo fmt --check` clean; `cargo clippy -p
+  kiln-cli -p kiln-commands --tests -- -D warnings` clean on base (all four files compile on
+  base); `cargo xtask no-skip` PASS. · gate attempts: 0 (not run: the whole gate, by the
+  director's instruction on CPU) · not run: `cargo xtask ci`; the permission-denied pairs (not
+  needed, Pinned (d)) · missing context: the declaration API (below) · next: director rules on
+  the QUESTION; the declared halves of AC-2 and AC-3 are added on this branch once the API is
+  named.
+  QUESTION: AC-2 (a declared `not_found` passes, an undeclared `decode_error` becomes
+  `Internal { reason: Other }`, `describe()` lists only `not_found`) and AC-3 rules (ii)–(v),
+  "an empty list is a declaration" and "a *disk* kind without an example gives no problem"
+  need a test command WITH a declaration and refusal examples, but Interface 3 leaves the API
+  to the implementer ("a trait item …, a method, a builder"), so these cannot be written from
+  the spec without guessing. Written now: only what needs no declaration (a command written
+  with today's `Command` items is one without a declaration, as Interface 3 and Pinned (f) 7
+  say). Proposed wording: Interface 3 names the API, e.g. `Command::refusals() ->
+  Vec<Refusal>` with `Refusal::example(RejectReason)` / `Refusal::disk(RejectReason)` (default:
+  `None` = no declaration) and `Command::refusal_examples() -> Vec<RefusalExample>` with the
+  fields of Interface 1, or the director hands the test author the implementer's public
+  signatures (only these) before the join. Prototype bug (3) shows the cost: without it no test
+  of this task catches a missing execute check.
+  Interpretations: an undeclared command publishes `refusals: []` and contributes no kind
+  (Interface 1: "the kinds the command declares, … possibly empty"); a refusal example's
+  `setup` has the `[name, params]` form of `examples` ("as in `examples`"); AC-3's `kiln-cli
+  commands --audit` exits 0 is asserted in AC-4's test (the CLI file can run the binary; the
+  commands file asserts `standard_registry().audit()` is empty); `run` of a refusal example
+  exits 3 and `exec` exits 2 (the documented exit codes); D-130's "phrase" ruling read as
+  covering AC-8's `doc-positions.md` check (the only phrase check of AC-8).
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
