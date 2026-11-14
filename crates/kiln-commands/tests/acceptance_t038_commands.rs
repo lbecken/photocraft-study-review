@@ -117,7 +117,11 @@ fn undeclared_refusal_is_internal() {
         ),
         "a command without a declaration is not checked (Interface 2): {got:?}"
     );
-    assert!(ctx.log().is_empty(), "a refusal is not logged: {:?}", ctx.log());
+    assert!(
+        ctx.log().is_empty(),
+        "a refusal is not logged: {:?}",
+        ctx.log()
+    );
 
     // Sanity: the same command succeeds and is logged when asked to, so the refusal above is
     // the command's own and the context is the one execute logs into.

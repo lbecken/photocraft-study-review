@@ -158,7 +158,9 @@ fn in_order_of(list: &[&str], order: &[&str]) -> Result<(), String> {
         if let Some(prev) = last
             && pos <= prev
         {
-            return Err(format!("{list:?} is not in the order of {order:?} (or repeats)"));
+            return Err(format!(
+                "{list:?} is not in the order of {order:?} (or repeats)"
+            ));
         }
         last = Some(pos);
     }
@@ -293,7 +295,10 @@ fn rejected_kinds(schema: &Value) -> Vec<String> {
 fn refusals(cmd: &Value) -> Vec<String> {
     let name = &cmd["name"];
     let list = cmd["refusals"].as_array().unwrap_or_else(|| {
-        panic!("command {name} has no `refusals` list (Interface 1); its keys: {:?}", keys(cmd))
+        panic!(
+            "command {name} has no `refusals` list (Interface 1); its keys: {:?}",
+            keys(cmd)
+        )
     });
     list.iter()
         .map(|k| {
@@ -384,7 +389,9 @@ fn schema_publishes_each_commands_refusals() {
             got == want
         };
         if !fits {
-            wrong.push(format!("{name}: published {got:?}, the table says {want:?}"));
+            wrong.push(format!(
+                "{name}: published {got:?}, the table says {want:?}"
+            ));
         }
     }
     assert!(
@@ -394,11 +401,7 @@ fn schema_publishes_each_commands_refusals() {
     );
 
     // error_kinds.rejected = the union of the refusals, in ALL order.
-    let want: Vec<&str> = all
-        .iter()
-        .copied()
-        .filter(|k| union.contains(*k))
-        .collect();
+    let want: Vec<&str> = all.iter().copied().filter(|k| union.contains(*k)).collect();
     assert_eq!(
         published, want,
         "error_kinds.rejected is exactly the union of all commands' `refusals`, in \
@@ -453,9 +456,11 @@ fn run_refusal_example(base: &Path, n: usize, name: &str, ex: &Value) -> Result<
     if !initial.is_empty() {
         // "when `initial_text` is not empty (the example has no setup)" (AC-4).
         if !setup.is_empty() {
-            return Err("has an initial_text and a setup; AC-4 says such an example has no \
+            return Err(
+                "has an initial_text and a setup; AC-4 says such an example has no \
                         setup"
-                .to_owned());
+                    .to_owned(),
+            );
         }
         let params = ex["params"].to_string();
         let out = kiln(
@@ -479,7 +484,10 @@ fn run_refusal_example(base: &Path, n: usize, name: &str, ex: &Value) -> Result<
             ));
         }
         if out.status.code() != Some(2) {
-            return Err(format!("exec: a command error exits 2, got {:?}", out.status));
+            return Err(format!(
+                "exec: a command error exits 2, got {:?}",
+                out.status
+            ));
         }
         return Ok(());
     }
@@ -530,7 +538,10 @@ fn run_refusal_example(base: &Path, n: usize, name: &str, ex: &Value) -> Result<
         return Err(format!("want rejected/{kind}, got {r}"));
     }
     if out.status.code() != Some(3) {
-        return Err(format!("run with one failed request exits 3, got {:?}", out.status));
+        return Err(format!(
+            "run with one failed request exits 3, got {:?}",
+            out.status
+        ));
     }
     Ok(())
 }
@@ -572,7 +583,11 @@ fn every_refusal_example_refuses_through_the_binary() {
         };
         let declared: BTreeSet<String> = cmd["refusals"]
             .as_array()
-            .map(|l| l.iter().filter_map(|k| k.as_str().map(str::to_owned)).collect())
+            .map(|l| {
+                l.iter()
+                    .filter_map(|k| k.as_str().map(str::to_owned))
+                    .collect()
+            })
             .unwrap_or_default();
         let kinds = by_command.entry(name.to_owned()).or_default();
         for (i, ex) in examples.iter().enumerate() {
