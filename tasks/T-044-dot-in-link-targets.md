@@ -250,6 +250,7 @@ and AC-5 are not tied.
 
 ## Questions and rulings
 None open.
+- Note from T-037's review round 2 (director, D-133): the clause of `docs/protocol/paths.md` added by T-037's ruling k3, which lists the requests refused in the same way when the root can no longer be reached (a first open, a save and `project.tree`), does not name `nav.workspace-symbols`, which is refused too (shown in `reviews/T-037-r2.md`). This task edits that document and adds the name there.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
