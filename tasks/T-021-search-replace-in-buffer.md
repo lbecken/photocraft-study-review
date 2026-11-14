@@ -2,7 +2,7 @@
 id: T-021
 title: "Search an open document by literal or regex, case-sensitive or not, optionally whole-word, and replace one or all matches as one undo step with capture groups"
 tier: medium            # ADR-0002 default: in-memory behaviour; adds public API to kiln-search (not a CHARTER §3 contract, no dependency); the regex dependency was added by T-017
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: [search.literal, search.regex, search.whole-word, search.replace]
 depends_on: [T-015, T-017, T-018, T-032]   # all merged (spec check R-158 against main 1dc59d0; R-170 at e72ef59): module slot; Regex contract; apply_edits; invalid_pattern
@@ -571,6 +571,13 @@ builder of the cap of three compiling at once (§5.4).
 - Q-3: (b). This task does not touch `reason.rs`. The published `when` text of `invalid_pattern` stays narrower than the binary (it does not mention a pattern over the cap or a bad replacement template) until T-038 merges; T-038's list of `when` texts gains this one. The gap is known and recorded here; the reviewer does not raise it as a finding against this task.
 - Two readings of the planner in R-170, confirmed (director, D-102): `from` is checked (`out_of_range` when beyond the text) only with `all: false`, and ignored with `all: true`; "`total` is exact" in Q-2 means the existing `replaced` field, and the reply gains no separate `total`.
 - Ruling on the implementer's question of R-173 (director, D-106; Pinned (i) S4). The implementer is right: `([ab]*)` is 7 chars, so 100 repetitions are 700 chars, not 800 as S4 and the spec check's table say. S4 is copied with "700 chars" and the implementer's own measured figures and conditions. The two sentences the implementer added beyond Pinned (a replacement that changes anything ends the typing group; a refusal changes nothing) stay, with the evidence in its log; the reviewer checks them against the binary like every other sentence.
+### Rulings on review round 1 (R-187, `reviews/T-021-r1.md`; director, D-116). The implementer acknowledges each before acting.
+- q1 (finding 1, defect). No optional parameter of `search.find` or `search.replace` is published with `"default": null`: the generated description gives the true default or no `default` keyword, as `cursor.move` and the `syntax.*` commands do, so that it agrees with the binary, which refuses `null`. `docs/commands.json` is regenerated. The binary's behaviour does not change.
+- q2 (finding 2, test gap; the surviving mutant). The implementer, who owns the acceptance tests in this arm, adds on the tests branch a case for each command that omits `case_sensitive` on a text with case variants (the reviewer's `Foo foo`), with the expected result by the Interface's default (`true`). This ruling is the permission METHODOLOGY §6 requires for a test added after the join.
+- q3 (finding 3, spec gap). Sentence S4 names the text it was measured on: after "on texts of 1,000,000 chars" it says that the text was `ab` repeated 500,000 times, so the match counts it quotes can be reproduced.
+- q4 (finding 4, spec gap). Sentence S2 attributes about 210 bytes per match to the list of replacements, but the measured growth is that of the whole process and includes the undo step and the new text. It is reworded to say what was measured and no more: that in one measurement (with its conditions, as recorded in R-173) a replace-all, its undo step included, grew the process's peak memory by about that many bytes per match. No structure is named as the cause.
+- q5 (finding 5, nit). The sentence "A replacement that changes anything ends the document's typing group" is replaced by one that says what the binary does in the three cases the implementer runs first and records: a replacement whose text equals the match; an empty match replaced by the empty string; no match at all. The reviewer observed that the first ends the typing group and adds an undo step and that the second is skipped.
+- q6 (finding 6, nit). The implementer's own unit tests that pin message texts (in `crates/kiln-commands/src/search.rs` and `crates/kiln-search/src/query.rs`) are changed to compare error variants or kinds, as Pinned (f) of this spec requires of every test of the task.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
