@@ -52,7 +52,8 @@ other document, and a `.rs` document that `syntax.highlight` refuses as `too_lar
 | `number` | `#b5cea8` |
 | `comment` | `#6a9955` |
 
-A selection does not change text colours. A later task that changes a colour changes this
+In a row that holds only blanks (spaces, tabs), the blanks are reported in the colour of
+`plain`. A selection does not change text colours. A later task that changes a colour changes this
 table, the spec of T-056 and its tests together.
 
 ## Input
@@ -84,7 +85,11 @@ The editor changes a document only by commands: every keystroke and click that e
 caret, undoes, redoes or saves is a request in the session log.
 
 Enter inserts the document's line ending as `doc.info` reports it when the key is pressed (`\n`
-for a document without a line break).
+for a document without a line break). After Enter the caret is at the start of the line that follows the break
+Enter made. Where the inserted line ending and the char after it form one line break together
+(a `cr` document, Enter typed with a `\n` right after the selection's end), the caret is after
+that whole break (the UI then follows the edit with a `cursor.set`; it sends none that the
+session would refuse, and `Message` shows no refusal).
 
 After a request that moves the caret, from the UI or from a script, the caret's line is in view
 from the next frame on.

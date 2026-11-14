@@ -22,7 +22,10 @@ kiln --help | -h | script --help
 - `<path>…` (T-056): `kiln script` opens the paths given after the script at start, in order,
   as if each were opened through `Path`. A refused one sets `Message` to begin with its kind, a
   successful one clears `Message`; start paths get no response line and do not change the exit
-  code; a successful one is logged as `doc.open` with that path, a refused one is not logged.
+  code; a successful one is logged as `doc.open` with that path, in the order of the command
+  line and before the script's first request, a refused one is not logged. These `doc.open`s
+  are input of the session: the log replayed with `kiln-cli run` reproduces the files with them
+  included.
   With `--memory` every start path is refused (`not_found`). Start paths are read only through
   `doc.open`.
 - Options may come before or after the positional arguments, each at most once.

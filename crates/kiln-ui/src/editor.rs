@@ -306,32 +306,39 @@ impl EditorView {
         );
     }
 
-    /// Typed text (or a line break): inserted at the caret, or replacing the selection with the
-    /// caret collapsed after it.
+    /// Typed text (or a line break): inserted at the caret, or replacing the selection, with the
+    /// caret collapsed after it. Where the text ends with `\r` and the char after the selection
+    /// is `\n`, the two form one break and the caret goes after the whole break (ruling x1).
     fn insert(&self, text: &str, session: &mut Session, message: &mut String) {
         let Some(doc) = &self.doc else {
             return;
         };
         let (id, (start, end)) = (doc.id, doc.selection());
-        if start == end {
+        let joins_break = text.ends_with('\r') && doc.chars.get(end) == Some(&'\n');
+        let caret = start + text.chars().count() + usize::from(joins_break);
+        let done = if start == end {
             send(
                 session,
                 message,
                 "doc.insert",
                 json!({"doc": id, "offset": doc.head, "text": text}),
-            );
-        } else if send(
-            session,
-            message,
-            "doc.replace",
-            json!({"doc": id, "start": start, "end": end, "text": text}),
-        ) {
-            let anchor = start + text.chars().count();
+            )
+        } else {
+            send(
+                session,
+                message,
+                "doc.replace",
+                json!({"doc": id, "start": start, "end": end, "text": text}),
+            )
+        };
+        // `doc.insert` alone leaves a caret after the text, except when the mapping rule's CRLF
+        // snap puts it before a joined break; `doc.replace` leaves the new text selected.
+        if done && (start != end || joins_break) {
             send(
                 session,
                 message,
                 "cursor.set",
-                json!({"doc": id, "anchor": anchor}),
+                json!({"doc": id, "anchor": caret}),
             );
         }
     }

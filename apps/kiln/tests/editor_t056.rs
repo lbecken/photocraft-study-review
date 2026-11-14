@@ -844,3 +844,73 @@ fn a_frame_after_a_control_request_is_not_settled() {
     assert_eq!(r.root("a"), r.root("b"));
     assert_eq!(editor(r.root("a"))["value"], "xabc\n");
 }
+
+/// Ruling x1: where the inserted `\r` and a `\n` after the selection form one break, the caret
+/// is after the whole break, and nothing is refused.
+#[test]
+fn enter_before_a_newline_in_a_cr_document_puts_the_caret_after_the_break() {
+    let dir = fresh("x1");
+    write_files(
+        &dir.join("root"),
+        &[("cr.txt", b"x\ry\rz\n"), ("cr2.txt", b"a\rb\rcd\n")],
+    );
+    let lines = [
+        ctl("i", "doc.info", json!({"doc": 1})),
+        ctl("cs", "cursor.set", json!({"doc": 1, "anchor": 5})),
+        focus_editor("fo"),
+        key("en", "Enter", &[]),
+        ctl("t1", "doc.text", json!({"doc": 1})),
+        ctl("c1", "cursor.get", json!({"doc": 1})),
+        // A selection followed by `\n` (the `d` of `cd\n`), replaced by Enter.
+        ctl("o2", "doc.open", json!({"path": "cr2.txt"})),
+        ctl("i2", "doc.info", json!({"doc": 2})),
+        ctl(
+            "sel",
+            "cursor.set",
+            json!({"doc": 2, "anchor": 5, "head": 6}),
+        ),
+        key("en2", "Enter", &[]),
+        ctl("t2", "doc.text", json!({"doc": 2})),
+        ctl("c2", "cursor.get", json!({"doc": 2})),
+        frames("settle", 1),
+        snapshot("s"),
+    ];
+    let r = run(&dir, &lines, &["cr.txt"]);
+    ok_actions(&r);
+    assert_eq!(r.result("i")["line_ending"], "cr");
+    assert_eq!(r.result("t1")["text"], "x\ry\rz\r\n");
+    assert_eq!(sel(r.result("c1")), (7, 7));
+    assert_eq!(r.result("i2")["line_ending"], "cr");
+    assert_eq!(r.result("t2")["text"], "a\rb\rc\r\n");
+    assert_eq!(sel(r.result("c2")), (7, 7));
+    let root = r.root("s");
+    assert_eq!(message(root), "");
+    assert_eq!(sel(editor(root)), (7, 7));
+}
+
+/// Ruling x3: a row that holds only blanks is reported in the `plain` colour, also inside a
+/// comment.
+#[test]
+fn a_row_of_blanks_is_plain() {
+    let dir = fresh("x3");
+    write_files(
+        &dir.join("root"),
+        &[("a.rs", b"/* c\n  \t \n*/ fn f() {}\n")],
+    );
+    let r = run(&dir, &[snapshot("s")], &["a.rs"]);
+    let rows = runs(editor(r.root("s")));
+    let blank = rows
+        .iter()
+        .find(|row| {
+            row.iter()
+                .all(|(t, _)| t.chars().all(|c| c == ' ' || c == '\t'))
+        })
+        .expect("a row of blanks");
+    for (_, c) in blank {
+        assert_eq!(c, colour_of("plain"));
+    }
+    assert_eq!(
+        rows[0],
+        [("/* c".to_owned(), colour_of("comment").to_owned())]
+    );
+}

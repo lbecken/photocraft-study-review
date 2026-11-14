@@ -774,6 +774,118 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   not run: no build (none needed) · missing context: none · next: director (`specified`).
 <!-- end planner log -->
 ### implementer
+- 2026-11-14T23:05Z · R-239 · ready · did: built the editor view, the current-document rule,
+  the panel places and the start paths of `kiln script`, with my own tests and the two
+  documents.
+  **Criteria in my words.** AC-1: `Title` (path, then `modified` iff dirty) and `Editor` (value =
+  `doc.text`, rows = the lines from 0) for a start path, an open through `Path`/`Open` and a
+  control `doc.open` plus a frame; start paths in order, the last successful one current, a
+  refused one in `Message`, only successful ones logged, no response line, exit code untouched;
+  the current document follows opens (also `already_open`) and closes (highest id), none → no
+  `Editor`. AC-2: every painted non-blank char has its `syntax.highlight` kind's table colour,
+  blanks the neighbour's; `.txt` and a too-large `.rs` all `plain`. AC-3: `click at {row,col}`
+  → head = line start + col; typing inserts there; `selection` = `cursor.get`; shift keeps the
+  anchor; a click without `at` after a scroll lands on a visible line. AC-4: random key sessions
+  equal a naive model of the Input table and `cursor.md`, EOL kinds preserved. AC-5: rows
+  consecutive from line 0, scrolling moves the first row down monotonically without changing
+  text or selection, the caret's line comes into view after keys and after a control
+  `cursor.set` plus one frame. AC-6: undo/redo/save agree with `doc.text`/`doc.info` and with a
+  second session; a save refused by the 100 temporary names → `Message` `io_error`, `Title`
+  `modified`, file unchanged. AC-7: the log replays to the same texts, selections, flags and
+  files; extra logged requests are read-only or Input-table commands; 600 idle frames add
+  nothing; `ui-commands` passes. AC-8: `frames 1` right after a control request answers
+  `settled:false`, then `settled:true`, and the root is then stable.
+  **Rulings acknowledged** (all accepted, none questioned): D-147 Q-2 A and Q-4 A (Q-2 now
+  belongs to T-065, nothing done for it here; Enter inserts the document's line ending); the
+  D-152 follow-ups (`settled:false` after a control request, colours against the published
+  table, a click at the centre of the visible part, the guard of w4 untouched because bare
+  `kiln` is unchanged, `scroll_view` helper and w1 ownership kept); D-156 Q-5 A (no window, no
+  dependency, no manifest touched), Q-6 A (start paths positional; only the case
+  `["script","s.jsonl","t.jsonl"]` of `script_t055.rs` changed: it now expects exit 0 and one
+  response line), Q-7 A (T-065; nothing here), Q-8 A (the table is `KIND_COLOURS` in
+  `crates/kiln-ui/src/editor.rs` and the table of `docs/protocol/ui-editor.md`), Q-9 A (the
+  view's reads go through the host and are logged), Q-10 A (one further frame after a re-read);
+  B1–B11 as fixed in the spec; T-055 n2 (nothing focuses itself), n4, n6, w1, w7.
+  **What was built.** `crates/kiln-ui/src/editor.rs` (the view: input → commands, reads,
+  scroll-to-caret, painting, the `Editor` node with one text-run child for `selection`);
+  `session.rs` (current document, a change counter, `request` and `read`); `shell.rs` (layout:
+  top rows, `Documents` at a quarter of the remaining height, then tabs, find, `Title`, project
+  | editor | outline, status at the bottom; `scroll_view_with`); `panels/mod.rs` with
+  `PanelView` (`request`, `read`, `current`, `set_current`, `open_documents`, `set_message`) and
+  `panels/{project,tabs,status,outline,find}.rs`, each `pub(crate) fn show(ui: &mut egui::Ui,
+  view: &mut PanelView<'_>)` drawing nothing; `lib.rs` (`App`, `draw_frame`, `apply_style`);
+  `script.rs` (`Script::new` runs no frame, `Script::start(paths)` opens the start paths, then
+  settles); `apps/kiln/src/main.rs` (start paths after the log check, usage).
+  **Frame function shared with T-065:** `kiln_ui::draw_frame(ui: &mut egui::Ui, app: &mut
+  kiln_ui::App)`, with `kiln_ui::App::new(host: kiln_control::Host) -> App`, `App::open(&mut
+  self, path: &str)` (a start path), `App::handle_line(&mut self, line: &[u8]) ->
+  Option<String>`, `App::log_script(&self) -> String` and `kiln_ui::apply_style(ctx:
+  &egui::Context)` (dark theme, no caret blink); documented in `crates/kiln-ui/src/lib.rs`.
+  **Design notes.** The view re-reads (`doc.info`, `doc.text`, `cursor.get`, and for `.rs`
+  `syntax.highlight` over the whole text) at the start of a frame when the session's change
+  counter moved (any successful request but its own reads), and after each input event that
+  dispatched; it then calls `request_repaint_after(1 ms)` (a zero-delay request makes egui run
+  two frames, `egui-0.37.0/src/context.rs:141-145`, which gave `settled:false` twice in my
+  first run). A scroll needs no read (the whole document was read), so reads happen only in
+  frames with a request. Head changes bring the head's line into view by setting the scroll
+  offset before the frame is painted (so one frame after a control `cursor.set` shows it).
+  `Title` reads `<path> — Kiln` or `<path> — modified — Kiln`: the suffix keeps `Title`'s value
+  different from the `Documents` child of the same path, so T-055-style `{"value": path}`
+  targets stay unambiguous.
+  **Measured** (debug build of `kiln` at this branch): largest settle count of an action in my
+  test scripts: 20 frames (`scroll` on `Editor`), `click` 14, `key` 4, `type` 3, `focus` 3 —
+  command: after `cargo test -p kiln --locked --test editor_t056`, a Python loop over
+  `target/tmp/kiln-editor-t056/*/stdout.txt` taking the maximum `result.frames` of responses
+  whose request (same id in `s.jsonl`) is a UI action other than `frames` → `{'click': 14,
+  'type': 3, 'key': 4, 'focus': 3, 'scroll': 20}`. Scroll settles in 8 frames for 1 step and 20
+  for 3, 10 and 100 steps (`kiln script` with one `scroll` down and one up on a 300-line
+  `.rs`: `"frames":8`, `"frames":20` ×3). These figures are in `docs/protocol/ui-editor.md`
+  Limits, worded as measured on my scripts.
+  **Sentences I wrote beyond Pinned (i), with evidence.** `ui-editor.md`: "A script of control
+  requests only, without start paths, runs no read" (the spec's sentence without "without start
+  paths" is false with a start path: the start frames read; checked: `kiln script` with start
+  path `cr.txt` logs `doc.info`/`doc.text`/`cursor.get` after the `doc.open`, while T-055's
+  `ac1_control_pass_through` passes); the settle-count sentence above; `ui.md` Usage lines on
+  start paths copy the spec's Interface (checked by `start_paths_open_in_order_…` and a scratch
+  run `kiln script s6.jsonl --root p6 missing.rs cr.txt`: exit 0, `Message` empty, one
+  `doc.open` logged). Every other sentence of `ui-editor.md` is copied from the spec's
+  Interface or Pinned and was checked against the binary by `apps/kiln/tests/editor_t056.rs`
+  (10 tests) or the scratch runs above (CR-only `Enter` → `a\r\rb`; a 1,048,577-char `.rs`
+  painted `plain` with `Message` empty).
+  QUESTION: "as if it were typed into `Path` and opened" — I do not put the start path's text
+  into `Path` (only the `doc.open` and `Message` effects); a filled `Path` would make a later
+  `type` into `Path` append to it. Confirm.
+  QUESTION: the settle count is to be measured on "the acceptance scripts", which I may not
+  see; I measured on my own scripts (above). The director or the test author can re-measure on
+  `acceptance_t056.rs` at the join, and the Limits sentence may then need the larger figure.
+  QUESTION: the spec sentence "A script of control requests only runs no read" — I narrowed it
+  to scripts without start paths (above); confirm the narrowing (the alternative, not reading
+  after start paths, contradicts "Frames, reads and the log": start paths are a source).
+  Defect seen, not fixed (T-055's observation, `crates/kiln-ui/src/observe.rs` `merge_rows`
+  sorts glyphs by their left edge): in proportional text with kerning the reported row order can
+  differ from the text — `Title` value `src/a.rs — modified — Kiln` was reported with row text
+  `src/a.rs — modifeid — Kiln`. The editor (monospace) is not affected (row texts equal lines in
+  all my tests, non-ASCII included). It is outside this task's purpose; for the director.
+  **Rulings x1–x3 (D-157), acknowledged and accepted before acting.** x1: `insert` now
+  follows the edit with `cursor.set {anchor: start + n + 1}` when the text ends with `\r` and
+  the char after the selection is `\n` (and, as before, after every `doc.replace`); without it
+  the mapping rule's CRLF snap left the caret before the `\r` on an empty selection, and on a
+  selection the `cursor.set` to `start + n` was refused `not_a_boundary`. Covered by my test
+  `enter_before_a_newline_in_a_cr_document_puts_the_caret_after_the_break` (`x\ry\rz\n` caret
+  5 → text `x\ry\rz\r\n`, head 7; `a\rb\rcd\n` with `d` selected → `a\rb\rc\r\n`, head 7;
+  `Message` empty); sentence added to `ui-editor.md` from the ruling. x2: already so (the start
+  paths' `doc.open`s are the first lines of the log, in command-line order; my replay test
+  replays the whole log, them included, with `Host`); sentence added to `ui.md` Usage from the
+  ruling. x3: already so (the view passes `plain` as the galley's fallback colour, which T-055's
+  observation reports for a row with no pixel-painting char); test `a_row_of_blanks_is_plain`
+  (a blank row inside a block comment of a `.rs` file); sentence added to `ui-editor.md`.
+  Random check (scratch, not committed): 25 seeded sessions of 40 keys/typed texts on LF, CRLF,
+  CR-only, no-break and mixed documents, compared with a Python model of the Input table and
+  `cursor.md` (`text`, `cursor.get`, `Editor` value and selection): 25 of 25 equal.
+  · gate attempts: GATE_ATTEMPTS · not run: the acceptance tests of T-056 (not visible to me); a
+  real window (T-065); release builds; a timing of keystrokes on large documents (the 1,048,577-char
+  document opens, paints and settles in the test that takes about 2 s for all 10 tests) · missing
+  context: none · next: join with `task/T-056-tests`; review.
 <!-- end implementer log -->
 ### test author
 - 2026-11-14 · R-240 · ready · did: wrote `apps/kiln/tests/acceptance_t056.rs` (22 tests, all
