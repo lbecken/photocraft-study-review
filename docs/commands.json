@@ -2558,6 +2558,914 @@
       }
     },
     {
+      "doc": "Put a document's caret (anchor = head) at a zero-based line and column (`col` default 0, in chars), each clamped to the document: the line to the last line, the column to that line's length without its break. Never refuses a line or column beyond the document. Ends the document's typing group.",
+      "examples": [
+        {
+          "description": "a column beyond the line is clamped before its CRLF",
+          "files": [
+            [
+              "a.txt",
+              "ab\r\ncdef\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "col": 9,
+            "doc": 1,
+            "line": 1
+          },
+          "result": {
+            "anchor": 8,
+            "col": 4,
+            "doc": 1,
+            "end": 8,
+            "head": 8,
+            "line": 1,
+            "start": 8
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "a line beyond the document is clamped to the last line",
+          "files": [
+            [
+              "a.txt",
+              "ab\r\ncdef\n"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "line": 8
+          },
+          "result": {
+            "anchor": 9,
+            "col": 0,
+            "doc": 1,
+            "end": 9,
+            "head": 9,
+            "line": 2,
+            "start": 9
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "nav.goto-line",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `nav.goto-line`.",
+        "properties": {
+          "col": {
+            "default": 0,
+            "description": "Zero-based column in chars; default 0. One beyond the line's content (without its line\nbreak) is clamped to its end. `null` is refused.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "description": "Zero-based line; one beyond the last line is clamped to the last line.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "line"
+        ],
+        "title": "GotoLineParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
+        "properties": {
+          "anchor": {
+            "description": "Char offset of the selection's anchor (the end that stays put while extending).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "col": {
+            "description": "Zero-based column of the head, in chars.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "doc": {
+            "description": "Id of the document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "description": "The larger of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "head": {
+            "description": "Char offset of the selection's head (the caret).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "line": {
+            "description": "Zero-based line of the head.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "description": "The smaller of `anchor` and `head`.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "anchor",
+          "head",
+          "start",
+          "end",
+          "line",
+          "col"
+        ],
+        "title": "CursorResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Select the name of item `index` of the document's outline (as `nav.outline` lists it for the current text): anchor = `name_start`, head = `name_end`. An index beyond the items is refused with `out_of_range`; a document longer than 1048576 chars with `too_large`. Ends the document's typing group.",
+      "examples": [
+        {
+          "description": "select the name of the second item",
+          "files": [
+            [
+              "a.rs",
+              "impl<T> Display for Foo<T> { fn fmt(&self) {} }\nmod m;\ntrait T { fn x(&self); }"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "index": 1
+          },
+          "result": {
+            "cursor": {
+              "anchor": 32,
+              "col": 35,
+              "doc": 1,
+              "end": 35,
+              "head": 35,
+              "line": 0,
+              "start": 32
+            },
+            "item": {
+              "depth": 1,
+              "end": 45,
+              "kind": "fn",
+              "name": "fmt",
+              "name_end": 35,
+              "name_start": 32,
+              "start": 29
+            }
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "nav.goto-symbol",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `nav.goto-symbol`.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "index": {
+            "description": "Index into the items `nav.outline` gives for the current text.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "index"
+        ],
+        "title": "GotoSymbolParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "CursorResult": {
+            "description": "Result of every `cursor.*` command: the selection of the document afterwards.",
+            "properties": {
+              "anchor": {
+                "description": "Char offset of the selection's anchor (the end that stays put while extending).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "col": {
+                "description": "Zero-based column of the head, in chars.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "doc": {
+                "description": "Id of the document.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "end": {
+                "description": "The larger of `anchor` and `head`.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "head": {
+                "description": "Char offset of the selection's head (the caret).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "line": {
+                "description": "Zero-based line of the head.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "start": {
+                "description": "The smaller of `anchor` and `head`.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "doc",
+              "anchor",
+              "head",
+              "start",
+              "end",
+              "line",
+              "col"
+            ],
+            "type": "object"
+          },
+          "ItemOut": {
+            "description": "One outline item (char offsets into the document's current text).",
+            "properties": {
+              "depth": {
+                "description": "Number of listed items that enclose this one.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "end": {
+                "description": "Char offset of the item's end.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "$ref": "#/$defs/KindName",
+                "description": "`fn`, `struct`, `enum`, `trait`, `impl` or `mod`."
+              },
+              "name": {
+                "description": "The name; for `impl` the type, or `<trait> for <type>`, whitespace runs collapsed.",
+                "type": "string"
+              },
+              "name_end": {
+                "description": "Char offset of the name's end (for `impl`: of the type).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "name_start": {
+                "description": "Char offset of the name's start (for `impl`: of the type).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "start": {
+                "description": "Char offset of the item's start (attributes and doc comments are not part of it).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "start",
+              "end",
+              "name_start",
+              "name_end",
+              "depth"
+            ],
+            "type": "object"
+          },
+          "KindName": {
+            "description": "The kind of an outline item, as `ItemKind::as_str` names it.",
+            "oneOf": [
+              {
+                "const": "fn",
+                "description": "`fn` (with or without a body).",
+                "type": "string"
+              },
+              {
+                "const": "struct",
+                "description": "`struct`.",
+                "type": "string"
+              },
+              {
+                "const": "enum",
+                "description": "`enum`.",
+                "type": "string"
+              },
+              {
+                "const": "trait",
+                "description": "`trait`.",
+                "type": "string"
+              },
+              {
+                "const": "impl",
+                "description": "`impl`.",
+                "type": "string"
+              },
+              {
+                "const": "mod",
+                "description": "`mod` (inline or `mod x;`).",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `nav.goto-symbol`.",
+        "properties": {
+          "cursor": {
+            "$ref": "#/$defs/CursorResult",
+            "description": "The selection afterwards: anchor = `name_start`, head = `name_end`."
+          },
+          "item": {
+            "$ref": "#/$defs/ItemOut",
+            "description": "The item at `index`."
+          }
+        },
+        "required": [
+          "item",
+          "cursor"
+        ],
+        "title": "GotoSymbolResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "List a document's `fn`, `struct`, `enum`, `trait`, `impl` and `mod` items that are not inside a function body, a block, an `extern` block, a `const` or `static` value or a macro invocation, in the order of their start, each with its name, char range, name range and nesting depth. Parses the current text afresh; read-only. A document longer than 1048576 chars is refused with `too_large`.",
+      "examples": [
+        {
+          "description": "an impl, a mod and a trait with their fns",
+          "files": [
+            [
+              "a.rs",
+              "impl<T> Display for Foo<T> { fn fmt(&self) {} }\nmod m;\ntrait T { fn x(&self); }"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1
+          },
+          "result": {
+            "items": [
+              {
+                "depth": 0,
+                "end": 47,
+                "kind": "impl",
+                "name": "Display for Foo<T>",
+                "name_end": 26,
+                "name_start": 20,
+                "start": 0
+              },
+              {
+                "depth": 1,
+                "end": 45,
+                "kind": "fn",
+                "name": "fmt",
+                "name_end": 35,
+                "name_start": 32,
+                "start": 29
+              },
+              {
+                "depth": 0,
+                "end": 54,
+                "kind": "mod",
+                "name": "m",
+                "name_end": 53,
+                "name_start": 52,
+                "start": 48
+              },
+              {
+                "depth": 0,
+                "end": 79,
+                "kind": "trait",
+                "name": "T",
+                "name_end": 62,
+                "name_start": 61,
+                "start": 55
+              },
+              {
+                "depth": 1,
+                "end": 77,
+                "kind": "fn",
+                "name": "x",
+                "name_end": 69,
+                "name_start": 68,
+                "start": 65
+              }
+            ]
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.rs"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "nav.outline",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params naming one open document.",
+        "properties": {
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc"
+        ],
+        "title": "DocParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "ItemOut": {
+            "description": "One outline item (char offsets into the document's current text).",
+            "properties": {
+              "depth": {
+                "description": "Number of listed items that enclose this one.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "end": {
+                "description": "Char offset of the item's end.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "$ref": "#/$defs/KindName",
+                "description": "`fn`, `struct`, `enum`, `trait`, `impl` or `mod`."
+              },
+              "name": {
+                "description": "The name; for `impl` the type, or `<trait> for <type>`, whitespace runs collapsed.",
+                "type": "string"
+              },
+              "name_end": {
+                "description": "Char offset of the name's end (for `impl`: of the type).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "name_start": {
+                "description": "Char offset of the name's start (for `impl`: of the type).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "start": {
+                "description": "Char offset of the item's start (attributes and doc comments are not part of it).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "start",
+              "end",
+              "name_start",
+              "name_end",
+              "depth"
+            ],
+            "type": "object"
+          },
+          "KindName": {
+            "description": "The kind of an outline item, as `ItemKind::as_str` names it.",
+            "oneOf": [
+              {
+                "const": "fn",
+                "description": "`fn` (with or without a body).",
+                "type": "string"
+              },
+              {
+                "const": "struct",
+                "description": "`struct`.",
+                "type": "string"
+              },
+              {
+                "const": "enum",
+                "description": "`enum`.",
+                "type": "string"
+              },
+              {
+                "const": "trait",
+                "description": "`trait`.",
+                "type": "string"
+              },
+              {
+                "const": "impl",
+                "description": "`impl`.",
+                "type": "string"
+              },
+              {
+                "const": "mod",
+                "description": "`mod` (inline or `mod x;`).",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `nav.outline`.",
+        "properties": {
+          "items": {
+            "description": "Every item, in the order of its start (preorder).",
+            "items": {
+              "$ref": "#/$defs/ItemOut"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OutlineResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Find outline items whose name contains `query` (ignoring case) in the project's `.rs` files, as `project.tree {}` lists them; an open document's current text is searched in place of its file. Exact matches first, then prefixes, then the others; at most `limit` (default 200). Files that cannot be read or decoded, or are longer than 1048576 chars, are listed in `skipped`. Read-only.",
+      "examples": [
+        {
+          "description": "exact matches first, then prefixes, then the others",
+          "files": [
+            [
+              "a.rs",
+              "fn foo() {}\nstruct FooBar;\n"
+            ],
+            [
+              "b/c.rs",
+              "mod foo { fn barfoo() {} }\n"
+            ],
+            [
+              "z.txt",
+              "fn foo() {}"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "query": "FOO"
+          },
+          "result": {
+            "items": [
+              {
+                "col": 3,
+                "end": 11,
+                "kind": "fn",
+                "line": 0,
+                "name": "foo",
+                "name_end": 6,
+                "name_start": 3,
+                "path": "a.rs",
+                "start": 0
+              },
+              {
+                "col": 4,
+                "end": 26,
+                "kind": "mod",
+                "line": 0,
+                "name": "foo",
+                "name_end": 7,
+                "name_start": 4,
+                "path": "b/c.rs",
+                "start": 0
+              },
+              {
+                "col": 7,
+                "end": 26,
+                "kind": "struct",
+                "line": 1,
+                "name": "FooBar",
+                "name_end": 25,
+                "name_start": 19,
+                "path": "a.rs",
+                "start": 12
+              },
+              {
+                "col": 13,
+                "end": 24,
+                "kind": "fn",
+                "line": 0,
+                "name": "barfoo",
+                "name_end": 19,
+                "name_start": 13,
+                "path": "b/c.rs",
+                "start": 10
+              }
+            ],
+            "skipped": [],
+            "too_deep": 0,
+            "truncated": false,
+            "walk_truncated": false
+          },
+          "setup": []
+        }
+      ],
+      "mutating": false,
+      "name": "nav.workspace-symbols",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `nav.workspace-symbols`.",
+        "properties": {
+          "limit": {
+            "default": 200,
+            "description": "Most items listed (1 to 10,000; default 200). `null` is refused.",
+            "format": "uint32",
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "Text to find in item names, ignoring case (not empty).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WorkspaceParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "KindName": {
+            "description": "The kind of an outline item, as `ItemKind::as_str` names it.",
+            "oneOf": [
+              {
+                "const": "fn",
+                "description": "`fn` (with or without a body).",
+                "type": "string"
+              },
+              {
+                "const": "struct",
+                "description": "`struct`.",
+                "type": "string"
+              },
+              {
+                "const": "enum",
+                "description": "`enum`.",
+                "type": "string"
+              },
+              {
+                "const": "trait",
+                "description": "`trait`.",
+                "type": "string"
+              },
+              {
+                "const": "impl",
+                "description": "`impl`.",
+                "type": "string"
+              },
+              {
+                "const": "mod",
+                "description": "`mod` (inline or `mod x;`).",
+                "type": "string"
+              }
+            ]
+          },
+          "SkipReason": {
+            "description": "Why a file was not searched (the name of an existing error kind).",
+            "oneOf": [
+              {
+                "const": "not_found",
+                "description": "The file was not found when it was read.",
+                "type": "string"
+              },
+              {
+                "const": "not_a_file",
+                "description": "The path was not a regular file when it was read.",
+                "type": "string"
+              },
+              {
+                "const": "outside_root",
+                "description": "The path resolved outside the root when it was read.",
+                "type": "string"
+              },
+              {
+                "const": "io_error",
+                "description": "Any other read failure.",
+                "type": "string"
+              },
+              {
+                "const": "decode_error",
+                "description": "The file is not valid UTF-8 / UTF-16 text.",
+                "type": "string"
+              },
+              {
+                "const": "too_large",
+                "description": "The text is longer than 1,048,576 chars.",
+                "type": "string"
+              }
+            ]
+          },
+          "Skipped": {
+            "description": "A file that was not searched.",
+            "properties": {
+              "path": {
+                "description": "Root-relative path of the file.",
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/$defs/SkipReason",
+                "description": "Why it was not searched."
+              }
+            },
+            "required": [
+              "path",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "Symbol": {
+            "description": "One matching item.",
+            "properties": {
+              "col": {
+                "description": "Zero-based column of `name_start`, in chars.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "end": {
+                "description": "Char offset of the item's end.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "$ref": "#/$defs/KindName",
+                "description": "`fn`, `struct`, `enum`, `trait`, `impl` or `mod`."
+              },
+              "line": {
+                "description": "Zero-based line of `name_start`.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "name": {
+                "description": "The item's name, as `nav.outline` gives it.",
+                "type": "string"
+              },
+              "name_end": {
+                "description": "Char offset of the name's end.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "name_start": {
+                "description": "Char offset of the name's start (for `impl`: of the type).",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "path": {
+                "description": "Root-relative path of the file.",
+                "type": "string"
+              },
+              "start": {
+                "description": "Char offset of the item's start in the file's text.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "kind",
+              "name",
+              "start",
+              "end",
+              "name_start",
+              "name_end",
+              "line",
+              "col"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `nav.workspace-symbols`.",
+        "properties": {
+          "items": {
+            "description": "The first `limit` matches: exact names first, then prefixes, then the others; within a\nrank by the file's place in the walk, then by start.",
+            "items": {
+              "$ref": "#/$defs/Symbol"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "description": "The files not searched, in walk order.",
+            "items": {
+              "$ref": "#/$defs/Skipped"
+            },
+            "type": "array"
+          },
+          "too_deep": {
+            "description": "Directories not descended because of the depth bound (as `project.tree`'s `too_deep`).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True iff more than `limit` items matched.",
+            "type": "boolean"
+          },
+          "walk_truncated": {
+            "description": "True iff the walk stopped at 1,000,000 entries.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "truncated",
+          "skipped",
+          "walk_truncated",
+          "too_deep"
+        ],
+        "title": "WorkspaceResult",
+        "type": "object"
+      }
+    },
+    {
       "doc": "List the project (or the directory `path`) as a tree, in preorder with each directory's entries in byte order of their names. Honours the project's `.gitignore` files, skips the directory whose path is exactly `target` and every `.git`, lists symlinks and special files without following or opening them, and lists a directory whose path has 128 or more segments without descending into it. Rules: docs/protocol/project.md.",
       "examples": [
         {
