@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-14 20:30 UTC_
+_Last updated: 2026-11-14 22:10 UTC_
 
 ## Now
 Iteration 2, **second stage** (ADR-0007, accepted with a changed order in D-147), under methodology **v1.3**
@@ -13,8 +13,10 @@ evaluation B (cut 2: a project editor) → T-060, T-061, the feature drafts each
 T-041 (last; owner told first). Deferred until what they remove starts to cost: T-051, T-052, T-054, T-043, T-064.
 
 In flight:
-- **T-055** (high): joined green at `f9fc44e` on its second join (D-149); review round 1 running (run R-230). Builders were R-226 in `.worktrees/T-055` and R-227 in
-  `.worktrees/T-055-tests`, both from main `9d5f6d67e9e7f373ce2a808622ac8ce4f0ce172c`.
+- **T-055 merged** at `e34ba1f112b2a140371131e0808b9a2caca5e3ef` (D-155; 997,800 tokens): `kiln script` and
+  `docs/protocol/ui.md` are on main. No worktree exists.
+- **T-056** (high, draft): spec check running (run R-237; it edits only the task file). Then: rulings, `specified`,
+  `ready`, dispatch (implementer and independent test author; each `touches` path belongs to one role, D-153).
 
 The planner's estimate for the whole stage is about 22.8 M tokens; about 5.5 M to cut 1 and 8.9 M to cut 2 (with
 the deferred corrections counted). The weekly usage limit was reached once (D-143). Next free task number: T-065.
