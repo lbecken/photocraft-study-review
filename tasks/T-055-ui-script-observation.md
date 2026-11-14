@@ -2,7 +2,7 @@
 id: T-055
 title: "Run the Kiln UI without a window from a script of control requests and UI requests, and read back what each frame shows"
 tier: high              # ADR-0002: adds dependencies (egui; kiln-control as an edge of kiln-ui); a new file write (--log); a gate path if Q-1 is answered A (xtask/ui-allowlist.toml)
-state: self_verified
+state: tests_joined
 owner_role: planner
 scorecard_items: []     # an interface task: no ui.* item can be observed before it; T-056 claims the first items through it
 depends_on: []          # nothing unmerged; T-054 is deferred (D-147) and rebases on this task's change of the root Cargo.toml
