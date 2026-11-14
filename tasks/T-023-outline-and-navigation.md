@@ -795,7 +795,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   23.12 s → 23 s): it stands. Checks: `cargo fmt --check` and `cargo xtask hygiene` (results in
   the report). · gate attempts: 0 (as instructed; the join runs the gate) · not run: full gate,
   release build (as instructed) · missing context: none · next: director join.
-- 2026-11-14 · R-204 · review round 1 request-changes (R-203) · rulings acknowledged (D-124):
+- 2026-11-14 05:30 · R-204 · review round 1 request-changes (R-203) · rulings acknowledged (D-124):
   m1 accepted (N8 was wrong: the search walks with `limit` 1,000,000, not `project.tree {}`'s
   50,000); m2 accepted (Q-2 confirmed; example added from a node dump, not from my code); m3
   accepted; m4 accepted; m5 accepted. · did: m1 run first (debug `target/debug/kiln-cli` of
