@@ -866,4 +866,15 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   full gate, full workspace tests per survivor, `outside_root` and `walk_truncated: true`
   through the CLI · missing context: none · next: director rules spec gaps 5–7; implementer
   fixes finding 1 and adds the tests for findings 2–4; round 2 is the delta.
+- 2026-11-14 · R-206 · round 2 (delta `b5ae636`..`67aff0e238414101cd8e4088deef5747ee352b90`) ·
+  rulings acknowledged and accepted: D-124 m1 to m5. · did: read the delta (only `.rs` change
+  outside tests is the `nav.workspace-symbols` description string: no behaviour change);
+  checked the reworded N8/description at the walk's boundary in memory (1,000,000 entries:
+  last file searched; 1,000,001: not searched, `walk_truncated: true`), the sentence beside N3
+  and its example (four items exact, `fn b` absent), N11's parenthesis; re-seeded O1, N15, N19:
+  killed by `outline_worked_examples`, `workspace_symbols_match_naive_model`,
+  `workspace_symbols_search_beyond_project_tree_default`; fixtures removed on green and failing
+  runs; acceptance file 11 passed in 5.51 s. Review `reviews/T-023-r2.md`: approve; one nit
+  (unwrapped `nav.md:115`) to Follow-ups. · gate attempts: 0 (`cargo xtask hygiene` run) · not
+  run: release build, the boundary on disk, full gate · missing context: none · next: director.
 <!-- end reviewer log -->
