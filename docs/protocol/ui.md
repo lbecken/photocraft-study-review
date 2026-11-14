@@ -75,7 +75,7 @@ those of the last frame's snapshot.
 | `snapshot` | — | reports the last frame (below); runs no frame |
 | `frames` | `count` (integer 1–600) | runs exactly `count` frames with no input |
 | `focus` | `target` | gives the target keyboard focus |
-| `click` | `target`; `button` (`"primary"` default, `"secondary"`); `modifiers` (array of `"ctrl"`, `"shift"`, `"alt"`, `"command"`; default none); `at` (optional `{"row":r,"col":c}`, integers ≥ 0) | a pointer press and release at the target, as a user's click: at its centre, or with `at`, at the left edge of char `c` of the target's painted row `r` (its `rows`), or just right of the row's last char when `c` equals the row's length |
+| `click` | `target`; `button` (`"primary"` default, `"secondary"`); `modifiers` (array of `"ctrl"`, `"shift"`, `"alt"`, `"command"`; default none); `at` (optional `{"row":r,"col":c}`, integers ≥ 0) | a pointer press and release at the target, as a user's click: at the centre of its visible part, or with `at`, at the left edge of char `c` of the target's painted row `r` (its `rows`), or just right of the row's last char when `c` equals the row's length |
 | `type` | `text` (string) | the text as typed input to the focused node |
 | `key` | `key` (a name from the table below); `modifiers` as for `click` | one key press and release |
 | `scroll` | `target`; `direction` (`"up"`, `"down"`, `"left"`, `"right"`); `steps` (integer 1–100, default 1) | scrolls the scrollable area that contains the target by `steps` steps |
@@ -139,7 +139,10 @@ How the fields are read from the toolkit's output:
   visible part of the area; the visible part of the window around a node is the window cut by every `scroll_view`
   above it.
 - A painted character counts when its centre lies inside its clip rectangle and the window; it
-  belongs to the deepest node whose rectangle contains its centre (the root when none does).
+  belongs to the deepest node whose visible part contains its centre (the root when none
+  does), the visible part of a node being its rectangle cut by the window and by every
+  `scroll_view` above it. So a node marked `offscreen` has no `rows`, and a scrolled list never
+  takes the text of a node outside it.
   Its colour is the colour it was painted with; a character that paints no pixels (a space)
   takes the colour of the character before it in the painted row (at the start of a row, of the
   first one after it that paints pixels), so the colour reported for a space is its neighbour's,
@@ -179,8 +182,9 @@ What the UI shows in T-055 (T-056 adds the window and the editor view, later tas
   UI, begins with the refusal's `kind` (e.g. `not_found`) followed by free text.
 
 Clicking `Open` (or `Enter` in `Path`) asks the session to open the path in `Path` (a `doc.open`
-control request); `Path` keeps its text. A successful open clears `Message`. Every interactive
-node has a non-empty `label`.
+control request); `Path` keeps its text. A successful open clears `Message`. Every node of role `button` or `text_input` has a non-empty `label`. The scroll bar the
+toolkit adds to an overflowing scroll area is a node of role `scroll_bar` without a label;
+scripts scroll with `scroll` on the `scroll_view` (or a node inside it), not through the bar.
 
 ## Determinism
 
@@ -191,6 +195,9 @@ writes the same log. No clock is read; each frame advances the UI's time by exac
 ## Limits
 
 - A script line is read whole into memory (as the control protocol).
+- A FIFO given as the script or as `--log` blocks until its other end is opened, as with
+  `kiln-cli run` (the script is read whole at start; the log file is opened before the first
+  request).
 - Mouse-wheel input is not offered; `scroll` uses the accessibility scroll action.
 - `frames` and `scroll` are capped (600, 100) and each action's settling is capped at 60
   frames, so one request runs a bounded number of frames.

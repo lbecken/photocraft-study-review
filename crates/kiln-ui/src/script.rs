@@ -584,7 +584,7 @@ fn find(observation: &Observation, target: &Target) -> Result<usize, Refusal> {
     }
 }
 
-/// Where a click on `node` lands: its centre, or with `at = (r, c)` the left edge of char `c`
+/// Where a click on `node` lands: the centre of its visible part, or with `at = (r, c)` the left edge of char `c`
 /// of its painted row `r` (just right of the last char when `c` is the row's length).
 fn click_point(
     observation: &Observation,
@@ -593,7 +593,8 @@ fn click_point(
 ) -> Result<Pos2, Refusal> {
     let n = &observation.nodes[node];
     let Some((row, col)) = at else {
-        return Ok(n.rect.map_or(Pos2::ZERO, |r| r.center()));
+        // The centre of the visible part (a user clicks what is visible, D-150 w5).
+        return Ok(n.visible.or(n.rect).map_or(Pos2::ZERO, |r| r.center()));
     };
     if n.rows.is_empty() {
         return Err(not_actionable("the target shows no text"));
@@ -741,6 +742,95 @@ mod tests {
             .handle_line(br#"{"ui":"click","target":{"value":"f00.txt"}}"#)
             .unwrap();
         assert!(response_ok(&ok), "{ok}");
+    }
+
+    /// Every node of a snapshot response, in pre-order.
+    fn all_nodes(snapshot: &str) -> Vec<Value> {
+        fn walk(n: &Value, out: &mut Vec<Value>) {
+            out.push(n.clone());
+            for c in n["children"].as_array().into_iter().flatten() {
+                walk(c, out);
+            }
+        }
+        let v: Value = serde_json::from_str(snapshot).unwrap();
+        let mut out = Vec::new();
+        walk(&v["result"]["root"], &mut out);
+        out
+    }
+
+    fn row_text(node: &Value) -> Vec<String> {
+        node["rows"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|row| {
+                row.as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|run| run["text"].as_str().unwrap().to_owned())
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn after_a_scroll_text_belongs_to_visible_nodes_only() {
+        let mut script = with_documents(40, (400, 300));
+        let scrolled = script
+            .handle_line(
+                br#"{"ui":"scroll","target":{"value":"f00.txt"},"direction":"down","steps":2}"#,
+            )
+            .unwrap();
+        assert!(response_ok(&scrolled), "{scrolled}");
+        let snapshot = script.handle_line(br#"{"ui":"snapshot"}"#).unwrap();
+        let nodes = all_nodes(&snapshot);
+        let path_label = nodes
+            .iter()
+            .find(|n| n["role"] == "label" && n["value"] == "Path")
+            .unwrap();
+        assert_eq!(row_text(path_label), ["Path"]);
+        let documents = nodes.iter().find(|n| n["label"] == "Documents").unwrap();
+        assert!(documents.get("rows").is_none(), "{documents}");
+        for n in &nodes {
+            if n.get("offscreen").is_some() {
+                assert!(n.get("rows").is_none(), "{n}");
+            }
+        }
+        let docs = documents["children"].as_array().unwrap();
+        assert!(
+            docs[0].get("offscreen").is_some(),
+            "the first document scrolled out"
+        );
+        for d in docs.iter().filter(|d| d.get("rows").is_some()) {
+            assert_eq!(row_text(d), [d["value"].as_str().unwrap()]);
+        }
+        assert!(docs.iter().any(|d| d.get("rows").is_some()));
+    }
+
+    #[test]
+    fn a_click_lands_at_the_centre_of_the_visible_part() {
+        let mut script = with_documents(40, (400, 300));
+        script.handle_line(br#"{"ui":"snapshot"}"#).unwrap();
+        let obs = script.observation.as_ref().unwrap();
+        let list = obs
+            .nodes
+            .iter()
+            .position(|n| n.label.as_deref() == Some("Documents"))
+            .unwrap();
+        let (rect, visible) = (
+            obs.nodes[list].rect.unwrap(),
+            obs.nodes[list].visible.unwrap(),
+        );
+        // The list overflows: the centre of its whole rectangle is below the window.
+        assert!(rect.center().y > 300.0, "{rect:?}");
+        let at = click_point(obs, list, None).unwrap();
+        assert_eq!(at, visible.center());
+        assert!(at.y < 300.0);
+        for (i, n) in obs.nodes.iter().enumerate() {
+            if let Some(v) = n.visible {
+                assert!(v.contains(click_point(obs, i, None).unwrap()), "{i}");
+            }
+        }
     }
 
     #[test]

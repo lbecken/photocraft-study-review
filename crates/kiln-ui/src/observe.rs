@@ -8,7 +8,8 @@
 //!   computed from them.
 //! - A node's rectangle is its bounds, or, without bounds, the union of its children's.
 //! - Each painted glyph whose centre lies inside its clip rectangle and the window belongs to
-//!   the deepest node whose rectangle contains that centre (the last one in tree order among
+//!   the deepest node whose visible part (its rectangle cut by the window and every
+//!   `scroll_view` above it) contains that centre (the last one in tree order among
 //!   equals; the root when none does). A node's `rows` are its glyphs grouped by painted row,
 //!   top to bottom, each row left to right in runs of one colour.
 
@@ -55,6 +56,9 @@ pub(crate) struct Node {
     pub(crate) selection: Option<(usize, usize)>,
     pub(crate) rows: Vec<Row>,
     pub(crate) rect: Option<Rect>,
+    /// The visible part: `rect` cut by the window and every `scroll_view` above the node
+    /// (`None` without a rectangle or when nothing of it is visible).
+    pub(crate) visible: Option<Rect>,
     pub(crate) parent: Option<usize>,
     pub(crate) children: Vec<usize>,
     depth: usize,
@@ -126,6 +130,7 @@ impl Observation {
             disabled: node.is_disabled(),
             read_only: node.is_read_only(),
             offscreen: false,
+            visible: None,
             selected: node.is_selected(),
             toggled: match node.toggled() {
                 Some(Toggled::True) => Some(true),
@@ -194,7 +199,9 @@ impl Observation {
                 continue;
             };
             let visible = self.visible_part(i, size);
-            self.nodes[i].offscreen = !overlaps(rect, visible);
+            let shown = overlaps(rect, visible);
+            self.nodes[i].offscreen = !shown;
+            self.nodes[i].visible = shown.then(|| rect.intersect(visible));
         }
     }
 
@@ -236,12 +243,13 @@ impl Observation {
         }
     }
 
-    /// The deepest node whose rectangle contains `p` (last in tree order among equals).
+    /// The deepest node whose visible part contains `p` (last in tree order among equals; the
+    /// root when none does).
     fn owner(&self, p: Pos2) -> usize {
         let mut best = 0;
         let mut best_depth = 0;
         for (i, node) in self.nodes.iter().enumerate().skip(1) {
-            if node.depth >= best_depth && node.rect.is_some_and(|r| contains(r, p)) {
+            if node.depth >= best_depth && node.visible.is_some_and(|r| contains(r, p)) {
                 best = i;
                 best_depth = node.depth;
             }
