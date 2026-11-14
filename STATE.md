@@ -1,24 +1,26 @@
 # State
 
-_Last updated: 2026-11-14 12:00 UTC_
+_Last updated: 2026-11-14 19:10 UTC_
 
 ## Now
-Iteration 2 under methodology **v1.2** (D-093). **The first stage (ADR-0005) is closed (D-142):** ten tasks merged
-(T-039, T-042, T-019, T-020, T-021, T-036, T-023, T-037, T-038, T-049) and the evaluation is published
-(`evaluations/iter-2.md`, D-141: 41 items confirmed, none rejected). Scorecard on main: 64 items: 41 verified,
-0 implemented, 0 failing, 23 planned (64.1%; the 60% line is passed). No UI exists; the 23 planned items are the UI
-and the features that need it.
+Iteration 2, **second stage** (ADR-0007, accepted with a changed order in D-147), under methodology **v1.3**
+(D-146). The first stage is closed (D-142): scorecard on main 64 items: 41 verified, 0 implemented, 0 failing,
+23 planned. Retrospective of the first stage: `retrospectives/iter-2-stage-1.md` (decided in D-144).
 
-In flight: the **retrospective of the stage** (run R-223, fresh analyst; output `retrospectives/iter-2-stage-1.md`
-and scripts under `retrospectives/scripts/`). No worktree exists.
+Order of the stage: T-055 (UI script mode and observation, ADR-0008) → T-056 (window and editor view; needs its spec
+check once T-055 has merged) → evaluation A, limited (cut 1: a desktop editor for one file) → T-057, T-058, T-059 →
+evaluation B (cut 2: a project editor) → T-060, T-061, the feature drafts each followed by its UI module → T-033 →
+T-041 (last; owner told first). Deferred until what they remove starts to cost: T-051, T-052, T-054, T-043, T-064.
 
-Then: decisions on its proposals (methodology v1.3 if any are accepted), and the planning of the second stage
-(D-140, the owner's remark on PhotoCraft's order, is an input). Drafts, each needing a spec check before dispatch:
-T-050 to T-053 (the evaluation's findings), T-044, T-045 to T-048, tooling T-033, T-043, T-041 (in that order; T-041
-last, owner told first), and the deferred drafts T-007, T-009, T-022, T-024 to T-031, T-034. Next free task number: T-054.
+In flight:
+- **T-055** (high): implementer run R-226 in `.worktrees/T-055`, independent test author run R-227 in
+  `.worktrees/T-055-tests`, both from main `9d5f6d67e9e7f373ce2a808622ac8ce4f0ce172c`.
+
+The planner's estimate for the whole stage is about 22.8 M tokens; about 5.5 M to cut 1 and 8.9 M to cut 2 (with
+the deferred corrections counted). The weekly usage limit was reached once (D-143). Next free task number: T-065.
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
 `handoffs/` (its last addendum first), then `tasks/` (state in front matter, role logs at the bottom), `metrics/`
 and `retrospectives/`. Worktrees live in `.worktrees/` (not pushed): after any restart run `uptime -s` and
-`git status` in each before touching it. The container restarted three times on 2026-11-14 (02:11Z, 02:59Z, 07:11Z).
+`git status` in each before touching it. The container restarted four times on 2026-11-14 (02:11Z, 02:59Z, 07:11Z, 18:15Z).
