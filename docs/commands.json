@@ -2778,6 +2778,395 @@
       }
     },
     {
+      "doc": "List the matches of a literal or regex query in an open document as char ranges (at most `limit`), with the exact number of all matches. Read-only.",
+      "examples": [
+        {
+          "description": "case-insensitive literal, whole words only",
+          "files": [
+            [
+              "a.txt",
+              "foo FOO fOo_x éFoo"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "case_sensitive": false,
+            "doc": 1,
+            "query": "Foo",
+            "whole_word": true
+          },
+          "result": {
+            "matches": [
+              {
+                "end": 3,
+                "start": 0
+              },
+              {
+                "end": 7,
+                "start": 4
+              }
+            ],
+            "total": 2,
+            "truncated": false
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "regex with empty matches, limited",
+          "files": [
+            [
+              "a.txt",
+              "baaab"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "limit": 2,
+            "query": "a*",
+            "regex": true
+          },
+          "result": {
+            "matches": [
+              {
+                "end": 0,
+                "start": 0
+              },
+              {
+                "end": 4,
+                "start": 1
+              }
+            ],
+            "total": 3,
+            "truncated": true
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": false,
+      "name": "search.find",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `search.find`.",
+        "properties": {
+          "case_sensitive": {
+            "default": true,
+            "description": "Compare chars exactly; default true. False: Unicode simple case folding. `null` is\nrefused.",
+            "type": "boolean"
+          },
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 10000,
+            "description": "Most matches listed (1 to 100,000; default 10,000); `total` counts all. `null` is\nrefused.",
+            "format": "uint32",
+            "maximum": 100000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "The literal text or regular expression (1 to 1,000 chars).",
+            "type": "string"
+          },
+          "regex": {
+            "default": false,
+            "description": "Regex mode; default false (literal). `null` is refused.",
+            "type": "boolean"
+          },
+          "whole_word": {
+            "default": false,
+            "description": "Keep only matches with a word boundary at both ends; default false. `null` is refused.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "doc",
+          "query"
+        ],
+        "title": "FindParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "Span": {
+            "description": "A range of chars `start..end`.",
+            "properties": {
+              "end": {
+                "description": "One past the last char.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "start": {
+                "description": "First char.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "start",
+              "end"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `search.find`.",
+        "properties": {
+          "matches": {
+            "description": "The first `limit` matches, in order, as char ranges.",
+            "items": {
+              "$ref": "#/$defs/Span"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "The exact number of all matches.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True iff `total > limit`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "matches",
+          "total",
+          "truncated"
+        ],
+        "title": "FindResult",
+        "type": "object"
+      }
+    },
+    {
+      "doc": "Replace the first match of a literal or regex query at or after `from`, or every match (`all`), in an open document, as one undo step; regex replacements may refer to capture groups. The selection maps through each replacement. With no match, nothing changes.",
+      "examples": [
+        {
+          "description": "swap with capture groups, every match",
+          "files": [
+            [
+              "a.txt",
+              "a1 b2"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "all": true,
+            "doc": 1,
+            "query": "(\\w)(\\d)",
+            "regex": true,
+            "replacement": "$2$1"
+          },
+          "result": {
+            "len_chars": 5,
+            "ranges": [
+              {
+                "end": 2,
+                "start": 0
+              },
+              {
+                "end": 5,
+                "start": 3
+              }
+            ],
+            "replaced": 2,
+            "truncated": false
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        },
+        {
+          "description": "the first literal match at or after an offset",
+          "files": [
+            [
+              "a.txt",
+              "aaa b aa"
+            ]
+          ],
+          "initial_text": "",
+          "params": {
+            "doc": 1,
+            "from": 1,
+            "query": "aa",
+            "replacement": "x"
+          },
+          "result": {
+            "len_chars": 7,
+            "ranges": [
+              {
+                "end": 7,
+                "start": 6
+              }
+            ],
+            "replaced": 1,
+            "truncated": false
+          },
+          "setup": [
+            [
+              "doc.open",
+              {
+                "path": "a.txt"
+              }
+            ]
+          ]
+        }
+      ],
+      "mutating": true,
+      "name": "search.replace",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Params of `search.replace`.",
+        "properties": {
+          "all": {
+            "default": false,
+            "description": "Replace every match (`from` is then ignored); default false: only the first match whose\nstart is at or after `from`. `null` is refused.",
+            "type": "boolean"
+          },
+          "case_sensitive": {
+            "default": true,
+            "description": "Compare chars exactly; default true. `null` is refused.",
+            "type": "boolean"
+          },
+          "doc": {
+            "description": "Id of an open document.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "from": {
+            "default": 0,
+            "description": "With `all: false`: the char offset the first replaced match starts at or after;\ndefault 0. `null` is refused.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 10000,
+            "description": "Most `ranges` listed in the reply (1 to 100,000; default 10,000); every match is\nreplaced whatever it is. `null` is refused.",
+            "format": "uint32",
+            "maximum": 100000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "The literal text or regular expression (1 to 1,000 chars).",
+            "type": "string"
+          },
+          "regex": {
+            "default": false,
+            "description": "Regex mode; default false (literal). `null` is refused.",
+            "type": "boolean"
+          },
+          "replacement": {
+            "description": "The replacement text; in regex mode `$1`, `${name}`, `$0` refer to groups and `$$` is\n`$`; in literal mode it is inserted verbatim.",
+            "type": "string"
+          },
+          "whole_word": {
+            "default": false,
+            "description": "Keep only matches with a word boundary at both ends; default false. `null` is refused.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "doc",
+          "query",
+          "replacement"
+        ],
+        "title": "ReplaceParams",
+        "type": "object"
+      },
+      "result_schema": {
+        "$defs": {
+          "Span": {
+            "description": "A range of chars `start..end`.",
+            "properties": {
+              "end": {
+                "description": "One past the last char.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "start": {
+                "description": "First char.",
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "start",
+              "end"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Result of `search.replace`.",
+        "properties": {
+          "len_chars": {
+            "description": "Length in chars afterwards.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ranges": {
+            "description": "The char ranges of the inserted texts in the new text, in order, for the first `limit`\nreplacements.",
+            "items": {
+              "$ref": "#/$defs/Span"
+            },
+            "type": "array"
+          },
+          "replaced": {
+            "description": "The exact number of replacements made.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True iff `replaced > limit`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "replaced",
+          "len_chars",
+          "ranges",
+          "truncated"
+        ],
+        "title": "ReplaceResult",
+        "type": "object"
+      }
+    },
+    {
       "doc": "Return highlight spans that cover the chars `start..end` of a document exactly once (default: the whole text), in seven kinds: `comment`, `string`, `number`, `keyword`, `type`, `function`, `plain` (rules in `docs/protocol/syntax.md`). Read-only; a document longer than 1048576 chars is refused with `too_large`.",
       "examples": [
         {
