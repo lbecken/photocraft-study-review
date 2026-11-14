@@ -828,6 +828,43 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   four targets) · not run: the non-root identity branch of the U cases (machine is uid 0, only
   the drop to 65534 ran); the whole gate · missing context: none · next: director joins with
   `task/T-037` and ties the seven tests to `ws.path-confinement`.
+- 2026-11-14T06:01Z · R-207 · rework after review round 1 (R-205) · Rulings D-125 k1 and k2
+  (read in the primary checkout's copy of this file) acknowledged and accepted before acting:
+  k1, the check applies to a re-open of any open document, edited or not, so AC-1 and AC-2 get
+  unedited cases with the same refusals; k2, "document unchanged" means all of Interface 2, so
+  one refused case of each of AC-1, AC-2 and AC-4 sets a selection and a pending redo step and
+  checks both after the refusal. k3, k4 (implementer's) and k5 (no change) noted, nothing to do
+  here. did: no test renamed, no test function added. `acceptance_t037_cli.rs`: a `Prep` per
+  case (edited as before; unedited; selection = `E` inserted, `cursor.set` anchor 1, `XY`
+  inserted at 1 and `doc.undo`, `cursor.set` anchor 2 head 5); "document unchanged" now checks
+  `doc.info` path, `len_chars`, `dirty`, `can_undo`, `can_redo` against the preparation, the
+  same `cursor.get` result as recorded after the preparation, and `doc.list`; the preparation is
+  itself checked before the change. Added to `reopen_of_a_path_now_outside_is_refused`: AC-1
+  (i)–(iv) unedited, AC-1 (i) with selection and redo; to
+  `reopen_after_the_root_moved_is_refused`: AC-2 (i) unedited with the move back (expects
+  `len_chars` 6), (ii), (iii) unedited, AC-2 (i) with selection and redo and the move back; to
+  `reopen_whose_walk_fails_inside_is_io_error`: AC-4 (i) with selection and redo. The
+  `cursor.get` check now applies to every refused case in this file, the edited cases included.
+  `acceptance_t037_removal_cli.rs` (`reopen_after_the_root_was_removed_is_refused`): AC-2 (iv),
+  (v), (vi) unedited ((v), (vi) with the full removal pattern). `acceptance_t037_commands.rs`
+  (`reopen_after_the_root_changed_is_refused`): AC-2 (i) with move back, (iv), (v) unedited, and
+  every case also checks `can_redo` and the `cursor.get` result. Guards unchanged. Base
+  results: `acceptance_t037_cli` 3 tests FAIL, all 20 cases by "re-open not refused"
+  (`already_open: true`), every preparation check passing first (so `can_redo: true` and the
+  selection hold on base); removal FAIL, all 6 cases; commands FAIL, all 6 cases; guards 2 PASS.
+  Removal binary 20 runs on base: 0/20 pass, 80 trial lines, 0 reused, 120 "not refused"
+  assertions. Scratch prototype (O1, as R-202's; removed with `git checkout`, never committed):
+  correct, all four targets pass; "checks only a modified document" fails the 4 AC-1 and 3 AC-2
+  unedited cases through control, the 3 unedited removal cases and the 3 unedited Rust-API
+  cases, the edited cases pass; "resets the selection to 0 on a refused re-open" fails every
+  edited and selection case of `acceptance_t037_cli` (13 of 20; the 7 unedited cases have the
+  caret at 0 already, so a reset to 0 changes nothing there) and the 3 edited Rust-API cases on
+  `cursor.get`; the removal binary (no cursor check) and guards pass. `cargo fmt --check` clean; `cargo clippy -p
+  kiln-cli -p kiln-commands --tests -- -D warnings` clean on base (with the prototype in place
+  clippy stopped on the prototype's own code, a collapsible `if` in `doc.rs`, not on the tests);
+  `cargo xtask no-skip` PASS; `/tmp` clean after the failing runs. · gate attempts: 0 (only my
+  four targets, as instructed) · not run: the whole gate; the non-root identity branch (machine
+  is uid 0) · missing context: none · next: director joins again with `task/T-037`.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-14T06:40Z · R-205 · tests_joined · review round 1 (high, independent) of
