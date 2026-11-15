@@ -1,16 +1,27 @@
 #!/bin/sh
 # T-065 window procedure (test author, R-251): AC-2, AC-3, b1, b2, b4. Usage: sh .github/scripts/window-procedure.sh <kiln> <fresh scratch dir>
 # The window procedure of record (T-070 Interface (3)): R-251's block of tasks/T-065-window.md
-# with three changes only: this usage line, the exit status, and (ruling m2, D-182) a window
+# with these changes only: this usage line, the exit status, and (ruling m2, D-182) a window
 # case's and AC-3's exit status is kiln's own, written by the wrapped command into <case>.st in
 # the scratch directory and read from there (not the virtual-display wrapper's; not written =
 # the case fails and says so). The three R-251 lines that run kiln under xvfb-run with a verdict
 # are replaced, and one line is added after the CASE line; every other case, fixture, comparison
-# and verdict line below is R-251's, inside the function `procedure`. The wrapper at the end passes
-# its output through unchanged and exits 0 only if it printed `WINDOW CASES PASS`, `PLAIN PASS`
-# and either `AC-3 PASS` or `AC-3 PRECONDITION FAILED` (a library is installed on this machine,
-# so AC-3 is not checked here: ruling Q-4 A, D-180); otherwise it exits 1. Changing this file is
-# a high-tier change (.github/ is a gate path).
+# and verdict line below is R-251's, inside the function `procedure`.
+# Ruling g1 (D-193): what kiln prints is never a verdict. R-251 echoes kiln's stderr in two lines
+# (`window stderr:` and AC-3's `stderr:`); `echo` below prints its text without reading escapes
+# and indents every line after the first, so an echoed line of kiln's never starts a line of the
+# output. A verdict is a line that starts at column 0. The wrapper at the end passes the output
+# through unchanged and exits 0 only if it printed `WINDOW CASES PASS`, `PLAIN PASS: …` and
+# either `AC-3 PASS` or `AC-3 PRECONDITION FAILED: …` (a library is installed on this machine, so
+# AC-3 is not checked here: ruling Q-4 A, D-180), and no FAIL or NOT RUN verdict
+# (`WINDOW CASES FAIL`, `AC-3 FAIL`, `PLAIN FAIL: …`, `PLAIN NOT RUN: …`); otherwise it exits 1.
+# Changing this file is a high-tier change (.github/ is a gate path).
+NL='
+'
+echo() {
+  _e=$*; _f=${_e%%"$NL"*}; printf '%s\n' "$_f"
+  while [ "$_f" != "$_e" ]; do _e=${_e#*"$NL"}; _f=${_e%%"$NL"*}; printf '    %s\n' "$_f"; done
+}
 procedure() {
 set -u
 K=$(realpath "$1"); W=$2; rm -rf "$W"; mkdir -p "$W"; cd "$W" || exit 99; W=$(pwd)
@@ -154,15 +165,16 @@ plain none && plain none2 && plain apath a.rs && {
 } || echo "PLAIN NOT RUN: a window was not drawn, or kiln ended"
 }
 procedure "$@" | {
-  window=0 plain=0 ac3=0
+  window=0 plain=0 ac3=0 failed=0
   while IFS= read -r line || [ -n "$line" ]; do
     printf '%s\n' "$line"
     case $line in
       "WINDOW CASES PASS") window=1 ;;
       "PLAIN PASS: "*) plain=1 ;;
       "AC-3 PASS" | "AC-3 PRECONDITION FAILED: "*) ac3=1 ;;
+      "WINDOW CASES FAIL" | "AC-3 FAIL" | "PLAIN FAIL: "* | "PLAIN NOT RUN: "*) failed=1 ;;
     esac
   done
-  [ "$window$plain$ac3" = 111 ]
+  [ "$window$plain$ac3$failed" = 1110 ]
 }
 exit $?
