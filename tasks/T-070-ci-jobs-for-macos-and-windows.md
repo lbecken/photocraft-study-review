@@ -305,6 +305,18 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
 - **Round 1 of CI is run on the joined branch** (workflow and procedure together), not on the implementer's
   commit alone, once the owner has allowed pushing `ci/…` branches.
 
+### Rulings after the first merge of the two branches (director, D-183; told to the test author)
+- **m7.** The test author's extension of m2 to AC-3's line (the wrapped command records `kiln`'s status there too)
+  is accepted.
+- **m8.** With the two branches merged (`e3b80ddb27d87b7b81f0a3c17dbbf856f34f1a3d`), 10 of the 11 gate tests pass
+  against the implementer's workflow and one fails for a fault of the test:
+  `ac1_gate_jobs_run_the_gate_and_upload_the_reports_whatever_its_result` counts the packages of the core-crates
+  step twice ("the step tests [kiln-text, kiln-syntax, kiln-search, xtask, kiln-text, …]"), because the step
+  echoes the command it is about to run (`echo "==== cargo test --locked -p $p" >> core-crates.txt`) and the test's
+  reader takes the echoed text for an invocation. The step is as m1 rules it: a loop over the four packages with
+  one `cargo test --locked -p "$p"` each, appended to `core-crates.txt`, under `set +e` with a final `exit 0`. The
+  test counts invocations, not text inside an `echo` or a quoted string.
+
 ## Log
 ### director
 <!-- end director log -->
