@@ -1,16 +1,16 @@
 ---
 id: T-071
-title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; every test target compiles on all three"
+title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; the gate's own tests compile and pass on all three"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (xtask/); the approval row must contain `gate paths`. No dependency change.
-state: draft
+state: specified
 owner_role: planner
 scorecard_items: []     # none claimed; the tests it marks stay tied to their items
 depends_on: [T-070]     # its Windows evidence is T-070's gate-windows core-crates step; and both edit docs/development.md (§5.2)
-touches:                # one role per path (D-153). All but the last two: implementer.
+touches:                # one role per path (D-153). All but the last two: implementer. Product test files: T-079 (ruling Q-1 B, D-180)
   - xtask/src/platforms.rs                  # GATE PATH: new: the registry's reader and rules (shared by no-skip and scorecard)
   - xtask/src/noskip.rs                     # GATE PATH
   - xtask/src/scorecard.rs                  # GATE PATH
-  - xtask/src/main.rs                       # GATE PATH: only the `mod platforms;` line and the write-mode refusal of Interface (4)
+  - xtask/src/main.rs                       # GATE PATH: only the `mod platforms;` line and the write-mode refusal of Interface (3)
   - xtask/platform-tests.toml               # GATE PATH: new: the registry with every entry (ruling Q-8 A, D-175)
   - xtask/fixtures/no-skip/                 # GATE PATH: the self-test cases of the new findings
   - xtask/src/hygiene.rs                    # GATE PATH: its #[cfg(test)] module only (Unix symlink calls, lines 540–541)
@@ -19,38 +19,14 @@ touches:                # one role per path (D-153). All but the last two: imple
   - xtask/tests/acceptance_t005_r4.rs       # GATE PATH: as above
   - xtask/tests/acceptance_t013_hygiene.rs  # GATE PATH
   - xtask/tests/guard_t005.rs               # GATE PATH
-  - crates/kiln-workspace/src/disk.rs       # its #[cfg(test)] module only (from line 535); product code unchanged (T-073)
-  - crates/kiln-commands/src/doc.rs         # its #[cfg(test)] module only (from line 1312)
-  - crates/kiln-workspace/tests/acceptance_t002.rs        # the two inert helpers (lines 169–187) and the test that uses them
-  - crates/kiln-workspace/tests/acceptance_t002_r2.rs
-  - crates/kiln-workspace/tests/acceptance_t008.rs
-  - crates/kiln-workspace/tests/acceptance_t019_workspace.rs
-  - crates/kiln-workspace/tests/acceptance_t036_workspace.rs
-  - crates/kiln-workspace/tests/confinement.rs
-  - crates/kiln-workspace/tests/guard_t008.rs
-  - crates/kiln-workspace/tests/guard_t036_removal_workspace.rs
-  - crates/kiln-workspace/tests/guard_t036_workspace.rs
-  - crates/kiln-workspace/tests/project.rs
-  - crates/kiln-commands/tests/acceptance_t037_commands.rs
-  - apps/kiln-cli/tests/acceptance_t008_cli.rs
-  - apps/kiln-cli/tests/acceptance_t019_cli.rs
-  - apps/kiln-cli/tests/acceptance_t023_cli.rs
-  - apps/kiln-cli/tests/acceptance_t036_cli.rs
-  - apps/kiln-cli/tests/acceptance_t037_cli.rs
-  - apps/kiln-cli/tests/acceptance_t037_removal_cli.rs
-  - apps/kiln-cli/tests/guard_t019_cli.rs
-  - apps/kiln-cli/tests/guard_t036_cli.rs
-  - apps/kiln-cli/tests/guard_t036_removal_cli.rs
-  - apps/kiln-cli/tests/guard_t037_cli.rs
-  - apps/kiln-cli/tests/guard_t038_cli.rs
-  - apps/kiln/tests/acceptance_t055.rs
-  - apps/kiln/tests/acceptance_t065.rs
-  - apps/kiln/tests/script_t055.rs
-  - apps/kiln/tests/window_t065.rs
+  - xtask/src/queue.rs                     # GATE PATH: its #[cfg(test)] module only (from line 803): two tests fail on macOS (R-285)
+  - xtask/src/worktree.rs                  # GATE PATH: its #[cfg(test)] module only (from line 228): one test fails on macOS (R-285)
+  - xtask/tests/acceptance_t013_publish.rs # GATE PATH: reads /proc (lines 942, 994); fails on macOS (R-285)
+  - crates/kiln-workspace/tests/acceptance_t002.rs        # the two inert helpers (lines 169–187) and the test that uses them (line 924): this task's own rule fails on them, so it fixes them
   - docs/development.md                     # implementer: the `no-skip` and `scorecard` rows of "The gate" and a paragraph on the registry
   - xtask/tests/acceptance_t071.rs          # GATE PATH: test author
   - xtask/tests/guard_t071.rs               # GATE PATH: test author (today's no-skip findings that must stay)
-budget_tokens: 1100000  # high (v1.4); estimate above the ceiling, see Estimate and Q-1
+budget_tokens: 1100000  # high (v1.4); estimate about 800,000 after the split (R-285)
 iteration: 2
 found_by: planner       # ADR-0009 (R-255)
 origin_task: null
@@ -74,10 +50,11 @@ checks the mode only `if let (Some(..), Some(..))` (line 924), so off Unix it pa
 After this task:
 1. the registry `xtask/platform-tests.toml` exists and holds every entry the current tests need;
 2. `no-skip` applies the rule (Interface (2)); the scorecard step behaves per platform (Interface (3));
-3. **every test target of the workspace compiles for `x86_64-pc-windows-msvc`** once `kiln-workspace`'s
-   6 product-code errors are set aside (they are T-073's): today 238 errors in 33 files, all test code
-   (R-261 re-check on 15555cc; ADR-0009 probe a4 method); after this task 0 in test code;
-4. `xtask`'s own tests compile and pass on Windows and macOS (seen in T-070's CI core-crates step).
+3. `xtask`'s own tests compile for Windows (today 4 errors in `xtask/src/hygiene.rs:540-541` and
+   `xtask/src/publish.rs:1340-1341`, plus `acceptance_t005_r3.rs`, `_r4.rs`, `acceptance_t013_hygiene.rs`,
+   `guard_t005.rs`; CI run 43765532298 `gate-windows`, R-255 probe a4) and pass on macOS and Windows
+   (today 6 fail on macOS, Interface (4)); seen in the `core-crates` step of `platforms.yml`;
+4. the product test files are **not** this task's: their marking and entries are T-079 (D-180 Q-1 B).
 Gate paths: everything under `xtask/` in `touches`.
 
 Reading list: METHODOLOGY v1.4 §8.1, §6; ADR-0009 Decision 4; `xtask/src/noskip.rs`, `scorecard.rs`,
@@ -141,25 +118,22 @@ findings"). The detail line adds `<n> platform test(s) registered (<p> pending)`
 - `cargo xtask scorecard` (write mode) on macOS or Windows exits 1 with one line
   `scorecard: refused: docs/scorecard.md is computed on Linux` and writes nothing.
 
-### (4) The entries (ruling Q-8 A: this task writes all of them)
-For each of the 33 files and test modules that do not compile for Windows today (list in `touches`; R-261
-`win-items.txt`: 238 errors, 31 test fns and 116 helpers or `use` lines named directly), and for
-`acceptance_t002.rs` (inert helpers):
-- a test that cannot compile or cannot mean anything off Unix gets `#[cfg(unix)]` (or the file `#![cfg(unix)]`
-  only if every test in it is of that kind), its Unix-only helpers get `#[cfg(unix)]` without an off-Unix
-  twin, and the test gets an entry with `doc`/`quote` of the sentence it tests and
-  `counterpart = "pending"`, `task` = `T-075` (`kiln-workspace`, `kiln-commands`) or `T-076` (`kiln-cli`,
-  `kiln`), a `reason` naming the facility (FIFO, mode bits, uid/gid, inode, non-UTF-8 bytes in a name or
-  argument, `mkfifo`, shell-script fakes), and `expires` per ruling Q-2;
-- or `counterpart = "none"` where Windows has no such facility and no sentence of `docs/protocol/` will
-  state a Windows behaviour for it — expected to be rare; each one is named in the implementer's log;
-- a test that compiles off Unix stays unmarked; no assertion is changed, removed or loosened on Linux or
-  macOS (golden rule 4);
-- `xtask`'s six files and modules become portable instead (the gate must run its own tests where it runs):
-  a symlink is made with the platform's call; a mode is set with the platform's means; `dev`/`ino` checks
-  use a portable identity or are Unix-only entries with a counterpart in the same file.
-How many tests end up registered is **to be measured by the implementer** (the count of entries, by
-`task`), and stated in the log and in the `no-skip` detail line.
+### (4) Entries written by this task (the rest are T-079's, D-180 Q-1 B)
+Only `xtask`'s own tests. Facts from the full test output of CI run 43765532298 (`gate-macos` artefact
+`test-output.txt` and `core-crates.txt`, downloaded in R-285; the task file's director log and
+`tasks/ci-runs/T-070-round-2.md` had only the printed prefix):
+| Test (file) | macOS failure as printed | Kind | What this task does |
+|---|---|---|---|
+| `queue::tests::basic_refusals_write_nothing` (`xtask/src/queue.rs:2154`) | "another queue run holds …/kiln-queue.lock (999999999 T-999)" | the queue's lock liveness reads `/proc/<pid>` and keeps any lock where `/proc` is absent (`queue.rs:313-314`) | register `linux`, `counterpart = "none"`, reason "the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))" — or make portable (Q-5) |
+| `queue::tests::lock_rule_is_applied_to_the_rebased_tree` (`queue.rs:931`) | `sed: 1: "Cargo.lock": invalid command code C` | the fixture uses GNU `sed -i` | make portable (no `sed -i`) |
+| `worktree::tests::create_seed_list_remove` (`worktree.rs:305`) | `assertion failed: list(root).unwrap().contains("task/T-007")` | temp dir under `/var` → `/private/var` link, INFERRED | as the queue row (Q-5) |
+| `acceptance_t005_r3::tampered_cached_gate_binary_does_not_decide_the_gate` (`:336`) | "nothing to tamper with" | the queue's private build tree layout, INFERRED | as the queue row |
+| `acceptance_t005_r4::planted_future_dated_xtask_does_not_decide_the_gate` (`:635`) | "round 1: nothing to plant over" | as above | as the queue row |
+| `acceptance_t013_publish::publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue` (`:941`) | `assertion failed: Path::new("/proc")…exists()` | `/proc` | as the queue row |
+Windows compile errors (`hygiene.rs`, `publish.rs` test modules; `acceptance_t005_r3/r4`,
+`acceptance_t013_hygiene`, `guard_t005`): made portable where the platform has the facility (a symlink by
+the platform's call; read-only by `Permissions::set_readonly`), else registered with the queue rows' reason.
+How many entries this writes is **to be measured by the implementer**; expected under 15.
 
 ### (5) `docs/development.md`
 The `no-skip` row states the rule and the new findings; the `scorecard` row states (3); a short
@@ -202,18 +176,18 @@ Local, gate tests by the independent test author (`xtask/tests/acceptance_t071.r
 - AC-4: scorecard on Linux with a listed test registered `windows`-only: not `Missing`, page compared;
   the same toy on a host reported as non-Linux cannot be run locally — see AC-6.
 Local, by the implementer and re-run by the reviewer (measurable here, R-255 probe method):
-- AC-5: in a scratch copy of the task head with `disk.rs`'s 6 product lines replaced by the probe's
-  stand-in (ADR-0009 `logs/probe-shim.diff`, never committed) and the C compiler stubbed,
-  `cargo check --workspace --all-targets --locked --target x86_64-pc-windows-msvc` reports **0 errors**
-  (today 238); the same for `aarch64-apple-darwin` without the stand-in (today 0, must stay 0); and the
-  Linux test list (`cargo test --workspace -- --list`) is unchanged, name for name, from main's.
-Observed only through CI (the director's record; §8.1):
-- AC-6: on the candidate `ci/T-071`, T-070's `gate-macos` scorecard step shows the platform detail line
-  with 0 problems from absent tests, and `gate-windows`'s core-crates step shows `xtask`'s tests passing.
-  (The Windows gate stays red until T-073; that is expected, T-070 "Expected to FAIL".)
+- AC-5: `cargo check -p xtask --all-targets --locked --target x86_64-pc-windows-msvc` in a scratch copy of
+  the task head reports 0 errors (today 4 + the four test files; `xtask` needs no C stub: it does not
+  depend on `tree-sitter`); the Linux test list of `xtask` (`cargo test -p xtask -- --list`) equals main's
+  name for name; `no-skip` on the task head passes on Linux.
+Observed only through CI (the director's record; §8.1; `ci/T-071`, D-185; reuse rule D-198):
+- AC-6: on the candidate, the `core-crates` step shows `xtask` exit status 0 on `gate-macos` and on
+  `gate-windows`; `gate-linux` green. The macOS gate stays red until T-079 (product tests) and Windows
+  until T-073, as `tasks/T-070-*.md` "Expected to FAIL" says; the scorecard step on macOS prints the
+  platform detail line of Interface (3).
 
 ## Out of scope and implementer notes
-- Writing Windows counterparts (T-073 to T-076); product code (`disk.rs` above line 535 is T-073's).
+- The product test files (T-079); Windows counterparts (T-073 to T-076); product code.
 - Changing an assertion of a marked test, or marking a test that compiles on Windows.
 - A new dependency (none needed: `syn` already parses attributes; `toml` reads the registry).
 - `skips.toml` entries for platform reasons: the registry is the only place for them.
@@ -233,16 +207,22 @@ Observed only through CI (the director's record; §8.1):
 - T-043 lists `xtask/tests/acceptance_t005_r3.rs`, `_r4.rs` and `docs/development.md` → not in flight
   together; order T-071 then T-043, or the reverse (Q-4).
 - T-064, T-041: `docs/development.md` → not in flight together.
-- T-057–T-059: new files `apps/kiln/tests/acceptance_t05N.rs`, not in this `touches`; their tests must
-  compile on Windows from the start (no Unix-only API without an entry). If one merges before T-071
-  with a Unix-only test, it is added to T-071's `touches` by a ruling.
+- T-054 (`Cargo.toml`, `docs/development.md` lines 82–88 and a paragraph): shares `docs/development.md`
+  → **not in flight together** under §5.2 (equal path), although the passages differ (Q-6).
+- T-057 (merged) and T-058/T-059: their test files (`apps/kiln/tests/acceptance_t057.rs`,
+  `project_t057.rs`; on `task/T-058`: `acceptance_t058.rs`, `tabs_t058.rs`) use no Unix-only API
+  (`grep` for `std::os::unix`, `cfg(unix)`, `/dev/full`, `raw_os_error`, `from_bytes`: 0 hits, R-285) and are
+  not in this `touches`. If T-058 merges while T-071 is in flight, nothing changes for T-071's branch;
+  T-071's queue run rebases onto it and its `no-skip` scans T-058's files: they pass unless they add a
+  platform cfg (they have none). Whether they pass on macOS is T-079's or T-058's concern, not this task's.
+- T-079 depends on this task; T-072–T-078 follow.
 - T-066, T-068 (kiln-ui): no shared path.
 - T-072–T-078 depend on this task.
 
 ## Estimate
-xtask gate changes of this experiment: T-033/T-043-class tool work 700,000–930,000 (stage-1 high p75
-866,379); plus mechanical marking of 34 files with per-test judgement and the Windows check (AC-5). **About
-1,300,000**: above the high ceiling 1,100,000 (Q-1).
+After the split (D-180 Q-1 B): the tool, the registry, `xtask`'s own 9 test files and modules and `acceptance_t002.rs`.
+xtask tool tasks: T-070 809,362 booked (D-197), stage-1 high p75 866,379. **About 800,000** of the high
+ceiling 1,100,000; arm: high → independent test author.
 
 ## Questions and rulings
 - **Q-1 (planner, R-261). Size.** A: one task, an `Extend T-071 to 1400000` row at dispatch. B: split:
@@ -286,12 +266,50 @@ Written to a full spec from the R-255 stub against main `15555cce3bfafdd8a579127
 - **Q-4: B.** T-043 and T-071 go in the order they become ready.
 - The stub of T-075 still lists `xtask/platform-tests.toml`; it is corrected at its own specification.
 
+### Spec check R-285
+Against main `cbb54a2628afbd368087e82c5d7925eaa5b08625` (T-070 merged at `c7af15f`, D-197).
+- **Split applied** (D-180 Q-1 B): the 28 product test files and the two product test modules left `touches`
+  and Interface (4); they are T-079's. Goal items 3–4, AC-5, AC-6, Estimate rewritten accordingly.
+- **New evidence: macOS.** The `gate-macos` artefact of run 43765532298 (downloaded with the Actions tools;
+  zip unpacked under `/home/user/kiln-plan-T-071/`, deleted) has the whole test output: **977 passed, 22
+  failed** over 121 `test result` lines (the record's 366/11 was a printed prefix). Of the 22, six are
+  `xtask`'s (table in Interface (4)); none is a product fault: each is a Linux assumption of a test or of
+  the director's tools. Added to `touches`: `xtask/src/queue.rs` and `xtask/src/worktree.rs` (test modules),
+  `xtask/tests/acceptance_t013_publish.rs`. The other 16 are T-079's (its spec lists them).
+- **New evidence: Windows.** Run 43765532298 confirms the xtask compile errors in `hygiene.rs:541` and
+  `publish.rs:1341` (`T-070-round-2.md`); the four xtask test files' errors are hidden there behind the bin
+  test's failure; R-261's check named them.
+- Line references re-read on cbb54a2: `hygiene.rs:540-541`, `publish.rs:1340-1341`, test modules at
+  `queue.rs:803`, `worktree.rs:228`, `hygiene.rs:426`, `publish.rs:753`; `noskip.rs:9-10, 81-90, 471, 492`;
+  `acceptance_t002.rs:169-187, 924`; `docs/development.md:75` — all as stated.
+- **Collisions:** T-054 shares `docs/development.md` → not in flight together (§5.2) — Q-6. T-058's files
+  are clean (above). T-043: unchanged (D-180 Q-4 B).
+- Not run: no build (nothing in this check needed one).
+
+- **Q-5 (planner, R-285). The director's tools on macOS and Windows.** A: their tests that assume Linux
+  (`/proc`, the queue's build tree) are registered `linux` with `counterpart = "none"`, since the queue,
+  `worktree` and `publish` run only on the director's machine. B: make the tools portable (liveness without
+  `/proc`, path canonicalisation). **Recommendation: A** — no platform but Linux runs them; B is real work
+  (`kill(pid, 0)` needs `unsafe` or a new dependency) for no user.
+- **Q-6 (planner, R-285). T-054 beside T-071.** A: sequence them (T-054 first: it is small and ready to
+  specify). B: T-071 drops `docs/development.md` and T-079 carries its two rows, which leaves the `no-skip`
+  row wrong on main between the merges. **Recommendation: A.**
+
+### Rulings on spec check R-285 (director, D-199)
+- **Q-5: A.** The director's tools' Linux-only tests (queue, `worktree`, `publish`) are registered as `linux` with
+  no counterpart and the reason: they run on the director's machine only.
+- **Q-6: A.** T-054 first, then this task; they are not in flight together (`docs/development.md` in both).
+- The whole test output of `gate-macos` in run 43765532298 (the uploaded artefact, read in R-285) is 977 passed and
+  22 failed, none a product fault by the panic messages; the "366 passed, 11 failed" in the director's records of
+  T-070 was the printed prefix. The 6 `xtask` failures are this task's, the 16 product-test failures T-079's.
+
 ## Log
 ### director
 <!-- end director log -->
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
 - 2026-11-15 · R-261 · draft · did: full spec against 15555cc (above) · not run: hosted runners · next: director (Q-1–Q-4, specified)
+- 2026-11-15 · R-285 · draft · did: spec check against cbb54a2; split applied; macOS artefact read (22 failures classified) · not run: builds · next: director (Q-5, Q-6)
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

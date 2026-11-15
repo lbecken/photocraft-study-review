@@ -733,3 +733,6 @@
 {"kind":"transition","task":"T-070","iteration":2,"at":"2026-11-15T22:30:00Z","from":"reviewed","to":"queued"}
 {"kind":"transition","task":"T-058","iteration":2,"at":"2026-11-15T22:30:00Z","from":"self_verified","to":"tests_joined"}
 {"kind":"transition","task":"T-070","iteration":2,"at":"2026-11-15T22:44:22Z","from":"queued","to":"merged"}
+{"kind":"run","task":"iter-2","iteration":2,"run":"R-285","role":"planner","tier":null,"started_at":"2026-11-15T22:45:55Z","ended_at":"2026-11-15T22:51:10Z","wall_s":315,"tokens":70381,"tool_calls":22,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"spec check of T-071 against main cbb54a2 (split applied: product test files to T-079; three xtask paths added; AC-5 and AC-6 xtask-only) and the full spec of T-079 (mark the product tests by platform: 30 paths, 6 criteria and a guard); the gate-macos artefact of run 43765532298 downloaded and read: 977 passed, 22 failed, each failure classified from its panic message, none a product fault; no build; tokens are the delta of the running figure (472627 - 402246)"}
+{"kind":"transition","task":"T-071","iteration":2,"at":"2026-11-15T22:51:32Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-079","iteration":2,"at":"2026-11-15T22:51:32Z","from":"draft","to":"specified"}
