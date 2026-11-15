@@ -1,8 +1,12 @@
 #!/bin/sh
 # T-065 window procedure (test author, R-251): AC-2, AC-3, b1, b2, b4. Usage: sh .github/scripts/window-procedure.sh <kiln> <fresh scratch dir>
 # The window procedure of record (T-070 Interface (3)): R-251's block of tasks/T-065-window.md
-# with two changes only, this usage line and the exit status. Every case, fixture, comparison and
-# verdict line below is R-251's, inside the function `procedure`. The wrapper at the end passes
+# with three changes only: this usage line, the exit status, and (ruling m2, D-182) a window
+# case's and AC-3's exit status is kiln's own, written by the wrapped command into <case>.st in
+# the scratch directory and read from there (not the virtual-display wrapper's; not written =
+# the case fails and says so). The three R-251 lines that run kiln under xvfb-run with a verdict
+# are replaced, and one line is added after the CASE line; every other case, fixture, comparison
+# and verdict line below is R-251's, inside the function `procedure`. The wrapper at the end passes
 # its output through unchanged and exits 0 only if it printed `WINDOW CASES PASS`, `PLAIN PASS`
 # and either `AC-3 PASS` or `AC-3 PRECONDITION FAILED` (a library is installed on this machine,
 # so AC-3 is not checked here: ruling Q-4 A, D-180); otherwise it exits 1. Changing this file is
@@ -97,12 +101,13 @@ case_() {
   n=$1 s=$2 mode=$3; shift 3; cp -r d "h_$n"; cp -r d "w_$n"
   if [ "$mode" = root ]; then
     timeout 180 "$K" script "$s" --root "h_$n" "$@" > "h_$n.out" 2> "h_$n.err"; hc=$?
-    xv sh -c 'exec "$0" "$@" 2>"w_'"$n"'.err"' "$K" --root "w_$n" "$@" --script "$s" > "w_$n.out"; wc=$?
+    xv sh -c '"$0" "$@" 2>"w_'"$n"'.err"; k=$?; echo $k > "w_'"$n"'.st"; exit $k' "$K" --root "w_$n" "$@" --script "$s" > "w_$n.out"; xw=$?; wc=$(cat "w_$n.st" 2>/dev/null)
   else  # no --root: the fixture copy is the current directory, the script is given relative to it
     (cd "h_$n" && timeout 180 "$K" script "../$s" "$@" > "../h_$n.out" 2> "../h_$n.err"); hc=$?
-    (cd "w_$n" && xv sh -c 'exec "$0" "$@" 2>"../w_'"$n"'.err"' "$K" "$@" --script "../$s" > "../w_$n.out"); wc=$?
+    (cd "w_$n" && xv sh -c '"$0" "$@" 2>"../w_'"$n"'.err"; k=$?; echo $k > "../w_'"$n"'.st"; exit $k' "$K" "$@" --script "../$s" > "../w_$n.out"); xw=$?; wc=$(cat "w_$n.st" 2>/dev/null)
   fi
   echo "CASE $n: exit window=$wc headless=$hc"
+  if [ -z "$wc" ]; then echo "  WINDOW EXIT NOT RECORDED: kiln's exit status was not written (wrapper exit=$xw)"; FAIL=1; elif [ "$xw" != "$wc" ]; then echo "  wrapper exit=$xw (not kiln's; not used)"; fi
   extra=""; [ "$n" = ac2 ] && extra=first
   python3 -I norm.py "w_$n.out" "h_$n.out" $extra || FAIL=1
   [ "$wc" = "$hc" ] || { echo "  EXIT DIFFERS"; FAIL=1; }
@@ -120,7 +125,7 @@ case_ noroot s.jsonl noroot a.rs src/b.rs missing.rs
 if ldconfig -p | grep -q -e 'libxkbcommon-x11\.so' -e 'libxcb-xkb\.so'; then echo "AC-3 PRECONDITION FAILED: a library is installed"; else
   cp -r d n
   env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u LD_LIBRARY_PATH MESA_SHADER_CACHE_DISABLE=true timeout 120 \
-    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root n a.rs 2>n.err" > n.out; e=$?
+    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "'$K' --root n a.rs 2>n.err; echo \$? > n.st" > n.out; e=$(cat n.st 2>/dev/null || echo "not-recorded")
   l=$(awk 'END{print NR}' n.err); p=$(grep -c panicked n.err); b=$(wc -c < n.out)
   echo "AC-3: exit=$e stdout_bytes=$b stderr_lines=$l panicked=$p (pass: 2 0 1 0)"; echo "  stderr: $(cat n.err)"
   [ "$e $b $l $p" = "2 0 1 0" ] && diff -r d n >/dev/null && echo "AC-3 PASS" || echo "AC-3 FAIL"
