@@ -2,7 +2,7 @@
 id: T-065
 title: "Open the Kiln UI in a desktop window on X11 that shows the current document, exit with status 2 when no window can be opened, and run a script in the window"
 tier: high              # ADR-0002: adds a dependency (eframe =0.37.0; lock 156 → 326 packages, none changes version at main f7fff5f: R-246); `ui.window` is a medium item (D-162: high is the larger)
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: [ui.window]
 depends_on: [T-056]     # merged at 30435d1 (D-162); spec check R-246 against main f7fff5f
@@ -340,6 +340,34 @@ window during `--script` needs a rule (not specified); release builds.
   status 2 and an empty stdout in both cases.
 - **a2 (the order of checks).** Where both the script and the root are bad, the script is reported: the message
   does not name the root (Pinned (c)).
+
+### Rulings on review round 1 (director, D-165; `reviews/T-065-r1.md` at `8d1117dd84898a8f223f3fa0acd2ed9385d9c262`; told to both builders)
+- **b1 (findings 2, 3, 5 and spec gap 10; reverses Q-12 A; implementer).** Under `--script` the window's time is
+  the script's: each frame advances time by the same fixed step as in `kiln script`, and nothing the toolkit times
+  (a double click, an animation, a settle count) depends on how fast the display delivers frames. The output of
+  `kiln --script` then equals `kiln script`'s for the same script and files; the implementer measures whether that
+  holds line for line with the frame counts and `settled`, and `docs/protocol/ui.md` and the usage text say what
+  was measured (if the counts can still differ, the sentence keeps "except the frame counts" and says why). The
+  director's ruling Q-12 A (real time) was wrong: the reviewer showed a timed double click and a long scroll in a
+  release build giving different snapshots. A plain window (no `--script`) keeps real time.
+- **b2 (finding 1; implementer).** No key closes the window: the toolkit's quit shortcut (`ctrl`+`Q` and its
+  variants) is not obeyed, with or without `--script`; a key the Input table does not name does what it does in
+  `kiln script`. The window closes on the window system's close request.
+- **b3 (finding 4; implementer, test author).** An argument that is not UTF-8 is a usage error (exit status 2, the
+  message and the usage, no panic), in the window form and in `kiln script`. The test author adds a gate test.
+- **b4 (findings 6 and 7, test gaps; test author, implementer).** The procedure of AC-2 gains a run without
+  `--root`, started in the fixture directory with a relative start path, compared with `kiln script` run the same
+  way (kills "default root `/`"). Start paths are opened by the same code with and without `--script`, so that the
+  `--script` comparison also covers the plain window; the reviewer re-seeds "the plain window opens no start path"
+  in round 2 and says whether the procedure now sees it.
+- **b5 (spec gap 8; implementer).** If the display goes away while the window is open, the window system ends the
+  process: status 1, one line from it on stderr, and responses not yet written are lost. This is stated as a limit
+  in `docs/protocol/ui.md` with the command that shows it; no code change.
+- **b6 (spec gap 9; implementer).** On a screen smaller than the window's default size the window is smaller, and
+  what a snapshot shows differs from `kiln script` at the default size. The implementer measures whether
+  `kiln script --size` with the window's actual size gives the same output and states the limit in
+  `docs/protocol/ui.md` as measured.
+- **b7 (nit 11).** Left as it is.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
