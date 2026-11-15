@@ -536,6 +536,8 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   test` per package (no build in this rework); `sudo apt-get update` (it would change this
   machine's package lists); no hosted runner. Whole gate not run (the director's instruction; the
   join runs it); `cargo xtask hygiene` on the committed state: result below.
+  · `cargo xtask hygiene` at 365d0daed981f6c12363ad4dd20fc057fd7d1f19: PASS (reviews ok; session-paths: 590 tracked files
+  clean) · gate attempts this run: 0 (by instruction) · missing context: none · next: director, join.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
