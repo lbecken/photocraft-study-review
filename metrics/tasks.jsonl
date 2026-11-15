@@ -661,3 +661,4 @@
 {"kind":"transition","task":"T-067","iteration":2,"at":"2026-11-15T05:17:16Z","from":"ready","to":"in_progress"}
 {"kind":"transition","task":"T-067","iteration":2,"at":"2026-11-15T05:36:50Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-067","iteration":2,"at":"2026-11-15T05:36:50Z","from":"self_verified","to":"queued"}
+{"kind":"transition","task":"T-067","iteration":2,"at":"2026-11-15T05:49:01Z","from":"queued","to":"merged"}
