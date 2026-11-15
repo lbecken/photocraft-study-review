@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-15 02:45 UTC_
+_Last updated: 2026-11-15 04:40 UTC_
 
 ## Now
 Iteration 2, **second stage** (ADR-0007, accepted with a changed order in D-147), under methodology **v1.3**
@@ -13,12 +13,12 @@ evaluation B (cut 2: a project editor) → T-060, T-061, the feature drafts each
 T-041 (last; owner told first). Deferred until what they remove starts to cost: T-051, T-052, T-054, T-043, T-064.
 
 In flight:
-- **T-055** (`kiln script`) merged at `e34ba1f` (D-155) and **T-056** (editor view) merged at `30435d1` (D-162).
-  Scorecard on main: 64 items: 41 verified, 2 implemented (`ui.editor-view`, `ui.dispatch-only`), 0 failing,
-  21 planned. No worktree exists.
-- **T-065** window (high; `ui.window`): joined green on its first join at `c2c8087` (6 gate acceptance tests);
-  review round 1 running (run R-249), which starts the real window under Xvfb. After its merge: evaluation A
-  (cut 1: a desktop editor for one file), where the director stops and reports to the owner.
+- **Cut 1 of ADR-0007 is built (D-168):** T-055 (`kiln script`, `e34ba1f`), T-056 (editor view, `30435d1`) and
+  T-065 (window, `d35078c`) are merged; 3,075,649 tokens for the three. Scorecard on main: 64 items: 41 verified,
+  3 implemented (`ui.window`, `ui.editor-view`, `ui.dispatch-only`), 0 failing, 20 planned. No worktree exists.
+- **Evaluation A** running (run R-253, fresh evaluator): clean clone and work directory under
+  `/home/user/kiln-eval-cut1/` (outside the repository, reachable by other identities); output
+  `work/iter-2-cut-1.md` and `work/drivers/`. After it is published the director stops and reports to the owner.
 
 Rules added in this stage (D-153, D-158, D-162): a `touches` path belongs to one role; a task's tier is the highest
 tier among the items it claims; the director commits nothing on a task branch but joins and scorecard ties.
