@@ -2,7 +2,7 @@
 id: T-056
 title: "Show the current document in an editor view with syntax colours, a caret and scrolling, and edit, undo and save it by dispatching commands only, observed through kiln script"
 tier: high              # re-tiered by D-158: it claims `ui.dispatch-only`, a high-tier scorecard item; the spec check (R-238) had set medium for the absence of dependency and gate-path changes
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: [ui.editor-view, ui.dispatch-only]
 depends_on: [T-055]     # merged at e34ba1f (D-155); spec checks R-237 (main 197617c) and R-238 (main e0926ae)
@@ -701,6 +701,35 @@ their AC numbers and touches are the old ones).
   `touches`), after the reviewer has reproduced it; the test author adds a test that, for every node that shows
   text in proportional type (`Title`, `Path`, `Open`, `Message`, `Documents`' children), the text of its rows
   equals the text it shows.
+
+### Rulings on review round 1 (director, D-159; `reviews/T-056-r1.md` at `a50e00de03db7c5eee7c1f23e6b6dbecbe68fee2`; cap for the task 1,300,000 tokens; told to both builders)
+- **z1 (finding 1, defect; completes y5; implementer, test author).** A row's text is the chars of the text the
+  node shows that the row paints, in reading order, taken from the text the toolkit laid out and not from the
+  positions of glyphs: a ligature, a combining mark, a joiner or a digit that the toolkit shapes into more or fewer
+  glyphs than chars changes nothing in the reported text, and a click's `at` column counts those chars. The
+  reviewer's cases are the test: `src/a.rs — modified — Kiln` in `Title`; in the editor `éb` written with a
+  combining mark, `ab́cd`, a joiner between `x` and `yz`, and `٣٣`. If one of the three causes cannot be fixed inside
+  the cap, the implementer fixes the others, states the remaining one as a limit in `docs/protocol/ui.md` with the
+  evidence, and says so; the director then files it as its own task. The test author adds acceptance tests: for
+  every node that shows text, the text of its rows equals the text it shows (cut at the right edge where the spec
+  says rows are cut), on the reviewer's cases; and a click with `at` on a line with a combining mark lands on the
+  char the column names.
+- **z2 (finding 2, defect; implementer, test author).** Every action settles within 60 frames, also `Enter` (and
+  undo and redo) at the end of a document that fills the view. The test author adds a test: in a document longer
+  than the view, `Enter` at the very end answers `settled: true`.
+- **z3 (finding 3, document sentence; implementer).** The settle sentence in `docs/protocol/ui-editor.md` carries
+  the reviewer's figures measured on the acceptance scripts: the largest is 20 frames (a `scroll` of 5 steps);
+  click 14, focus 13, key 4, type 3; re-measured after z2.
+- **z4 (findings 4 to 6, test gaps; test author).** Tests for: text with chars outside ASCII typed over a selection
+  (the caret afterwards, counted in chars, against `cursor.get`); a successful save through the UI clears
+  `Message`; a path that only contains `.rs` (such as `x.rs.txt`) is painted `plain`.
+- **z5 (finding 7, spec gap).** In a document whose line ending is `lf`, `Enter` right after a lone `\r` inserts a
+  `\n` that joins it into one break, so no line is added. This is left as it is and stated as a limit in
+  `docs/protocol/ui-editor.md` (implementer); T-025, which replaces what Enter does, decides it.
+- **z6 (finding 8, nit; implementer).** The sentence on the extra frame says what the binary does: after any
+  control request of the script the view asks for one more frame, also when no document is open.
+- The branch's copy of this file gets the front-matter lines `tier` and `budget_tokens` of main (a director's
+  commit), so that the gate's `hygiene` step agrees with the review's `tier: high`.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:

@@ -139,6 +139,10 @@ kind that can be shown without a disk (`refusal_examples()`); otherwise the refu
 audit fails at the join. A message text, the command list and `error_kinds` are not pinned by a test (golden rule 9).
 The spec check before dispatch adds the matching acceptance criterion.
 
+## Note from T-056 (director, D-159) — to decide at specification
+What Enter does next to a lone `\r` or `\n` (T-056 rulings x1 and z5): in an `lf` document, Enter right after a
+lone `\r` joins it into one break and adds no line; T-056 states it as a limit and leaves the decision to this task.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
