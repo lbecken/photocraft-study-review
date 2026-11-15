@@ -470,6 +470,179 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `task/T-065-tests`, review.
 <!-- end implementer log -->
 ### test author
+- 2026-11-15T02:03Z · R-248 · ready · did: wrote `apps/kiln/tests/acceptance_t065.rs` (AC-1, 6 tests,
+  every `kiln` with `DISPLAY`, `WAYLAND_DISPLAY`, `WAYLAND_SOCKET` removed, `HOME` a fresh
+  directory, a 120 s hang detector; no display needed, nothing skipped) and the AC-2/AC-3
+  procedure below. No `guard_t065.rs`: what main has that must stay is covered by merged tests
+  (`kiln --help`/`-h`/`script --help`: `acceptance_t055.rs` `ac8_help`; bare `kiln` without a
+  display: `guard_t055.rs`; script mode ignores the display variables: `script_t055.rs:666`,
+  `acceptance_t055.rs:2140`). Rulings acknowledged and accepted: Q-2 A, Q-5 A, Q-7 A, Q-11 A,
+  Q-12 A (AC-2 compares without `frames`/`settled`), closing the window during `--script`
+  unspecified (not tested).
+  - `ui.window` (AC-1) → tests, each failing on base by **assertion** (exit 1 where 2 is
+    required: `kiln: the desktop UI is not built yet …`):
+    `ac1_no_display_exits_2_with_one_line` (`--root d src/a.rs`: exit 2, empty stdout, exactly
+    one stderr line without `panicked`; root, cwd and `HOME` trees unchanged, Pinned (b));
+    `ac1_no_display_every_window_form` (bare `kiln` in the root, options after paths, a file
+    called `script` not first, a missing start path and several paths (no exit 3: start paths
+    after the window system), `--script` with a readable script; all "no window");
+    `ac1_wayland_only_or_unreachable_display_exits_2` (`WAYLAND_DISPLAY` only, X11 only; and
+    `DISPLAY=:4093` after a precondition panic-check that nothing serves it);
+    `ac1_bad_root_is_named_before_the_window` (`--root <missing>`, a file as root, root after
+    the paths, with a readable `--script`: exit 2, empty stdout, stderr names the root as
+    given); `ac1_usage_errors_exit_2` (18 lines: `--bogus`, `--root d --root d`, `--log
+    l.jsonl` (no file created), `--memory`, `--size`, an option without value, `--script`
+    twice, usage before root and script: exit 2, empty stdout, stderr contains the usage as
+    `kiln --help` prints it and more); `ac1_unreadable_script_exits_2` (`--script
+    missing.jsonl`, a directory as script: exit 2, empty stdout; with both script and root bad,
+    stderr does not name the root, Pinned (c)).
+  - Self-check: a scratch stub of the window form in `main.rs` (never committed; window always
+    fails) passed all 6; 14 seeded bugs, each killed: (1) usage error without the usage →
+    usage_errors; (2) window checked before the root → bad_root; (3) an option twice accepted →
+    usage_errors; (4) two stderr lines on no window → exits_2_with_one_line, every_window_form,
+    wayland_or_unreachable; (5) options after the first path taken as paths → bad_root,
+    usage_errors; (6) `--log` without `script` ignored → usage_errors; (7) `--script` not
+    checked → unreadable_script; (8) no window exits 1 → the three no-window tests; (9) `script`
+    anywhere taken as the subcommand → every_window_form; (10) a panic on no window (exit 101) →
+    the three; (11) root checked before the script → unreadable_script; (12) a line on stdout on
+    no window → the three; (13) a set `DISPLAY` taken as a window (exit 0) →
+    wayland_or_unreachable; (14) start paths checked before the window (exit 3) →
+    every_window_form. Clippy `-D warnings` on the test file: clean (with the stub the bin itself
+    fails clippy, so the file was linted on base, where it compiles).
+  - **AC-2 and AC-3 procedure (reviewer round 1, evaluator; needs `xvfb-run`, `apt-get
+    download`, `python3`; nothing installed).** Save the block as `ac2.sh` and run, from the
+    worktree after `cargo build -p kiln`, `sh ac2.sh target/debug/kiln <scratch>/t065-ac2`
+    (`<scratch>/t065-ac2` is deleted and re-created; it must be a fresh scratch directory). It
+    makes the root `d` (`a.rs` = Pinned (g)'s text; `src/b.rs` = `fn b() {` + 58 lines `    let
+    vN = N;` + `}`, long enough to scroll), four copies (`h`, `h3` headless; `w`, `w3` window),
+    the script `s.jsonl` (snapshot; `click` `Editor` `at` row 1 col 4; `type` `y`; snapshot;
+    `key` `S` `ctrl`; `scroll` `Editor` down 2; snapshot; `doc.text`, `cursor.get` of doc 2,
+    `doc.list`; `frames` 2; snapshot) and `s3.jsonl` (the same plus a `click` on a label no node
+    has, so both runs exit 3). It runs `kiln script <s> --root <h> a.rs src/b.rs missing.rs`,
+    then the window `kiln --root <w> a.rs src/b.rs missing.rs --script <s>` by the spec's recipe,
+    then AC-3, then one extra order check.
+    **Compared** (`norm.py`): the two stdouts line by line as JSON after removing, from every
+    response whose `result` has `settled`, the keys `frames` and `settled`, and from every
+    response whose `result` has `root`, the key `frames` (Q-12 A); every other byte-level field
+    must be equal (JSON-equal, so key order is irrelevant; the protocol writes sorted compact
+    JSON anyway). **AC-2 passes** when, for both `s.jsonl` and `s3.jsonl`: `norm.py` prints
+    `lines 12 12` (`13 13`), no `DIFF`, `first snapshot Title src/b.rs and Message not_found:
+    True` and `EQUAL`; the window's exit code equals the headless one (0, and 3 for `s3`);
+    `FILES EQUAL` and `FILES3 EQUAL` (`diff -r` of the window copy against the headless copy,
+    where `src/b.rs` has the `y` and was saved by `ctrl+S`). **AC-3 passes** when `AC-3 exit=2`,
+    stdout 0 bytes, stderr 1 line, `panicked: 0`; it needs the precondition the script checks
+    (neither library installed on the system: `ldconfig -p`). The extra line (`--script
+    missing.jsonl` under a working display exits 2 within the timeout, not 124, stdout empty) is
+    Pinned (c) "`--script` readable before the window system", which the gate cannot tell apart
+    from "no window"; report it, it is not an AC.
+    What I could check here (Xvfb starts, `DISPLAY=:99`; both libraries absent from the system):
+    the headless half against base (exit 0 / 3; first snapshot `Title` `src/b.rs — Kiln`,
+    `Message` `not_found …`; after `y` `Title` `… — modified — Kiln`, after `ctrl+S` not
+    modified and `src/b.rs` saved, after the scroll the first `Editor` row `    let v12 = 12;`;
+    the extra `click` refused `no_target`); `norm.py` gives `EQUAL` for an output whose `frames`
+    and `settled` were all changed and `NOT EQUAL` (4 `DIFF`s) for one with a changed text; the
+    libraries unpack by the recipe; against base the window half fails as the spec says (window
+    exit 1, 0 lines, `NOT EQUAL`, files differ; AC-3 exit 1); against the stub, AC-3 and the
+    extra check pass trivially (the stub never opens a window). Not checked: anything with a real
+    window (no implementation here), so the window half of AC-2, AC-3 against eframe and the
+    real-time settling of each action are unchecked until the join.
+```sh
+#!/bin/sh
+# AC-2 / AC-3 procedure of T-065 (test author). Usage: sh ac2.sh <kiln binary> <scratch dir>
+set -u
+K=$(realpath "$1"); W=$2; rm -rf "$W"; mkdir -p "$W"; cd "$W" || exit 99
+# --- fixtures: root d (copied to w for the window run, h for the headless run) ---
+mkdir -p d/src
+printf 'fn main() {\n    let x = 1;\n}\n' > d/a.rs
+{ printf 'fn b() {\n'; i=0; while [ $i -lt 58 ]; do printf '    let v%d = %d;\n' $i $i; i=$((i+1)); done; printf '}\n'; } > d/src/b.rs
+cat > s.jsonl <<'J'
+{"id":"s1","ui":"snapshot"}
+{"id":"c","ui":"click","target":{"label":"Editor"},"at":{"row":1,"col":4}}
+{"id":"t","ui":"type","text":"y"}
+{"id":"s2","ui":"snapshot"}
+{"id":"k","ui":"key","key":"S","modifiers":["ctrl"]}
+{"id":"sc","ui":"scroll","target":{"label":"Editor"},"direction":"down","steps":2}
+{"id":"s3","ui":"snapshot"}
+{"id":1,"command":"doc.text","params":{"doc":2}}
+{"id":2,"command":"cursor.get","params":{"doc":2}}
+{"id":3,"command":"doc.list"}
+{"id":"f","ui":"frames","count":2}
+{"id":"s4","ui":"snapshot"}
+J
+# s3.jsonl: the same with one refused request at the end (both runs must exit 3)
+{ cat s.jsonl; echo '{"id":"x","ui":"click","target":{"label":"no such node t065"}}'; } > s3.jsonl
+cp -r d h; cp -r d w; cp -r d h3; cp -r d w3
+cat > norm.py <<'P'
+import json, sys
+def norm(line):
+    v = json.loads(line)
+    r = v.get("result")
+    if isinstance(r, dict):
+        if "settled" in r:          # an action: drop frames and settled (Q-12 A)
+            r.pop("settled"); r.pop("frames", None)
+        elif "root" in r:           # a snapshot: drop its frames total
+            r.pop("frames", None)
+    return v
+a = [norm(l) for l in open(sys.argv[1], encoding="utf-8").read().splitlines()]
+b = [norm(l) for l in open(sys.argv[2], encoding="utf-8").read().splitlines()]
+print("lines", len(a), len(b))
+for i, (x, y) in enumerate(zip(a, b)):
+    if x != y: print("DIFF at line", i + 1); print(" window  :", json.dumps(x)[:600]); print(" headless:", json.dumps(y)[:600])
+def node(n, lab):
+    if n.get("label") == lab: return n
+    for c in n.get("children", []):
+        m = node(c, lab)
+        if m: return m
+s1 = next((x for x in a if x.get("id") == "s1"), None)
+t = node(s1["result"]["root"], "Title") if s1 else None
+m = node(s1["result"]["root"], "Message") if s1 else None
+first = bool(t and t.get("value", "").startswith("src/b.rs") and m and m.get("value", "").startswith("not_found"))
+print("first snapshot Title src/b.rs and Message not_found:", first)
+print("EQUAL" if a == b and len(a) > 0 and first else "NOT EQUAL")
+P
+# --- headless reference ---
+timeout 120 "$K" script s.jsonl --root h a.rs src/b.rs missing.rs > h.out 2> h.err; echo "headless exit=$?" | tee h.code
+timeout 120 "$K" script s3.jsonl --root h3 a.rs src/b.rs missing.rs > h3.out 2> h3.err; echo "headless3 exit=$?" | tee h3.code
+# --- the two libraries, unpacked into scratch (nothing installed) ---
+X="$W/xlibs"; mkdir -p "$X/debs" && (cd "$X/debs" && apt-get download libxkbcommon-x11-0 libxcb-xkb1 >/dev/null) && for f in "$X"/debs/*.deb; do dpkg-deb -x "$f" "$X/root"; done
+LIB="$X/root/usr/lib/x86_64-linux-gnu"; ls "$LIB"/libxkbcommon-x11.so.0 "$LIB"/libxcb-xkb.so.1 || echo "LIBRARIES MISSING: AC-2 not run"
+# --- AC-2: the window, by the recipe ---
+win() { # win <root> <script> <out> <err>
+  env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LD_LIBRARY_PATH="$LIB" MESA_SHADER_CACHE_DISABLE=true timeout 120 \
+    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root $1 a.rs src/b.rs missing.rs --script $2 2>$4" > "$3"; echo $?; }
+echo "window exit=$(win w s.jsonl w.out w.err)" | tee w.code
+echo "window3 exit=$(win w3 s3.jsonl w3.out w3.err)" | tee w3.code
+echo "--- AC-2 s.jsonl:";  python3 -I norm.py w.out h.out
+echo "exit codes: $(cut -d= -f2 w.code) (window) $(cut -d= -f2 h.code) (headless)"
+diff -r w h >/dev/null && echo "FILES EQUAL" || { echo "FILES DIFFER"; diff -r w h | head -20; }
+echo "--- AC-2 s3.jsonl:"; python3 -I norm.py w3.out h3.out
+echo "exit codes: $(cut -d= -f2 w3.code) (window) $(cut -d= -f2 h3.code) (headless)"
+diff -r w3 h3 >/dev/null && echo "FILES3 EQUAL" || { echo "FILES3 DIFFER"; diff -r w3 h3 | head -20; }
+echo "window stderr:"; cat w.err
+# --- AC-3: the same Xvfb without the two libraries (precondition: not installed on the system) ---
+if ldconfig -p | grep -q -e 'libxkbcommon-x11\.so' -e 'libxcb-xkb\.so'; then echo "AC-3 PRECONDITION FAILED: a library is installed"; else
+  cp -r d n
+  env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u LD_LIBRARY_PATH MESA_SHADER_CACHE_DISABLE=true timeout 120 \
+    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root n a.rs 2>n.err" > n.out; echo "AC-3 exit=$? (pass: 2)"
+  echo "AC-3 stdout bytes=$(wc -c < n.out) (pass: 0); stderr lines=$(awk 'END{print NR}' n.err) (pass: 1); panicked: $(grep -c panicked n.err) (pass: 0)"
+  echo "AC-3 stderr: $(cat n.err)"; diff -r d n >/dev/null && echo "AC-3 root unchanged" || echo "AC-3 ROOT CHANGED"
+fi
+# --- extra, order of checks under a display (Pinned (c)): the script is checked before the window ---
+env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LD_LIBRARY_PATH="$LIB" MESA_SHADER_CACHE_DISABLE=true timeout 60 \
+  xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root d a.rs --script missing.jsonl 2>m.err" > m.out; echo "missing script exit=$? (pass: 2, not 124) stdout bytes=$(wc -c < m.out) (pass: 0)"
+```
+  · gate attempts: 0 of `cargo xtask ci` (ran `cargo test -p kiln --test acceptance_t065`: 6
+  failed on base by assertion, 6 passed on the stub; `cargo clippy -p kiln --all-targets -D
+  warnings` clean; `cargo xtask hygiene` PASS, `cargo xtask no-skip` PASS) · not run: full `cargo
+  xtask ci`; any real window · missing context: none · next: reviewer (AC-2/AC-3 by the procedure)
+  QUESTION: (Q-a) AC-1's usage errors: I read "a message and the usage on stderr" as "stderr
+  contains the usage exactly as `kiln --help` prints it on stdout, plus a message" (base's
+  `kiln script` does so), and use it to tell a usage error from "no window", which also exits 2
+  without a display. If the window form may print a different (shorter) usage on error, the
+  assertion in `ac1_usage_errors_exit_2` fails at the join; proposed wording if so: "stderr has
+  more than one line". Likewise `ac1_unreadable_script_exits_2` takes Pinned (c) to mean that
+  with an unreadable script and a bad root the message does not name the root. Recommendation:
+  confirm both readings.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
