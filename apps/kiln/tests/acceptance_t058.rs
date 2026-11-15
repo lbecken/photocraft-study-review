@@ -894,8 +894,8 @@ struct WantTab {
     discard: bool,
 }
 
-/// The nodes after `tabs[i]` in depth-first order and before the next tab (for the last tab,
-/// to the end of the snapshot).
+/// The nodes after `tabs[i]` in depth-first order and before the next tab, within `all`, the
+/// preorder of `Tabs` (so the last tab's group ends with the tab strip, D-201 h7).
 fn segment<'a>(all: &[&'a Value], tabs: &[&Value], i: usize) -> Vec<&'a Value> {
     let at = |t: &Value| {
         all.iter()
@@ -960,6 +960,7 @@ fn check_tabs(root: &Value, want: &[WantTab], check_rows: bool, what: &str) {
     let exp: Vec<String> = want.iter().map(|w| w.path.clone()).collect();
     assert_eq!(got, exp, "{what}: tab labels below Tabs, in order");
     let all = preorder(root);
+    let strip = preorder(list);
     for (i, w) in want.iter().enumerate() {
         let t = tabs[i];
         let p = &w.path;
@@ -977,7 +978,7 @@ fn check_tabs(root: &Value, want: &[WantTab], check_rows: bool, what: &str) {
                 "{what}: the tab `{p}` paints its path"
             );
         }
-        let seg = segment(&all, &tabs, i);
+        let seg = segment(&strip, &tabs, i);
         let marks: Vec<&&Value> = seg
             .iter()
             .filter(|n| role(n) == Some("label") && value(n) == Some("modified"))
@@ -1782,6 +1783,56 @@ fn ac4_refused_close_then_save_then_close() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// After the refused close, an undo back to clean removes `Discard` (D-201 h4): by `ctrl+Z` in
+/// the focused editor, and in a second session by a control `doc.undo`; the file is untouched.
+#[test]
+fn ac4_refused_close_then_undo_removes_discard() {
+    let dir = case_dir("ac4-undo");
+    let r = ac4_root(&dir);
+    let by_key = vec![focus("fe2", editor_target()), key("undo", "Z", &["ctrl"])];
+    let by_control = vec![
+        ctl("undo", "doc.undo", json!({"doc": 2})),
+        frames("undo-f", SETTLE),
+    ];
+    for (name, undo) in [("key", by_key), ("control", by_control)] {
+        let mut script = ac4_prefix();
+        script.extend(undo);
+        script.push(snapshot("s3"));
+        script.push(ctl("l3", "doc.list", json!({})));
+        let s = run(&dir, name, &script, &root_args());
+        ac4_check_refused(&s);
+        if name == "key" {
+            s.act("undo");
+        } else {
+            s.ok("undo");
+        }
+        let what = format!("after the undo ({name}) that makes b.txt clean");
+        assert_eq!(
+            doc_list(s.ok("l3")),
+            [
+                Listed {
+                    doc: 1,
+                    path: "a.txt".into(),
+                    dirty: false
+                },
+                Listed {
+                    doc: 2,
+                    path: "b.txt".into(),
+                    dirty: false
+                }
+            ],
+            "{what}: doc.list (precondition: the undo made it clean)"
+        );
+        check_tabs(s.snap("s3"), &ac4_want("b.txt", false, false), true, &what);
+        assert_eq!(
+            fs::read(r.join("b.txt")).expect("b.txt"),
+            AC4_B,
+            "{what}: the file"
+        );
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // =============================================================================================
 // AC-5: dirty marks (oracle: doc.list).
 // =============================================================================================
@@ -1869,6 +1920,139 @@ fn ac5_modified_marks_follow_doc_list() {
         );
         let _ = fs::remove_dir_all(&dir);
     }
+}
+
+/// The tab of `path` and the nodes of its group (after it, before the next tab, within `Tabs`).
+fn tab_and_group<'a>(root: &'a Value, path: &str, what: &str) -> (&'a Value, Vec<&'a Value>) {
+    let tabs = tab_nodes(root, true, what);
+    let list = tab_list(root, what).expect("Tabs");
+    let strip = preorder(list);
+    let i = tabs
+        .iter()
+        .position(|t| label(t) == Some(path))
+        .unwrap_or_else(|| panic!("{what}: no tab labelled `{path}`"));
+    (tabs[i], segment(&strip, &tabs, i))
+}
+
+/// A dirty document whose path is wider than the tab strip at the default size (D-201 h2): its
+/// tab paints one row, the start of its path (whole, or cut at the window's edge: Limits), the
+/// same row as while it was clean; its `modified` node paints exactly one row `modified`.
+/// Lengths around the strip's width; which ones are wider is found from the clean snapshots
+/// (a cut row), not pinned. Dirty by a control `doc.insert`, and once by typing in the editor
+/// after a click on the tab (the reviewer's case).
+#[test]
+fn ac5_a_wide_dirty_path_keeps_its_row_and_its_mark() {
+    let dir = case_dir("ac5-wide");
+    let r = dir.join(ROOT);
+    write(&r.join("a.txt"), b"a\n");
+    write(&r.join("b.txt"), b"b\n");
+    let wide = |n: usize| format!("d/{}.t", "x".repeat(n));
+    let lens: Vec<usize> = (120..=240).step_by(4).collect();
+    for n in &lens {
+        write(&r.join(wide(*n)), b"w\n");
+    }
+    let ui_len = 180;
+    let mut script = vec![
+        open("o1", "a.txt"),
+        open("o2", "b.txt"),
+        frames("f0", SETTLE),
+    ];
+    for (id, (k, n)) in (3_u64..).zip(lens.iter().enumerate()) {
+        script.extend([
+            open(&format!("o-{k}"), &wide(*n)),
+            frames(&format!("fo-{k}"), SETTLE),
+            snapshot(&format!("c{k}")),
+            ctl(
+                &format!("i-{k}"),
+                "doc.insert",
+                json!({"doc": id, "offset": 0, "text": "Q"}),
+            ),
+            frames(&format!("fi-{k}"), SETTLE),
+            snapshot(&format!("d{k}")),
+            ctl(
+                &format!("x-{k}"),
+                "doc.close",
+                json!({"doc": id, "discard": true}),
+            ),
+            frames(&format!("fx-{k}"), SETTLE),
+        ]);
+    }
+    script.extend([
+        open("o-ui", &wide(ui_len)),
+        open("o-back", "a.txt"),
+        frames("fu", SETTLE),
+        click("t-ui", &tab_target(&wide(ui_len))),
+        snapshot("c-ui"),
+        focus("fe", editor_target()),
+        type_text("ty", "Q"),
+        snapshot("d-ui"),
+        ctl("l-ui", "doc.list", json!({})),
+    ]);
+    let s = run(&dir, "s", &script, &root_args());
+    let mut cases: Vec<(String, String, String)> = lens
+        .iter()
+        .enumerate()
+        .map(|(k, n)| (wide(*n), format!("c{k}"), format!("d{k}")))
+        .collect();
+    cases.push((wide(ui_len), "c-ui".into(), "d-ui".into()));
+    let (mut cut, mut whole) = (0, 0);
+    for (p, c, d) in &cases {
+        let what = format!("the {}-char path `d/x…x.t`", p.chars().count());
+        let (tab, _) = tab_and_group(s.snap(c), p, &format!("{what}, clean"));
+        assert!(!offscreen(tab), "{what}, clean: the tab is offscreen");
+        let clean = row_texts(tab);
+        assert_eq!(
+            clean.len(),
+            1,
+            "{what}, clean: the tab paints one row: {clean:?}"
+        );
+        assert!(
+            clean[0].len() > 2 && p.starts_with(&clean[0]),
+            "{what}, clean: the tab's row is not the start of its path: {clean:?}"
+        );
+        if clean[0] == *p {
+            whole += 1;
+        } else {
+            cut += 1;
+        }
+        let dirty_root = s.snap(d);
+        let (tab, group) = tab_and_group(dirty_root, p, &format!("{what}, dirty"));
+        assert!(!offscreen(tab), "{what}, dirty: the tab is offscreen");
+        assert_eq!(
+            row_texts(tab),
+            clean,
+            "{what}, dirty: the tab's row changed with the mark"
+        );
+        let marks: Vec<&Value> = group
+            .into_iter()
+            .filter(|n| role(n) == Some("label") && value(n) == Some("modified"))
+            .collect();
+        assert_eq!(
+            marks.len(),
+            1,
+            "{what}, dirty: one `modified` after the tab"
+        );
+        assert!(
+            !offscreen(marks[0]),
+            "{what}, dirty: `modified` is offscreen"
+        );
+        assert_eq!(
+            row_texts(marks[0]),
+            ["modified"],
+            "{what}, dirty: `modified` paints exactly one row `modified`"
+        );
+    }
+    assert!(
+        cut > 0 && whole > 0,
+        "the lengths do not straddle the strip's width (whole: {whole}, cut: {cut}; a test bug)"
+    );
+    assert!(
+        doc_list(s.ok("l-ui"))
+            .iter()
+            .any(|d| d.dirty && d.path == wide(ui_len)),
+        "precondition: typing made the wide document dirty"
+    );
+    let _ = fs::remove_dir_all(&dir);
 }
 
 // =============================================================================================
