@@ -515,6 +515,27 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   accepted; round 1 of CI runs on the joined branch, my CI-REQUEST for 6f469df is not used; disk
   rule (no build below 14 GB free; this rework runs no build and no whole gate, by the director's
   instruction).
+  · did (53887cf, 3eb8c0c): m1 — the core-crates step of the three gate jobs (identical copies)
+  loops over `kiln-text kiln-syntax kiln-search xtask`, one `cargo test --locked -p "$p"` each,
+  appending to `core-crates.txt` between `==== cargo test --locked -p <p>` and `==== <p>: exit
+  status <rc>` lines; the log line is `CORE CRATES: exit status per package: kiln-text=… xtask=…
+  (reported, not required)`; `exit 0`. m3 — checked, no change needed: `window-probe` keeps
+  `fail-fast: false`; the upload steps of `window-linux` and of `window-probe` have `if: always()`
+  (the probe step also has `if: always()`, so "not run" is written when the build fails). m4 — new
+  step "Refresh the runner's package lists (installs nothing)", `sudo apt-get update`, after the
+  build and before the procedure. `docs/development.md`: the core-crates bullet (one run per
+  package and why), the setup-step list gains the refresh, "Packages installed … none" gains the
+  refresh sentence. m5, m6: no change (as built, as written).
+  · re-checked: PyYAML parse plus my structure script (18 `paths-ignore` patterns equal to
+  `ledger.toml`'s, triggers, `contents: read`, no `concurrency`/`continue-on-error`/`pull_request`,
+  15 `uses:` all 40-hex, every job's label, `if:` and matrix, every step's `if:`); `actionlint`
+  1.7.12 on `platforms.yml` and `ci.yml`: exit 0; the new core-crates script run with `bash
+  --noprofile --norc -eo pipefail` against a fake `cargo` whose `xtask` run fails to compile with
+  exit 101: the three others still run and report, the file holds all four sections, the summary
+  reads `kiln-text=0 kiln-syntax=0 kiln-search=0 xtask=101`, step exit 0. Not run: the real `cargo
+  test` per package (no build in this rework); `sudo apt-get update` (it would change this
+  machine's package lists); no hosted runner. Whole gate not run (the director's instruction; the
+  join runs it); `cargo xtask hygiene` on the committed state: result below.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
