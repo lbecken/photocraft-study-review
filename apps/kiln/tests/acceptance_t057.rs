@@ -1998,6 +1998,82 @@ fn ac8_a_truncated_root_listing_ends_with_a_marker() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// The tree's items and `truncated` markers in snapshot order: an item as its label, a marker as
+/// `"<marker>"`.
+fn items_and_markers(snap: &Value, what: &str) -> Vec<String> {
+    let tree = files_tree(snap, what).expect("Project files");
+    preorder(tree)
+        .into_iter()
+        .filter_map(|n| {
+            if role(n) == Some("tree_item") {
+                label(n).map(str::to_string)
+            } else if role(n) == Some("label")
+                && label(n).is_none()
+                && value(n).is_some_and(|v| v.starts_with("truncated"))
+            {
+                Some("<marker>".to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Ruling v1 (D-184, r1 of D-188): a sub-directory's marker comes after everything shown below
+/// that directory; nested truncated listings show one marker each, innermost first. The root is
+/// `a/b/c/` holding 50,001 files, so the reads of the root, `a` and `a/b` are all truncated while
+/// each directory shows one child; `a`'s last shown entry, `a/b`, is itself expanded.
+#[test]
+fn ac8b_nested_truncated_listings_put_each_marker_after_its_directory() {
+    let dir = case_dir("ac8b");
+    let root = dir.join(ROOT);
+    let deep = root.join("a").join("b").join("c");
+    mkdir(&deep);
+    for k in 0..50_001 {
+        fs::write(deep.join(format!("f{k:05}")), b"").expect("write a/b/c/f…");
+    }
+    write(&root.join("a/z.txt"), b"z\n");
+    write(&root.join("z.txt"), b"z\n");
+    let script = vec![
+        click_toggle("c"),
+        click_item("ca", "a"),
+        snapshot("s1"),
+        click_item("cab", "a/b"),
+        snapshot("s2"),
+        click_item("cab2", "a/b"),
+        snapshot("s3"),
+        ctl("pt", "project.tree", json!({})),
+        ctl("pta", "project.tree", json!({"path": "a"})),
+        ctl("ptab", "project.tree", json!({"path": "a/b"})),
+    ];
+    let s = run(&dir, "s", &script, &root_args());
+    s.all_ui_ok();
+    for id in ["pt", "pta", "ptab"] {
+        assert_eq!(
+            s.ok(id)["truncated"],
+            json!(true),
+            "precondition: {id} truncated"
+        );
+    }
+    let m = "<marker>";
+    assert_eq!(
+        items_and_markers(s.snap("s1"), "s1"),
+        ["a", "a/b", m, m],
+        "root and `a` expanded: `a`'s marker, then the root's"
+    );
+    assert_eq!(
+        items_and_markers(s.snap("s2"), "s2"),
+        ["a", "a/b", "a/b/c", m, m, m],
+        "`a/b` expanded too: every marker after everything shown below its directory, innermost first"
+    );
+    assert_eq!(
+        items_and_markers(s.snap("s3"), "s3"),
+        ["a", "a/b", m, m],
+        "`a/b` collapsed again"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // =============================================================================================
 // AC-10: F1, the shell fix (oracle: snapshot walk, doc.line).
 // =============================================================================================
