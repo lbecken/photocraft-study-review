@@ -36,6 +36,11 @@ reports for entries out of view.
 - The same question holds for `Documents` (T-055) and the editor's rows (T-056, which already paints only the
   rows in view).
 
+## Note from T-057's review round 2 (director, D-191)
+The limit sentence in `docs/protocol/ui-project.md` quotes "18.0 s for the expand"; the reviewer says that figure
+was the time of a whole script that started the session and expanded both the root and the large directory. This
+task re-measures and corrects the sentence.
+
 ## Log
 ### director
 - 2026-11-15 filed as a draft (D-188).
