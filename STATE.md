@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-15 19:22 UTC_
+_Last updated: 2026-11-15 21:15 UTC_
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.3** (D-146).
@@ -11,16 +11,18 @@ Decided since: the retrospective to cut 1 (D-174), ADR-0009 on platforms (D-175;
 D-173), methodology v1.4 (D-176). **INC-001 (CI on main red since T-036) is closed: T-069 merged, CI run 366 green
 at 2026-11-15T18:02:59Z (D-179).**
 
-In flight:
-- **T-057** (project panel, cut 2; medium, implementer-first arm): joined green on its first join at `4d6e464`
-  (11 acceptance tests); review round 1 running (run R-269). Scorecard on the branch: 44 verified, 1 implemented.
-- **T-070** (CI jobs for macOS and Windows; high): both builders done, branches merged in the worktree at `cd1121b`
-  (11 of 11 gate tests pass there); **not yet joined** (two full builds do not fit on the disk beside each other:
-  its join runs when T-057's review has freed its build). After the join it needs CI rounds on `ci/T-070`:
-  **the owner has been asked for permission to push `ci/…` branches** (D-180) and has not answered yet.
-- **T-054** (lighter build profile): spec being written (run R-270), moved up because of the disk (D-182).
+In flight (after the usage limit of about 20:35Z and the restart of 21:11Z, D-190):
+- **T-057** (project panel, cut 2; medium): rework after review round 1 merged; second join green at `6335016`
+  (12 acceptance tests); review round 2 running (run R-275, the round-1 reviewer resumed).
+- **T-070** (CI jobs for macOS and Windows; high): CI round 1 on `ci/T-070` recorded (D-187: Linux gate, Linux
+  window procedure and the macOS window probe green; Windows red as expected; macOS gate red with a first list of
+  failing tests); local join green at `bbbb0e5` (8 acceptance tests, 3 guards); review round 1 running (run R-274,
+  resumed after the limit); it prepares the negative candidate for AC-6, which the director pushes to
+  `ci/T-070-negative` (the owner allows `ci/…` branches, D-185).
+- **T-054** (lighter build profile; high): specified (D-186), dispatched after T-070 merges. Interim: builds run
+  with `CARGO_PROFILE_DEV_DEBUG=line-tables-only CARGO_INCREMENTAL=0`.
 Next (ADR-0009 Q-4): T-071 and T-079 after T-070; T-058, T-059; T-066; T-043; T-072 to T-076; T-077, T-078. Next
-free task number: T-081. CI on main: runs 377 and 378 green (read 19:20Z).
+free task number: T-082. CI on main: run 388 on `1072708` green (read 21:13Z).
 
 Scorecard on main: 64 items: 44 verified, 0 implemented, 0 failing, 20 planned (68.8%). Merged in this stage:
 T-055 (`kiln script`, the UI without a window, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (the
@@ -49,4 +51,4 @@ pushed commit and records it** (INC-001, closed in D-179).
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
 `handoffs/` (its last addendum first), then `tasks/` (state in front matter, role logs at the bottom), `metrics/`
 and `retrospectives/`. Worktrees live in `.worktrees/` (not pushed): after any restart run `uptime -s` and
-`git status` in each before touching it. The container restarted four times on 2026-11-14 (02:11Z, 02:59Z, 07:11Z, 18:15Z) and on 2026-11-15 at 16:09Z.
+`git status` in each before touching it. The container restarted four times on 2026-11-14 (02:11Z, 02:59Z, 07:11Z, 18:15Z) and on 2026-11-15 at 16:09Z and 21:11Z.
