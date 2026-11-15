@@ -730,6 +730,21 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
 - 2026-11-15 · R-268 · ready · rulings of D-183 acknowledged and accepted before acting: m7 (AC-3's
   line under m2 stays), m8 (my core-crates reader counted the `cargo test` inside an `echo` as an
   invocation; I make it count commands only, keeping every m1 requirement).
+  · did (m8): the core-crates reader now splits a line into statements at `;`, `&&` and `&`
+  outside quotes and counts a statement as a `cargo test` invocation only when its command word
+  is `cargo test` (after `do`/`then`/`if`/`!`/`{`/`(` and assignments); an `echo`, `printf` or
+  `:` line and quoted words invoke nothing. Every m1 requirement is unchanged. · self-check
+  (scratch stub, deleted, never committed): 11 of 11 pass; 21 mutants as expected. Fail: one
+  invocation naming all four packages; loop without `xtask`; no `||`; `>` not `>>`; no
+  `--locked`; `set +e` without a final `true`; the implementer's step of the join without
+  `exit 0`, with `>`, without `--locked`, without `xtask`; that step with its `cargo test` line
+  removed (only the `echo` lines name it); test-output naming another step / `always()` / gate
+  step without `id:`; fail-fast removed; either window upload without `if:`. Pass: four
+  written-out lines; `set +e` + `tee -a` + `true`; the implementer's step of the join as given in
+  D-183; test-output `failure()`. Clippy `-D warnings` clean with the stub. Committed state:
+  `acceptance_t070` 3 passed, 8 failed by assertion (no workflow on this branch) · gate attempts:
+  none of `cargo xtask ci` (not asked) · not run: the joined branch itself; anything on a hosted
+  runner · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
