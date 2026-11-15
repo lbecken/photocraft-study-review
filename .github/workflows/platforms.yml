@@ -99,7 +99,7 @@ jobs:
           set +e
           cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
           rc=$?
-          grep -E "^(test result:|thread '.*' panicked)" test-output.txt | head -200
+          grep -E -A1 "^(test result:|thread '.*panicked at|---- .* stdout ----)" test-output.txt | head -200
           echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
           exit 0
 
@@ -170,7 +170,7 @@ jobs:
           set +e
           cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
           rc=$?
-          grep -E "^(test result:|thread '.*' panicked)" test-output.txt | head -200
+          grep -E -A1 "^(test result:|thread '.*panicked at|---- .* stdout ----)" test-output.txt | head -200
           echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
           exit 0
 
@@ -243,7 +243,7 @@ jobs:
           set +e
           cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
           rc=$?
-          grep -E "^(test result:|thread '.*' panicked)" test-output.txt | head -200
+          grep -E -A1 "^(test result:|thread '.*panicked at|---- .* stdout ----)" test-output.txt | head -200
           echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
           exit 0
 
