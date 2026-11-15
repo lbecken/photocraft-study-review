@@ -9,4 +9,5 @@ tests = [
     "kiln::acceptance_t065::ac1_bad_root_is_named_before_the_window",
     "kiln::acceptance_t065::ac1_usage_errors_exit_2",
     "kiln::acceptance_t065::ac1_unreadable_script_exits_2",
+    "kiln::acceptance_t065::ac1_non_utf8_argument_is_a_usage_error",
 ]
