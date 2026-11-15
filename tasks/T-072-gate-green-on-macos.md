@@ -42,6 +42,13 @@ if `disk.rs` must change. Re-estimate at specification.
   `tasks/ci-runs/T-070-negative.md`), the three failing `xtask` tests are not named, and the full output is cut at
   200 lines. This task's spec decides whether the report steps print failing tests with their messages (a change
   to `.github/workflows/platforms.yml`, a gate path) or the artefacts are read instead.
+- **Follow-ups from T-070's review round 2** (`reviews/T-070-r2.md`, new findings 1 to 3; the first task that edits
+  `.github/workflows/platforms.yml` or `xtask/tests/acceptance_t070.rs` takes them, this one or T-077): (1) the
+  probe's time bound is tested as the text `120`, not as a bound (`sleep 2` in the watchdog or a dropped `kill -9`
+  pass the gate), and no gate test covers "every recording step ends with exit 0"; (2) two assertions pin a layout
+  no spec text pins (the probe reading the build's result through `steps.<id>.outcome`, and the literal `120`):
+  loosen them when the workflow next changes; (3) `docs/development.md`: the macOS disk cell leaves out the
+  record's inode columns although the sentence says "as printed".
 
 ## Log
 ### director
