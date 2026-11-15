@@ -732,3 +732,4 @@
 {"kind":"transition","task":"T-070","iteration":2,"at":"2026-11-15T22:29:59Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-070","iteration":2,"at":"2026-11-15T22:30:00Z","from":"reviewed","to":"queued"}
 {"kind":"transition","task":"T-058","iteration":2,"at":"2026-11-15T22:30:00Z","from":"self_verified","to":"tests_joined"}
+{"kind":"transition","task":"T-070","iteration":2,"at":"2026-11-15T22:44:22Z","from":"queued","to":"merged"}
