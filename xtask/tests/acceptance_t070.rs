@@ -1305,6 +1305,340 @@ fn ac1_window_jobs_build_run_and_upload() {
     );
 }
 
+// ---- g4 (D-193): the window jobs' steps -------------------------------------------------------
+
+/// The statements of a `run:` script (comments removed, `\`-continued lines joined), in order.
+fn statements(run: &str) -> Vec<String> {
+    let text = run.replace("\\\n", " ");
+    text.lines()
+        .flat_map(|l| shell_statements(strip_comment(l).trim()))
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// A statement's words from its command word on (after the keywords that open a compound
+/// command and after variable assignments).
+fn command_words(st: &str) -> Vec<String> {
+    let words: Vec<String> = st
+        .split_whitespace()
+        .map(|w| w.trim_start_matches(['(', '{']).to_owned())
+        .collect();
+    let skip = words
+        .iter()
+        .take_while(|w| {
+            matches!(
+                w.as_str(),
+                "" | "do" | "then" | "else" | "elif" | "if" | "while" | "until" | "!" | "time"
+            ) || (w.contains('=') && !w.starts_with('-') && !w.starts_with('"'))
+        })
+        .count();
+    words[skip..].to_vec()
+}
+
+/// A statement whose command only prints or does nothing (`echo`, `printf`, `:`). A statement
+/// of assignments only (`limit=120`) is not one: its words are operands.
+fn is_message(st: &str) -> bool {
+    matches!(
+        command_words(st).first().map(String::as_str),
+        Some("echo" | "printf" | ":")
+    )
+}
+
+/// The values of every `env:` the step sees (workflow, job, step), as text.
+fn env_values(w: &Y, j: &Y, s: &Y) -> Vec<String> {
+    let mut out = Vec::new();
+    for e in [w.get("env"), j.get("env"), s.get("env")]
+        .into_iter()
+        .flatten()
+    {
+        if let Y::Map(m) = e {
+            out.extend(m.iter().filter_map(|(_, v)| v.str().map(str::to_owned)));
+        }
+    }
+    out
+}
+
+fn env_keys(w: &Y, j: &Y, s: &Y) -> Vec<String> {
+    [w.get("env"), j.get("env"), s.get("env")]
+        .into_iter()
+        .flatten()
+        .flat_map(|e| e.keys().into_iter().map(str::to_owned).collect::<Vec<_>>())
+        .collect()
+}
+
+fn build_step(id: &str, st: &[Y]) -> usize {
+    step_idx(id, st, "runs `cargo build -p kiln --locked`", |s| {
+        statements(run_of(s)).iter().any(|x| {
+            let c = command_words(x);
+            c.len() >= 2 && c[0] == "cargo" && c[1] == "build" && x.contains("-p kiln")
+        })
+    })
+}
+
+fn procedure_step(st: &[Y]) -> usize {
+    step_idx(
+        "window-linux",
+        st,
+        "runs the procedure file into window-procedure.txt",
+        |s| {
+            run_of(s).contains(".github/scripts/window-procedure.sh")
+                && run_of(s).contains("window-procedure.txt")
+        },
+    )
+}
+
+fn probe_step(st: &[Y]) -> usize {
+    step_idx(
+        "window-probe",
+        st,
+        "runs kiln --root … --script … into window-probe.txt",
+        |s| {
+            let r = run_of(s);
+            r.contains("--root") && r.contains("--script") && r.contains("window-probe.txt")
+        },
+    )
+}
+
+/// The `target/` sub-directory the build statement of `run` writes the binary to (`debug` for
+/// the dev profile, `release` for `--release`, the profile's name for `--profile`); an error
+/// for a build that puts it elsewhere (`--target`, `--target-dir`).
+fn build_profile_dir(run: &str) -> Result<String, String> {
+    let st = statements(run)
+        .into_iter()
+        .find(|x| {
+            let c = command_words(x);
+            c.len() >= 2 && c[0] == "cargo" && c[1] == "build"
+        })
+        .ok_or("no `cargo build` statement")?;
+    let c = command_words(&st);
+    let mut dir = "debug".to_owned();
+    for (i, w) in c.iter().enumerate() {
+        if w == "--target"
+            || w.starts_with("--target=")
+            || w == "--target-dir"
+            || w.starts_with("--target-dir=")
+        {
+            return Err(format!(
+                "`{st}` writes the binary outside target/<profile>/"
+            ));
+        }
+        if w == "--release" || w == "-r" {
+            dir = "release".into();
+        }
+        let p = if w == "--profile" {
+            c.get(i + 1).cloned()
+        } else {
+            w.strip_prefix("--profile=").map(str::to_owned)
+        };
+        if let Some(p) = p {
+            dir = match p.trim_matches('"') {
+                "dev" | "test" => "debug".into(),
+                "bench" => "release".into(),
+                other => other.into(),
+            };
+        }
+    }
+    Ok(dir)
+}
+
+#[test]
+fn ac1_window_linux_procedure_status_is_not_masked() {
+    // Interface (1): `window-linux` is red when the procedure's exit status is non-zero. The
+    // step's `bash` runs with `-e` and `pipefail`; nothing may undo them or swallow the status.
+    let w = workflow();
+    let st = steps(job(&w, "window-linux"));
+    let s = &st[procedure_step(st)];
+    if let Some(sh) = s.get("shell").and_then(Y::str) {
+        assert_eq!(
+            sh, "bash",
+            "window-linux: the procedure step runs in `{sh}`, not bash (-eo pipefail)"
+        );
+    }
+    let sts = statements(run_of(s));
+    for x in &sts {
+        assert!(
+            !x.contains("||"),
+            "window-linux: the procedure step masks a failure: `{x}`"
+        );
+        let c = command_words(x);
+        assert!(
+            !(c.first().map(String::as_str) == Some("set")
+                && c.iter().skip(1).any(|f| f.starts_with('+'))),
+            "window-linux: the procedure step turns off -e or pipefail: `{x}`"
+        );
+        assert!(
+            !(c.first().map(String::as_str) == Some("exit")
+                && c.get(1).map(String::as_str) == Some("0")),
+            "window-linux: the procedure step ends with `exit 0`: `{x}`"
+        );
+    }
+    let last = sts.last().map(String::as_str).unwrap_or("");
+    assert!(
+        !["true", ":"].contains(&last),
+        "window-linux: the procedure step ends with `{last}`, so its status is always 0"
+    );
+}
+
+#[test]
+fn ac1_window_jobs_build_the_profile_whose_binary_they_run() {
+    // Interface (1): `cargo build -p kiln --locked`, then the procedure on `target/debug/kiln`.
+    // The binary the procedure (or the probe) runs is the one the job built.
+    let w = workflow();
+    for id in ["window-linux", "window-probe"] {
+        let j = job(&w, id);
+        let st = steps(j);
+        let b = build_step(id, st);
+        for k in env_keys(&w, j, &st[b]) {
+            assert!(
+                ![
+                    "CARGO_BUILD_TARGET",
+                    "CARGO_TARGET_DIR",
+                    "CARGO_BUILD_TARGET_DIR"
+                ]
+                .contains(&k.as_str()),
+                "job `{id}`: env `{k}` moves the binary out of target/<profile>/"
+            );
+        }
+        let dir = build_profile_dir(run_of(&st[b])).unwrap_or_else(|e| panic!("job `{id}`: {e}"));
+        let user = if id == "window-linux" {
+            procedure_step(st)
+        } else {
+            probe_step(st)
+        };
+        let text = format!(
+            "{}\n{}",
+            run_of(&st[user]),
+            env_values(&w, j, &st[user]).join("\n")
+        );
+        let mut runs_dirs = Vec::new();
+        let mut rest = text.as_str();
+        while let Some(i) = rest.find("target/") {
+            let tail = &rest[i + "target/".len()..];
+            if let Some((d, after)) = tail.split_once('/')
+                && after.starts_with("kiln")
+            {
+                runs_dirs.push(d.to_owned());
+            }
+            rest = tail;
+        }
+        if id == "window-linux" {
+            assert!(
+                !runs_dirs.is_empty(),
+                "window-linux: the procedure step names no target/<profile>/kiln"
+            );
+        }
+        for d in runs_dirs {
+            assert_eq!(
+                d, dir,
+                "job `{id}`: builds target/{dir}/ but runs target/{d}/kiln"
+            );
+        }
+    }
+}
+
+#[test]
+fn ac1_window_probe_exits_with_kiln_status() {
+    // Ruling m5 (D-182): a probe leg's colour is kiln's exit status. The step's last command
+    // exits with a status saved from `$?`.
+    let w = workflow();
+    let st = steps(job(&w, "window-probe"));
+    let sts = statements(run_of(&st[probe_step(st)]));
+    let saved: Vec<String> = sts
+        .iter()
+        .flat_map(|x| x.split_whitespace().map(str::to_owned).collect::<Vec<_>>())
+        .filter_map(|t| t.strip_suffix("=$?").map(str::to_owned))
+        .filter(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .collect();
+    assert!(
+        !saved.is_empty(),
+        "window-probe: the probe step saves no exit status (`v=$?`)"
+    );
+    let last = sts.last().cloned().unwrap_or_default();
+    let c = command_words(&last);
+    let ok = c.len() == 2
+        && c[0] == "exit"
+        && saved.iter().any(|v| {
+            [
+                format!("\"${v}\""),
+                format!("${v}"),
+                format!("${{{v}}}"),
+                format!("\"${{{v}}}\""),
+            ]
+            .contains(&c[1])
+        });
+    assert!(
+        ok,
+        "window-probe: the probe step does not end by exiting with kiln's saved status ({saved:?}): `{last}`"
+    );
+}
+
+#[test]
+fn ac1_window_probe_runs_after_a_failed_build_and_records_not_run() {
+    // Interface (1) and ruling g4: the probe step runs whatever the build's result (so a record
+    // is written and uploaded) and records "not run" when the build failed.
+    let w = workflow();
+    let j = job(&w, "window-probe");
+    let st = steps(j);
+    let b = build_step("window-probe", st);
+    let p = probe_step(st);
+    assert!(b < p, "window-probe: the probe step precedes the build");
+    let bid = st[b].get("id").and_then(Y::str).unwrap_or("");
+    assert!(
+        !bid.is_empty(),
+        "window-probe: the build step has no `id:`, so the probe cannot read its result"
+    );
+    let c = st[p].get("if");
+    assert!(
+        runs(c, failed_at(bid)) && runs(c, PASSED),
+        "window-probe: the probe step does not run whatever the build's result (if: {c:?})"
+    );
+    let text = squash(&format!(
+        "{}\n{}",
+        run_of(&st[p]),
+        env_values(&w, j, &st[p]).join("\n")
+    ));
+    assert!(
+        [
+            format!("steps.{bid}.outcome"),
+            format!("steps.{bid}.conclusion")
+        ]
+        .iter()
+        .any(|r| text.contains(r.as_str())),
+        "window-probe: the probe step does not read the build's result (steps.{bid}.outcome)"
+    );
+    assert!(
+        run_of(&st[p]).to_ascii_lowercase().contains("not run"),
+        "window-probe: the probe step records no \"not run\""
+    );
+}
+
+#[test]
+fn ac1_window_probe_is_bounded_to_120_seconds() {
+    // Interface (1): one run bounded to 120 s. The bound is a command's operand (or an `env:`
+    // value), not a message's text.
+    let w = workflow();
+    let j = job(&w, "window-probe");
+    let st = steps(j);
+    let p = probe_step(st);
+    let numbers = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_ascii_digit())
+            .filter(|n| !n.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+    let mut found: Vec<String> = statements(run_of(&st[p]))
+        .iter()
+        .filter(|x| !is_message(x))
+        .flat_map(|x| numbers(x))
+        .collect();
+    found.extend(env_values(&w, j, &st[p]).iter().flat_map(|v| numbers(v)));
+    assert!(
+        found.iter().any(|n| n == "120"),
+        "window-probe: no command of the probe step carries the 120 s bound (numbers: {found:?})"
+    );
+}
+
 #[test]
 fn ac1_defaults_env_checkout_and_every_action_pinned_by_sha() {
     let text = subject(WORKFLOW);

@@ -809,6 +809,38 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   of `kiln` are told apart from verdicts; the wrapper exits non-zero on any FAIL or NOT RUN verdict;
   forged cases in the guard tests) and g4 (five more workflow requirements in the acceptance tests)
   are mine; g2, g3, g7 are the implementer's; g5, g6 and the round-2 reading of AC-4 noted.
+  · did, g1: the procedure defines `echo` before `procedure` (no R-251 line changed): it prints
+  its text without reading escapes and indents every line after the first, so kiln's stderr,
+  echoed by R-251's `window stderr:` and AC-3 `stderr:` lines, never starts a line; a verdict is a
+  line at column 0. The wrapper also exits 1 when it read `WINDOW CASES FAIL`, `AC-3 FAIL`,
+  `PLAIN FAIL: …` or `PLAIN NOT RUN: …`. Forged FAIL lines from kiln do not turn a passing run red
+  (chosen: by g1 a kiln line is no verdict either way; a run that fails by itself stays red through
+  its own FAIL). Guards added to `guard_t070.rs` (they run the file's header, its two R-251 echo
+  lines and its wrapper around a stand-in body; no display, no kiln):
+  `g1_forged_ac3_pass_in_kiln_stderr_is_not_a_verdict` (the reviewer's k4, with a literal `\n`,
+  and with no AC-3 verdict of the procedure's own), `g1_forged_plain_pass_in_kiln_stderr_is_not_a_verdict`,
+  `g1_forged_fail_lines_in_kiln_stderr_do_not_turn_a_passing_run_red`,
+  `g1_any_fail_or_not_run_verdict_exits_1_even_beside_the_passes`. They fail on the R-273 file
+  (all four) and on each part undone (no `echo`: 3; no continuation indent: 3; no FAIL rule: 1;
+  NOT RUN not counted: 1). Under Xvfb with kiln built here: base exit 0; k4 (no-window stderr
+  adds `AC-3 PASS`) exit 1, the line indented, `AC-3 FAIL`; forged `PLAIN PASS` while the plain
+  window drops its path exit 1; forged FAIL/NOT RUN lines in every window case of a passing run
+  exit 0; k1, k2, k3 exit 1 each.
+  g4: five tests added to `acceptance_t070.rs`, each killing its mutant on a scratch stub (never
+  committed): `ac1_window_linux_procedure_status_is_not_masked` (M9 `| tee … || true`; also
+  `set +o pipefail`, `; true`, `; exit 0`, `shell: sh`), `ac1_window_probe_exits_with_kiln_status`
+  (M10 `exit 0`; also no final exit), `ac1_window_probe_runs_after_a_failed_build_and_records_not_run`
+  (M11 no `if:`; also `if: success()`, no read of `steps.<build id>.outcome`, no "not run", build
+  step without `id:`), `ac1_window_probe_is_bounded_to_120_seconds` (M12 `120` → `1200`; a 120 in
+  a message does not count), `ac1_window_jobs_build_the_profile_whose_binary_they_run` (M20
+  `--release`; also `--target`, the probe built `--release` running `target/debug`). Pass as they
+  should: `set -o pipefail`, `--profile dev`, `exit $rc`, the bound in a variable or in `env:`,
+  `if: success() || failure()`; one acceptable form (`limit=120`) first failed, fixed (an
+  assignment is not a message). Stub: 13 of 13 pass; clippy `-D warnings` clean. On this branch:
+  `guard_t070` 7 passed; `acceptance_t070` 0 passed, 13 failed by assertion (11 the workflow, 2
+  `.gitattributes`) · gate attempts: none of `cargo xtask ci` (not asked) · not run: the joined
+  branch (the implementer's g2/g3/g7 rework); the earlier m1/m3 mutants were not re-run (their
+  code is unchanged); anything on a hosted runner · next: director (re-join)
 <!-- end test author log -->
 ### reviewer
 - 2026-11-15 · R-274 · round 1 · request-changes · reviewed `bbbb0e52cd51497e33f3b045e3c067500f2343e7`
