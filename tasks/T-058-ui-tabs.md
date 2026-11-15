@@ -2,7 +2,7 @@
 id: T-058
 title: "Show every open document as a tab; make a document current by clicking its tab or its Documents entry; close it from its tab, discarding unsaved changes only on a second, explicit click"
 tier: medium            # ADR-0002 default (UI behaviour over existing commands; no dependency, gate path, persistence or process code); = the claimed item's tier (`ui.tabs`: medium); fixed at specified (METHODOLOGY v1.4 §4)
-state: in_progress            # director only, written with every transition; see METHODOLOGY §3
+state: self_verified            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: [ui.tabs]
 depends_on: []          # T-056, T-057, T-065 merged; nothing unmerged
