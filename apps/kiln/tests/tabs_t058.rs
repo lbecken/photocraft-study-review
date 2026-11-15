@@ -1266,14 +1266,11 @@ fn starts_ltr(name: &str) -> bool {
     !["שלום", "سلام", "٣"].iter().any(|p| name.starts_with(p))
 }
 
-/// One generated session: the steps, and the expected strip and `Title` after each.
-fn generated(
-    seed: u64,
-) -> (
-    Vec<String>,
-    Vec<String>,
-    Vec<(String, Vec<Shown>, Option<String>)>,
-) {
+/// After one step: its snapshot's id, the expected strip and the path `Title` begins with.
+type Check = (String, Vec<Shown>, Option<String>);
+
+/// One generated session: the root's names, the script, and a check after each step.
+fn generated(seed: u64) -> (Vec<String>, Vec<String>, Vec<Check>) {
     let mut rng = Rng(seed);
     let mut names = BTreeSet::new();
     let count = 3 + rng.below(4);
