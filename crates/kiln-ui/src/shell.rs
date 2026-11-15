@@ -52,15 +52,24 @@ impl Shell {
             ui.label(self.message.as_str()).accessible_name("Message");
             ui.separator();
             let documents_height = (ui.available_height() * DOCUMENTS_SHARE).max(1.0);
+            // A click on an entry makes its document current, as a click on its tab does.
+            let mut switch = None;
             ui.allocate_ui(egui::vec2(ui.available_width(), documents_height), |ui| {
                 scroll_view(ui, "kiln-shell-documents", |ui| {
                     list(ui, "Documents", |ui| {
-                        for (_, path) in session.docs() {
-                            ui.label(path.as_str());
+                        for (doc, path) in session.docs() {
+                            let entry = ui.label(path.as_str());
+                            if entry.clicked() || entry.secondary_clicked() {
+                                switch = Some(*doc);
+                            }
                         }
                     });
                 });
             });
+            if let Some(doc) = switch {
+                session.set_current(doc);
+                ui.ctx().request_repaint();
+            }
             ui.separator();
             self.document_area(ui, session, editor);
         });
