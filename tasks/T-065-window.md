@@ -645,4 +645,20 @@ env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LD_LIBRARY_PATH="$LIB" MESA_SHADER_CACH
   confirm both readings.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-15 · R-249 · tests_joined (head c2c8087) · round 1 · did: rulings acknowledged and
+  accepted: Q-2 A, Q-5 A, Q-7 A, Q-11 A, Q-12 A (but see finding 10), closing during `--script`
+  unspecified, a1 and a2 (D-164, main's copy). Ran the test author's `ac2.sh` as written (AC-2
+  `EQUAL` for both scripts, exits 0/0 and 3/3, files equal; AC-3 exit 2, one line, no panic),
+  70 window scripts against `kiln script` (2,170 lines), no-display and failure cases, strace,
+  the lock comparison (156 → 326, none changes version), a 100-script differential of `kiln
+  script` base vs head (0 differences), 18 mutants, a release build of the head. Verdict
+  `request-changes`: `reviews/T-065-r1.md` — defects: `ctrl`+`Q` closes the window mid-script;
+  the double click differs (real time); a 100-step scroll hits the 60-frame cap in a release
+  build; a non-UTF-8 argument panics; the ui.md/usage sentence on equal output. Test gaps: the
+  plain window's start paths, the default root (window-only mutants M08, M14). Spec gaps for the
+  director: a display lost while open (exit 1), a screen smaller than 1280×800, Q-12 A against
+  the Interface (recommendation: Q-12 B for `--script`). · gate attempts: 0 (ran `cargo test -p
+  kiln -p kiln-ui`, `xtask layers`, `ui-commands`, `no-skip`, `hygiene`) · not run: a real window
+  manager, real keyboard on the plain window, CI runner · missing context: none · next: implementer
+  (findings 1–7), director (8–10)
 <!-- end reviewer log -->
