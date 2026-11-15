@@ -137,7 +137,8 @@ dependency). No new dependency.
 - AC-3 (smaller build tree) — measured, not tested: the implementer runs
   `cargo test --workspace --no-run --locked` from an empty `target/` in its worktree, records
   `du -sh target` before and after the change in its log, then deletes `target/`. The branch's
-  figure is at most 40% of the base's (measured: 2.6 of 7.6 GB, 34%). The implementer also records
+  figure is at most 40% of the base's (measured: 2.6 of 7.6 GB, 34%, at `78e223b`; 2.6 of 7.8 GB,
+  33%, at `cbb54a2`, R-284). The implementer also records
   `du -sh target` after its last `cargo xtask ci` (D4). The reviewer repeats the first measurement
   once. Each measurement starts only with 14 GB free (`df -h /home/user`), one at a time.
   Oracle: `du`.
