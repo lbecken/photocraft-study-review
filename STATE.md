@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-15 02:00 UTC_
+_Last updated: 2026-11-15 02:45 UTC_
 
 ## Now
 Iteration 2, **second stage** (ADR-0007, accepted with a changed order in D-147), under methodology **v1.3**
@@ -16,9 +16,8 @@ In flight:
 - **T-055** (`kiln script`) merged at `e34ba1f` (D-155) and **T-056** (editor view) merged at `30435d1` (D-162).
   Scorecard on main: 64 items: 41 verified, 2 implemented (`ui.editor-view`, `ui.dispatch-only`), 0 failing,
   21 planned. No worktree exists.
-- **T-065** window (high; `ui.window`; spec check R-246, rulings D-163): implementer run R-247 in
-  `.worktrees/T-065`, independent test author run R-248 in `.worktrees/T-065-tests`, both from main
-  `025cc78900d63c90cb04ab6794b45d5bab8c157b`. It adds the windowing dependency. After its merge: evaluation A
+- **T-065** window (high; `ui.window`): joined green on its first join at `c2c8087` (6 gate acceptance tests);
+  review round 1 running (run R-249), which starts the real window under Xvfb. After its merge: evaluation A
   (cut 1: a desktop editor for one file), where the director stops and reports to the owner.
 
 Rules added in this stage (D-153, D-158, D-162): a `touches` path belongs to one role; a task's tier is the highest
