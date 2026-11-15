@@ -15,6 +15,7 @@ touches:                # provisional, fixed at specification; one role per path
   - apps/kiln-cli/tests/guard_t037_cli.rs
   - docs/development.md                                   # one paragraph: what these tests need from the machine
   - incidents/INC-001-ci-red-since-t036.md                # implementer writes it with the text the director gives below (D-175): `incidents/` is not a ledger path
+  - reviews/T-069-r1.md                                  # reviewer: the read of the diff asked for by ADR-0009 Q-7 (a low-tier branch may not otherwise carry a review file; D-179)
 budget_tokens: 150000   # low (v1.3)
 iteration: 2
 found_by: planner       # R-255 (ADR-0009, Context "Kiln today"): CI red on main since run 257
