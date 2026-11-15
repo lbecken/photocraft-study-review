@@ -39,6 +39,10 @@ Several published texts are stale, cut or uneven, each found by an evaluator or 
 - Q6 changes a published shape: which form stays, and is that a protocol change (tier)?
 - NEW-4: publish the witness sort (example or disk) of each declared kind, or say it in `docs/control-protocol.md` only?
 
+## Note from T-056's review round 2 (director, D-161)
+`docs/protocol/ui-editor.md`, the settle sentence, says "1,110 actions", the count of the first 22 acceptance
+tests; with all 28 the reviewer counted 1,135 (the figures themselves are unchanged: largest 20 frames).
+
 ## Log
 ### director
 - 2026-11-14 filed as a draft (D-141).

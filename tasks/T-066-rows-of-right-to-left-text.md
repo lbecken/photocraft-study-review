@@ -40,6 +40,11 @@ hold for and why that cannot be changed.
   text wraps?
 - Is right-to-left text in scope for the product (CHARTER), or is the honest answer a stated limit?
 
+## Note from T-056's review round 2 (director, D-161)
+The limit stated in `docs/protocol/ui.md` is slightly narrower than what the reviewer showed: chars that a
+right-to-left row loses can turn up in another node's rows (`xt` in the `Documents` list, `ln` in a container).
+The specification states the full extent or removes it.
+
 ## Log
 ### director
 - 2026-11-15 filed as a draft (D-160).
