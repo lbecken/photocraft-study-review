@@ -2,7 +2,7 @@
 id: T-070
 title: "Run the gate in CI on macOS and Windows as tracking jobs, check files out byte for byte, keep the reports, probe the window on each platform, and run the Linux window procedure under Xvfb on every code push"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (.github/workflows/platforms.yml, .github/scripts/, xtask/tests/); the approval row must contain `gate paths`. No dependency change.
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: []     # produces evidence; changes no behaviour of Kiln's binaries
 depends_on: [T-069]     # merged (30c66909, D-179): the existing CI job is green, so a run can be read
@@ -319,6 +319,36 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
 
 ## Log
 ### director
+- 2026-11-15 CI round 1 (D-187). Candidate `cd1121b9e69a949bddd0d91afce5b96887747894` (both branches merged) pushed
+  to `ci/T-070` at 19:30:06Z; run id 43752760283 (run 1 of `platforms.yml`), read with the Actions tools by a helper
+  under the director (extraction: `tasks/ci-runs/T-070-round-1.md`; artefact contents were not downloaded).
+  - `gate-linux`: success, 15 min 34 s. `GATE PASSED in 647.6s`; test `990 passed, 0 failed, 0 ignored in 120
+    suites`; scorecard `64 items: 44 verified, 0 implemented, 0 failing, 20 planned.`; `CORE CRATES: exit status per
+    package: kiln-text=0 kiln-syntax=0 kiln-search=0 xtask=0`; disk `8.6G target`.
+  - `window-linux`: success, 2 min 13 s. Six `CASE` lines with equal exit statuses (ac2 0/0, ac2x3 3/3, dblclick
+    0/0, scroll100 0/0, ctrlq 0/0, noroot 0/0); `WINDOW CASES PASS`; `AC-3 PASS` (the two X libraries are not
+    installed on the runner: `dpkg-query: no packages found matching libxkbcommon-x11-0`, likewise `libxcb-xkb1`);
+    `missing script: exit=2`; `PLAIN PASS: the start path changes the screen`; `APT LISTS: 58 files`.
+  - `window-probe (macos-15)`: success, 2 min 26 s. `PROBE: exit status 0`; stdout 3 lines (two snapshots showing
+    `Path`, `Open`, `Documents`; one `doc.list`); stderr empty. macOS 15.8.2, arm64.
+  - `window-probe (windows-2025)`: failure at "Build kiln" (6 errors in `crates/kiln-workspace/src/disk.rs`);
+    `PROBE: not run (cargo build -p kiln: failure)`.
+  - `gate-windows`: failure at "Gate", 9 min 15 s. `GATE FAILED in 194.7s: clippy, schema, scorecard, test`; fmt,
+    layers, ui-commands, hygiene, no-skip pass. Core crates: kiln-text=0, kiln-syntax=0, kiln-search=0 (all `test
+    result: ok`), xtask=101. Disk `2.5G target`.
+  - `gate-macos`: failure at "Gate", 21 min 20 s. `GATE FAILED in 355.1s: scorecard, test`; fmt, clippy, layers,
+    ui-commands, hygiene, schema, no-skip pass. The test-output step shows 46 binaries, 366 passed and 11 failed in
+    its first 200 lines (the step cuts there; the full list is in the artefact): three tests need `/dev/full`;
+    five no-display tests of `kiln` time out (a window opens, or the binary hangs, where Linux has no display);
+    one link-loop precondition gets a different error (os error 62); `deep_trees_stop_at_the_depth_bound` cannot
+    make a 2,100-deep chain; `tree_order_and_counts` differs. Core crates: three ok, xtask 116 passed and 3 failed
+    (names not printed). Disk `4.4G target`.
+  - Artefacts: six, one per job (`gate-linux-…` 8,822 B, `gate-macos-…` 29,358 B, `gate-windows-…` 8,377 B,
+    `window-linux-…` 577 B, two `window-probe-…`).
+  - Read against the criteria: AC-4 holds on this candidate (`gate-linux` and `window-linux` green with the
+    verdict lines). AC-5 holds (both other gates and both probes completed with success or failure; artefacts
+    present; the Windows core-crates output has a `test result:` line for each of the three crates). AC-6 (the
+    negative candidate) is still to run.
 <!-- end director log -->
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
