@@ -153,6 +153,69 @@ when it is absent, combined with a gate that runs on one machine and a CI result
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009's probe (CI red since run 257) · next: director
 <!-- end planner log -->
 ### implementer
+- 2026-11-15 · R-256 · ready · rulings of D-175 acknowledged and accepted (tier low with a
+  reviewer's read; oracle pinned: assertions unchanged, only how the unreadable root is reached;
+  other uid-0 tests in scope only if they fail as an ordinary identity; T-052 abandoned; INC-001
+  text copied byte for byte from the ruling's block).
+  ACs restated: (1) as uid 0 and as an ordinary user, in a checkout both can reach, the five tests
+  (and `confinement::root_that_cannot_be_opened_for_reading_is_refused_by_new`, same helper) pass
+  and each fails under a mutant of `disk.rs` that removes the refusal it guards; (2) as uid 0 in
+  a checkout below a root-owned 0700 directory, each identity-changing test fails with a
+  `precondition:` message naming that directory; (3) CI green after the merge (director).
+  **Cause, reproduced.** Ordinary identity here: `setpriv --reuid 1000 --regid 1000
+  --clear-groups --inh-caps=-all --bounding-set=-all` with a copy of the 1.97.0 toolchain and the
+  cargo registry, in a clone of this branch owned by uid 1000 under `/home/user/kiln-t069-scratch/`
+  with its own `target/` (this worktree and `/root` are not writable/reachable for uid 1000; the
+  scratch directory is deleted at the end). On base `e9d4b4d`: `cargo xtask scorecard --check`
+  as uid 1000 FAILS with exactly the CI result: the three tests named in the Goal fail and
+  `docs/scorecard.md is stale`; `cargo test --workspace --locked --no-fail-fast` as uid 1000: 975
+  ok, 3 FAILED, the same three, and no other test. The panic in each is not the identity change
+  (as an ordinary user the tests already ran as their own identity) but the parent's fixture
+  snapshot: `fs::read(..).unwrap()` of the mode-0000 control file `open/locked.txt`, which only
+  uid 0 can read (`acceptance_t036_workspace.rs:167`, `acceptance_t036_cli.rs:172`,
+  `guard_t036_removal_cli.rs:192` at base: `PermissionDenied`). As uid 0 on base, all six files
+  pass; with the scratch checkout's top directory made root-owned 0700, as uid 0 six tests fail
+  (the five + the confinement one) with `precondition: cannot spawn …: Permission denied`, which
+  names no path.
+  **Changed** (tests only, `touches`): the three T-036 files: the snapshot reads a file it gets
+  `PermissionDenied` on with the owner's read bit added for that read and the mode restored at
+  once (`read_bytes`), so both identities compare the same bytes; all five files and
+  `confinement.rs`: before a child runs as 65534 (uid 0 only), `assert_reachable` checks that
+  65534 can search every directory down to the binary it runs and to the fixture (mode bits),
+  and fails with `precondition: … <path> (mode 0700, owner uid 0, …) does not let uid 65534
+  search it …`. No assertion changed; no skip, `#[ignore]` or `cfg`. `docs/development.md`: one
+  paragraph under CI. `incidents/INC-001-ci-red-since-t036.md`: created with the ruling's text.
+  **Results at `3f5cff6`** (test change): uid 0, worktree, the six files: 1+6+1+3+3+2 tests ok.
+  uid 1000: `cargo test --workspace --locked --no-fail-fast` 978 ok, 0 failed; `cargo xtask ci
+  --keep-going` GATE PASSED (scorecard PASS 64 items, 44 verified, 0 failing; test PASS 979
+  passed). AC-2, uid 0, checkout below root 0700: the same six tests fail, each with the
+  precondition message naming `/home/user/kiln-t069-scratch (mode 0700, owner uid 0, group gid
+  0)`; the other tests in those binaries pass.
+  **Tests outside the five that fail as an ordinary identity:** none (only the three T-036 tests
+  failed as uid 1000 on base; the two T-037 tests and `confinement` failed only in the
+  unreachable checkout as uid 0).
+  **Mutants** of `crates/kiln-workspace/src/disk.rs`, each applied, run (the six files) and
+  reverted with `git checkout -- crates/kiln-workspace/src/disk.rs`, under both identities with
+  identical results; `git status` clean after each set: M1 (`DiskFs::new` holds `/` when the root
+  cannot be opened: refusal at start removed) → `unreadable_root_is_refused_by_new`,
+  `unreadable_root_is_refused_at_start`, `confinement::root_that_cannot…` FAIL; M2 (held-root
+  identity not compared in `current_root`) → `root_made_unreadable_after_start_stays_protected…`
+  FAIL (with the other two guard_t036 cases, `reopen_after_the_root_moved_is_refused`,
+  `confinement::root_that_cannot…`); M3 (`check_location` accepts a walk failing with
+  `PermissionDenied`) → `reopen_whose_walk_fails_inside_is_io_error` FAIL in its "as U" cases
+  AC-4 (ii) and (iii); M4 (`check_location` opens the file) → `reopen_does_not_need_the_file`
+  FAIL in "as U: a.txt made mode 0000".
+  **Gate:** attempt 1, uid 0, worktree, at `4c96de1`: GATE PASSED (979 passed; scorecard 44
+  verified, 0 failing). Ordinary identity: `cargo xtask ci --keep-going` as uid 1000 at
+  `3f5cff6` (above) and again at the log commit (last line of this entry).
+  QUESTION: the incident text (copied as ruled) says the tests fail because they "re-run
+  themselves under another identity starting from uid 0"; the reproduced mechanism is that their
+  parent reads a mode-0000 control file only uid 0 can read (the identity branch for an ordinary
+  user already existed). Should the record of D-175 or INC-001 be corrected? Not changed here.
+  · not run: the CI runner itself (the director reads the run after the merge); ACLs or
+  filesystems other than ext4-like mode bits; TMPDIR set to an unreachable directory as uid 0 is
+  covered by the fixture check but was not exercised. · missing context: none. · next: reviewer
+  (diff read and the AC-1 mutant), director.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
