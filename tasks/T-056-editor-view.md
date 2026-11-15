@@ -1073,4 +1073,12 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   t056, t055 three files, kiln-ui, `ui-commands`, `hygiene`) · not run: full `cargo xtask ci`,
   release build, a window · missing context: none · next: implementer (findings 1–6), director
   (finding 7, tier in the branch's task file).
+- 2026-11-15 · R-244 · review round 2 (delta `97ba223..084b740`, final) · did: rulings z1–z6
+  acknowledged and accepted; delta inside `touches` by role; M12, M16, M17 now killed by the z4
+  tests; y5 cases, click columns, colours (445 rows, 0 mismatches), differential seeds 241056 and
+  241057 (2 × 180 × 40, 0 mismatches), 20 x1 sessions clean; 5,000-key run 0 unsettled (round 1:
+  146); 6 changed document sentences hold; settle figures re-measured on the 28 acceptance tests
+  (1,135 actions, max 20). Verdict approve (`reviews/T-056-r2.md`); 2 follow-ups (RTL limit
+  sentence narrower than shown; stale action count). · gate attempts: 0 · not run: full
+  `cargo xtask ci`, release build · missing context: none · next: director.
 <!-- end reviewer log -->
