@@ -39,6 +39,12 @@ Snapshot after each caret movement or edit: the line and column shown equal `cur
 - Tests find nodes by label and role and check them against the commands in the same session;
   none pins a whole snapshot, a message text or the shell's layout (golden rule 9).
 
+## Note from T-057's review (director, D-188)
+Two acceptance tests of T-057 depend on the shell's layout: `ac2_expand_and_collapse_follow_the_naive_model` needs
+some click to require a scroll at `--size 800x320`, and `ac3_generated_trees_fully_expanded` clicks every entry at
+`1280x8192` without scrolling. A task that changes the layout re-checks them; `apps/kiln/tests/acceptance_t057.rs`
+then goes into its `touches`.
+
 ## Log
 ### director
 <!-- end director log -->

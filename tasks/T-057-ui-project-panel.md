@@ -498,6 +498,28 @@ changes the current-document rule in a way AC-4 must follow (T-058 is still a dr
 - The sentence "a file the UI's `doc.save` creates appears after the next expand" is unverified: no script can make
   a save create a file. It is removed from the document unless the reviewer finds a way to show it.
 
+### Rulings on review round 1 (director, D-188; `reviews/T-057-r1.md` at `27d9875c41bf0967f44a655aca299d5e10d6cca7`)
+- **r1 (finding 1, test gap).** An acceptance test for ruling v1 is added to `acceptance_t057.rs` on the tests
+  branch: with a truncated listing inside an expanded sub-directory, that directory's `truncated` marker comes
+  after everything shown below it, and a nested truncated directory's marker comes before its parent's. The
+  fixture needs no Unix-only API (the reviewer used 50,001 empty files, as AC-8 does).
+- **r2 (finding 2).** P5 in `docs/protocol/ui-project.md` says where nested markers go: each after the last entry
+  shown below its directory, the innermost first.
+- **r3 (finding 3).** The sentence of v3 is added: a successful expand leaves `Message` as it was.
+- **r4 (finding 4).** The sentence on the cost of a large directory states what was measured, as a limit: every
+  shown entry is laid out on every frame, so the time of a frame grows with the number of entries shown; the
+  reviewer measured, in a debug build with 50,000 entries shown, 18.0 s for the expand, 0.76 s for each later
+  frame and 475.9 s for 600 idle frames. Laying out only the rows in view changes what a snapshot reports for the
+  rows out of view and is not done in this task; it is filed as draft T-081.
+- **r5 (finding 5).** "shows its first 37 chars" is replaced by what holds: a name wider than the panel is cut at
+  the panel's edge, and how many chars remain depends on the chars.
+- **r6 (finding 6, spec gap).** A file name that contains a line break is painted on two rows, so "one row equal
+  to the value" does not hold for it; its label and value are exact and a click opens it. Stated as a limit.
+- **r7 (findings 7 and 8).** The long comment line in `shell.rs` is wrapped. The two tests that depend on the
+  layout (AC-2 needs a scroll at 800x320; AC-3 clicks every entry at 1280x8192 without scrolling) stay as they are
+  and are named in T-058's and T-059's notes: a task that changes the shell's layout re-checks them.
+- The sentence "a file the UI's `doc.save` creates appears after the next expand" stays: the reviewer showed it.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·

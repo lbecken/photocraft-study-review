@@ -43,6 +43,12 @@ Clicking a `Documents` entry does nothing and logs nothing today (`evaluations/i
 inert"); this task gives documents their way of being made current, and the entry either becomes that control or
 stays a label the document calls a label.
 
+## Note from T-057's review (director, D-188)
+Two acceptance tests of T-057 depend on the shell's layout: `ac2_expand_and_collapse_follow_the_naive_model` needs
+some click to require a scroll at `--size 800x320`, and `ac3_generated_trees_fully_expanded` clicks every entry at
+`1280x8192` without scrolling. A task that changes the layout re-checks them; `apps/kiln/tests/acceptance_t057.rs`
+then goes into its `touches`.
+
 ## Log
 ### director
 <!-- end director log -->
