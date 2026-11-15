@@ -2,7 +2,7 @@
 id: T-070
 title: "Run the gate in CI on macOS and Windows as tracking jobs, check files out byte for byte, keep the reports, probe the window on each platform, and run the Linux window procedure under Xvfb on every code push"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (.github/workflows/platforms.yml, .github/scripts/, xtask/tests/); the approval row must contain `gate paths`. No dependency change.
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # produces evidence; changes no behaviour of Kiln's binaries
 depends_on: [T-069]     # merged (30c66909, D-179): the existing CI job is green, so a run can be read
