@@ -276,6 +276,35 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   `CI-REQUEST` and the director holds the request.
 - Tests added by this task use no Unix-only API (T-071's rule is not merged yet).
 
+### Rulings on the test author's questions of R-264 (director, D-182; told to both builders)
+- **m1 (Q-a).** The core-crates step runs one `cargo test --locked -p <package>` per package (`kiln-text`,
+  `kiln-syntax`, `kiln-search`, `xtask`), each appending to `core-crates.txt`, inside the one step, so that a
+  package whose tests do not compile on a platform does not stop the others (measured by the test author: with one
+  `cargo test -p a -p b` cargo runs no test at all when one package's test file fails to compile).
+- **m2 (Q-b).** A window case's exit status is the status of `kiln` itself, not of the virtual-display wrapper: the
+  procedure records `kiln`'s status inside the wrapped command and reads it from there; if it was not recorded the
+  case fails and says so. (In 1 of 8 runs here a case showed the wrapper's own status 5; 20 repeats gave 3 every
+  time.) The test author changes the procedure file and its test of the block's lines accordingly, stating each
+  line that differs from the block in `tasks/T-065-window.md`.
+- **m3.** The window-probe matrix does not cancel one platform when the other fails, and the uploads of the window
+  jobs happen whatever the procedure's or the probe's result; the implementer makes it so and the test author
+  adds the checks to its workflow tests.
+- **Disk.** The disk was full while three builders compiled (0 MB free, reported by the test author); a builder
+  checks `df -h /home/user` before a gate run and stops and reports below 14 GB free.
+
+### Rulings on the implementer's questions of R-263 (director, D-182; told to both builders)
+- **m4 (question c).** The `window-linux` job may refresh the runner's package lists (`sudo apt-get update`)
+  before the procedure; it installs nothing.
+- **m5 (question a).** A window-probe leg is green only when the window form ran the script and `kiln` exited 0;
+  its colour is `kiln`'s exit status. A leg that cannot open a window is red and stays tracked ("built, not
+  observed", ADR-0009 Q-5).
+- **m6 (question b).** `window-linux` is tracked until a decision row names its first green run on main, like the
+  other jobs of this workflow; AC-4 still needs it green on the candidate before the task is queued.
+- The condition of the test-output step, `failure() && steps.gate.outcome == 'failure'`, is accepted as the
+  spec's "only when the gate failed"; the test author's workflow test accepts either form.
+- **Round 1 of CI is run on the joined branch** (workflow and procedure together), not on the implementer's
+  commit alone, once the owner has allowed pushing `ci/…` branches.
+
 ## Log
 ### director
 <!-- end director log -->
