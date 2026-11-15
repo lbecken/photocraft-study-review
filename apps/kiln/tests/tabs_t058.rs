@@ -1450,3 +1450,115 @@ fn generated_sessions_follow_the_model() {
         let _ = fs::remove_dir_all(&dir);
     }
 }
+
+/// A secondary click and modifiers on `Close`, `Discard` and a `Documents` entry act as a click;
+/// a click on a tab leaves the editor unfocused and nothing focused.
+#[test]
+fn close_discard_and_entries_take_any_click() {
+    let dir = case_dir("any-click");
+    fixture(
+        &dir,
+        &[("a.txt", "a\n"), ("b.txt", "b\n"), ("c.txt", "c\n")],
+    );
+    let secondary = |id: &str, target: Value| {
+        ui(
+            id,
+            "click",
+            json!({"target": target, "button": "secondary"}),
+        )
+    };
+    let modified = |id: &str, target: Value| {
+        ui(
+            id,
+            "click",
+            json!({"target": target, "modifiers": ["ctrl", "alt"]}),
+        )
+    };
+    let script = vec![
+        open("o1", "a.txt"),
+        open("o2", "b.txt"),
+        open("o3", "c.txt"),
+        frames("f", 3),
+        click("ce", json!({"label": "Editor"})),
+        type_text("ty", "q"),
+        click_tab("ct", "a.txt"),
+        snapshot("s0"),
+        secondary("x3", json!({"label": "Close c.txt"})),
+        snapshot("s1"),
+        modified("x1", json!({"label": "Close a.txt"})),
+        snapshot("s2"),
+        modified("e2", json!({"role": "label", "value": "c.txt"})),
+        snapshot("s3"),
+        secondary("d3", json!({"label": "Discard c.txt"})),
+        snapshot("s4"),
+    ];
+    let s = run(&dir, "s", &script, &[]);
+    s.all_ui_ok();
+    let root = s.snap("s0");
+    assert!(
+        preorder(root).iter().all(|n| n.get("focused").is_none()),
+        "s0: something focused after a tab click"
+    );
+    assert!(title(root).unwrap().starts_with("a.txt"));
+    // c.txt is dirty: refused, Discard shown.
+    let c = |snap: &str| {
+        shown(s.snap(snap), snap)
+            .into_iter()
+            .find(|t| t.path == "c.txt")
+    };
+    assert!(c("s1").expect("c.txt").discard);
+    assert!(message(s.snap("s1")).starts_with("unsaved_changes"));
+    // a.txt (clean, current) closed with modifiers: c.txt (highest) current, Message cleared.
+    assert_eq!(tab_labels(s.snap("s2"), "s2"), ["b.txt", "c.txt"]);
+    assert!(title(s.snap("s2")).unwrap().starts_with("c.txt"));
+    assert_eq!(message(s.snap("s2")), "");
+    // A Documents entry with modifiers switches.
+    assert!(c("s3").expect("c.txt").current);
+    // A secondary click on Discard closes.
+    assert_eq!(tab_labels(s.snap("s4"), "s4"), ["b.txt"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// A long path is painted on one row (a prefix of it, cut at the window's edge at most); a
+/// `scroll` of the strip sends nothing.
+#[test]
+fn long_paths_and_scrolls() {
+    let dir = case_dir("long");
+    let long = format!("{}.txt", "x".repeat(120));
+    let mut files: Vec<(String, &str)> = (0..40).map(|i| (format!("g{i:02}.txt"), "g\n")).collect();
+    files.push((long.clone(), "l\n"));
+    let refs: Vec<(&str, &str)> = files.iter().map(|(p, t)| (p.as_str(), *t)).collect();
+    fixture(&dir, &refs);
+    let mut script: Vec<String> = files
+        .iter()
+        .enumerate()
+        .map(|(i, (p, _))| open(&format!("o{i}"), p))
+        .collect();
+    script.extend([
+        frames("f", 5),
+        snapshot("s0"),
+        ui(
+            "sc",
+            "scroll",
+            json!({"target": {"label": "Tabs"}, "direction": "down", "steps": 3}),
+        ),
+        frames("idle", 100),
+    ]);
+    let s = run(&dir, "s", &script, &[]);
+    s.all_ui_ok();
+    let root = s.snap("s0");
+    let tab = preorder(root)
+        .into_iter()
+        .find(|n| role(n) == Some("tab") && label(n) == Some(long.as_str()))
+        .expect("the long path's tab");
+    let rows = row_texts(tab);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert!(long.starts_with(&rows[0]) && rows[0].len() > 20, "{rows:?}");
+    let before = log_upto(&dir, "p0", &script, "s0", &[]);
+    assert_eq!(
+        s.log_entries().len(),
+        before,
+        "the scroll or idle frames logged something"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
