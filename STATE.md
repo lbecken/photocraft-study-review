@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-15 18:20 UTC_
+_Last updated: 2026-11-15 19:22 UTC_
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.3** (D-146).
@@ -12,14 +12,15 @@ D-173), methodology v1.4 (D-176). **INC-001 (CI on main red since T-036) is clos
 at 2026-11-15T18:02:59Z (D-179).**
 
 In flight:
-- **T-070** (CI jobs for macOS and Windows, the Linux window procedure as a CI job; high): implementer run R-263 in
-  `.worktrees/T-070`, independent test author run R-264 in `.worktrees/T-070-tests`. Three of its criteria need
-  candidate commits pushed to `ci/T-070`; **the owner has been asked for permission to push `ci/…` branches**
-  (D-180) and the director holds any `CI-REQUEST` until the owner answers.
-- **T-057** (project panel, cut 2; medium, implementer writes the acceptance tests first): implementer run R-265 in
-  `.worktrees/T-057` and `.worktrees/T-057-tests` (D-181).
-Next (ADR-0009 Q-4): T-071 (the platform-test tool) and T-079 (marking the product test files) after T-070; T-058,
-T-059; T-066; T-043; T-072 to T-076; T-077, T-078. Next free task number: T-081.
+- **T-057** (project panel, cut 2; medium, implementer-first arm): joined green on its first join at `4d6e464`
+  (11 acceptance tests); review round 1 running (run R-269). Scorecard on the branch: 44 verified, 1 implemented.
+- **T-070** (CI jobs for macOS and Windows; high): both builders done, branches merged in the worktree at `cd1121b`
+  (11 of 11 gate tests pass there); **not yet joined** (two full builds do not fit on the disk beside each other:
+  its join runs when T-057's review has freed its build). After the join it needs CI rounds on `ci/T-070`:
+  **the owner has been asked for permission to push `ci/…` branches** (D-180) and has not answered yet.
+- **T-054** (lighter build profile): spec being written (run R-270), moved up because of the disk (D-182).
+Next (ADR-0009 Q-4): T-071 and T-079 after T-070; T-058, T-059; T-066; T-043; T-072 to T-076; T-077, T-078. Next
+free task number: T-081. CI on main: runs 377 and 378 green (read 19:20Z).
 
 Scorecard on main: 64 items: 44 verified, 0 implemented, 0 failing, 20 planned (68.8%). Merged in this stage:
 T-055 (`kiln script`, the UI without a window, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (the
