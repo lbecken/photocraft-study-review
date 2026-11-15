@@ -97,8 +97,9 @@ impl Shell {
 }
 
 /// A vertical scroll area whose content is one accessibility node of role `scroll_view`, with
-/// the visible part of the area (its clip rectangle, cut to the area's own width) as its bounds. `kiln script` scrolls the
-/// nearest such node around a target and treats its bounds as the visible part.
+/// the visible part of the area (its clip rectangle, cut to the area's own width) as its bounds.
+/// `kiln script` scrolls the nearest such node around a target and treats its bounds as the
+/// visible part.
 pub(crate) fn scroll_view(ui: &mut Ui, id_salt: &str, add: impl FnOnce(&mut Ui)) {
     scroll_view_with(ui, id_salt, None, add);
 }

@@ -67,7 +67,8 @@ document current (`docs/protocol/ui-editor.md`, "The current document"), and the
 from the next frame. A FIFO or a device is refused (`not_a_file`) without blocking. A refused
 read (`not_found`, `not_a_file`, `outside_root`, `io_error`, `invalid_path`) is not logged,
 leaves the directory (or the root) collapsed and sets `Message` to begin with its kind, because
-the user asked for it; the editor's own background reads never set `Message`.
+the user asked for it; the editor's own background reads never set `Message`. A successful
+expand leaves `Message` as it was; only a successful open or save clears it.
 
 ## When the tree on disk changes
 
@@ -82,11 +83,15 @@ after the next expand of its directory.
 ## Truncated listings
 
 P5. When the read that listed a directory was truncated, a node whose value begins with
-`truncated` follows its last shown entry, and entries of that directory after the cut are not
-shown.
+`truncated` comes after the last entry shown below that directory (after the descendants of its
+last entry, when that entry is an expanded directory), and entries of that directory after the
+cut are not shown.
 
 Which entries are shown is then what that read listed (`project.tree`'s rule 6: preorder up to
-`limit`). For the root, the marker follows the root's last shown entry.
+`limit`). Nested truncated listings show one marker each, innermost first: with the root, `a`
+and `a/b` expanded and all three reads truncated, the markers of `a/b`, `a` and the root follow
+one another after the last entry shown below `a/b`. The markers are identical; a script tells
+them apart only by position.
 
 ## Labels, targets and paths
 
@@ -110,14 +115,19 @@ blocking. It reads only on a user's click.
 
 ## Limits
 
-- Expanding a large directory costs one `project.tree` of up to 50,000 entries (0.5 s for
-  50,200 entries in a debug build, measured once on a 4-core Linux machine; no time bound is
-  stated).
+- Every shown entry is laid out on every frame, so the time of a frame grows with the number of
+  entries shown. Measured by the reviewer (`reviews/T-057-r1.md`, finding 4) in a debug build,
+  with a directory of 50,000 entries shown: 18.0 s for the expand, then 0.76 s for each later
+  frame (475.9 s for 600 idle frames). The read itself is one `project.tree` of up to 50,000
+  entries. No time bound is stated.
 - The rows of a name that begins with right-to-left text can lack chars (`docs/protocol/ui.md`,
   Limits); its `label` and `value` are exact.
 - A name wider than the panel is cut at the panel's right edge: its row then holds only the
-  chars whose centre lies inside the panel; its `label` and `value` are exact. Measured: a root
-  file whose name has 84 chars, at the default size, has a row of its first 37 chars.
+  chars whose centre lies inside the panel; its `label` and `value` are exact. How many chars
+  remain depends on the chars, since their widths differ.
+- A name that contains a line break is painted on two rows (`new` and `line` for `new\nline`),
+  so its rows are not one row equal to its `value`; its `label` and `value` are exact and a
+  click opens it.
 
 ## Example
 
