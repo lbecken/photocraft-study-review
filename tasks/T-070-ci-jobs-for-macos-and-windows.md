@@ -666,7 +666,12 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   T-077 and T-078 edit `platforms.yml`: my tests require the five jobs, not that no others exist;
   a T-077 change to `window-probe` needs `ac1_five_jobs…`/`ac1_window_jobs…` updated by a high-tier
   test author.
-  · gate attempts: 1 of `cargo xtask ci --keep-going` (result below) · not run: the gate tests on
+  · gate attempts: 1 of `cargo xtask ci --keep-going` (10 min 25 s): every step PASS or EMPTY but
+  `test` (930 passed, 3 failed: three `acceptance_t005_r3` tests, which then passed 11 of 11 alone;
+  the volume was full during the run, 0 MB free after it, INFERRED cause; `cargo test` stopped at
+  that suite). Then `cargo test -p xtask --locked --no-fail-fast`: every suite ok but
+  `acceptance_t070` (3 passed, 8 failed by the assertion above, as expected on this branch);
+  `hygiene` and `no-skip` PASS · not run: the gate tests on
   macOS or Windows (the exit-rule test needs `sh` there: Git Bash on Windows, unmeasured), any
   hosted runner · missing context: none · next: join, reviewer (AC-7 with this file)
 <!-- end test author log -->
