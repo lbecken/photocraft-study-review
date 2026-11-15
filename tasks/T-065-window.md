@@ -832,4 +832,15 @@ plain none && plain none2 && plain apath a.rs && {
   kiln -p kiln-ui`, `xtask layers`, `ui-commands`, `no-skip`, `hygiene`) · not run: a real window
   manager, real keyboard on the plain window, CI runner · missing context: none · next: implementer
   (findings 1–7), director (8–10)
+- 2026-11-15 · R-252 · round 2 (head 50d6b73, delta from c2c8087) · did: rulings b1–b8
+  acknowledged and accepted. New `ac2.sh` as written: 6 window cases (57 lines) equal with and
+  without frame counts, AC-3 PASS, order check, PLAIN PASS (4 runs, debug and release).
+  Round-1 reproductions (`ctrl`+`Q`, double click ×3, 100-step scroll in a release build) now
+  byte-equal; 98 scripts, 2,750 lines, 0 differences; real XTest input and held modifiers ignored
+  under a script. M08 killed by the plain-window framebuffer check (3/3), M14 by case `noroot`.
+  `kiln script` byte-equal to round 1 (100 seeded scripts). Non-UTF-8: 25 command lines, exit 2.
+  12 sentences checked, 2 nits (ui.md:71 "the clock is not read"; ui.md:104 panic rate, 8 of 20
+  here). Verdict `approve`: `reviews/T-065-r2.md`. · gate attempts: 0 (ran `cargo test -p kiln -p
+  kiln-ui`, `xtask hygiene`) · not run: real window manager, CI runner · missing context: none ·
+  next: director (approval row; nits 1–2 as follow-ups)
 <!-- end reviewer log -->
