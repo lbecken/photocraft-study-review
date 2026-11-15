@@ -17,9 +17,11 @@
 #![cfg(test)]
 
 use std::collections::BTreeMap;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::Read;
 use std::net::{SocketAddr, TcpStream};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
@@ -78,7 +80,7 @@ enum Display {
 }
 
 /// `kiln <args>` in `cwd` with `HOME` set to `home`, stdin closed, under the hang detector.
-fn kiln_in(cwd: &Path, home: &Path, display: Display, args: &[&str]) -> Out {
+fn kiln_in<A: AsRef<OsStr>>(cwd: &Path, home: &Path, display: Display, args: &[A]) -> Out {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_kiln"));
     cmd.args(args)
         .current_dir(cwd)
@@ -98,7 +100,7 @@ fn kiln_in(cwd: &Path, home: &Path, display: Display, args: &[&str]) -> Out {
             cmd.env("DISPLAY", format!(":{UNUSED_DISPLAY}"));
         }
     }
-    let what = format!("kiln {}", args.join(" "));
+    let what = format!("kiln {}", shown(args));
     let mut child = cmd.spawn().unwrap_or_else(|e| panic!("spawn {what}: {e}"));
     let mut out = child.stdout.take().expect("stdout pipe");
     let mut err = child.stderr.take().expect("stderr pipe");
@@ -121,6 +123,14 @@ fn kiln_in(cwd: &Path, home: &Path, display: Display, args: &[&str]) -> Out {
         stdout: out_reader.join().expect("stdout reader"),
         stderr: err_reader.join().expect("stderr reader"),
     }
+}
+
+/// The arguments as one line for messages (not UTF-8 shown lossily).
+fn shown<A: AsRef<OsStr>>(args: &[A]) -> String {
+    args.iter()
+        .map(|a| a.as_ref().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// One case directory: `<dir>/d` with `src/a.rs` (the root), `<dir>/home` (an empty `HOME`),
@@ -457,5 +467,42 @@ fn ac1_unreadable_script_exits_2() {
         out.stderr_text()
     );
     assert_eq!(tree(&dir.join("d")), before_root, "the root changed");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// b3 (D-165): an argument that is not UTF-8 is a usage error, exit 2, a message and the usage
+/// on stderr (ruling a1), nothing on stdout, no panic, in the window form and in `kiln script`,
+/// whether it is a path, an option, or an option's value. (On base `std::env::args` panics.)
+#[test]
+fn ac1_non_utf8_argument_is_a_usage_error() {
+    let dir = case_dir("non-utf8");
+    let home = dir.join("home");
+    let usage = usage(&dir, &home);
+    let bad = OsStr::from_bytes(b"src/\xffa.rs");
+    let bad_opt = OsStr::from_bytes(b"--r\xffoot");
+    let os = |s: &str| OsString::from(s);
+    let cases: [Vec<OsString>; 9] = [
+        vec![os("--root"), os("d"), bad.into()],
+        vec![bad.into()],
+        vec![os("--root"), bad.into(), os("src/a.rs")],
+        vec![bad_opt.into(), os("d")],
+        vec![os("--root"), os("d"), os("--script"), bad.into()],
+        vec![os("script"), bad.into(), os("--root"), os("d")],
+        vec![
+            os("script"),
+            os("s.jsonl"),
+            os("--root"),
+            os("d"),
+            bad.into(),
+        ],
+        vec![os("script"), os("s.jsonl"), os("--root"), bad.into()],
+        vec![os("script"), os("s.jsonl"), os("--log"), bad.into()],
+    ];
+    let before = tree(&dir);
+    for args in cases {
+        let out = kiln_in(&dir, &home, Display::None, &args);
+        assert_usage_error(&out, &usage, &format!("kiln {}", shown(&args)));
+    }
+    assert_eq!(tree(&dir), before, "a refused start wrote a file");
     let _ = fs::remove_dir_all(&dir);
 }
