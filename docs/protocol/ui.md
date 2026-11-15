@@ -132,7 +132,11 @@ is an object with:
   caret or selection;
 - `rows`: for a node that shows text: the text the frame painted inside the node and inside the
   visible part of the window, one array per painted row from top to bottom, each row a list of
-  runs `{"text":…,"color":"#rrggbb"}` from left to right, adjacent runs of the same colour merged;
+  runs `{"text":…,"color":"#rrggbb"}` from left to right, adjacent runs of the same colour merged.
+  A row's text is the chars of the text the node shows that the row paints, in reading order,
+  taken from the text the toolkit laid out and not from the positions of its glyphs: a
+  ligature, a combining mark or a joiner that the toolkit shapes into more or fewer glyphs than
+  chars changes nothing in the reported text, and a `click`'s `at` column counts those chars;
 - `children`: the child nodes in the toolkit's order (always present, possibly empty).
 
 Nodes that the frame does not show at all (hidden) are left out. The snapshot is computed from
@@ -212,6 +216,14 @@ writes the same log. No clock is read; each frame advances the UI's time by exac
   `kiln-cli run` (the script is read whole at start; the log file is opened before the first
   request).
 - Mouse-wheel input is not offered; `scroll` uses the accessibility scroll action.
+- Text that the toolkit lays out right to left (a text that begins with an Arabic-Indic digit
+  such as `٣`, or with an Arabic or Hebrew letter): its rows report its chars in reading order,
+  but which of them count as painted inside the visible part is decided from glyph positions
+  that do not match the chars, so a row can lack chars at its end or keep chars beyond a cut,
+  and when the toolkit lays such text out into several rows (in a narrow node), the rows' text
+  can be wrong. Measured: `Title` of a document named `٣٣ ab ٣٣ ab … fin fi.txt` (1280×800) reports
+  its row without the last two chars; at `--size 200x400` the `Documents` entry and `Title`
+  report a reversed and a duplicated row.
 - `frames` and `scroll` are capped (600, 100) and each action's settling is capped at 60
   frames, so one request runs a bounded number of frames.
 - The runner spawns no process, opens no network connection and reads no clock for behaviour.

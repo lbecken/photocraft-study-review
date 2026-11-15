@@ -886,6 +886,50 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   real window (T-065); release builds; a timing of keystrokes on large documents (the 1,048,577-char
   document opens, paints and settles in the test that takes about 2 s for all 10 tests) · missing
   context: none · next: join with `task/T-056-tests`; review.
+- 2026-11-15 · R-242 · rework after review round 1 · did: rulings y1–y5 (D-158) and z1–z6
+  (D-159) acknowledged and accepted before acting; tier high noted (D-158). y1, y3: nothing to
+  change. y4: `ui-editor.md` now states the ` — Kiln` / ` — modified — Kiln` suffix. **z1**
+  (`crates/kiln-ui/src/observe.rs`): a row's chars come from the galley's laid-out text
+  (`job.text`, split by the rows' glyph counts when they add up, the whole text for a one-row
+  galley; the glyphs' own chars only for an elided galley or a several-row galley whose counts
+  do not add up); `merge_rows` no longer sorts glyphs by `x0` (pieces of different shapes on one
+  line are ordered by their first char, a piece keeps reading order); each char gets edges from
+  `char_edges` (a zero-width glyph starts where the char before ends; left edges strictly
+  increase by at least 0.01), which the editor's click also uses (`nearest_boundary` replaces
+  `cursor_from_pos`), so an `at` column names the char. Causes fixed: (a) the `fi` ligature and
+  (b) a cluster's glyphs carrying its first char, fully; (c) the extra glyph of a run starting
+  with `٣`: the reported text is right and, in the editor, clicks are right (probe below), but in
+  text laid out right to left the glyph vector is in visual order, so which chars count as
+  inside the visible part is decided from wrong positions — stated as a limit in
+  `docs/protocol/ui.md` with the measurement (Title of a document named `٣٣ ab ٣٣ ab … fin fi.txt`
+  lost its last two chars at 1280×800; at `--size 200x400` the `Documents` entry and `Title`
+  reported a reversed and a duplicated row; seen with a temporary `eprintln!` in `text_rows`:
+  103 glyphs for 53 chars, the first 53 in visual order, then 50 at x 285; removed). Probe
+  (`kiln script` on a file with the lines `éb` (combining), `ab́cd`, `x‍yz`, `٣٣`, `٣٣ ab`,
+  `modified fi office affine fjord efficient`, a click `at` every column of every line and
+  `cursor.get`): every row text equals its line, 0 click mismatches; `Title` `a.rs — modified —
+  Kiln` reported as is. **z2** (`editor.rs` `view`): egui knows the last frame's maximum offset
+  only, and an offset beyond it rubber-bands back for dozens of frames
+  (`egui-0.37.0/src/containers/scroll_area.rs:916-1000`, `AxisPhysics::step`). The view now
+  sets at most that maximum, draws the text shifted by the rest (so the caret's line is in view
+  in that frame) and sets the full offset in the next frame (one requested frame). Before:
+  300 lines, caret at the end, `Enter` → `{"frames":60,"settled":false}` twice; after: 4 frames
+  each, `ctrl+Z` 4. A first try with a screen of slack below the last line made short documents
+  scrollable and failed `ac2_colours_of_rust_files` and `ac8_…`; dropped. Tests of my own:
+  `growing_a_long_document_at_its_end_settles`, `rows_report_the_text_and_clicks_count_its_chars`.
+  **z3**: re-measured on the acceptance scripts after z2: `target/debug/kiln` replaced for one
+  run by a wrapper that kept each script and stdout (restored, `cmp` equal), the test binary
+  `target/debug/deps/acceptance_t056-*` run directly → 22 passed; a Python pass over the kept
+  files took the maximum `result.frames` per UI action other than `frames`: 1,110 actions, 0
+  unsettled, `scroll` 20, `click` 14, `focus` 13, `key` 4, `type` 3 (the reviewer's figures);
+  the sentence in `ui-editor.md` says so. **z5**: stated as a limit in `ui-editor.md`. **z6**:
+  the extra-frame sentence now says "after any successful control request …, also when no
+  document is open" (checked: `--root` without start paths, `doc.list`, `frames 1` →
+  `settled:false`, `frames 1` → `true`), and names the growth case (checked: a control insert of
+  80 lines at the end, `frames 1` ×2 → `false`, `false`, then `true`; the line `added 79` has a
+  row after the first). Acceptance tests: 22 of 22 pass on this branch; my tests 14 of 14. ·
+  gate attempts: GATE3 · not run: the test author's new tests for z1/z2 (not on this branch);
+  a fix of the right-to-left positions (limit) · missing context: none · next: delta review.
 <!-- end implementer log -->
 ### test author
 - 2026-11-14 · R-240 · ready · did: wrote `apps/kiln/tests/acceptance_t056.rs` (22 tests, all

@@ -18,7 +18,8 @@ the highest id; with none open, no `Title` and no `Editor` node is shown.
 
 - A node labelled `Title` whose `value` begins with the current document's path; the part of
   the value after the path contains the word `modified` exactly when `doc.info` reports the
-  document `dirty`.
+  document `dirty`. The value is the path followed by ` — Kiln`, or by ` — modified — Kiln`
+  when the document is dirty, so that it never equals a `Documents` entry.
 - A node of role `multiline_text_input`, labelled `Editor`, inside a node of role `scroll_view`
   that contains no shell node (`Path`, `Open`, `Message`, `Documents`):
   - `value` is the current document's text exactly (`doc.text`, every char, `\r` included);
@@ -111,10 +112,13 @@ follows neither.
   nothing, so frames on an idle UI add nothing to the log. A script of control requests only,
   without start paths, runs no read (it runs no frame after the first request) and its `--log`
   stays `Host::log_script()`.
-- In the frame in which it re-read after a script's control request, the view asks for one
-  further frame: `{"ui":"frames","count":1}` right after a successful control request answers
-  `settled: false`; the following `{"ui":"frames","count":1}` answers `settled: true` unless
-  something else asks for frames.
+- After any successful control request of the script, the view asks, in the next frame, for
+  one further frame, also when no document is open: `{"ui":"frames","count":1}` right after a
+  successful control request answers `settled: false`; the following
+  `{"ui":"frames","count":1}` answers `settled: true` unless something else asks for frames.
+  (One thing that does: when a request grows the document at its end by more than the view
+  could scroll in the frame before, the view asks for one more frame to finish scrolling; the
+  caret's line is in view from the first frame all the same.)
 - A read the session refuses (for example `syntax.highlight` → `too_large`) is not shown in
   `Message`. No UI request of its own gets a response line or changes the exit code.
 
@@ -129,11 +133,13 @@ interpreted.
 - An empty line paints nothing, so it has no row.
 - The view re-reads the document after every request, so the cost of a keystroke grows with the
   document's length; no time bound is stated.
-- The largest settle count of an editor action measured in the implementer's test scripts of
-  T-056 (`apps/kiln/tests/editor_t056.rs`) was 20 frames, for a `scroll` of 3 or more steps on
-  `Editor`; there a `click` on `Editor` settled within 14 frames, `key` within 4, `type` and
-  `focus` within 3. Every action's
-  settling stays capped at 60 frames (`docs/protocol/ui.md`).
+- The largest settle count of an action measured on the acceptance scripts of T-056
+  (`apps/kiln/tests/acceptance_t056.rs`, 1,110 actions, all settled) was 20 frames, for a
+  `scroll` of 5 steps; there a `click` settled within 14 frames, `focus` within 13, `key`
+  within 4 and `type` within 3. Every action's settling stays capped at 60 frames
+  (`docs/protocol/ui.md`).
+- In a document whose line ending is `lf`, `Enter` right after a lone `\r` inserts a `\n` that
+  joins it into one `\r\n` break, so no line is added (the text gains a char).
 
 ## Example
 
