@@ -122,6 +122,72 @@ pub struct Script {
 /// A UI request that is refused: its kind and a message.
 type Refusal = (&'static str, String);
 
+/// What a script line needs before its response is known (T-065: the window runs the frames of
+/// a [`Pending`] itself, `kiln script` runs them at once).
+pub(crate) enum Step {
+    /// The response line, `None` for a blank line.
+    Done(Option<String>),
+    /// An action: its frames are to be run, then [`Script::finish`] gives the response.
+    Frames(Pending),
+}
+
+/// The frames an action (or the start) still has to run, and what the ones run so far said.
+pub(crate) struct Pending {
+    /// The request's `id`; `None` for the start, which gets no response.
+    id: Option<Value>,
+    /// The input of the frames still to run before settling (one entry per frame).
+    input: std::collections::VecDeque<Vec<Event>>,
+    /// `frames`: exactly the frames of `input`, no settling.
+    exact: bool,
+    run: u64,
+    wants_more: bool,
+}
+
+impl Pending {
+    /// One frame per entry of `input` (at least one), then frames without input while the UI
+    /// asks for one.
+    fn settle(id: Option<Value>, input: Vec<Vec<Event>>) -> Pending {
+        let mut input: std::collections::VecDeque<_> = input.into();
+        if input.is_empty() {
+            input.push_back(Vec::new());
+        }
+        Pending {
+            id,
+            input,
+            exact: false,
+            run: 0,
+            wants_more: false,
+        }
+    }
+
+    /// Exactly `count` frames without input.
+    fn exactly(id: Value, count: u64) -> Pending {
+        Pending {
+            id: Some(id),
+            input: (0..count).map(|_| Vec::new()).collect(),
+            exact: true,
+            run: 0,
+            wants_more: false,
+        }
+    }
+
+    /// The input of the next frame to run, or `None` when the action is complete. `go_on(run)`
+    /// says whether settling may run one more frame after `run` frames (for `kiln script`:
+    /// fewer than [`SETTLE_CAP`]).
+    pub(crate) fn next_input(&mut self, go_on: impl FnOnce(u64) -> bool) -> Option<Vec<Event>> {
+        if let Some(events) = self.input.pop_front() {
+            return Some(events);
+        }
+        (!self.exact && self.wants_more && go_on(self.run)).then(Vec::new)
+    }
+
+    /// Record that one frame ran; `wants_more`: the UI asked for a further frame.
+    pub(crate) fn after_frame(&mut self, wants_more: bool) {
+        self.run += 1;
+        self.wants_more = wants_more;
+    }
+}
+
 impl Script {
     /// A session over `files` with a UI of `size` (width, height) points; no frame has run
     /// yet ([`Script::start`] runs the first ones). Fails, with the host's message (naming a
@@ -132,10 +198,16 @@ impl Script {
             Files::Memory => Host::in_memory(&[]),
         }
         .map_err(|e| e.to_string())?;
+        Ok(Script::with_host(host, size))
+    }
+
+    /// A session over `host` (T-065: the window checks the root itself, before the window
+    /// system).
+    pub(crate) fn with_host(host: Host, size: (u32, u32)) -> Script {
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
         apply_style(&ctx);
-        Ok(Script {
+        Script {
             ctx,
             app: App::new(host),
             started: false,
@@ -144,7 +216,7 @@ impl Script {
             last_update: None,
             last_shapes: Vec::new(),
             observation: None,
-        })
+        }
     }
 
     /// Open the start paths in order, each as if it were typed into `Path` and opened (no
@@ -152,30 +224,56 @@ impl Script {
     /// until the UI settles. Runs once; the first request line runs it (without paths) if it has
     /// not run.
     pub fn start(&mut self, paths: &[&str]) {
+        if let Some(mut pending) = self.begin_start(paths) {
+            self.run_frames(&mut pending);
+        }
+    }
+
+    /// The start without its frames: opens the paths and gives the frames to run before the
+    /// first request; `None` if the start has already been made.
+    pub(crate) fn begin_start(&mut self, paths: &[&str]) -> Option<Pending> {
         if self.started {
-            return;
+            return None;
         }
         self.started = true;
         for path in paths {
             self.app.open(path);
         }
-        self.settle(Vec::new());
+        Some(Pending::settle(None, Vec::new()))
     }
 
     /// One script line in; its response line (without `"\n"`) out, `None` for a blank line.
     pub fn handle_line(&mut self, line: &[u8]) -> Option<String> {
         self.start(&[]);
+        match self.begin_line(line) {
+            Step::Done(response) => response,
+            Step::Frames(mut pending) => {
+                self.run_frames(&mut pending);
+                self.finish(pending)
+            }
+        }
+    }
+
+    /// One script line, up to the frames it needs (the start must have been made).
+    pub(crate) fn begin_line(&mut self, line: &[u8]) -> Step {
         let parsed = std::str::from_utf8(line)
             .ok()
             .and_then(|text| serde_json::from_str::<Value>(text).ok());
         match parsed {
             Some(Value::Object(request)) if request.contains_key("ui") && valid_id(&request) => {
-                Some(self.ui_request(&request))
+                self.ui_request(&request)
             }
             // Control requests, and every line-level error, are the host's (same bytes). They
             // run no frame (D-149 n4): what they change is shown from the next frame on.
-            _ => self.app.handle_line(line),
+            _ => Step::Done(self.app.handle_line(line)),
         }
+    }
+
+    /// The response of an action whose frames have run (`None` for the start).
+    pub(crate) fn finish(&self, pending: Pending) -> Option<String> {
+        let id = pending.id?;
+        let result = json!({"frames": pending.run, "settled": !pending.wants_more});
+        Some(canonical(&json!({"id": id, "ok": true, "result": result})))
     }
 
     /// The session log as a script (the format of `kiln-cli run --log`).
@@ -188,20 +286,28 @@ impl Script {
         self.frames
     }
 
-    fn ui_request(&mut self, request: &Map<String, Value>) -> String {
+    /// The UI's state, for a window that draws the frames itself (T-065).
+    pub(crate) fn app_mut(&mut self) -> &mut App {
+        &mut self.app
+    }
+
+    fn ui_request(&mut self, request: &Map<String, Value>) -> Step {
         let id = request.get("id").cloned().unwrap_or(Value::Null);
-        let response = match self.ui_action(request) {
-            Ok(result) => json!({"id": id, "ok": true, "result": result}),
-            Err((kind, message)) => json!({
+        match self.ui_action(request) {
+            Ok(UiStep::Answer(result)) => Step::Done(Some(canonical(
+                &json!({"id": id, "ok": true, "result": result}),
+            ))),
+            Ok(UiStep::Settle(input)) => Step::Frames(Pending::settle(Some(id), input)),
+            Ok(UiStep::Exactly(count)) => Step::Frames(Pending::exactly(id, count)),
+            Err((kind, message)) => Step::Done(Some(canonical(&json!({
                 "error": {"code": "ui", "kind": kind, "message": cap(&message)},
                 "id": id,
                 "ok": false,
-            }),
-        };
-        canonical(&response)
+            })))),
+        }
     }
 
-    fn ui_action(&mut self, request: &Map<String, Value>) -> Result<Value, Refusal> {
+    fn ui_action(&mut self, request: &Map<String, Value>) -> Result<UiStep, Refusal> {
         let action = parse(request)?;
         let (screen, update, shapes) = (self.screen, self.last_update.as_ref(), &self.last_shapes);
         let observation: &Observation = self
@@ -209,15 +315,11 @@ impl Script {
             .get_or_insert_with(|| Observation::new(update, shapes, screen));
         let input = match action {
             UiAction::Snapshot => {
-                return Ok(json!({"frames": self.frames, "root": observation.to_json(0)}));
+                return Ok(UiStep::Answer(
+                    json!({"frames": self.frames, "root": observation.to_json(0)}),
+                ));
             }
-            UiAction::Frames(count) => {
-                let mut settled = true;
-                for _ in 0..count {
-                    settled = !self.frame(Vec::new());
-                }
-                return Ok(json!({"frames": count, "settled": settled}));
-            }
+            UiAction::Frames(count) => return Ok(UiStep::Exactly(count)),
             UiAction::Focus(target) => {
                 let node = find(observation, &target)?;
                 if !observation.nodes[node].takes_text() {
@@ -287,65 +389,84 @@ impl Script {
                 vec![(0..steps).map(|_| action_request(direction, id)).collect()]
             }
         };
-        let (frames, settled) = self.settle(input);
-        Ok(json!({"frames": frames, "settled": settled}))
+        Ok(UiStep::Settle(input))
     }
 
-    /// Run one frame per entry of `input` (at least one), then frames without input until the
-    /// UI asks for no further frame or [`SETTLE_CAP`] frames ran. Returns (frames run, settled).
-    fn settle(&mut self, input: Vec<Vec<Event>>) -> (u64, bool) {
-        let mut input = input;
-        if input.is_empty() {
-            input.push(Vec::new());
+    /// Run the frames of `pending` with simulated time, settling at most [`SETTLE_CAP`] frames.
+    fn run_frames(&mut self, pending: &mut Pending) {
+        while let Some(events) = pending.next_input(|run| run < SETTLE_CAP) {
+            let wants_more = self.frame(events);
+            pending.after_frame(wants_more);
         }
-        let mut run = 0;
-        let mut wants_more = false;
-        for events in input {
-            wants_more = self.frame(events);
-            run += 1;
-        }
-        while wants_more && run < SETTLE_CAP {
-            wants_more = self.frame(Vec::new());
-            run += 1;
-        }
-        (run, !wants_more)
     }
 
     /// Run one frame with `events`; true if the UI asks for a further frame.
     fn frame(&mut self, events: Vec<Event>) -> bool {
-        let mut viewports = egui::ViewportIdMap::default();
-        viewports.insert(
-            ViewportId::ROOT,
-            ViewportInfo {
-                native_pixels_per_point: Some(1.0),
-                focused: Some(true),
-                ..ViewportInfo::default()
-            },
-        );
-        let input = RawInput {
-            viewport_id: ViewportId::ROOT,
-            viewports,
-            screen_rect: Some(self.screen),
-            max_texture_side: Some(8192),
-            time: Some(self.frames as f64 / 60.0),
-            predicted_dt: 1.0 / 60.0,
-            events,
-            focused: true,
-            ..RawInput::default()
-        };
+        let input = headless_input(self.screen, self.frames, events);
         let app = &mut self.app;
         let mut output = self.ctx.run_ui(input, |ui| draw_frame(ui, app));
         // No renderer: the font atlas updates are not needed (nothing is drawn as pixels).
         output.textures_delta.clear();
-        self.frames += 1;
         let wants_more = output
             .viewport_output
             .get(&ViewportId::ROOT)
             .is_some_and(|v| v.repaint_delay != Duration::MAX);
-        self.last_update = output.platform_output.accesskit_update;
-        self.last_shapes = output.shapes;
-        self.observation = None;
+        self.record_frame(
+            output.platform_output.accesskit_update,
+            output.shapes,
+            self.screen,
+        );
         wants_more
+    }
+
+    /// Record what one frame produced: its accessibility update, its shapes and the window's
+    /// rectangle in points. The next UI request observes it.
+    pub(crate) fn record_frame(
+        &mut self,
+        update: Option<TreeUpdate>,
+        shapes: Vec<ClippedShape>,
+        screen: Rect,
+    ) {
+        self.frames += 1;
+        self.screen = screen;
+        self.last_update = update;
+        self.last_shapes = shapes;
+        self.observation = None;
+    }
+}
+
+/// What a valid UI action needs.
+enum UiStep {
+    /// Answered without a frame (`snapshot`).
+    Answer(Value),
+    /// One frame per entry, then settling.
+    Settle(Vec<Vec<Event>>),
+    /// Exactly this many frames (`frames`).
+    Exactly(u64),
+}
+
+/// The input of frame number `frame` (from 0) of `kiln script`: the window `screen`, simulated
+/// time `frame / 60` s, and `events`.
+pub(crate) fn headless_input(screen: Rect, frame: u64, events: Vec<Event>) -> RawInput {
+    let mut viewports = egui::ViewportIdMap::default();
+    viewports.insert(
+        ViewportId::ROOT,
+        ViewportInfo {
+            native_pixels_per_point: Some(1.0),
+            focused: Some(true),
+            ..ViewportInfo::default()
+        },
+    );
+    RawInput {
+        viewport_id: ViewportId::ROOT,
+        viewports,
+        screen_rect: Some(screen),
+        max_texture_side: Some(8192),
+        time: Some(frame as f64 / 60.0),
+        predicted_dt: 1.0 / 60.0,
+        events,
+        focused: true,
+        ..RawInput::default()
     }
 }
 

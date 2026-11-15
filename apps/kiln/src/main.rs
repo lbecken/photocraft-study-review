@@ -1,14 +1,22 @@
 //! # kiln — desktop application (thin binary)
 //!
 //! ```text
+//! kiln [--root <dir>] [--script <file>] [<path>…]
 //! kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>…]
 //! kiln --help | -h | script --help
 //! ```
 //!
+//! Without a subcommand `kiln` opens the Kiln UI in a window on X11 (T-065,
+//! [`kiln_ui::run_window`]) over the root, opens each `<path>` at start as `kiln script` does,
+//! and runs until the window is closed (exit 0). With `--script <file>` the window takes its
+//! input from the script, closes after the last line and prints the responses as `kiln script`
+//! (exit 0, or 3 with an `ok:false` response). If the window system cannot be started: exit 2,
+//! one line on stderr, nothing on stdout. If the window is closed before the script ends, the
+//! responses of the lines that ran are printed, one stderr line says so, exit 2.
+//!
 //! `kiln script` runs the Kiln UI without a window from a script of control requests and UI
 //! requests (`docs/protocol/ui.md`); the paths after the script are opened at start, in order,
-//! as if each were opened through `Path`. Without a subcommand the binary still only says that
-//! the desktop window is not built and exits with a failure status (the window is T-065).
+//! as if each were opened through `Path`.
 //!
 //! Exit codes of `script`: 0 every response `ok:true`; 3 at least one `ok:false`; 2 usage
 //! error, unreadable script, bad root, log file not writable (message on stderr, nothing on
@@ -18,11 +26,19 @@ use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
 
-use kiln_ui::{DEFAULT_SIZE, Files, SIZE_RANGE, Script, parse_size, response_ok};
+use kiln_ui::{
+    DEFAULT_SIZE, Files, SIZE_RANGE, Script, WindowError, parse_size, response_ok, run_window,
+};
 
 const USAGE: &str = "usage:
+  kiln [--root <dir>] [--script <file>] [<path>…]
   kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>…]
   kiln --help | -h | script --help
+
+  (none)  open the Kiln UI in a window on X11 over the root; each <path> is opened at
+          start as for `script`. With --script <file>, the window takes its input from
+          the script and closes after its last line; the responses are those of
+          `script`, except the frame counts
 
   script  run the Kiln UI without a window: each line of <script> is a control request
           (answered as `kiln-cli control` answers it) or a UI request (an object with a
@@ -110,26 +126,88 @@ fn parse_opts(args: &[String]) -> Result<(Vec<&str>, Opts), String> {
     Ok((positional, opts))
 }
 
-/// `--help` or `-h` as the first argument, or in an option position of `script` (not as the
-/// value of `--root`, `--log` or `--size`).
+/// `--help` or `-h` as the first argument, or in an option position of `script` or of the
+/// window form (not as the value of an option).
 fn wants_help(args: &[String]) -> bool {
     let is_help = |a: &str| a == "--help" || a == "-h";
-    match args.first().map(String::as_str) {
-        Some(first) if is_help(first) => true,
-        Some("script") => {
-            let mut takes_value = false;
-            for a in &args[1..] {
-                if takes_value {
-                    takes_value = false;
-                } else if is_help(a) {
-                    return true;
-                } else {
-                    takes_value = matches!(a.as_str(), "--root" | "--log" | "--size");
-                }
-            }
-            false
+    let (rest, valued): (&[String], &[&str]) = match args.first().map(String::as_str) {
+        Some(first) if is_help(first) => return true,
+        Some("script") => (&args[1..], &["--root", "--log", "--size"]),
+        _ => (args, &["--root", "--script", "--log", "--size"]),
+    };
+    let mut takes_value = false;
+    for a in rest {
+        if takes_value {
+            takes_value = false;
+        } else if is_help(a) {
+            return true;
+        } else {
+            takes_value = valued.contains(&a.as_str());
         }
-        _ => false,
+    }
+    false
+}
+
+/// Bare `kiln`: the window (T-065), in the order of checks usage → `--script` readable → root
+/// → window system → start paths → first frame.
+fn window(args: &[String]) -> Outcome {
+    let mut root: Option<&str> = None;
+    let mut script: Option<&str> = None;
+    let mut paths = Vec::new();
+    let mut rest = args;
+    while let [arg, tail @ ..] = rest {
+        rest = tail;
+        if !arg.starts_with("--") {
+            paths.push(arg.as_str());
+            continue;
+        }
+        let slot = match arg.as_str() {
+            "--root" => &mut root,
+            "--script" => &mut script,
+            "--log" | "--memory" | "--size" => {
+                return Outcome::usage(format!("option `{arg}` is only for `kiln script`"));
+            }
+            _ => return Outcome::usage(format!("unknown option `{arg}`")),
+        };
+        let [value, tail @ ..] = rest else {
+            return Outcome::usage(format!("option `{arg}` needs a value"));
+        };
+        rest = tail;
+        if slot.replace(value.as_str()).is_some() {
+            return Outcome::usage(format!("option `{arg}` given twice"));
+        }
+    }
+    let bytes = match script {
+        None => None,
+        Some(path) => match std::fs::read(path) {
+            Ok(b) => Some(b),
+            Err(e) => {
+                return Outcome::err(2, format!("kiln: cannot read script `{path}`: {e}\n"));
+            }
+        },
+    };
+    let root = root.unwrap_or(".");
+    match run_window(Path::new(root), &paths, bytes.as_deref()) {
+        Ok(None) => Outcome {
+            code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        },
+        Ok(Some(run)) => Outcome {
+            code: match (run.completed, run.failed) {
+                (false, _) => 2,
+                (true, true) => 3,
+                (true, false) => 0,
+            },
+            stdout: run.responses,
+            stderr: if run.completed {
+                String::new()
+            } else {
+                "kiln: the window was closed before the script ended\n".to_owned()
+            },
+        },
+        Err(WindowError::BadRoot(e)) => Outcome::err(2, format!("kiln: bad --root: {e}\n")),
+        Err(WindowError::NoWindow(e)) => Outcome::err(2, format!("kiln: no window: {e}\n")),
     }
 }
 
@@ -243,11 +321,7 @@ fn main() -> ExitCode {
     } else if args.first().map(String::as_str) == Some("script") {
         script(&args[1..])
     } else {
-        Outcome::err(
-            1,
-            "kiln: the desktop UI is not built yet (see docs/scorecard.md, items ui.*)\n"
-                .to_owned(),
-        )
+        window(&args)
     };
     let mut out = std::io::stdout().lock();
     let written = out

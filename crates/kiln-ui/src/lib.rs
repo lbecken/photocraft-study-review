@@ -39,11 +39,13 @@ mod panels;
 mod script;
 mod session;
 mod shell;
+mod window;
 
 pub use script::{
     DEFAULT_SIZE, Files, KEY_NAMES, MAX_FRAMES, MAX_SCROLL_STEPS, SETTLE_CAP, SIZE_RANGE, Script,
     parse_size, response_ok,
 };
+pub use window::{ScriptRun, WindowError, run_window};
 
 use editor::EditorView;
 use session::Session;
