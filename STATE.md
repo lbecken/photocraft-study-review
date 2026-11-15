@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-15 16:50 UTC_
+_Last updated: 2026-11-15 18:10 UTC_
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.3** (D-146).
@@ -8,9 +8,13 @@ Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run t
 2, and make the editor multi-platform (Linux, macOS, Windows).**
 
 Decided since: the retrospective to cut 1 (D-174), ADR-0009 on platforms (D-175; signed installers out of scope,
-D-173). **In flight: T-069 only** (the fix of INC-001). Order after main is green in CI (ADR-0009 Q-4): T-070 (CI
-jobs for macOS and Windows) and T-071 (the platform-test rule), then cut 2 (T-057, T-058, T-059) interleaved with
-T-072 to T-076, with T-066 and T-043 in that batch; T-077, T-078 after. Next free task number: T-079.
+D-173), methodology v1.4 (D-176). **INC-001 (CI on main red since T-036) is closed: T-069 merged, CI run 366 green
+at 2026-11-15T18:02:59Z (D-179).**
+
+In flight: planning of the next batch — the spec check of T-070 (CI jobs for macOS and Windows) and the spec of
+T-071 (the platform-test rule) by the planner of ADR-0009; the spec of T-057 (project panel, cut 2) by the planner
+of ADR-0007. Order (ADR-0009 Q-4): T-070 and T-071, then cut 2 (T-057, T-058, T-059) interleaved with T-072 to
+T-076, with T-066 and T-043 in that batch; T-077, T-078 after. Next free task number: T-079.
 
 Scorecard on main: 64 items: 44 verified, 0 implemented, 0 failing, 20 planned (68.8%). Merged in this stage:
 T-055 (`kiln script`, the UI without a window, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (the
@@ -33,8 +37,7 @@ What comes next is the owner's choice (D-170):
 Methodology **v1.4** is in force (D-176): among its rules, a task's tier is at least the highest tier of the items
 it claims and is fixed at `specified`; rulings live on main and the director commits only joins and scorecard ties
 on a task branch; a `touches` path belongs to one role; **after every push the director reads the CI run of the
-pushed commit and records it** (INC-001: CI on main has been red since T-036; the fix is T-069, in progress, run
-R-256; dispatching of other tasks is stopped until main is green in CI).
+pushed commit and records it** (INC-001, closed in D-179).
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
