@@ -2,4 +2,17 @@ id = "ui.tabs"
 title = "Open documents appear as tabs; switching and closing tabs dispatch commands"
 crate = "kiln-ui"
 tier = "medium"
-tests = []
+tests = [
+    "kiln::acceptance_t058::ac1_tabs_follow_random_opens_and_closes",
+    "kiln::acceptance_t058::ac2_click_on_a_tab_switches_with_reads_only",
+    "kiln::acceptance_t058::ac3_close_clean_documents_from_their_tabs",
+    "kiln::acceptance_t058::ac4_refused_close_then_discard",
+    "kiln::acceptance_t058::ac4_refused_close_then_save_then_close",
+    "kiln::acceptance_t058::ac5_modified_marks_follow_doc_list",
+    "kiln::acceptance_t058::ac6_click_on_a_documents_entry_switches",
+    "kiln::acceptance_t058::ac7a_control_requests_only_log_as_host",
+    "kiln::acceptance_t058::ac7b_idle_frames_after_tabs_add_nothing",
+    "kiln::acceptance_t058::ac7c_a_control_edit_is_read_then_idle",
+    "kiln::acceptance_t058::ac8_generated_sessions_follow_the_naive_model",
+    "kiln::acceptance_t058::ac9_every_tab_of_300_documents_can_be_reached_and_clicked",
+]
