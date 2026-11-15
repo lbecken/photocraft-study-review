@@ -352,6 +352,13 @@ worded as one measurement each).
   unset; the director ends the interim of D-186 with a decision row after the merge.
 - Not in flight with T-071 (`docs/development.md`); beside T-058 is allowed.
 
+### Ruling on the implementer's report (director, D-203)
+- **i1.** Sentence D3 of the paragraph in `docs/development.md` states the implementer's own figures of run R-286
+  (rebuilds 14.4 to 24.2 s without the incremental cache against 7.3 to 9.6 s with it, two runs each), not the
+  planner's figures of R-270: a figure in a document comes from a command of the run that writes it. The spec's
+  D3 wording "one measurement each" is read as this.
+- The 14 GB free before a measured build (AC-3) is the rule; the dispatch's 9 GB was the director's slip.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
