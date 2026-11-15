@@ -358,6 +358,22 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   · gate attempts: 1 (`cargo xtask ci --keep-going --report …` through the workflow's own step, started
   at accc222; the docs line of 8780a48 was written while it ran), PASSED in 581.8 s; final attempt after this entry below ·
   missing context: none · next: director, CI round 1 on the head commit named in my report.
+  · gate attempt 2: `cargo xtask ci` at 6f469df37a387996dbcb243c612e39f60fd8a7f0, `GATE PASSED in 489.1s`
+  (11 steps, fuzz and budgets EMPTY). Attempts in all: 2, both green.
+  · CI-REQUEST: 6f469df37a387996dbcb243c612e39f60fd8a7f0 (the gated commit; the commit after it adds
+  only these two log lines). Expected: `gate-linux` green (prints the three versions; `GATE PASSED`;
+  core crates exit 0; disk line); `window-linux` green only if `apt-get download` works on the runner
+  and Xvfb + Mesa open the window: the artefact should show the six `CASE` lines, `WINDOW CASES
+  PASS`, `AC-3 PASS` or `AC-3 PRECONDITION FAILED`, `PLAIN PASS`; if the procedure file is not on the
+  pushed commit (it is the test author's), the step fails at `sh` and the job is red — that round
+  then only shows the package record; `gate-macos` unknown (records which gate steps fail);
+  `gate-windows` red at `clippy` and later steps, core-crates log with `test result: ok` for
+  kiln-text, kiln-syntax, kiln-search and compile errors for xtask; `window-probe` macOS: one PROBE
+  exit line with stderr (unknown); Windows: red at "Build kiln", record "PROBE: not run". Lines to
+  copy: each job's `GATE PASSED|GATE FAILED` line and the report's `failed_step`, `CORE CRATES:`,
+  the `test result:` lines of core-crates, `DISK:` with the two figures, `COMMAND`/`PACKAGE`/`APT
+  LISTS`/`LDCONFIG` lines, every `PROBE` line and the first 5 lines of stderr, the procedure's
+  verdict lines, and the wall time of every job.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
