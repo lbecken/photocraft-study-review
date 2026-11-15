@@ -216,6 +216,10 @@ when it is absent, combined with a gate that runs on one machine and a CI result
   filesystems other than ext4-like mode bits; TMPDIR set to an unreachable directory as uid 0 is
   covered by the fixture check but was not exercised. · missing context: none. · next: reviewer
   (diff read and the AC-1 mutant), director.
+  Last line: at `85ea36a`, as uid 1000, `cargo xtask ci --keep-going`: GATE PASSED (scorecard PASS,
+  64 items, 44 verified, 0 failing; test PASS, 979 passed, 0 failed); gate attempt 2, uid 0,
+  worktree, at the commit of this line: see the commit after it (PASS expected; reported to
+  the director). Scratch checkout `/home/user/kiln-t069-scratch/` deleted.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
