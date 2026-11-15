@@ -439,6 +439,12 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 
 ### director
 <!-- end director log -->
+- 2026-11-15 **Pre-merge platform run** (ADR-0009 Decision 5; D-204): run 43777023951 of `platforms.yml` on `ci/T-058` at
+  `043ed2b07fc61b56b059b5db72761e1ed4c9e739` (the branch rebased onto main `20eb15a` in a throwaway worktree). The two
+  counted jobs are green: `window-linux` success (`WINDOW CASES PASS`, `AC-3 PASS`, `PLAIN PASS: the start path
+  changes the screen`) and `window-probe (macos-15)` success. `window-probe (windows-2025)` fails at "Build kiln" as
+  on main; the three gate jobs were still running when read (23:56Z) and are not counted (D-202).
+
 ### planner
 - 2026-11-14 · R-225 · (new) · did: filed as a draft for ADR-0007. · gate attempts: 0 · missing context: T-056's merged shell · next: director.
 - 2026-11-15 · R-276 · draft · did: specified the tabs against main `c288f7f` with a prototype build in scratch (tabs, status bar, `Documents` click; all 110 merged `kiln` tests green); tier medium (item medium), independent arm (even); 9 criteria, AC-8 on generated sessions; the current-document rule gains one clause, and the four merged tests that pin the rest need no change; ordered before T-059 (it adds `PanelView::changes`). · gate attempts: 0 (scratch builds only) · not run: macOS, Windows, the window · missing context: none · next: director (Q-1 to Q-4).
