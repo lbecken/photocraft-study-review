@@ -749,6 +749,17 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   AC-3 tests move unchanged in what they assert to `xtask/tests/guard_t070.rs` (they pass on the
   base, the procedure file being mine); the eight workflow and `.gitattributes` tests stay in
   `acceptance_t070.rs`.
+  · did (m9): moved the AC-3 section (`r251_block`, `R251_REPLACED` and the three tests) to the new
+  `xtask/tests/guard_t070.rs`, byte-identical (diff of the section: none), with copies of the
+  helpers it needs (`root`, `subject`, `oracle`, `scratch`, `Out`, `run_to`, `find_sh`,
+  `sh_path`; identical except that `scratch` uses the sub-directory `t070-guard`, not `t070-acc`);
+  removed them, `PROCEDURE`, `find_sh` and `sh_path` from `acceptance_t070.rs` and pointed its
+  header at the guard file. Nothing else changed. · results on this branch (built with
+  `CARGO_PROFILE_DEV_DEBUG=line-tables-only CARGO_INCREMENTAL=0`, 8.8 GB free at start):
+  `guard_t070` 3 passed; `acceptance_t070` 0 passed, 8 failed, each on `… does not exist (T-070
+  adds it)` (6 the workflow, 2 `.gitattributes`); clippy `-D warnings` clean · gate attempts:
+  none of `cargo xtask ci` (not asked) · not run: the joined branch; no stub re-run (the
+  acceptance tests' code is unchanged, only deleted around) · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

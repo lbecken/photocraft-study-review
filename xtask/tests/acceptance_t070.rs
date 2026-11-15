@@ -11,13 +11,11 @@
 //! - AC-2: `.gitattributes` on a toy repository cloned with `core.autocrlf=true`: an LF and a CRLF
 //!   file are byte-equal to their blobs; without the attribute file the LF file changes (the
 //!   negative control, which also shows that the clone converts at all on this machine).
-//! - AC-3 (ruling Q-3 B, D-180: structure in the gate, the run by the reviewer and the
-//!   `window-linux` job): every line of the R-251 block of `tasks/T-065-window.md` in the
-//!   procedure file in order, the usage line naming the file, and the exit rule for a run in
-//!   which no verdict can pass (no `kiln`, no tools on `PATH`; no display, no network).
+//! - AC-3's tests of the procedure file are in `guard_t070.rs` (ruling m9, D-189: the file is the
+//!   test author's and on the tests branch, so they pass on the base).
 //!
 //! No Unix-only API is used (the files run on macOS and Windows once T-070 has merged).
-//! A missing precondition (no `git`, no `sh`, the T-065 block not found) is a panic that says so.
+//! A missing precondition (no `git`, `ci.yml` or `xtask/ledger.toml` unreadable) is a panic that says so.
 #![cfg(test)]
 
 use std::io::Read as _;
@@ -36,7 +34,6 @@ fn root() -> PathBuf {
 }
 
 const WORKFLOW: &str = ".github/workflows/platforms.yml";
-const PROCEDURE: &str = ".github/scripts/window-procedure.sh";
 
 /// The text of a file under the root; the file not existing is an assertion failure (it is
 /// the subject of the test, not a precondition).
@@ -136,25 +133,6 @@ fn git(dir: &Path, cfg: &Path, args: &[&str]) -> Vec<u8> {
         o.stderr
     );
     o.stdout
-}
-
-/// The `sh` on `PATH`, as an absolute path (the exit-rule run empties `PATH`).
-fn find_sh() -> PathBuf {
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    for d in std::env::split_paths(&path) {
-        for name in ["sh", "sh.exe"] {
-            let p = d.join(name);
-            if p.is_file() {
-                return p;
-            }
-        }
-    }
-    panic!("precondition: no `sh` on PATH (the window procedure is a POSIX sh script)");
-}
-
-/// A path as `sh` takes it on every platform (forward slashes; Git Bash reads `C:/…`).
-fn sh_path(p: &Path) -> String {
-    p.to_string_lossy().replace('\\', "/")
 }
 
 // ---- a reader for the YAML subset of a workflow ----------------------------------------------
@@ -1481,137 +1459,4 @@ fn ac2_gitattributes_is_the_one_pinned_line() {
         a == "* -text\n" || a == "* -text",
         ".gitattributes must be exactly the one line `* -text`: {a:?}"
     );
-}
-
-// ---- AC-3 ------------------------------------------------------------------------------------
-
-/// The R-251 block of `tasks/T-065-window.md`: the ```` ```sh ```` fence after "Window
-/// procedure (replaces R-248's in full)" up to its closing fence.
-fn r251_block() -> Vec<String> {
-    let t = oracle("tasks/T-065-window.md");
-    let lines: Vec<&str> = t.lines().collect();
-    let at = lines
-        .iter()
-        .position(|l| l.contains("Window procedure (replaces R-248's in full)"))
-        .unwrap_or_else(|| panic!("precondition: the R-251 entry is not in tasks/T-065-window.md"));
-    let open = (at..lines.len())
-        .find(|&i| lines[i] == "```sh")
-        .unwrap_or_else(|| panic!("precondition: no ```sh fence after the R-251 heading"));
-    let close = (open + 1..lines.len())
-        .find(|&i| lines[i] == "```")
-        .unwrap_or_else(|| panic!("precondition: the R-251 block is not closed"));
-    let block: Vec<String> = lines[open + 1..close]
-        .iter()
-        .map(|s| (*s).to_owned())
-        .collect();
-    let cases = block.iter().filter(|l| l.starts_with("case_ ")).count();
-    assert_eq!(cases, 6, "precondition: the R-251 block has six case lines");
-    block
-}
-
-/// The lines of the R-251 block the procedure file replaces, and nothing else: the usage line
-/// (Interface (3)), and the three lines that take a window run's exit status from `xvfb-run`
-/// (ruling m2, D-182: the status is `kiln`'s own, recorded inside the wrapped command): the two
-/// window lines of `case_` and AC-3's.
-const R251_REPLACED: [&str; 4] = [
-    "Usage: sh ac2.sh",
-    r#"    xv sh -c 'exec "$0" "$@" 2>"w_'"$n"'.err"' "$K" --root "w_$n" "$@" --script "$s" > "w_$n.out"; wc=$?"#,
-    r#"    (cd "w_$n" && xv sh -c 'exec "$0" "$@" 2>"../w_'"$n"'.err"' "$K" "$@" --script "../$s" > "../w_$n.out"); wc=$?"#,
-    r#"    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root n a.rs 2>n.err" > n.out; e=$?"#,
-];
-
-#[test]
-fn ac3_procedure_holds_every_line_of_r251_in_order() {
-    let block = r251_block();
-    let text = subject(PROCEDURE);
-    let file: Vec<&str> = text.lines().collect();
-    for r in R251_REPLACED {
-        assert_eq!(
-            block.iter().filter(|l| l.contains(r)).count(),
-            1,
-            "precondition: R-251's block has the replaced line {r:?} once"
-        );
-        assert!(
-            !file.iter().any(|l| l.contains(r)),
-            "{PROCEDURE} still has R-251's line {r:?} (replaced: Interface (3), ruling m2)"
-        );
-    }
-    let mut from = 0;
-    for want in block
-        .iter()
-        .filter(|l| !R251_REPLACED.iter().any(|r| l.contains(r)))
-    {
-        match (from..file.len()).find(|&i| file[i] == want) {
-            Some(i) => from = i + 1,
-            None => {
-                panic!("{PROCEDURE}: R-251's line is missing, changed or out of order: {want:?}")
-            }
-        }
-    }
-    for case in ["ac2", "ac2x3", "dblclick", "scroll100", "ctrlq", "noroot"] {
-        assert!(
-            file.iter()
-                .any(|l| l.starts_with(&format!("case_ {case} "))),
-            "{PROCEDURE}: no case {case}"
-        );
-    }
-}
-
-#[test]
-fn ac3_usage_line_names_the_file() {
-    let text = subject(PROCEDURE);
-    assert!(
-        text.lines()
-            .any(|l| l.contains("Usage:") && l.contains("window-procedure.sh")),
-        "{PROCEDURE}: no usage line naming window-procedure.sh"
-    );
-    assert!(!text.contains("ac2.sh"), "{PROCEDURE} still names ac2.sh");
-}
-
-#[test]
-fn ac3_exit_status_is_1_when_no_verdict_passes() {
-    // No kiln (a path that does not exist) and an empty PATH: nothing the procedure calls exists,
-    // so no case can pass, nothing reaches a display or the network, and the script must still
-    // run to its end and exit 1 (R-251's block always exits 0).
-    let text = subject(PROCEDURE);
-    assert!(!text.is_empty());
-    let sh = find_sh();
-    let d = scratch("exit-rule");
-    let empty_path = d.join("empty-path");
-    let work = d.join("work");
-    std::fs::create_dir_all(&empty_path).unwrap();
-    std::fs::create_dir_all(&work).unwrap();
-    let o = run_to(
-        Command::new(&sh)
-            .arg(sh_path(&root().join(PROCEDURE)))
-            .arg(sh_path(&d.join("no-such-kiln")))
-            .arg(sh_path(&work))
-            .env("PATH", &empty_path)
-            .current_dir(&d),
-        600,
-    );
-    let out = String::from_utf8_lossy(&o.stdout).into_owned();
-    let lines: Vec<&str> = out.lines().collect();
-    assert!(
-        lines.contains(&"WINDOW CASES FAIL")
-            && lines.iter().any(|l| l.starts_with("PLAIN NOT RUN")),
-        "the procedure did not run to its end (no `WINDOW CASES FAIL` and `PLAIN NOT RUN`):\n{out}\n{}",
-        o.stderr
-    );
-    for pass in ["WINDOW CASES PASS", "AC-3 PASS"] {
-        assert!(
-            !lines.contains(&pass),
-            "printed {pass} without a kiln:\n{out}"
-        );
-    }
-    assert!(
-        !lines.iter().any(|l| l.starts_with("PLAIN PASS")),
-        "printed PLAIN PASS without a kiln"
-    );
-    assert_eq!(
-        o.code,
-        Some(1),
-        "exit status with every verdict failing:\n{out}"
-    );
-    std::fs::remove_dir_all(&d).unwrap();
 }
