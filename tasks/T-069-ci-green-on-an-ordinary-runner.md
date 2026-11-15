@@ -2,7 +2,7 @@
 id: T-069
 title: "Make the gate pass in CI again: the confinement tests that change identity pass, or fail with their reason, whatever the identity and location of the checkout"
 tier: low               # ADR-0002: tests and documentation only, no behaviour change; scorecard_items empty (the tests stay tied to ws.path-confinement, which is not claimed). See ADR-0009 Q-7: a reviewer reads the diff anyway
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: []
 depends_on: []
