@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-14 23:45 UTC_
+_Last updated: 2026-11-15 01:55 UTC_
 
 ## Now
 Iteration 2, **second stage** (ADR-0007, accepted with a changed order in D-147), under methodology **v1.3**
@@ -13,14 +13,18 @@ evaluation B (cut 2: a project editor) → T-060, T-061, the feature drafts each
 T-041 (last; owner told first). Deferred until what they remove starts to cost: T-051, T-052, T-054, T-043, T-064.
 
 In flight:
-- **T-056** editor view (re-tiered to high, D-158): joined green on its first join at `97ba223` (22 acceptance
-  tests); review round 1 running (run R-241). It claims `ui.editor-view` and `ui.dispatch-only`; an approval row is
-  needed before the queue.
-- **T-065** window (high, draft; `ui.window`): its spec check runs when T-056 has merged; then evaluation A (cut 1).
-- T-055 merged at `e34ba1f` (D-155).
+- **T-055** (`kiln script`) merged at `e34ba1f` (D-155) and **T-056** (editor view) merged at `30435d1` (D-162).
+  Scorecard on main: 64 items: 41 verified, 2 implemented (`ui.editor-view`, `ui.dispatch-only`), 0 failing,
+  21 planned. No worktree exists.
+- **T-065** window (high, draft; `ui.window`): spec check running (run R-246; it edits only `tasks/T-065-window.md`).
+  Then: rulings, `specified`, `ready`, dispatch; after its merge evaluation A (cut 1: a desktop editor for one file),
+  where the director stops and reports to the owner.
+
+Rules added in this stage (D-153, D-158, D-162): a `touches` path belongs to one role; a task's tier is the highest
+tier among the items it claims; the director commits nothing on a task branch but joins and scorecard ties.
 
 The planner's estimate for the whole stage is about 22.8 M tokens; about 5.5 M to cut 1 and 8.9 M to cut 2 (with
-the deferred corrections counted). The weekly usage limit was reached once (D-143). Next free task number: T-066.
+the deferred corrections counted). The weekly usage limit was reached once (D-143). Next free task number: T-067.
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
