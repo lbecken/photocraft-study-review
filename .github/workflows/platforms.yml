@@ -1,0 +1,410 @@
+# The gate on macOS and Windows, the Linux gate for candidates (`ci/**`), nightly and dispatch, the
+# T-065 window procedure under Xvfb on Linux, and a window probe on macOS and Windows (T-070, ADR-0009).
+# Changing this file is a high-tier change (CHARTER §4: gate path).
+#
+# Which job counts for main's colour is not stated here: it is the record's (METHODOLOGY §8.1). A job is
+# tracking until a decision row names its first green run on main.
+#
+# `paths-ignore` is built from `xtask/ledger.toml` as T-041 builds `ci.yml`'s: for each entry with
+# `mode = "any"`, in file order, `e` and `e/**` (`e` = the path without a trailing `/`); `add-only`
+# entries contribute nothing. `xtask/tests/acceptance_t070.rs` checks it against `xtask/ledger.toml`.
+name: platforms
+
+on:
+  push:
+    branches: [main, 'ci/**']
+    paths-ignore:
+      - 'tasks'
+      - 'tasks/**'
+      - 'metrics'
+      - 'metrics/**'
+      - 'docs/decisions.md'
+      - 'docs/decisions.md/**'
+      - 'docs/adr'
+      - 'docs/adr/**'
+      - 'STATE.md'
+      - 'STATE.md/**'
+      - 'handoffs'
+      - 'handoffs/**'
+      - 'retrospectives'
+      - 'retrospectives/**'
+      - 'evaluations'
+      - 'evaluations/**'
+      - 'methodology'
+      - 'methodology/**'
+  schedule:
+    # Nightly at 03:17 UTC, on the default branch.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No `concurrency:` group on purpose (as `ci.yml`): every state is checked to the end.
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+defaults:
+  run:
+    # Git Bash on Windows.
+    shell: bash
+
+jobs:
+  gate-macos:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          cargo --version
+          cargo clippy --version
+          rustfmt --version
+
+      - name: Cache cargo registry and target
+        # Swatinem/rust-cache v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Gate
+        id: gate
+        run: cargo xtask ci --keep-going --report gate-report.json
+
+      - name: Gate report
+        if: always()
+        run: |
+          if [ -f gate-report.json ]; then cat gate-report.json; echo; else echo "GATE REPORT: none written"; fi
+
+      - name: Core crates (reported, not required)
+        if: always()
+        run: |
+          set +e
+          cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search -p xtask > core-crates.txt 2>&1
+          rc=$?
+          grep -E '^(test result:|     Running |   Doc-tests |error)' core-crates.txt
+          echo "CORE CRATES: exit status $rc (reported, not required)"
+          exit 0
+
+      - name: Full test output (gate failed)
+        if: failure() && steps.gate.outcome == 'failure'
+        run: |
+          set +e
+          cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
+          rc=$?
+          grep -E "^(test result:|thread '.*' panicked)" test-output.txt | head -200
+          echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
+          exit 0
+
+      - name: Disk
+        if: always()
+        run: |
+          echo "DISK: df -h of the workspace's volume"
+          df -h .
+          if [ -d target ]; then echo "DISK: du -sh target"; du -sh target; else echo "DISK: no target/"; fi
+
+      - name: Upload reports
+        if: always()
+        # actions/upload-artifact v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: gate-macos-${{ github.run_id }}
+          path: |
+            gate-report.json
+            core-crates.txt
+            test-output.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  gate-windows:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          cargo --version
+          cargo clippy --version
+          rustfmt --version
+
+      - name: Cache cargo registry and target
+        # Swatinem/rust-cache v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Gate
+        id: gate
+        run: cargo xtask ci --keep-going --report gate-report.json
+
+      - name: Gate report
+        if: always()
+        run: |
+          if [ -f gate-report.json ]; then cat gate-report.json; echo; else echo "GATE REPORT: none written"; fi
+
+      - name: Core crates (reported, not required)
+        if: always()
+        run: |
+          set +e
+          cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search -p xtask > core-crates.txt 2>&1
+          rc=$?
+          grep -E '^(test result:|     Running |   Doc-tests |error)' core-crates.txt
+          echo "CORE CRATES: exit status $rc (reported, not required)"
+          exit 0
+
+      - name: Full test output (gate failed)
+        if: failure() && steps.gate.outcome == 'failure'
+        run: |
+          set +e
+          cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
+          rc=$?
+          grep -E "^(test result:|thread '.*' panicked)" test-output.txt | head -200
+          echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
+          exit 0
+
+      - name: Disk
+        if: always()
+        run: |
+          echo "DISK: df -h of the workspace's volume"
+          df -h .
+          if [ -d target ]; then echo "DISK: du -sh target"; du -sh target; else echo "DISK: no target/"; fi
+
+      - name: Upload reports
+        if: always()
+        # actions/upload-artifact v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: gate-windows-${{ github.run_id }}
+          path: |
+            gate-report.json
+            core-crates.txt
+            test-output.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  gate-linux:
+    # Candidates (`ci/**`), nightly and dispatch only; on pushes to main `ci.yml` is the Linux gate.
+    if: github.ref != 'refs/heads/main' || github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          cargo --version
+          cargo clippy --version
+          rustfmt --version
+
+      - name: Cache cargo registry and target
+        # Swatinem/rust-cache v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Gate
+        id: gate
+        run: cargo xtask ci --keep-going --report gate-report.json
+
+      - name: Gate report
+        if: always()
+        run: |
+          if [ -f gate-report.json ]; then cat gate-report.json; echo; else echo "GATE REPORT: none written"; fi
+
+      - name: Core crates (reported, not required)
+        if: always()
+        run: |
+          set +e
+          cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search -p xtask > core-crates.txt 2>&1
+          rc=$?
+          grep -E '^(test result:|     Running |   Doc-tests |error)' core-crates.txt
+          echo "CORE CRATES: exit status $rc (reported, not required)"
+          exit 0
+
+      - name: Full test output (gate failed)
+        if: failure() && steps.gate.outcome == 'failure'
+        run: |
+          set +e
+          cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
+          rc=$?
+          grep -E "^(test result:|thread '.*' panicked)" test-output.txt | head -200
+          echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
+          exit 0
+
+      - name: Disk
+        if: always()
+        run: |
+          echo "DISK: df -h of the workspace's volume"
+          df -h .
+          if [ -d target ]; then echo "DISK: du -sh target"; du -sh target; else echo "DISK: no target/"; fi
+
+      - name: Upload reports
+        if: always()
+        # actions/upload-artifact v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: gate-linux-${{ github.run_id }}
+          path: |
+            gate-report.json
+            core-crates.txt
+            test-output.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  window-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          cargo --version
+          cargo clippy --version
+          rustfmt --version
+
+      - name: Cache cargo registry and target
+        # Swatinem/rust-cache v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Build kiln
+        run: cargo build -p kiln --locked
+
+      - name: Window procedure (T-065) under Xvfb
+        # The procedure's exit status is the job's colour (pipefail: `tee` does not mask it).
+        run: sh .github/scripts/window-procedure.sh target/debug/kiln "$RUNNER_TEMP/window" 2>&1 | tee window-procedure.txt
+
+      - name: Installed X and GL packages (for the record)
+        if: always()
+        run: |
+          set +e
+          for c in xvfb-run Xvfb; do printf 'COMMAND %s: %s\n' "$c" "$(command -v "$c" || echo absent)"; done
+          dpkg-query -W -f='PACKAGE ${Package} ${Version} ${db:Status-Abbrev}\n' \
+            xvfb libxkbcommon-x11-0 libxcb-xkb1 libgl1-mesa-dri libglx-mesa0 libegl-mesa0 mesa-libgallium 2>&1
+          echo "dpkg-query: exit status $?"
+          echo "APT LISTS: $(ls /var/lib/apt/lists 2>/dev/null | wc -l) files in /var/lib/apt/lists"
+          ldconfig -p | grep -E 'libxkbcommon-x11|libxcb-xkb|libGLX_mesa|libEGL_mesa' || echo "LDCONFIG: none of the four libraries"
+
+      - name: Upload the procedure's output
+        if: always()
+        # actions/upload-artifact v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: window-linux-${{ github.run_id }}
+          path: window-procedure.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  window-probe:
+    strategy:
+      # One leg's result must not cancel the other's.
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          cargo --version
+          cargo clippy --version
+          rustfmt --version
+
+      - name: Cache cargo registry and target
+        # Swatinem/rust-cache v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Build kiln
+        id: build
+        run: cargo build -p kiln --locked
+
+      - name: Window probe
+        # One run of the window form with a three-line script, bounded to 120 s by a bash watchdog
+        # (GNU `timeout` is not assumed on macOS). The step's exit status is kiln's.
+        if: always()
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          PROBE_OS: ${{ matrix.os }}
+        run: |
+          set +e
+          out="$PWD/window-probe.txt"
+          {
+            echo "PROBE OS: $PROBE_OS $(uname -a)"
+            if command -v sw_vers >/dev/null 2>&1; then sw_vers; fi
+          } > "$out"
+          if [ "$BUILD_OUTCOME" != success ]; then
+            echo "PROBE: not run (cargo build -p kiln: $BUILD_OUTCOME)" >> "$out"
+            cat "$out"
+            exit 0
+          fi
+          k="$PWD/target/debug/kiln"
+          if [ -f "$k.exe" ]; then k="$k.exe"; fi
+          p="$RUNNER_TEMP/window-probe"
+          rm -rf "$p"; mkdir -p "$p/d"; cd "$p" || exit 99
+          printf 'fn main() {\n    let x = 1;\n}\n' > d/a.rs
+          printf '%s\n' '{"id":"s1","ui":"snapshot"}' '{"id":1,"command":"doc.list"}' '{"id":"s2","ui":"snapshot"}' > s.jsonl
+          "$k" --root d --script s.jsonl > stdout.txt 2> stderr.txt &
+          kp=$!
+          (
+            i=0
+            while [ "$i" -lt 120 ]; do
+              sleep 1
+              kill -0 "$kp" 2>/dev/null || exit 0
+              i=$((i+1))
+            done
+            : > timed_out
+            kill "$kp" 2>/dev/null
+          ) < /dev/null > /dev/null 2>&1 &
+          wp=$!
+          wait "$kp"; rc=$?
+          wait "$wp"
+          {
+            if [ -f timed_out ]; then echo "PROBE: timed out after 120 s (killed)"; fi
+            echo "PROBE: exit status $rc"
+            echo "PROBE: stdout $(wc -c < stdout.txt) bytes, $(awk 'END{print NR}' stdout.txt) lines"
+            echo "--- stdout"; cat stdout.txt
+            echo "--- stderr"; cat stderr.txt
+            echo "--- end"
+          } >> "$out"
+          cat "$out"
+          exit "$rc"
+
+      - name: Upload the probe's record
+        if: always()
+        # actions/upload-artifact v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: window-probe-${{ matrix.os }}-${{ github.run_id }}
+          path: window-probe.txt
+          if-no-files-found: warn
+          retention-days: 30
