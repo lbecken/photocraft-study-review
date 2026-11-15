@@ -231,4 +231,28 @@ when it is absent, combined with a gate that runs on one machine and a CI result
 ### test author
 <!-- end test author log -->
 ### reviewer
+- 2026-11-15 · R-259 · round 1 · approve · rulings D-175 (branch) and c1 / D-177 (main's task
+  file) acknowledged and accepted. INC-001 states the cause I reproduced, and D-177 records the
+  corrected one. Read of the diff `e9d4b4d..673dbe0`:
+  - Only additions, plus the `snapshot` line in the three T-036 files. No assertion changed,
+    no skip, `#[ignore]` or `cfg` added.
+  - `read_bytes` restores the mode before it unwraps and runs only while no request is in
+    flight.
+  - `assert_reachable` runs as uid 0 only and can add failures, never passes.
+  Ran the six test files:
+  - uid 0 in the worktree: all pass.
+  - Review clone with its own target, test binaries run as uid 0 and as uid 1000
+    (`setpriv --reuid 1000 --regid 1000 --clear-groups --inh-caps=-all --bounding-set=-all`).
+    Base as 1000: the three T-036 tests FAIL with PermissionDenied at their snapshot
+    (:167/:172/:192). Head as 1000 and as 0: all pass.
+  - Head as 0, clone dir chmod 0700 root: the six identity-changing tests fail with
+    `precondition:` naming that directory.
+  Mutants under both identities, identical results:
+  - M1 (disk.rs `DiskFs::new` refusal removed): killed by the three at-start tests.
+  - M2 (`current_root` identity check removed): killed by guard_t036 (iii).
+  Restored, `git status` clean. Docs paragraph and INC-001 checked (commit ids, the eight
+  merges, cause). Finding 1 is a nit: canonical-path and ACL limits of `assert_reachable`;
+  it fails rather than passes. Follow-ups: confinement leaves `k8i-*` fixtures in `temp_dir`;
+  machines that still fail (Windows, rootless uid 0, macOS root). Review in
+  `reviews/T-069-r1.md`. · not run: CI runs; whole gate as uid 1000 · next: director.
 <!-- end reviewer log -->
