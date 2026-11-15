@@ -710,3 +710,4 @@
 {"kind":"run","task":"T-057","iteration":2,"run":"R-275","role":"reviewer","tier":"medium","started_at":"2026-11-15T21:12:41Z","ended_at":"2026-11-15T21:15:53Z","wall_s":192,"tokens":16571,"tool_calls":10,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"review round 2 (final) at 6335016: approve; the delta is what r1 to r7 call for; M10 and M18 are each killed by the new acceptance test and nothing else; five changed document sentences hold against the binary (one figure in the cost limit is the time of a whole script, noted as a follow-up); cargo test -p kiln -p kiln-ui 133 passed"}
 {"kind":"transition","task":"T-057","iteration":2,"at":"2026-11-15T21:16:17Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-057","iteration":2,"at":"2026-11-15T21:16:17Z","from":"reviewed","to":"queued"}
+{"kind":"transition","task":"T-057","iteration":2,"at":"2026-11-15T21:25:24Z","from":"queued","to":"merged"}

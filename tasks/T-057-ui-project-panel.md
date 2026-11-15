@@ -2,7 +2,7 @@
 id: T-057
 title: "Show the project tree in a panel beside the editor: expand and collapse directories, and open a file as the current document by clicking it"
 tier: medium            # ADR-0002 default (UI behaviour over existing commands; no dependency, gate path, persistence or process code); ≥ the claimed item's tier (`ui.project-panel`: low); fixed at specified (METHODOLOGY v1.4 §4)
-state: queued                 # director only, written with every transition; see METHODOLOGY §3
+state: merged                 # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: [ui.project-panel]
 depends_on: []          # T-055, T-056, T-065 merged (main 15555cc); nothing unmerged
