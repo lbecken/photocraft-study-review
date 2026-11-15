@@ -400,6 +400,74 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   runner · missing context: none · next: director (Q-11, Q-12; then `specified`).
 <!-- end planner log -->
 ### implementer
+- 2026-11-15 · R-247 · ready · did: read AGENTS.md, the implementer brief, the spec in full (rulings
+  and both spec-check sections), ADR-0008, `ui.md`, `ui-editor.md`, the merged `kiln-ui` and `apps/kiln`.
+  **Rulings acknowledged and accepted:** Q-2 A, Q-5 A, Q-7 A (AC-3 implemented by catching the panic while the
+  window system starts), Q-11 A (I edit `ui.md` first), Q-12 A (real time; only `frames`/`settled` differ);
+  closing during `--script` (unspecified; see below); and, from the director's message during this run, the
+  rulings a1 and a2 of D-164 (read in the task file on main): a1 accepted, the usage on a usage error is the
+  same `USAGE` text `--help` prints, so stderr contains `--help`'s stdout; a2 accepted, `--script` is read
+  before the root, so a bad script is reported and the root is not named.
+  **Criteria in my words:** AC-1 (gate) with no display variables: bare `kiln` exits 2 with one stderr line, no
+  panic, empty stdout; a bad root is named before the window system is tried; usage errors and an unreadable
+  script exit 2 with empty stdout; `--help` exits 0. AC-2 (Xvfb): the window's `--script` prints what `kiln
+  script` prints except the frame counts, and leaves the same files. AC-3 (Xvfb without the libraries): exit 2,
+  one line, no panic.
+  **Code:** `crates/kiln-ui/src/window.rs` (new): `pub fn run_window(root, paths, script: Option<&[u8]>) ->
+  Result<Option<ScriptRun>, WindowError>`, re-exported from `lib.rs` and documented there. Order: root
+  (`Host::on_disk`) → `eframe::run_native` (window system) → start paths in the app creator → first frame. Every
+  frame is `draw_frame` after `apply_style`; inner size 1280×800; eframe `NativeOptions` otherwise default
+  (no persistence feature, so no storage). `--script`: a `Driver` feeds a `Script` one frame at a time. It
+  adds each frame's input in `eframe::App::raw_input_hook`, and an egui plugin's `output_hook` takes each pass's
+  accesskit update, shapes, repaint delay and `viewport_rect`, merged per frame as `FullOutput::append` merges
+  them. While the script runs, the plugin asks for the next frame with `request_repaint_after(1 ms)`. A
+  zero-delay request would carry over into the next frame's repaint delay and break settling. The settle rule
+  is the same as `kiln script`'s (60-frame cap). A frame that did not run (a hidden window, logic only) gets no
+  new input; eframe keeps the input it was given. Responses are printed after `run_native` returns. No-window
+  case: `run_native`'s `Err`, or a panic before the app creator runs, which is caught with a silent panic hook,
+  gives `WindowError::NoWindow` on one line (whitespace collapsed). The default hook is put back when the
+  window has started, and a later panic is re-raised (`resume_unwind`), not hidden.
+  `crates/kiln-ui/src/script.rs`: the frame loop of `Script` is split into `begin_line` / `Pending` / `finish`
+  and `record_frame`, with `headless_input` taken out of `frame`. `kiln script` runs the same frames and inputs
+  as before, and its fields and the T-055/T-056 unit tests are unchanged. `apps/kiln/src/main.rs`: the window
+  form (`--root`, `--script`, paths; `--log`/`--memory`/`--size` are usage errors there); `--help` in an option
+  position of the window form; the usage names both forms. `docs/protocol/ui.md`: line 33 replaced, synopsis
+  line, a section "The window". Its guarantee sentences are copied from Pinned (i) and (b), Interface and
+  Pinned (c)/(d); I added no guarantee sentence of my own.
+  **Closing the window during `--script`** (unspecified, D-163): the lines not yet run are not run; the
+  responses of the lines that ran go to stdout; one stderr line `kiln: the window was closed before the script
+  ended`; exit 2; no panic. Measured by sending `WM_DELETE_WINDOW` (python ctypes on libX11, as a window
+  manager's close) under Xvfb: after 3 s with 20×`frames 600`: exit 2, 0 responses, that one line; after 15 s:
+  exit 2, responses 1–3 (`frames 600`, `settled true`), that one line.
+  **Lock:** set comparison (`tomllib`) of `Cargo.lock` against base `025cc78`: `base 156 new 326 added 170
+  removed 0 removed: []`, so no existing package changed version.
+  **Tests:** `apps/kiln/tests/window_t065.rs` (6 tests through the binary, no display: no-window exits incl.
+  start paths, `--script` and a path named `script`; bad root named; unreadable script before the root (a2);
+  usage errors contain `--help`'s output (a1); help forms equal; `kiln script` unaffected). Unit tests in
+  `window.rs`: the driver run on headless frames with the plugin gives byte-equal output to `Script` (13
+  responses, frames included, start paths with a refused one); input is not re-given to a frame that did not
+  run; one-line errors.
+  **Real window under Xvfb, by the spec's recipe** (the two libraries `apt-get download`ed and `dpkg-deb -x`ed
+  into scratch, `LD_LIBRARY_PATH`, `MESA_SHADER_CACHE_DISABLE=true`): `kiln --root d a.rs src/b.rs missing.rs
+  --script s.jsonl` with 5 snapshots, a click `at` into `Editor`, typing, `Enter`, a 3-step `scroll`, `ctrl+S`,
+  focus/type/click `Open`, `ctrl+Z`, two control requests and one refused click. Exit 3 in 1.55 s, as `kiln
+  script` on a copy (exit 3). The 17 lines were equal once `frames`/`settled` were removed (`equal True 17
+  17`). First snapshot: `Title` `src/b.rs — Kiln`, `Message` `not_found: …`. `diff -r` of the two roots: no
+  difference. Window frame counts: start 30 frames (headless 14), the scroll 38, settled (headless 20). The
+  same run with a fresh `HOME`: nothing written with `MESA_SHADER_CACHE_DISABLE=true`, 11 files under
+  `.cache/mesa_shader_cache/` without it. In the run directory only the file saved by `ctrl+S` changed, and
+  stderr was empty. AC-3 (no `LD_LIBRARY_PATH`): exit 2, 0 bytes stdout, the one line `kiln: no window: Library
+  libxkbcommon-x11.so could not be loaded.`. Without a script the window stayed up until `timeout 4` killed it
+  (124), stderr empty. No display: exit 2, one line (`kiln: no window: winit EventLoopError: os error at …`);
+  `DISPLAY=:99`: the same.
+  **Deviations:** none from the spec that I know of. The window's title bar text is `Kiln`; the spec does not
+  set it. Risk, not a deviation: the window keeps the 60-frame settle cap of `kiln script`. If frames come much
+  faster than 60 per second, a UI animation that needs real time (a scroll) could stop settling early, and its
+  snapshot would then differ. At the pace measured here (about 40 to 60 frames per second) the scroll settled.
+  · gate attempts: 1 (last: green, `GATE PASSED in 703.5s`, wall 709.6 s; test step 971 passed) · `target/` 12G
+  after the gate (181M at the start) · not run: AC-2/AC-3 by the test author's scripts (I do not have them); a
+  release build; a real window manager; HiDPI; the CI runner · missing context: none · next: join with
+  `task/T-065-tests`, review.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
