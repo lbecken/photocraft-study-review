@@ -593,15 +593,90 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
     extra check pass trivially (the stub never opens a window). Not checked: anything with a real
     window (no implementation here), so the window half of AC-2, AC-3 against eframe and the
     real-time settling of each action are unchecked until the join.
+  (The R-248 script is superseded in full by the R-251 procedure below; run that one.)
+  · gate attempts: 0 of `cargo xtask ci` (ran `cargo test -p kiln --test acceptance_t065`: 6
+  failed on base by assertion, 6 passed on the stub; `cargo clippy -p kiln --all-targets -D
+  warnings` clean; `cargo xtask hygiene` PASS, `cargo xtask no-skip` PASS) · not run: full `cargo
+  xtask ci`; any real window · missing context: none · next: reviewer (AC-2/AC-3 by the procedure)
+  QUESTION: (Q-a) AC-1's usage errors: I read "a message and the usage on stderr" as "stderr
+  contains the usage exactly as `kiln --help` prints it on stdout, plus a message" (base's
+  `kiln script` does so), and use it to tell a usage error from "no window", which also exits 2
+  without a display. If the window form may print a different (shorter) usage on error, the
+  assertion in `ac1_usage_errors_exit_2` fails at the join; proposed wording if so: "stderr has
+  more than one line". Likewise `ac1_unreadable_script_exits_2` takes Pinned (c) to mean that
+  with an unreadable script and a bad root the message does not name the root. Recommendation:
+  confirm both readings.
+- 2026-11-15T03:25Z · R-251 · after join 1 and review round 1 · did: acknowledged the rulings D-164 a1, a2
+  (accepted: they are the readings my R-248 tests use; no test changed for them) and D-165 b1
+  (accepted: reverses Q-12 A; the comparison now reports both with and without the counts), b2,
+  b3, b4 (accepted; b5–b7 noted, not mine).
+  - b3 → new gate test `ac1_non_utf8_argument_is_a_usage_error` (9 command lines: a non-UTF-8
+    start path, root, option name, `--script` value in the window form; script, start path,
+    `--root`, `--log` value in `kiln script`; each exit 2, empty stdout, the usage as `kiln
+    --help` prints it plus a message (a1), no panic; no file written). Fails on base by
+    **assertion** (exit 101: `std::env::args` panics). The argument is built with
+    `std::os::unix::ffi::OsStrExt` and **no `cfg`**: the file therefore compiles only on Unix
+    (the gate runs only on Linux); if that needs a ruling, the director rules.
+  - Self-check: the stub (re-created, never committed; `main.rs` is base again) now reads
+    `args_os`; all 7 gate tests pass on it. Seeded bugs 1–14 of R-248 each killed again by the
+    same tests; new (15) a non-UTF-8 argument converted lossily (taken as a path → "no window")
+    → non_utf8; (16) only the window form checks, `kiln script` still panics → non_utf8.
+    16 of 16 killed. Clippy `-D warnings` clean on base.
+  - **Window procedure (replaces R-248's in full).** Save the block as `ac2.sh`; from the
+    worktree after `cargo build -p kiln`: `sh ac2.sh target/debug/kiln <scratch>/t065-ac2` (a
+    fresh scratch directory; it is deleted and re-created). Needs `xvfb-run`, `Xvfb`, `apt-get
+    download`, `python3`; nothing is installed. Each window case runs `kiln script` in one copy
+    of the fixture root and the window (`--script`, by the spec's recipe) in another, then
+    compares: `ac2` (AC-2 as before, `--root`, start paths `a.rs src/b.rs missing.rs`, plus
+    first snapshot `Title` `src/b.rs…`, `Message` `not_found…`); `ac2x3` (the same plus one
+    refused request: exit 3); `dblclick` (b1 (i): focus `Path`, type, `click` `Path`, `frames`
+    20, `click` `Path`, type `Z`, snapshot; headless gives `Path` `src/a.rsZ`, two single
+    clicks); `scroll100` (b1 (ii): `scroll` 100 steps on a 1,002-line `src/l.rs`, snapshot,
+    `cursor.get`; headless first row `    let w660 = 660;`); `ctrlq` (b2: type, `ctrl+Q`,
+    `frames` 5, type, `ctrl+shift+Q`, `ctrl+S`, snapshot, `doc.list`; headless saves `qwfn main()
+    {…`); `noroot` (b4: no `--root`, the fixture copy as the current directory, relative start
+    paths, script given as `../s.jsonl`, for both runs). Then AC-3, the order check
+    (`--script missing.jsonl` under a display), and the plain-window check.
+    **Pass rule.** For every window case: `without counts: EQUAL` (`norm.py`: the outputs
+    JSON-equal line by line after removing `frames` and `settled` from action results and
+    `frames` from snapshots; for `ac2` also `first snapshot … True`), the same exit status
+    (`exit window=N headless=N`), `files EQUAL` (`diff -r` of the two copies); the script then
+    prints `WINDOW CASES PASS`. This is required. `with counts: EQUAL` (whole lines, counts
+    included) is **reported, not required**, until the implementer's measurement under b1 says
+    whether the counts must match; if it does, every case must also show it. `AC-3 PASS`
+    (exit 2, 0 bytes stdout, 1 stderr line, no `panicked`, root unchanged; precondition
+    printed if a library is installed). `missing script: exit=2 stdout_bytes=0` (124 means a
+    window opened before the script was checked; not an AC, Pinned (c)).
+    **Plain window (b4, no `--script`).** `Xvfb -displayfd -fbdir` is started directly three
+    times; `kiln --root d` (twice) and `kiln --root d a.rs` run on it until the framebuffer
+    differs from the empty screen and is unchanged for 4 samples 0.5 s apart (at most 60 s);
+    then kiln (which must still be running) and Xvfb are killed. `PLAIN PASS` means the screen
+    with the start path differs from the one without; it assumes no layout, only that an open
+    document shows something (`Title`, `Editor`). The two runs without a path are compared as a
+    control: if they differ, the script says the comparison is not meaningful (a blinking or
+    animated screen); `PLAIN NOT RUN` if nothing was drawn or kiln ended. This kills "the plain
+    window opens no start path" only if the window stabilises; it is not robust against a UI
+    that keeps repainting differently, so the reviewer's re-seeded mutant in round 2 stays the
+    check of record.
+    What I could run here: the whole procedure against base (every window case `NOT EQUAL`,
+    exit 1 against 0/3; `AC-3 FAIL` exit 1; missing script exit 1; `PLAIN NOT RUN`) and against
+    a scratch fake `kiln` whose window form runs the real `kiln script` and whose plain form runs
+    `xterm` showing the start path (every case `EQUAL` with and without counts, `WINDOW CASES
+    PASS`, `AC-3 PASS`, the two no-path screens equal, `PLAIN PASS`), so the cases, the copies,
+    the no-root run, the comparison and the framebuffer mechanics work. The headless outputs were
+    read: each case exercises what it names. Not run: any real eframe window (no implementation
+    here): the window half of every case, the counts with the script's time, `ctrl+Q`, the plain
+    window's stabilising are unchecked until the join.
 ```sh
 #!/bin/sh
-# AC-2 / AC-3 procedure of T-065 (test author). Usage: sh ac2.sh <kiln binary> <scratch dir>
+# T-065 window procedure (test author, R-251): AC-2, AC-3, b1, b2, b4. Usage: sh ac2.sh <kiln> <fresh scratch dir>
 set -u
-K=$(realpath "$1"); W=$2; rm -rf "$W"; mkdir -p "$W"; cd "$W" || exit 99
-# --- fixtures: root d (copied to w for the window run, h for the headless run) ---
+K=$(realpath "$1"); W=$2; rm -rf "$W"; mkdir -p "$W"; cd "$W" || exit 99; W=$(pwd)
+# --- fixtures: root d ---
 mkdir -p d/src
 printf 'fn main() {\n    let x = 1;\n}\n' > d/a.rs
 { printf 'fn b() {\n'; i=0; while [ $i -lt 58 ]; do printf '    let v%d = %d;\n' $i $i; i=$((i+1)); done; printf '}\n'; } > d/src/b.rs
+{ printf 'fn l() {\n'; i=0; while [ $i -lt 1000 ]; do printf '    let w%d = %d;\n' $i $i; i=$((i+1)); done; printf '}\n'; } > d/src/l.rs
 cat > s.jsonl <<'J'
 {"id":"s1","ui":"snapshot"}
 {"id":"c","ui":"click","target":{"label":"Editor"},"at":{"row":1,"col":4}}
@@ -616,80 +691,129 @@ cat > s.jsonl <<'J'
 {"id":"f","ui":"frames","count":2}
 {"id":"s4","ui":"snapshot"}
 J
-# s3.jsonl: the same with one refused request at the end (both runs must exit 3)
 { cat s.jsonl; echo '{"id":"x","ui":"click","target":{"label":"no such node t065"}}'; } > s3.jsonl
-cp -r d h; cp -r d w; cp -r d h3; cp -r d w3
+cat > dc.jsonl <<'J'
+{"id":"f","ui":"focus","target":{"label":"Path"}}
+{"id":"t","ui":"type","text":"src/a.rs"}
+{"id":"c1","ui":"click","target":{"label":"Path"}}
+{"id":"w","ui":"frames","count":20}
+{"id":"c2","ui":"click","target":{"label":"Path"}}
+{"id":"z","ui":"type","text":"Z"}
+{"id":"s","ui":"snapshot"}
+J
+cat > sc.jsonl <<'J'
+{"id":"s0","ui":"snapshot"}
+{"id":"sc","ui":"scroll","target":{"label":"Editor"},"direction":"down","steps":100}
+{"id":"s","ui":"snapshot"}
+{"id":1,"command":"cursor.get","params":{"doc":1}}
+J
+cat > q.jsonl <<'J'
+{"id":"c","ui":"click","target":{"label":"Editor"},"at":{"row":0,"col":0}}
+{"id":"t","ui":"type","text":"q"}
+{"id":"kq","ui":"key","key":"Q","modifiers":["ctrl"]}
+{"id":"f","ui":"frames","count":5}
+{"id":"t2","ui":"type","text":"w"}
+{"id":"kq2","ui":"key","key":"Q","modifiers":["ctrl","shift"]}
+{"id":"ks","ui":"key","key":"S","modifiers":["ctrl"]}
+{"id":"s","ui":"snapshot"}
+{"id":1,"command":"doc.list"}
+J
 cat > norm.py <<'P'
 import json, sys
-def norm(line):
-    v = json.loads(line)
-    r = v.get("result")
-    if isinstance(r, dict):
-        if "settled" in r:          # an action: drop frames and settled (Q-12 A)
-            r.pop("settled"); r.pop("frames", None)
-        elif "root" in r:           # a snapshot: drop its frames total
-            r.pop("frames", None)
-    return v
-a = [norm(l) for l in open(sys.argv[1], encoding="utf-8").read().splitlines()]
-b = [norm(l) for l in open(sys.argv[2], encoding="utf-8").read().splitlines()]
-print("lines", len(a), len(b))
-for i, (x, y) in enumerate(zip(a, b)):
-    if x != y: print("DIFF at line", i + 1); print(" window  :", json.dumps(x)[:600]); print(" headless:", json.dumps(y)[:600])
+def load(p, drop):
+    out = []
+    for l in open(p, encoding="utf-8").read().splitlines():
+        v = json.loads(l); r = v.get("result")
+        if drop and isinstance(r, dict):
+            if "settled" in r: r.pop("settled"); r.pop("frames", None)   # an action
+            elif "root" in r: r.pop("frames", None)                       # a snapshot
+        out.append(v)
+    return out
 def node(n, lab):
     if n.get("label") == lab: return n
     for c in n.get("children", []):
         m = node(c, lab)
         if m: return m
-s1 = next((x for x in a if x.get("id") == "s1"), None)
-t = node(s1["result"]["root"], "Title") if s1 else None
-m = node(s1["result"]["root"], "Message") if s1 else None
-first = bool(t and t.get("value", "").startswith("src/b.rs") and m and m.get("value", "").startswith("not_found"))
-print("first snapshot Title src/b.rs and Message not_found:", first)
-print("EQUAL" if a == b and len(a) > 0 and first else "NOT EQUAL")
+w, h = sys.argv[1], sys.argv[2]
+a, b = load(w, True), load(h, True)
+for i, (x, y) in enumerate(zip(a, b)):
+    if x != y: print("  DIFF at line", i + 1, "\n   window  :", json.dumps(x)[:400], "\n   headless:", json.dumps(y)[:400])
+ok = a == b and len(a) > 0
+if len(sys.argv) > 3:   # the first snapshot of s.jsonl: Title src/b.rs, Message not_found
+    s1 = next((x for x in a if x.get("id") == "s1"), None)
+    t = node(s1["result"]["root"], "Title") if s1 else None
+    m = node(s1["result"]["root"], "Message") if s1 else None
+    first = bool(t and t.get("value", "").startswith("src/b.rs") and m and m.get("value", "").startswith("not_found"))
+    print("  first snapshot Title src/b.rs and Message not_found:", first); ok = ok and first
+full = load(w, False) == load(h, False) and len(a) > 0
+print("  lines", len(a), len(b), "| without counts:", "EQUAL" if ok else "NOT EQUAL", "| with counts:", "EQUAL" if full else "NOT EQUAL")
+sys.exit(0 if ok else 1)
 P
-# --- headless reference ---
-timeout 120 "$K" script s.jsonl --root h a.rs src/b.rs missing.rs > h.out 2> h.err; echo "headless exit=$?" | tee h.code
-timeout 120 "$K" script s3.jsonl --root h3 a.rs src/b.rs missing.rs > h3.out 2> h3.err; echo "headless3 exit=$?" | tee h3.code
 # --- the two libraries, unpacked into scratch (nothing installed) ---
-X="$W/xlibs"; mkdir -p "$X/debs" && (cd "$X/debs" && apt-get download libxkbcommon-x11-0 libxcb-xkb1 >/dev/null) && for f in "$X"/debs/*.deb; do dpkg-deb -x "$f" "$X/root"; done
-LIB="$X/root/usr/lib/x86_64-linux-gnu"; ls "$LIB"/libxkbcommon-x11.so.0 "$LIB"/libxcb-xkb.so.1 || echo "LIBRARIES MISSING: AC-2 not run"
-# --- AC-2: the window, by the recipe ---
-win() { # win <root> <script> <out> <err>
-  env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LD_LIBRARY_PATH="$LIB" MESA_SHADER_CACHE_DISABLE=true timeout 120 \
-    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root $1 a.rs src/b.rs missing.rs --script $2 2>$4" > "$3"; echo $?; }
-echo "window exit=$(win w s.jsonl w.out w.err)" | tee w.code
-echo "window3 exit=$(win w3 s3.jsonl w3.out w3.err)" | tee w3.code
-echo "--- AC-2 s.jsonl:";  python3 -I norm.py w.out h.out
-echo "exit codes: $(cut -d= -f2 w.code) (window) $(cut -d= -f2 h.code) (headless)"
-diff -r w h >/dev/null && echo "FILES EQUAL" || { echo "FILES DIFFER"; diff -r w h | head -20; }
-echo "--- AC-2 s3.jsonl:"; python3 -I norm.py w3.out h3.out
-echo "exit codes: $(cut -d= -f2 w3.code) (window) $(cut -d= -f2 h3.code) (headless)"
-diff -r w3 h3 >/dev/null && echo "FILES3 EQUAL" || { echo "FILES3 DIFFER"; diff -r w3 h3 | head -20; }
-echo "window stderr:"; cat w.err
-# --- AC-3: the same Xvfb without the two libraries (precondition: not installed on the system) ---
+X="$W/xlibs"; mkdir -p "$X/debs" && (cd "$X/debs" && apt-get download libxkbcommon-x11-0 libxcb-xkb1 >/dev/null 2>&1) && for f in "$X"/debs/*.deb; do dpkg-deb -x "$f" "$X/root"; done
+LIB="$X/root/usr/lib/x86_64-linux-gnu"; ls "$LIB"/libxkbcommon-x11.so.0 "$LIB"/libxcb-xkb.so.1 >/dev/null || echo "LIBRARIES MISSING"
+xv() { env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LD_LIBRARY_PATH="$LIB" MESA_SHADER_CACHE_DISABLE=true timeout 180 xvfb-run -a -s "-screen 0 1280x800x24" "$@"; }
+# case <name> <script> <root|noroot> <paths…>: headless in copy h_<name>, window in copy w_<name>
+FAIL=0
+case_() {
+  n=$1 s=$2 mode=$3; shift 3; cp -r d "h_$n"; cp -r d "w_$n"
+  if [ "$mode" = root ]; then
+    timeout 180 "$K" script "$s" --root "h_$n" "$@" > "h_$n.out" 2> "h_$n.err"; hc=$?
+    xv sh -c 'exec "$0" "$@" 2>"w_'"$n"'.err"' "$K" --root "w_$n" "$@" --script "$s" > "w_$n.out"; wc=$?
+  else  # no --root: the fixture copy is the current directory, the script is given relative to it
+    (cd "h_$n" && timeout 180 "$K" script "../$s" "$@" > "../h_$n.out" 2> "../h_$n.err"); hc=$?
+    (cd "w_$n" && xv sh -c 'exec "$0" "$@" 2>"../w_'"$n"'.err"' "$K" "$@" --script "../$s" > "../w_$n.out"); wc=$?
+  fi
+  echo "CASE $n: exit window=$wc headless=$hc"
+  extra=""; [ "$n" = ac2 ] && extra=first
+  python3 -I norm.py "w_$n.out" "h_$n.out" $extra || FAIL=1
+  [ "$wc" = "$hc" ] || { echo "  EXIT DIFFERS"; FAIL=1; }
+  if diff -r "w_$n" "h_$n" >/dev/null; then echo "  files EQUAL"; else echo "  FILES DIFFER"; diff -r "w_$n" "h_$n" | head -5; FAIL=1; fi
+  [ -s "w_$n.err" ] && echo "  window stderr: $(head -c 300 "w_$n.err")"
+}
+case_ ac2 s.jsonl root a.rs src/b.rs missing.rs
+case_ ac2x3 s3.jsonl root a.rs src/b.rs missing.rs
+case_ dblclick dc.jsonl root a.rs
+case_ scroll100 sc.jsonl root src/l.rs
+case_ ctrlq q.jsonl root a.rs
+case_ noroot s.jsonl noroot a.rs src/b.rs missing.rs
+[ $FAIL = 0 ] && echo "WINDOW CASES PASS" || echo "WINDOW CASES FAIL"
+# --- AC-3: Xvfb without the two libraries (precondition: neither installed on the system) ---
 if ldconfig -p | grep -q -e 'libxkbcommon-x11\.so' -e 'libxcb-xkb\.so'; then echo "AC-3 PRECONDITION FAILED: a library is installed"; else
   cp -r d n
   env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u LD_LIBRARY_PATH MESA_SHADER_CACHE_DISABLE=true timeout 120 \
-    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root n a.rs 2>n.err" > n.out; echo "AC-3 exit=$? (pass: 2)"
-  echo "AC-3 stdout bytes=$(wc -c < n.out) (pass: 0); stderr lines=$(awk 'END{print NR}' n.err) (pass: 1); panicked: $(grep -c panicked n.err) (pass: 0)"
-  echo "AC-3 stderr: $(cat n.err)"; diff -r d n >/dev/null && echo "AC-3 root unchanged" || echo "AC-3 ROOT CHANGED"
+    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root n a.rs 2>n.err" > n.out; e=$?
+  l=$(awk 'END{print NR}' n.err); p=$(grep -c panicked n.err); b=$(wc -c < n.out)
+  echo "AC-3: exit=$e stdout_bytes=$b stderr_lines=$l panicked=$p (pass: 2 0 1 0)"; echo "  stderr: $(cat n.err)"
+  [ "$e $b $l $p" = "2 0 1 0" ] && diff -r d n >/dev/null && echo "AC-3 PASS" || echo "AC-3 FAIL"
 fi
-# --- extra, order of checks under a display (Pinned (c)): the script is checked before the window ---
-env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LD_LIBRARY_PATH="$LIB" MESA_SHADER_CACHE_DISABLE=true timeout 60 \
-  xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root d a.rs --script missing.jsonl 2>m.err" > m.out; echo "missing script exit=$? (pass: 2, not 124) stdout bytes=$(wc -c < m.out) (pass: 0)"
+# --- extra, Pinned (c) under a display: the script is checked before the window ---
+xv sh -c "exec '$K' --root d a.rs --script missing.jsonl 2>m.err" > m.out; e=$?
+echo "missing script: exit=$e stdout_bytes=$(wc -c < m.out) (pass: 2 0; 124 = a window opened)"
+# --- b4, plain window (no --script): does it show its start path? Framebuffer of the virtual display ---
+plain() { # plain <tag> <paths…>: start Xvfb with -fbdir, start kiln, wait until the screen is drawn and stable, copy it
+  t=$1; shift; mkdir -p "fb_$t"; rm -f "disp_$t"
+  Xvfb -displayfd 3 -screen 0 1280x800x24 -fbdir "$W/fb_$t" -nolisten tcp 3>"disp_$t" 2>/dev/null & xp=$!
+  i=0; while [ ! -s "disp_$t" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+  cp "fb_$t/Xvfb_screen0" "blank_$t"
+  env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET DISPLAY=":$(cat "disp_$t")" LD_LIBRARY_PATH="$LIB" MESA_SHADER_CACHE_DISABLE=true \
+    "$K" --root d "$@" > "plain_$t.out" 2> "plain_$t.err" & kp=$!
+  i=0; st=0; : > "prev_$t"
+  while [ $i -lt 120 ] && [ $st -lt 4 ]; do sleep 0.5; i=$((i+1)); cp "fb_$t/Xvfb_screen0" "cur_$t"
+    if cmp -s "cur_$t" "blank_$t"; then st=0; elif cmp -s "cur_$t" "prev_$t"; then st=$((st+1)); else st=0; fi; cp "cur_$t" "prev_$t"; done
+  kill -0 $kp 2>/dev/null && alive=yes || alive=no
+  kill $kp 2>/dev/null; wait $kp 2>/dev/null; kill $xp 2>/dev/null; wait $xp 2>/dev/null
+  echo "plain $t: drawn_and_stable=$([ $st -ge 4 ] && echo yes || echo no) still_running=$alive"; [ $st -ge 4 ] && [ $alive = yes ]
+}
+plain none && plain none2 && plain apath a.rs && {
+  cmp -s cur_none cur_none2 && echo "  two runs without a path: same screen" || echo "  two runs without a path differ (screen not deterministic; comparison below not meaningful)"
+  cmp -s cur_none cur_apath && echo "PLAIN FAIL: the screen with start path a.rs equals the one without" || echo "PLAIN PASS: the start path changes the screen"
+} || echo "PLAIN NOT RUN: a window was not drawn, or kiln ended"
 ```
-  · gate attempts: 0 of `cargo xtask ci` (ran `cargo test -p kiln --test acceptance_t065`: 6
-  failed on base by assertion, 6 passed on the stub; `cargo clippy -p kiln --all-targets -D
-  warnings` clean; `cargo xtask hygiene` PASS, `cargo xtask no-skip` PASS) · not run: full `cargo
-  xtask ci`; any real window · missing context: none · next: reviewer (AC-2/AC-3 by the procedure)
-  QUESTION: (Q-a) AC-1's usage errors: I read "a message and the usage on stderr" as "stderr
-  contains the usage exactly as `kiln --help` prints it on stdout, plus a message" (base's
-  `kiln script` does so), and use it to tell a usage error from "no window", which also exits 2
-  without a display. If the window form may print a different (shorter) usage on error, the
-  assertion in `ac1_usage_errors_exit_2` fails at the join; proposed wording if so: "stderr has
-  more than one line". Likewise `ac1_unreadable_script_exits_2` takes Pinned (c) to mean that
-  with an unreadable script and a bad root the message does not name the root. Recommendation:
-  confirm both readings.
+  · gate attempts: 0 of `cargo xtask ci` (`cargo test -p kiln --test acceptance_t065`: 7 failed
+  on base by assertion, 7 passed on the stub; clippy clean; `cargo xtask hygiene` PASS, `cargo xtask no-skip` PASS) ·
+  not run: full `cargo xtask ci`; a real window · missing context: none · next: join 2, reviewer
+  round 2 by this procedure
 <!-- end test author log -->
 ### reviewer
 - 2026-11-15 · R-249 · tests_joined (head c2c8087) · round 1 · did: rulings acknowledged and
