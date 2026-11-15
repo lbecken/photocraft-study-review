@@ -864,6 +864,39 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   kiln --test acceptance_t056` red 22/22 as intended · not run: the full gate; the tests against
   the real implementation (join); Q-6 A's `script_t055` change · missing context: none · next:
   director (T1–T3), join with `task/T-056`.
+- 2026-11-15 · R-243 · in review (round 1 done) · rulings acknowledged and accepted (read in
+  main's copy of this file): D-157 x1 (the tests keep avoiding the CRLF-joining Enter), x2 (start
+  paths are the invocation's input; my AC-7 sessions still open documents by control requests),
+  x3 (applied: `expected_row_colours` paints a blank-only row `plain`, the blank-row assertion is
+  gone); D-158 tier high, y4 (Title not pinned beyond path + `modified`), y5; D-159 z1, z2, z4
+  (mine), z5 (Enter after a lone `\r` stays avoided). · did: added 6 tests to
+  `acceptance_t056.rs` (chars written with `\u{…}` escapes):
+  - z1 (a) `z1_rows_equal_the_text_each_node_shows` — every node with rows except `Editor` has
+    one row equal to its value or label (Title `src/a.rs … modified …` after an edit, Path,
+    Open, Message after a refused open, Documents' children); Editor rows equal its lines `é`
+    with a combining acute, `ab́cd`, `x`+ZWJ+`yz`, `٣٣`, `office ffi fl` (ui.editor-view).
+  - z1 (b) `z1_click_at_counts_chars_on_shaped_lines` — six `at` clicks, caret = line start +
+    col by `cursor.get`, then `Q` typed there vs the model (ui.editor-view).
+  - z2 `z2_enter_undo_redo_at_the_end_of_a_long_document_settle` — 300 lines, caret at the end,
+    Enter, ctrl+Z, ctrl+Y each `settled: true`, texts checked (ui.editor-view).
+  - z4 (a) `z4_non_ascii_typed_over_a_selection_caret_counts_chars` — `λжé😀` over 1..4 and
+    9..2, caret vs `cursor.get` and the model (ui.editor-view).
+  - z4 (b) `z4_successful_ui_save_clears_message` — refused open, then ctrl+S → Message empty,
+    file written (ui.dispatch-only: an effect of a UI-dispatched save).
+  - z4 (c) `z4_a_path_that_only_contains_rs_is_plain` — `x.rs.txt`, `d.rs/a.txt`, `a.rsx`
+    painted plain although `syntax.highlight` gives keywords (ui.editor-view).
+  Base: 28 of 28 fail (the 6 new by assertion: no Editor/Title, `no_target`, `not_actionable`).
+  Self-check: the stub of R-240 rebuilt in the worktree (uncommitted, removed) and extended
+  for z1 (row chars taken from the laid-out text, rows in laid-out order) and z2 (the forced
+  scroll offset deferred until the content has grown; the unextended stub reproduced the
+  reviewer's defect: Enter at the end ran 60 frames unsettled): 28/28 pass, T-055's 26 pass.
+  Seeded bugs → kills: N1 row chars sorted by x → both z1 tests; N2 T-055's glyph-based rows
+  (cluster char repeated) → both z1 tests; N3 click column counted in bytes → z1 click, ac3 click,
+  ac7 click; N4 un-deferred offset at the end → z2; N5 caret counted in bytes after typing over a
+  selection → z4 (a); N6 UI save leaves Message → z4 (b); N7 `.rs` matched by `contains` → z4 (c).
+  7 of 7 killed. · gate attempts: 0 full gate; `hygiene`, `no-skip`, `clippy` steps below ·
+  not run: the new tests against the implementation (join) · missing context: none · next:
+  director, join.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
