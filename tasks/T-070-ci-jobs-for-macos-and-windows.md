@@ -407,6 +407,48 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   join runs it); `cargo xtask hygiene` on the committed state: result below.
   · `cargo xtask hygiene` at 365d0daed981f6c12363ad4dd20fc057fd7d1f19: PASS (reviews ok; session-paths: 590 tracked files
   clean) · gate attempts this run: 0 (by instruction) · missing context: none · next: director, join.
+#### Rework after review round 1
+- 2026-11-15 · R-277 · rework · rulings of D-193 acknowledged, all accepted: g2, g3, g7 are mine; g1, g4 the
+  test author's (g4: I make the workflow meet what its tests will require, below); g5, g6 the director's
+  (AC-6 read from the logs of `ci/T-070-negative`; T-077's `touches`); AC-4 read again in round 2. Read
+  `reviews/T-070-r1.md` at 3c7399b and `tasks/ci-runs/T-070-round-1.md` on main.
+  · g2 (0dd0b46): every recording step now begins `set +e` and ends `exit 0`: Disk (three gate jobs,
+  identical), Gate report (three), the package record of `window-linux`; core crates and the full test
+  output already did. Run with `bash --noprofile --norc -eo pipefail`: Disk normal 0; Disk with a `du`
+  that exits 1: 0 (the reviewer's finding: 1 before); `df` and `du` both failing: 0; Gate report without a
+  file: 0, with a `cat` that fails: 0; package record normal 0, with failing `ldconfig` and `dpkg-query`:
+  0. A structure check of the parsed YAML: every `if: always()` `run:` step except the probe (whose
+  status is `kiln`'s, m5) has `set +e` and ends `exit 0`.
+  · g3 (23e57b4): `docs/development.md` "Runners, wall times and disk" replaces "Runners and wall times":
+  the six wall times of run 43752760283 (candidate `cd1121b`) as the ruling gives them, the three `df -h
+  .` lines and `du -sh target` figures as the extraction prints them, that the macOS and Windows gate
+  figures are of red runs (macOS: 11 min 26 s of it the test-output step), that the window on macOS is
+  still built, not observed (§8.1, ADR-0009 Q-5). "14 GB disk each" and "not measured yet" are gone;
+  the CPU and memory figures stay only as GitHub's documented figures, which no run shows.
+  · g7 (0dd0b46, 23e57b4): after SIGTERM at 120 s the watchdog checks `kiln` each second for 5 s and then
+  sends `kill -9`, recording "PROBE: SIGTERM ignored for 5 s, sent SIGKILL". The docs' probe row says so.
+  Run with the bound cut to 3 s in a copy (only that line changed): a `kiln` with `trap "" TERM` →
+  SIGKILL, step exit 137 after 8 s; a plain hang → 143 after 4 s; normal exit 0 → 0 after 1 s; exit 2 →
+  2; nothing left running after any of them.
+  · g4, already true, no change needed (line numbers at 23e57b4):
+  - procedure step not masked: `platforms.yml:340` `sh .github/scripts/window-procedure.sh target/debug/kiln
+    "$RUNNER_TEMP/window" 2>&1 | tee window-procedure.txt` under `defaults.run.shell: bash` (`:52`), which
+    Actions runs with `-eo pipefail`; with a fake procedure exiting 1 the step exits 1, exiting 0 → 0;
+  - probe exits with `kiln`'s status: `:455` `exit "$rc"` (runs above: 137, 143, 0, 2);
+  - probe runs whatever the build's result: `:399` `if: always()`; `:410` `if [ "$BUILD_OUTCOME" != success ]`
+    records "PROBE: not run (cargo build -p kiln: failure)" and exits 0 (run: `BUILD_OUTCOME=failure`);
+  - time bound as documented: `:425` `while [ "$i" -lt 120 ]`, one `sleep 1` per turn, docs "bounded to
+    120 s (SIGTERM at 120 s, SIGKILL 5 s later …)";
+  - profile: `:332` `cargo build -p kiln --locked` (dev profile) builds `target/debug/kiln`, which `:340` runs.
+  No conflict with a ruling or the spec found.
+  · re-checked: PyYAML parse plus my structure script (18 `paths-ignore` patterns equal to the ledger's, `contents:
+  read`, no `concurrency` or `continue-on-error`, 15 `uses:` all 40-hex); `actionlint` 1.7.12 on both workflows:
+  exit 0 (shellcheck still not available); `CARGO_PROFILE_DEV_DEBUG=line-tables-only CARGO_INCREMENTAL=0 cargo
+  test -p xtask --locked --test acceptance_t070 --test guard_t070`: 8 + 3 passed (the test author's g4 checks
+  were not on this branch yet); `cargo xtask hygiene`: result below. Disk before the build: 19 GB free.
+  · not checked here: anything on a hosted runner (round 2 runs on the re-join); `kill -9` of a native
+  process from Git Bash on Windows and the SIGKILL path on macOS (Linux only here); the whole gate
+  (not run: the change is to the workflow, its docs and this log; the director re-joins).
 <!-- end implementer log -->
 ### test author
 - 2026-11-15 · R-264 · ready (base 0bc14b8) · did: read AGENTS.md, the test-author brief, METHODOLOGY
