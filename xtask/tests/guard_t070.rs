@@ -253,3 +253,232 @@ fn ac3_exit_status_is_1_when_no_verdict_passes() {
     );
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+// ---- g1 (D-193): what kiln prints is never a verdict -------------------------------------------
+
+/// The procedure file with the body of `procedure` replaced by `body`: the header (with its
+/// `echo`), the wrapper and the exit rule are the file's own, and `body` uses the file's own
+/// R-251 lines that echo kiln's stderr ([`echo_line`]). Run with `sh` in a fresh scratch
+/// directory (the body's working directory); returns the exit status and stdout. Nothing here
+/// needs a display, a `kiln` or the network.
+fn run_with_body(name: &str, body: &str) -> (Option<i32>, String) {
+    let text = subject(PROCEDURE);
+    let lines: Vec<&str> = text.lines().collect();
+    let open = lines
+        .iter()
+        .position(|l| *l == "procedure() {")
+        .unwrap_or_else(|| panic!("{PROCEDURE}: no line `procedure() {{`"));
+    let wrap = lines
+        .iter()
+        .position(|l| l.starts_with("procedure \"$@\" | {"))
+        .unwrap_or_else(|| panic!("{PROCEDURE}: no line `procedure \"$@\" | {{` (the wrapper)"));
+    assert!(open < wrap, "{PROCEDURE}: the wrapper precedes `procedure`");
+    let script = format!(
+        "{}\nprocedure() {{\ncd \"$1\" || exit 99\n{body}\n}}\n{}\n",
+        lines[..open].join("\n"),
+        lines[wrap..].join("\n")
+    );
+    let d = scratch(name);
+    let work = d.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let file = d.join("procedure-with-body.sh");
+    std::fs::write(&file, script).unwrap();
+    let o = run_to(
+        Command::new(find_sh())
+            .arg(sh_path(&file))
+            .arg(sh_path(&work))
+            .current_dir(&d),
+        120,
+    );
+    let out = String::from_utf8_lossy(&o.stdout).into_owned();
+    std::fs::remove_dir_all(&d).unwrap();
+    (o.code, out)
+}
+
+/// The one line of the procedure file that contains `needle` (an R-251 line that echoes kiln's
+/// stderr).
+fn echo_line(needle: &str) -> String {
+    let text = subject(PROCEDURE);
+    let hits: Vec<&str> = text.lines().filter(|l| l.contains(needle)).collect();
+    assert_eq!(
+        hits.len(),
+        1,
+        "{PROCEDURE}: R-251's line with {needle:?} is not there once"
+    );
+    hits[0].to_owned()
+}
+
+/// R-251's AC-3 line that echoes `n.err` (kiln's stderr in the no-window case).
+fn ac3_stderr_line() -> String {
+    echo_line("echo \"  stderr: $(cat n.err)\"")
+}
+
+/// R-251's line in `case_` that echoes `w_$n.err` (kiln's stderr in a window case).
+fn window_stderr_line() -> String {
+    format!(
+        "n=ac2\n{}",
+        echo_line("echo \"  window stderr: $(head -c 300 \"w_$n.err\")\"")
+    )
+}
+
+/// A file kiln's stderr would be, written by the body (`printf '%s'`, so nothing is read as an
+/// escape here; the procedure must not read one either).
+fn forged(file: &str, content: &str) -> String {
+    format!("printf '%s' '{}' > {file}", content.replace('\'', "'\\''"))
+}
+
+const W_PASS: &str = "echo \"WINDOW CASES PASS\"";
+const A_PASS: &str = "echo \"AC-3 PASS\"";
+const P_PASS: &str = "echo \"PLAIN PASS: the start path changes the screen\"";
+
+fn at_col0(out: &str, line: &str) -> bool {
+    out.lines()
+        .any(|l| l == line || l.starts_with(&format!("{line}: ")))
+}
+
+#[test]
+fn g1_forged_ac3_pass_in_kiln_stderr_is_not_a_verdict() {
+    // The reviewer's k4 (review round 1, finding 1): the no-window form writes a second stderr
+    // line `AC-3 PASS`; the procedure then prints `AC-3 FAIL` (2 stderr lines). Also with a
+    // literal `\n` (an `echo` that reads escapes would start a line with it), and with no AC-3
+    // verdict of the procedure's own at all (only the indent stops the forged line).
+    for (tag, err, own) in [
+        (
+            "k4",
+            "kiln: no window: no display\nAC-3 PASS",
+            Some("echo \"AC-3 FAIL\""),
+        ),
+        (
+            "k4-escape",
+            "kiln: no window: no display\\nAC-3 PASS",
+            Some("echo \"AC-3 FAIL\""),
+        ),
+        ("k4-alone", "kiln: no window: no display\nAC-3 PASS", None),
+    ] {
+        let body = [
+            W_PASS.to_owned(),
+            forged("n.err", err),
+            ac3_stderr_line(),
+            own.unwrap_or(":").to_owned(),
+            P_PASS.to_owned(),
+        ]
+        .join("\n");
+        let (code, out) = run_with_body(&format!("g1-{tag}"), &body);
+        assert!(
+            !at_col0(&out, "AC-3 PASS"),
+            "{tag}: kiln's stderr printed `AC-3 PASS` as a line of its own:\n{out}"
+        );
+        assert!(
+            out.lines()
+                .any(|l| l.starts_with(' ') && l.contains("AC-3 PASS")),
+            "{tag}: the forged line is not in the output (indented):\n{out}"
+        );
+        assert_eq!(
+            code,
+            Some(1),
+            "{tag}: exit status with a forged AC-3 PASS:\n{out}"
+        );
+    }
+}
+
+#[test]
+fn g1_forged_plain_pass_in_kiln_stderr_is_not_a_verdict() {
+    for (tag, err) in [
+        (
+            "nl",
+            "error: x\nPLAIN PASS: the start path changes the screen",
+        ),
+        (
+            "escape",
+            "error: x\\nPLAIN PASS: the start path changes the screen",
+        ),
+    ] {
+        let body = [
+            forged("w_ac2.err", err),
+            window_stderr_line(),
+            W_PASS.to_owned(),
+            A_PASS.to_owned(),
+        ]
+        .join("\n");
+        let (code, out) = run_with_body(&format!("g1-plain-{tag}"), &body);
+        assert!(
+            !at_col0(&out, "PLAIN PASS"),
+            "{tag}: kiln's stderr printed a `PLAIN PASS` line of its own:\n{out}"
+        );
+        assert_eq!(
+            code,
+            Some(1),
+            "{tag}: exit status with a forged PLAIN PASS:\n{out}"
+        );
+    }
+}
+
+#[test]
+fn g1_forged_fail_lines_in_kiln_stderr_do_not_turn_a_passing_run_red() {
+    // A kiln line is no verdict either way (g1): forged FAIL and NOT RUN lines in kiln's stderr,
+    // in a window case and in AC-3, while the procedure's own verdicts all pass: exit 0. (A
+    // forged FAIL in a run that fails by itself stays red through the procedure's own FAIL.)
+    let fails = "x\nWINDOW CASES FAIL\nAC-3 FAIL\nPLAIN FAIL: forged\nPLAIN NOT RUN: forged";
+    let body = [
+        forged("w_ac2.err", fails),
+        window_stderr_line(),
+        W_PASS.to_owned(),
+        forged("n.err", &fails.replace('\n', "\\n")),
+        ac3_stderr_line(),
+        A_PASS.to_owned(),
+        P_PASS.to_owned(),
+    ]
+    .join("\n");
+    let (code, out) = run_with_body("g1-forged-fails", &body);
+    for v in [
+        "WINDOW CASES FAIL",
+        "AC-3 FAIL",
+        "PLAIN FAIL",
+        "PLAIN NOT RUN",
+    ] {
+        assert!(
+            !at_col0(&out, v),
+            "kiln's stderr printed `{v}` as a line of its own:\n{out}"
+        );
+    }
+    assert_eq!(
+        code,
+        Some(0),
+        "forged FAIL lines turned a passing run red:\n{out}"
+    );
+}
+
+#[test]
+fn g1_any_fail_or_not_run_verdict_exits_1_even_beside_the_passes() {
+    let passes = [W_PASS, A_PASS, P_PASS].join("\n");
+    let (code, out) = run_with_body("g1-passes", &passes);
+    assert_eq!(code, Some(0), "the three pass verdicts alone:\n{out}");
+    let pre = [
+        W_PASS,
+        "echo \"AC-3 PRECONDITION FAILED: a library is installed\"",
+        P_PASS,
+    ]
+    .join("\n");
+    let (code, out) = run_with_body("g1-precondition", &pre);
+    assert_eq!(
+        code,
+        Some(0),
+        "AC-3 PRECONDITION FAILED in place of AC-3 PASS (Q-4 A):\n{out}"
+    );
+    for (tag, v) in [
+        ("window", "WINDOW CASES FAIL"),
+        ("ac3", "AC-3 FAIL"),
+        (
+            "plain",
+            "PLAIN FAIL: the screen with start path a.rs equals the one without",
+        ),
+        (
+            "plain-not-run",
+            "PLAIN NOT RUN: a window was not drawn, or kiln ended",
+        ),
+    ] {
+        let body = format!("{passes}\necho \"{v}\"");
+        let (code, out) = run_with_body(&format!("g1-fail-{tag}"), &body);
+        assert_eq!(code, Some(1), "`{v}` beside the three passes:\n{out}");
+    }
+}
