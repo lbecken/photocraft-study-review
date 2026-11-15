@@ -85,12 +85,21 @@ jobs:
 
       - name: Core crates (reported, not required)
         if: always()
+        # One `cargo test` per package: with several `-p` in one run, a package whose tests do not
+        # compile stops every other package's tests (D-182 m1).
         run: |
           set +e
-          cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search -p xtask > core-crates.txt 2>&1
-          rc=$?
-          grep -E '^(test result:|     Running |   Doc-tests |error)' core-crates.txt
-          echo "CORE CRATES: exit status $rc (reported, not required)"
+          : > core-crates.txt
+          summary=""
+          for p in kiln-text kiln-syntax kiln-search xtask; do
+            echo "==== cargo test --locked -p $p" >> core-crates.txt
+            cargo test --locked -p "$p" >> core-crates.txt 2>&1
+            rc=$?
+            echo "==== $p: exit status $rc" >> core-crates.txt
+            summary="$summary $p=$rc"
+          done
+          grep -E '^(==== |test result:|     Running |   Doc-tests |error)' core-crates.txt
+          echo "CORE CRATES: exit status per package:$summary (reported, not required)"
           exit 0
 
       - name: Full test output (gate failed)
@@ -156,12 +165,21 @@ jobs:
 
       - name: Core crates (reported, not required)
         if: always()
+        # One `cargo test` per package: with several `-p` in one run, a package whose tests do not
+        # compile stops every other package's tests (D-182 m1).
         run: |
           set +e
-          cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search -p xtask > core-crates.txt 2>&1
-          rc=$?
-          grep -E '^(test result:|     Running |   Doc-tests |error)' core-crates.txt
-          echo "CORE CRATES: exit status $rc (reported, not required)"
+          : > core-crates.txt
+          summary=""
+          for p in kiln-text kiln-syntax kiln-search xtask; do
+            echo "==== cargo test --locked -p $p" >> core-crates.txt
+            cargo test --locked -p "$p" >> core-crates.txt 2>&1
+            rc=$?
+            echo "==== $p: exit status $rc" >> core-crates.txt
+            summary="$summary $p=$rc"
+          done
+          grep -E '^(==== |test result:|     Running |   Doc-tests |error)' core-crates.txt
+          echo "CORE CRATES: exit status per package:$summary (reported, not required)"
           exit 0
 
       - name: Full test output (gate failed)
@@ -229,12 +247,21 @@ jobs:
 
       - name: Core crates (reported, not required)
         if: always()
+        # One `cargo test` per package: with several `-p` in one run, a package whose tests do not
+        # compile stops every other package's tests (D-182 m1).
         run: |
           set +e
-          cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search -p xtask > core-crates.txt 2>&1
-          rc=$?
-          grep -E '^(test result:|     Running |   Doc-tests |error)' core-crates.txt
-          echo "CORE CRATES: exit status $rc (reported, not required)"
+          : > core-crates.txt
+          summary=""
+          for p in kiln-text kiln-syntax kiln-search xtask; do
+            echo "==== cargo test --locked -p $p" >> core-crates.txt
+            cargo test --locked -p "$p" >> core-crates.txt 2>&1
+            rc=$?
+            echo "==== $p: exit status $rc" >> core-crates.txt
+            summary="$summary $p=$rc"
+          done
+          grep -E '^(==== |test result:|     Running |   Doc-tests |error)' core-crates.txt
+          echo "CORE CRATES: exit status per package:$summary (reported, not required)"
           exit 0
 
       - name: Full test output (gate failed)
@@ -291,6 +318,10 @@ jobs:
 
       - name: Build kiln
         run: cargo build -p kiln --locked
+
+      - name: Refresh the runner's package lists (installs nothing)
+        # The procedure fetches two libraries with `apt-get download`, which needs current lists (D-182 m4).
+        run: sudo apt-get update
 
       - name: Window procedure (T-065) under Xvfb
         # The procedure's exit status is the job's colour (pipefail: `tee` does not mask it).
