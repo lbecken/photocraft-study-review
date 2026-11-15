@@ -22,6 +22,7 @@ use egui::{
 };
 use serde_json::{Value, json};
 
+use crate::observe::{MIN_STEP, char_edges};
 use crate::session::Session;
 use crate::shell::{accesskit_rect, scroll_view_with};
 
@@ -174,6 +175,8 @@ pub(crate) struct EditorView {
     scrolled_for: Option<(u64, usize)>,
     /// The vertical scroll offset after the last frame.
     offset: f32,
+    /// `(doc, largest offset)` of the scroll area in the last frame.
+    last_max: Option<(u64, f32)>,
     geometry: Option<Geometry>,
 }
 
@@ -292,8 +295,7 @@ impl EditorView {
         } else {
             let font = monospace(ctx);
             let galley = line_galley(ctx, &font, doc, line, g.width);
-            let cursor = galley.cursor_from_pos(vec2(pos.x - g.left, g.row_height / 2.0));
-            cursor.index.0.min(end - start)
+            nearest_boundary(&galley, pos.x - g.left).min(end - start)
         };
         let head = start + col;
         let anchor = if shift { doc.anchor } else { head };
@@ -446,10 +448,12 @@ impl EditorView {
         };
         let font = monospace(ui.ctx());
         let row_height = ui.fonts_mut(|f| f.row_height(&font));
-        let content_height = doc.lines.len() as f32 * row_height;
         let view_height = ui.available_height();
+        let content_height = doc.lines.len() as f32 * row_height;
+        let max_offset = (content_height - view_height).max(0.0);
         // After a change of the head (or of the document), bring the head's line into view.
         let mut offset = None;
+        let mut shift = 0.0;
         if self.scrolled_for != Some((doc.id, doc.head)) {
             let same_doc = self.scrolled_for.map(|(d, _)| d) == Some(doc.id);
             let mut at = if same_doc { self.offset } else { 0.0 };
@@ -459,13 +463,35 @@ impl EditorView {
             } else if top + row_height > at + view_height {
                 at = top + row_height - view_height;
             }
-            offset = Some(at.clamp(0.0, (content_height - view_height).max(0.0)));
-            self.scrolled_for = Some((doc.id, doc.head));
+            let at = at.clamp(0.0, max_offset);
+            // The scroll area knows last frame's maximum only (beyond it, egui animates the
+            // offset back for dozens of frames): it goes as far as that allows, the text is
+            // drawn shifted by the rest, and the next frame sets the whole offset.
+            let allowed = match self.last_max {
+                Some((d, last)) if d == doc.id && at > last => last,
+                _ => at,
+            };
+            if allowed < at {
+                shift = at - allowed;
+                ui.ctx().request_repaint_after(Duration::from_millis(1));
+            } else {
+                self.scrolled_for = Some((doc.id, doc.head));
+            }
+            offset = Some(allowed);
         }
+        self.last_max = Some((doc.id, max_offset));
         let focused = focused(ui.ctx());
         let mut geometry = None;
         let (scrolled, _) = scroll_view_with(ui, "kiln-editor-scroll", offset, |ui| {
-            geometry = Some(paint(ui, doc, &font, row_height, content_height, focused));
+            geometry = Some(paint(
+                ui,
+                doc,
+                &font,
+                row_height,
+                content_height,
+                shift,
+                focused,
+            ));
         });
         self.offset = scrolled;
         self.geometry = geometry;
@@ -553,6 +579,31 @@ fn line_galley(ctx: &Context, font: &FontId, doc: &Doc, line: usize, width: f32)
     }
 }
 
+/// The char boundary of a one-row `galley` nearest to `x` (galley-relative): the left edges of
+/// its chars as the observation reports them (`observe::char_edges`), and the end of its last
+/// char; the lower one on a tie.
+fn nearest_boundary(galley: &Galley, x: f32) -> usize {
+    let Some(placed) = galley.rows.first() else {
+        return 0;
+    };
+    let n = galley.job.text.chars().count();
+    let edges = char_edges(&placed.row, n);
+    let x = x - placed.pos.x;
+    let last_left = edges.last().map_or(f32::NEG_INFINITY, |(l, _)| *l);
+    let end = edges
+        .iter()
+        .map(|(_, r)| *r)
+        .fold(last_left + MIN_STEP, f32::max);
+    let mut best = (0, f32::INFINITY);
+    for (k, b) in edges.iter().map(|(l, _)| *l).chain([end]).enumerate() {
+        let d = (b - x).abs();
+        if d < best.1 {
+            best = (k, d);
+        }
+    }
+    best.0
+}
+
 /// A layout job of the chars `[start, stop)`, one section per run of one colour.
 fn line_job(doc: &Doc, start: usize, stop: usize, font: &FontId) -> LayoutJob {
     let mut job = LayoutJob::default();
@@ -592,9 +643,10 @@ fn paint(
     font: &FontId,
     row_height: f32,
     content_height: f32,
+    shift: f32,
     focused: bool,
 ) -> Geometry {
-    let origin = ui.max_rect().min;
+    let origin = ui.max_rect().min - vec2(0.0, shift);
     let rect = Rect::from_min_size(
         origin,
         vec2(ui.available_width(), content_height.max(row_height)),

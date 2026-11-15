@@ -330,27 +330,47 @@ fn row_json(row: &Row) -> Value {
 }
 
 /// Painted rows of one node, merged when they share a line (a row whose vertical middle lies
-/// inside another's span joins it), sorted top to bottom and each left to right.
+/// inside another's span joins it), sorted top to bottom. Within a line, the pieces painted by
+/// different text shapes are ordered left to right by their first char; the chars of one piece
+/// keep their reading order (the order of the laid-out text, never of glyph positions, z1).
 fn merge_rows(rows: Vec<Row>) -> Vec<Row> {
-    let mut merged: Vec<Row> = Vec::new();
+    let mut merged: Vec<(Row, Vec<Vec<Glyph>>)> = Vec::new();
     for row in rows {
         let middle = (row.top + row.bottom) / 2.0;
         match merged
             .iter_mut()
-            .find(|m| m.top <= middle && middle < m.bottom)
+            .find(|(m, _)| m.top <= middle && middle < m.bottom)
         {
-            Some(m) => m.glyphs.extend(row.glyphs),
-            None => merged.push(row),
+            Some((_, pieces)) => pieces.push(row.glyphs),
+            None => {
+                let pieces = vec![row.glyphs];
+                merged.push((
+                    Row {
+                        top: row.top,
+                        bottom: row.bottom,
+                        glyphs: Vec::new(),
+                    },
+                    pieces,
+                ));
+            }
         }
     }
-    merged.sort_by(|a, b| a.top.total_cmp(&b.top));
-    for row in &mut merged {
-        row.glyphs.sort_by(|a, b| a.x0.total_cmp(&b.x0));
-    }
-    merged
+    let mut out: Vec<Row> = merged
+        .into_iter()
+        .map(|(mut row, mut pieces)| {
+            pieces.sort_by(|a, b| {
+                let x = |p: &Vec<Glyph>| p.first().map_or(0.0, |g| g.x0);
+                x(a).total_cmp(&x(b))
+            });
+            row.glyphs = pieces.into_iter().flatten().collect();
+            row
+        })
+        .collect();
+    out.sort_by(|a, b| a.top.total_cmp(&b.top));
+    out
 }
 
-/// The painted rows of every text shape in `shape`, restricted to glyphs whose centre lies in
+/// The painted rows of every text shape in `shape`, restricted to chars whose centre lies in
 /// `clip`.
 fn collect_text(
     shape: &Shape,
@@ -369,6 +389,76 @@ fn collect_text(
     }
 }
 
+/// The chars of each row of `galley`, taken from the text it laid out (`job.text`): by the
+/// rows' glyph counts when they add up to the text's chars, the whole text for a galley of one
+/// row; `None` (use the glyphs' own chars) when neither holds or the galley was elided.
+fn row_chars(galley: &egui::Galley) -> Option<Vec<Vec<char>>> {
+    if galley.elided {
+        return None;
+    }
+    let chars: Vec<char> = galley.job.text.chars().collect();
+    let total: usize = galley
+        .rows
+        .iter()
+        .map(|r| r.row.glyphs.len() + usize::from(r.ends_with_newline))
+        .sum();
+    if total == chars.len() {
+        let mut at = 0;
+        let rows = galley
+            .rows
+            .iter()
+            .map(|r| {
+                let row = chars[at..at + r.row.glyphs.len()].to_vec();
+                at += r.row.glyphs.len() + usize::from(r.ends_with_newline);
+                row
+            })
+            .collect();
+        return Some(rows);
+    }
+    if galley.rows.len() == 1 {
+        let mut row = chars;
+        if row.last() == Some(&'\n') {
+            row.pop();
+        }
+        return Some(vec![row]);
+    }
+    None
+}
+
+/// The smallest step between the left edges of two chars (points): chars the toolkit lays out
+/// with no width of their own (a combining mark, a joiner, the second char of a ligature) still
+/// get distinct edges, so that a click at a char's left edge names that char.
+pub(crate) const MIN_STEP: f32 = 0.01;
+
+/// Left and right edges of `n` chars laid out as `row` (row-relative x): char `k` is the
+/// toolkit's glyph `k` (the last glyph for chars beyond the glyph count); a char whose glyph has
+/// no width starts where the char before it ends; left edges strictly increase.
+pub(crate) fn char_edges(row: &egui::epaint::text::Row, n: usize) -> Vec<(f32, f32)> {
+    let glyphs = &row.glyphs;
+    let mut out = Vec::with_capacity(n);
+    let mut prev_left = f32::NEG_INFINITY;
+    let mut prev_right = glyphs.first().map_or(0.0, |g| g.pos.x);
+    for k in 0..n {
+        let Some(g) = glyphs.get(k.min(glyphs.len().saturating_sub(1))) else {
+            break;
+        };
+        let width = if k < glyphs.len() {
+            g.advance_width
+        } else {
+            0.0
+        };
+        let mut left = if width > 0.0 { g.pos.x } else { prev_right };
+        if left < prev_left + MIN_STEP {
+            left = prev_left + MIN_STEP;
+        }
+        let right = left + width.max(0.0);
+        out.push((left, right));
+        prev_left = left;
+        prev_right = prev_right.max(right);
+    }
+    out
+}
+
 fn text_rows(
     text: &TextShape,
     clip: Rect,
@@ -378,24 +468,32 @@ fn text_rows(
     if text.opacity_factor <= 0.0 || text.angle != 0.0 {
         return;
     }
-    for placed in &text.galley.rows {
+    let laid_out = row_chars(&text.galley);
+    for (i, placed) in text.galley.rows.iter().enumerate() {
+        if placed.glyphs.is_empty() {
+            continue;
+        }
         let origin = text.pos + placed.pos.to_vec2();
         let top = transform.mul_pos(origin).y;
         let bottom = transform.mul_pos(origin + egui::vec2(0.0, placed.size.y)).y;
         let colors = glyph_colors(text, placed);
+        let chars: Vec<char> = match &laid_out {
+            Some(rows) => rows[i].clone(),
+            None => placed.glyphs.iter().map(|g| g.chr).collect(),
+        };
+        let edges = char_edges(&placed.row, chars.len());
         let mut glyphs = Vec::new();
-        for (glyph, color) in placed.glyphs.iter().zip(colors) {
-            let left = transform.mul_pos(origin + egui::vec2(glyph.pos.x, 0.0)).x;
-            let right = transform
-                .mul_pos(origin + egui::vec2(glyph.pos.x + glyph.advance_width, 0.0))
-                .x;
+        for (k, (chr, (l, r))) in chars.iter().zip(edges).enumerate() {
+            let color = colors[k.min(colors.len() - 1)];
+            let left = transform.mul_pos(origin + egui::vec2(l, 0.0)).x;
+            let right = transform.mul_pos(origin + egui::vec2(r, 0.0)).x;
             let centre = Pos2::new((left + right) / 2.0, (top + bottom) / 2.0);
             if !contains(clip, centre) || color.a() == 0 {
                 continue;
             }
             let [r, g, b, _] = color.to_srgba_unmultiplied();
             glyphs.push(Glyph {
-                chr: glyph.chr,
+                chr: *chr,
                 x0: left,
                 x1: right,
                 y: centre.y,
