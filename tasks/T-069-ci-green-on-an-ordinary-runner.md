@@ -220,6 +220,13 @@ when it is absent, combined with a gate that runs on one machine and a CI result
   64 items, 44 verified, 0 failing; test PASS, 979 passed, 0 failed); gate attempt 2, uid 0,
   worktree, at the commit of this line: see the commit after it (PASS expected; reported to
   the director). Scratch checkout `/home/user/kiln-t069-scratch/` deleted.
+- 2026-11-15 · R-258 · ready · ruling c1 (D-177) acknowledged and accepted: INC-001 now states
+  the cause as reproduced in R-256 ("What happened", "Cause", first bullet of "Permanent fix";
+  the rest as ruled). Figures checked against my R-256 record: on base as uid 1000, 975 tests
+  ok and the same three FAILED, each a PermissionDenied unwrap reading `open/locked.txt`; kept
+  as given. Correction to R-256: gate attempt 2 (uid 0, worktree) at `e727698` PASSED (979
+  tests passed; scorecard 64 items, 0 failing). This run: `cargo xtask hygiene` only; the whole
+  gate not re-run (change limited to the incident file and this log). · next: director.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
