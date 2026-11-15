@@ -369,6 +369,11 @@ window during `--script` needs a rule (not specified); release builds.
   `docs/protocol/ui.md` as measured.
 - **b7 (nit 11).** Left as it is.
 
+### Ruling on the test author's question of R-251 (director, D-166)
+- **b8.** A test file that compiles only on Unix is accepted without a `cfg`: the gate and CI run on Linux, and
+  the window is built for X11 only. The charter names no platform; that Kiln is built and tested on Linux with X11
+  only is said to the owner with the report at cut 1.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
