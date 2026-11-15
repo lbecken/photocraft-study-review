@@ -97,7 +97,7 @@ impl Shell {
 }
 
 /// A vertical scroll area whose content is one accessibility node of role `scroll_view`, with
-/// the visible part of the area (its clip rectangle) as its bounds. `kiln script` scrolls the
+/// the visible part of the area (its clip rectangle, cut to the area's own width) as its bounds. `kiln script` scrolls the
 /// nearest such node around a target and treats its bounds as the visible part.
 pub(crate) fn scroll_view(ui: &mut Ui, id_salt: &str, add: impl FnOnce(&mut Ui)) {
     scroll_view_with(ui, id_salt, None, add);
@@ -120,9 +120,17 @@ pub(crate) fn scroll_view_with(
             UiBuilder::new().accessibility_role(Role::ScrollView),
             |ui| {
                 add(ui);
+                // The visible part: the clip rectangle (the window cut by every scroll area
+                // above) cut to the area's own horizontal extent, since for a vertical scroll
+                // area the clip rectangle spans the parent's full width (T-057 F1).
                 let clip = ui.clip_rect();
+                let own = ui.max_rect().x_range();
+                let visible = egui::Rect::from_x_y_ranges(
+                    clip.x_range().intersection(own),
+                    clip.y_range(),
+                );
                 ui.ctx().accesskit_node_builder(ui.unique_id(), |node| {
-                    node.set_bounds(accesskit_rect(clip));
+                    node.set_bounds(accesskit_rect(visible));
                 });
             },
         );
