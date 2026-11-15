@@ -710,6 +710,9 @@ const CORE_PACKAGES: [&str; 4] = ["kiln-text", "kiln-syntax", "kiln-search", "xt
 /// each invocation (or the loop) is followed by `||`, or the run has `set +e` and ends in
 /// `true`, `:` or `exit 0`. One invocation naming several packages fails (with one
 /// `cargo test -p a -p b`, cargo runs no test when one package's tests do not compile).
+/// Invocations are counted as commands (ruling m8, D-183): a statement invokes `cargo test`
+/// only when its command word is `cargo test`; the words of an `echo`, `printf` or `:` line or
+/// of a quoted string invoke nothing.
 fn core_crates_check(run: &str) -> Result<(), String> {
     let text = run.replace("\\\n", " ");
     let lines: Vec<&str> = text.lines().map(|l| strip_comment(l).trim()).collect();
@@ -760,8 +763,9 @@ fn core_crates_check(run: &str) -> Result<(), String> {
     }
     let mut covered: Vec<String> = Vec::new();
     for l in &lines {
-        for st in l.split(';').flat_map(|x| x.split("&&")) {
-            if !st.contains("cargo test") {
+        for st in shell_statements(l) {
+            let st = st.as_str();
+            if !invokes_cargo_test(st) {
                 continue;
             }
             let t: Vec<&str> = st.split_whitespace().collect();
@@ -822,6 +826,69 @@ fn core_crates_check(run: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// A shell line split into statements at `;`, `&&` and a lone `&` outside quotes (`||` and `|`
+/// stay inside the statement: they belong to it).
+fn shell_statements(line: &str) -> Vec<String> {
+    let cs: Vec<char> = line.chars().collect();
+    let (mut out, mut cur) = (Vec::new(), String::new());
+    let (mut sq, mut dq) = (false, false);
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        match c {
+            '\\' if !sq && i + 1 < cs.len() => {
+                cur.push(c);
+                cur.push(cs[i + 1]);
+                i += 2;
+                continue;
+            }
+            '\'' if !dq => sq = !sq,
+            '"' if !sq => dq = !dq,
+            ';' if !sq && !dq => {
+                out.push(std::mem::take(&mut cur));
+                i += 1;
+                continue;
+            }
+            '&' if !sq && !dq => {
+                let redirect = cur.ends_with('>') || cs.get(i + 1) == Some(&'>');
+                if cs.get(i + 1) == Some(&'&') {
+                    out.push(std::mem::take(&mut cur));
+                    i += 2;
+                    continue;
+                }
+                if !redirect {
+                    out.push(std::mem::take(&mut cur));
+                    i += 1;
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        cur.push(c);
+        i += 1;
+    }
+    out.push(cur);
+    out.into_iter().filter(|s| !s.trim().is_empty()).collect()
+}
+
+/// Whether a statement's command is `cargo test`: after the keywords that open a compound
+/// command (`do`, `then`, `else`, `if`, `while`, `until`, `!`, `{`, `(`, `time`) and variable
+/// assignments, the first two words are `cargo` and `test`. `echo … cargo test …` is not.
+fn invokes_cargo_test(st: &str) -> bool {
+    let mut words = st
+        .split_whitespace()
+        .map(|w| w.trim_start_matches(['(', '{']));
+    let first = loop {
+        match words.next() {
+            None => return false,
+            Some("" | "do" | "then" | "else" | "if" | "while" | "until" | "!" | "time") => {}
+            Some(w) if w.contains('=') && !w.starts_with('-') && !w.starts_with('"') => {}
+            Some(w) => break w,
+        }
+    };
+    first == "cargo" && words.next() == Some("test")
 }
 
 // ---- workflow helpers ---------------------------------------------------------------------------
