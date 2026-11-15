@@ -1011,4 +1011,22 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   director, join.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-15 · R-241 · tests_joined (round 1, head `97ba223`) · did: full review, high tier
+  (D-158; this branch's task file still says medium). Rulings x1–x3 and y1–y5 (main's copy)
+  acknowledged and accepted; x1, x3, y1, y3, y4 hold on the binary, y2 and y5 are not yet applied.
+  Differential run against my own model of the Input table (seeds 241056/241057/241058, 420
+  sessions, 16,800 steps, plus 20 x1 sessions): 0 differences. Colours on 14 own files (445 rows,
+  26,916 chars, both size-limit files, `.txt`, blanks): 0 differences. Dispatch: 40 random
+  sessions replayed with `kiln-cli run`, 4,158 UI-logged requests all read-only or of the Input
+  table, idle frames add nothing. 20 mutants: 16 killed (12 by acceptance), 1 equivalent, 3
+  survived. y5 reproduced deterministically; cause: harfrust ligatures/continuation glyphs and
+  `glyph.chr` per cluster in epaint 0.37, sorted by `x0` in `merge_rows`; the editor is affected
+  too (combining marks, ZWJ, Arabic-Indic digits). Settle figure on the acceptance scripts: 20
+  frames (scroll), click 14, focus 13. Findings: 3 defects (y5; Enter at the end of a full view
+  does not settle in 60 frames, breaking L8; the Limits settle sentence), 3 test gaps (M12, M16,
+  M17), 1 spec gap (Enter after a lone CR in an LF document adds no line), 1 nit. Verdict
+  request-changes (`reviews/T-056-r1.md`). · gate attempts: 0 (suites run: acceptance/editor
+  t056, t055 three files, kiln-ui, `ui-commands`, `hygiene`) · not run: full `cargo xtask ci`,
+  release build, a window · missing context: none · next: implementer (findings 1–6), director
+  (finding 7, tier in the branch's task file).
 <!-- end reviewer log -->
