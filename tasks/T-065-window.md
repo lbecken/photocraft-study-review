@@ -334,6 +334,13 @@ window during `--script` needs a rule (not specified); release builds.
 - Blockers B12 to B15 are accepted as the spec check fixed them. The tier is high (a dependency change); the item
   `ui.window` is medium.
 
+### Rulings on the test author's question of R-248 (director, D-164; told to both builders)
+- **a1 (the usage on error).** On a usage error stderr holds a message and the usage exactly as `kiln --help`
+  prints it on stdout; that is how a usage error is told apart from "no window", which prints one line. Exit
+  status 2 and an empty stdout in both cases.
+- **a2 (the order of checks).** Where both the script and the root are bad, the script is reported: the message
+  does not name the root (Pinned (c)).
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
