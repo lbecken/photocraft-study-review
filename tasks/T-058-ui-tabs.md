@@ -2,7 +2,7 @@
 id: T-058
 title: "Show every open document as a tab; make a document current by clicking its tab or its Documents entry; close it from its tab, discarding unsaved changes only on a second, explicit click"
 tier: medium            # ADR-0002 default (UI behaviour over existing commands; no dependency, gate path, persistence or process code); = the claimed item's tier (`ui.tabs`: medium); fixed at specified (METHODOLOGY v1.4 §4)
-state: tests_joined            # director only, written with every transition; see METHODOLOGY §3
+state: in_progress            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: [ui.tabs]
 depends_on: []          # T-056, T-057, T-065 merged; nothing unmerged
@@ -14,6 +14,7 @@ touches:                # one role per path (D-153); no gate path
   - apps/kiln/tests/tabs_t058.rs             # implementer: its own tests through the binary
   - docs/protocol/ui-tabs.md                 # implementer: new; the sentences of Pinned (i)
   - docs/protocol/ui-editor.md               # implementer: the section "The current document" only
+  - docs/protocol/ui.md                      # implementer: the one sentence on when `Message` begins with a kind (ruling h5, D-201); nothing else
 budget_tokens: 800000   # medium (v1.4)
 iteration: 2
 found_by: planner       # ADR-0007 row 8 (run R-225); specified in run R-276; the Documents note: evaluator (D-169)
@@ -404,6 +405,32 @@ build; deleted after this run):
 
 Not checked: macOS and Windows (CI after T-070); a release build; the real window
 (`kiln --script` under Xvfb); more than 300 documents.
+
+### Rulings on review round 1 (director, D-201; `reviews/T-058-r1.md` at `20fb71378f2da53b8b009caf96b0e22538a73c33`; told to both builders)
+- **h1 (finding 1, defect; implementer).** The `modified` mark paints exactly `modified` on one row whatever the
+  strip's width and the path's length, and the tab's own rows hold its whole path. No wrap of the mark.
+- **h2 (finding 2, test gap; test author).** `acceptance_t058.rs` gains a case with a dirty document whose path is
+  wider than the strip at the default size: the rows of the tab and of its `modified` node are compared. It fails
+  at the reviewed head `a56ba4e`. It also gains the assertion of h4 (an undo back to clean removes `Discard`).
+- **h3 (finding 3, document sentence; implementer; the spec's wording corrected here).** The binary's rule stays
+  (`Session::changes`): **a change is any successful request that reaches the session from outside the panels'
+  own reads, a script's read-only control request included**; the panels read again on the next frame after one.
+  `ui-tabs.md` states it so; the spec's Interface and T5 sentence "any source other than a read" is read as this.
+  No product change. Idle frames still send nothing (AC-7 b).
+- **h4 (finding 4, document sentence; implementer; the spec's T3 corrected here).** `Discard <path>` stays until
+  the document is closed or is no longer dirty (a save, or an undo back to clean, by the UI or by a control
+  request).
+- **h5 (finding 5; implementer).** `docs/protocol/ui.md` joins `touches` for one sentence: `Message` begins with a
+  refusal's kind after a refused open by the UI **and after a refused close from a tab**. Nothing else in that
+  file (T-066 and T-068 edit it later and are not in flight).
+- **h6 (finding 6, spec gap).** AC-4's "`ctrl+S` after the refused close" is read as "after the editor has focus
+  again"; the tests give it focus first, and the document's sentence stays. That a click on a tab, a close button
+  or a `Documents` entry leaves the keyboard nowhere is a product weakness, not this task's: T-082 (draft).
+- **h7 (finding 7, nit; test author).** The last tab's group must not take in nodes outside the tab strip: bound
+  it by the `Tabs` node if a snapshot gives the means, else by the first node that is not a tab, a `modified`
+  mark, a `Close` or a `Discard` button. Say which was possible.
+- **h8 (finding 8, nit; implementer).** The sentence "painted whole on one row" gets the spec's caveat back (cut at
+  the window's edge).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
