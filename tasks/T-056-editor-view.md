@@ -928,7 +928,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   `settled:false`, `frames 1` → `true`), and names the growth case (checked: a control insert of
   80 lines at the end, `frames 1` ×2 → `false`, `false`, then `true`; the line `added 79` has a
   row after the first). Acceptance tests: 22 of 22 pass on this branch; my tests 14 of 14. ·
-  gate attempts: GATE3 · not run: the test author's new tests for z1/z2 (not on this branch);
+  gate attempts: 1 (green at `004bc5d`, 545.9 s) · not run: the test author's new tests for z1/z2 (not on this branch);
   a fix of the right-to-left positions (limit) · missing context: none · next: delta review.
 <!-- end implementer log -->
 ### test author
