@@ -534,10 +534,76 @@ branch, so `git show task/T-NNN:<path> > <path>` brings each back.
 
 ## CI
 
+Two workflows, both with `permissions: contents: read`, no secrets, no `pull_request` trigger
+(no code from forks runs), no `concurrency` group (no run is cancelled or replaced), no
+`continue-on-error`, every action pinned by commit sha (`actions/checkout` v7.0.1,
+`Swatinem/rust-cache` v2.9.3, and in `platforms.yml` `actions/upload-artifact` v7.0.2), and no
+job that writes to the repository.
+
 `.github/workflows/ci.yml` runs `cargo xtask ci` on every push to `main` (and on manual
-dispatch), Linux, `permissions: contents: read`, actions pinned by commit sha
-(`actions/checkout` v7.0.1, `Swatinem/rust-cache` v2.9.3). There is no `concurrency` group,
-so no run on `main` is cancelled or replaced.
+dispatch), Linux (`ubuntu-24.04`). It is the Linux gate on `main`.
+
+`.github/workflows/platforms.yml` (T-070, ADR-0009) runs on every push to `main` or to a
+branch `ci/<anything>` that changes a path outside the ledger, nightly at 03:17 UTC on the
+default branch (`schedule`), and on manual dispatch. The ledger filter is a `paths-ignore`
+list built from `xtask/ledger.toml` as T-041 builds it: for each entry with `mode = "any"`, in
+file order, `e` and `e/**`; `add-only` entries contribute nothing. A push whose changed paths
+are all ledger paths starts no job of this workflow (GitHub's documented `paths-ignore` rule,
+as T-041 Interface (2) reads it; not observed here). Its jobs:
+
+| Job | Runner label | Runs on | What it does |
+|---|---|---|---|
+| `gate-macos` | `macos-15` | every trigger | the whole gate, `cargo xtask ci --keep-going --report gate-report.json` |
+| `gate-windows` | `windows-2025` | every trigger | the same |
+| `gate-linux` | `ubuntu-24.04` | pushes to `ci/**`, nightly, dispatch | the same; not on pushes to `main`, where `ci.yml` is the Linux gate (no duplicate run) |
+| `window-linux` | `ubuntu-24.04` | every trigger | `cargo build -p kiln`, then the window procedure (below) under Xvfb |
+| `window-probe` | `macos-15`, `windows-2025` | every trigger | `cargo build -p kiln`; if it built, one run of `kiln --root <dir with a.rs> --script <snapshot, doc.list, snapshot>`, bounded to 120 s, recording exit status, stdout and stderr; the step's exit status is `kiln`'s, and "not run" is recorded when the build failed |
+
+A job's colour is its gate step's exit status (for `window-linux` the build's and the
+procedure's, for `window-probe` the build's and the probe's): the steps that only record
+something (reports, the core-crates step, the full test output, disk and package lines) end with
+exit status 0 whatever they record, so they can neither hide a failure nor cause one; a setup step
+(checkout, toolchain, cache) or an upload that fails makes the job red. Steps run with
+`bash` (Git Bash on Windows), `CARGO_TERM_COLOR=always`, `CARGO_INCREMENTAL=0`, the toolchain
+of `rust-toolchain.toml` installed by `rustup toolchain install` (the versions are printed).
+After the gate, whatever its result, each gate job prints the report and runs:
+- the **core-crates step**, `cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search
+  -p xtask` into `core-crates.txt`. It is reported, not required: its exit status never changes
+  the job's colour. These four packages do not depend on `kiln-workspace`, so on Windows, where
+  the workspace does not build until T-073, it is the only test evidence;
+- only when the gate step failed, `cargo test --workspace --locked --no-fail-fast` into
+  `test-output.txt` (its exit status is recorded, not used);
+- a disk line: `df -h .` and `du -sh target`.
+
+Artefacts (on GitHub only, kept 30 days): `gate-<os>-<run id>` with whichever of
+`gate-report.json`, `core-crates.txt`, `test-output.txt` exist; `window-linux-<run id>` with
+`window-procedure.txt`; `window-probe-<label>-<run id>` with `window-probe.txt`.
+
+**Tracking and counted** (METHODOLOGY §8.1). The Linux gate counts for main's colour. A macOS
+or Windows job, `window-linux` and each `window-probe` leg is *tracking* until a decision row
+names its first green run on `main`: until then its result is recorded and a red one is filed as
+a task, not an incident. From that row on the job is *counted*. The workflow file does not say
+which jobs count; the decision rows do. A task whose `touches` include a platform-sensitive path
+is queued only when every counted job is green on its rebased head pushed by the director to the
+candidate branch `ci/T-NNN`, which also runs `gate-linux`.
+
+**The window procedure** of record is `.github/scripts/window-procedure.sh` (the T-065
+procedure as a file): `sh .github/scripts/window-procedure.sh <kiln> <fresh scratch dir>`. It
+exits 0 only if it printed `WINDOW CASES PASS`, `PLAIN PASS` and either `AC-3 PASS` or `AC-3
+PRECONDITION FAILED` (a runner that has the two X libraries installed cannot check the start
+without them; that is reported as not checked there). `.github/` is a gate path, so only a
+high-tier task's test author changes it; the reviewer and the evaluator run it from `main`.
+Packages installed on the runner by the workflow: none.
+
+**Line endings.** `.gitattributes` holds one line, `* -text`: no end-of-line conversion on
+checkout or commit for any path, whatever `core.autocrlf` says, so files are checked out as
+committed on every platform (a clone with `core.autocrlf=true` had 587 of 588 tracked files
+differing from their blobs without it and 0 of 589 with it, T-070 Pinned (g)).
+
+**Runners and wall times.** Labels as pinned by T-070: `macos-15` arm64 3 CPU 7 GB, `windows-2025`
+x64 4 CPU 16 GB, `ubuntu-24.04` x64 4 CPU 16 GB, 14 GB disk each (GitHub's documentation, not
+verified here). The wall time and disk use of each job are not measured yet: the director
+records them from the runs of `platforms`.
 
 **What the confinement tests need from the machine.** The tests of `ws.path-confinement` that
 need a root the process under test cannot read (`acceptance_t036_workspace`,
