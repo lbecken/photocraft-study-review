@@ -557,7 +557,7 @@ as T-041 Interface (2) reads it; not observed here). Its jobs:
 | `gate-windows` | `windows-2025` | every trigger | the same |
 | `gate-linux` | `ubuntu-24.04` | pushes to `ci/**`, nightly, dispatch | the same; not on pushes to `main`, where `ci.yml` is the Linux gate (no duplicate run) |
 | `window-linux` | `ubuntu-24.04` | every trigger | `cargo build -p kiln`, then the window procedure (below) under Xvfb |
-| `window-probe` | `macos-15`, `windows-2025` | every trigger | `cargo build -p kiln`; if it built, one run of `kiln --root <dir with a.rs> --script <snapshot, doc.list, snapshot>`, bounded to 120 s, recording exit status, stdout and stderr; the step's exit status is `kiln`'s, and "not run" is recorded when the build failed |
+| `window-probe` | `macos-15`, `windows-2025` | every trigger | `cargo build -p kiln`; if it built, one run of `kiln --root <dir with a.rs> --script <snapshot, doc.list, snapshot>`, bounded to 120 s (SIGTERM at 120 s, SIGKILL 5 s later if `kiln` is still running), recording exit status, stdout and stderr; the step's exit status is `kiln`'s, and "not run" is recorded when the build failed |
 
 A job's colour is its gate step's exit status (for `window-linux` the build's and the
 procedure's, for `window-probe` the build's and the probe's): the steps that only record
@@ -605,10 +605,27 @@ checkout or commit for any path, whatever `core.autocrlf` says, so files are che
 committed on every platform (a clone with `core.autocrlf=true` had 587 of 588 tracked files
 differing from their blobs without it and 0 of 589 with it, T-070 Pinned (g)).
 
-**Runners and wall times.** Labels as pinned by T-070: `macos-15` arm64 3 CPU 7 GB, `windows-2025`
-x64 4 CPU 16 GB, `ubuntu-24.04` x64 4 CPU 16 GB, 14 GB disk each (GitHub's documentation, not
-verified here). The wall time and disk use of each job are not measured yet: the director
-records them from the runs of `platforms`.
+**Runners, wall times and disk.** Labels as pinned by T-070: `macos-15` (arm64), `windows-2025`
+(x64), `ubuntu-24.04` (x64); GitHub's documentation gives 3 CPU and 7 GB of memory for
+`macos-15` and 4 CPU and 16 GB for the other two, which no run here shows. Run 43752760283 of
+`platforms` (candidate `cd1121b` on `ci/T-070`; the director's record "CI round 1" in
+`tasks/T-070-ci-jobs-for-macos-and-windows.md` and `tasks/ci-runs/T-070-round-1.md`) showed,
+per job (wall time = the job's completion minus its start, so queueing is not counted; the disk
+columns are the job's `DISK` lines as printed):
+
+| Job | Result | Wall time | `df -h .` (size, used, avail, use) | `du -sh target` |
+|---|---|---|---|---|
+| `gate-linux` | green | 15 min 34 s | `/dev/root 145G 69G 76G 48% /` | 8.6G |
+| `gate-macos` | red (gate: scorecard, test) | 21 min 20 s, of which 11 min 26 s the full-test-output step | `/dev/disk2s5 320Gi 262Gi 40Gi 87%` (`/System/Volumes/Data`) | 4.4G |
+| `gate-windows` | red (gate: clippy, schema, scorecard, test) | 9 min 15 s | `D: 150G 5.5G 145G 4% /d` | 2.5G |
+| `window-linux` | green | 2 min 13 s | (no disk line) | |
+| `window-probe` (`macos-15`) | green | 2 min 26 s | (no disk line) | |
+| `window-probe` (`windows-2025`) | red at "Build kiln" | 2 min 8 s | (no disk line) | |
+
+The macOS and Windows gate figures are of red runs, not of a passing gate; on Windows the
+workspace did not compile (`kiln-workspace`), so its `target` is that of a partial build. The
+macOS probe ran the three-line script in the window form and `kiln` exited 0; the window on macOS is still built, not observed,
+until CI has run the window procedure there (METHODOLOGY §8.1; ADR-0009 Q-5).
 
 **What the confinement tests need from the machine.** The tests of `ws.path-confinement` that
 need a root the process under test cannot read (`acceptance_t036_workspace`,
