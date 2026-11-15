@@ -473,6 +473,9 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   (no workflow, no `.gitattributes` on this branch), as before · gate attempts: none of
   `cargo xtask ci` (not asked; acceptance_t070, clippy, hygiene run) · not run: anything on a
   hosted runner; my tests against the implementer's workflow (the join) · next: director (join)
+- 2026-11-15 · R-268 · ready · rulings of D-183 acknowledged and accepted before acting: m7 (AC-3's
+  line under m2 stays), m8 (my core-crates reader counted the `cargo test` inside an `echo` as an
+  invocation; I make it count commands only, keeping every m1 requirement).
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
