@@ -420,6 +420,15 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   `hygiene` and `no-skip` PASS · not run: the gate tests on
   macOS or Windows (the exit-rule test needs `sh` there: Git Bash on Windows, unmeasured), any
   hosted runner · missing context: none · next: join, reviewer (AC-7 with this file)
+- 2026-11-15 · R-267 · ready · rulings of D-182 (read in the task file on main) acknowledged and
+  accepted before acting: m1 (one `cargo test --locked -p <package>` per package in the one
+  core-crates step, each appending to `core-crates.txt`; my test will require it), m2 (a window
+  case's exit status is `kiln`'s, recorded inside the wrapped command; I change the procedure and
+  its block test), m3 (window-probe does not cancel a leg; window uploads run whatever the result;
+  I add the checks), m4 (`sudo apt-get update` allowed in `window-linux`; my tests do not forbid
+  it), m5 and m6 (noted; nothing for my tests), the test-output condition
+  `failure() && steps.gate.outcome == 'failure'` (my test accepts it and `failure()`), round 1 on
+  the joined branch, and the disk rule (23 GB free on `/home/user` at start).
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
