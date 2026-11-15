@@ -1559,3 +1559,55 @@ fn long_paths_and_scrolls() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Review round 1, h1: the `modified` mark of a dirty document whose path is wider than the
+/// strip paints exactly `modified` on one row, and the tab's row holds its whole path at the
+/// default size (a prefix of it, cut at the window's edge, in a narrow window).
+#[test]
+fn the_mark_of_a_wide_dirty_tab_is_one_row() {
+    let dir = case_dir("wide-dirty");
+    let wide = format!("d/{}.t", "x".repeat(180));
+    fixture(
+        &dir,
+        &[("a.txt", "a\n"), (wide.as_str(), "w\n"), ("b.txt", "b\n")],
+    );
+    let script = vec![
+        open("o1", "a.txt"),
+        open("o2", &wide),
+        open("o3", "b.txt"),
+        frames("f", 2),
+        click_tab("c", &wide),
+        ui("fe", "focus", json!({"target": {"label": "Editor"}})),
+        type_text("t", "Q"),
+        snapshot("s"),
+    ];
+    for (size, whole) in [(None, true), (Some("800x320"), false)] {
+        let extra: Vec<&str> = size.map_or_else(Vec::new, |s| vec!["--size", s]);
+        let s = run(&dir, "s", &script, &extra);
+        s.all_ui_ok();
+        let root = s.snap("s");
+        let what = format!("size {size:?}");
+        let tab = preorder(root)
+            .into_iter()
+            .find(|n| role(n) == Some("tab") && label(n) == Some(wide.as_str()))
+            .expect("the wide tab");
+        let rows = row_texts(tab);
+        assert_eq!(rows.len(), 1, "{what}: tab rows {rows:?}");
+        if whole {
+            assert_eq!(rows[0], wide, "{what}: the tab's row");
+        } else {
+            assert!(
+                wide.starts_with(&rows[0]) && rows[0].len() > 20,
+                "{what}: {rows:?}"
+            );
+        }
+        let marks: Vec<&Value> = preorder(root)
+            .into_iter()
+            .filter(|n| value(n) == Some("modified"))
+            .collect();
+        assert_eq!(marks.len(), 1, "{what}");
+        assert_eq!(row_texts(marks[0]), ["modified"], "{what}: the mark's rows");
+        assert!(shown(root, &what)[1].modified, "{what}");
+    }
+    let _ = fs::remove_dir_all(&dir);
+}

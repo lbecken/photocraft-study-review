@@ -100,7 +100,11 @@ pub(crate) fn show(ui: &mut Ui, view: &mut PanelView<'_>) {
                             clicked = Some(Clicked::Tab(*id));
                         }
                         if state.dirty.contains(id) {
-                            ui.add(Label::new(RichText::new(MODIFIED).weak()).selectable(false));
+                            // On one row of its own: never wrapped into a wide tab's row.
+                            let mark = Label::new(RichText::new(MODIFIED).weak())
+                                .wrap_mode(TextWrapMode::Extend)
+                                .selectable(false);
+                            ui.add(mark);
                         }
                         if was_clicked(&close_button(ui, *id, path)) {
                             clicked = Some(Clicked::Close(*id));
