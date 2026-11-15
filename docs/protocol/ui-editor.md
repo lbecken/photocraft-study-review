@@ -9,10 +9,16 @@ the same UI is T-065.
 
 ## The current document
 
-The editor view shows one document, the **current document**: the one most recently opened by a
-successful `doc.open` from any source (a start path, the UI, a script's control request), a
-`doc.open` that answers `already_open: true` included; if it is closed, the open document with
-the highest id; with none open, no `Title` and no `Editor` node is shown.
+The editor view shows one document, the **current document** (T-056; T-058 added rule 2):
+
+1. A successful `doc.open` from any source (a start path, `Path`/`Open`, the project panel, a
+   script's control request), one that answers `already_open: true` included, makes that
+   document current.
+2. A click on a document's tab, or on its `Documents` entry, makes it current
+   (`docs/protocol/ui-tabs.md`).
+3. When the current document is closed (from its tab or by any `doc.close`), the open document
+   with the highest id becomes current.
+4. With no document open there is no current document, no `Title`, no `Editor` and no `Tabs`.
 
 ## What it shows (nodes)
 
