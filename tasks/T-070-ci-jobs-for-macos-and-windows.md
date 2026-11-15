@@ -762,4 +762,18 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   acceptance tests' code is unchanged, only deleted around) · next: director (join)
 <!-- end test author log -->
 ### reviewer
+- 2026-11-15 · R-274 · round 1 · request-changes · reviewed `bbbb0e52cd51497e33f3b045e3c067500f2343e7`
+  (base 0bc14b8). Rulings read in main's task file and accepted: Q-1 A to Q-4 A (D-180), m1 to m6 (D-182),
+  m7, m8 (D-183), m9 (D-189). I question none of them, but AC-6's Windows clause cannot be met while the
+  workspace does not compile there (review finding 6). · did: workflow read line by line; ledger filter
+  recomputed (18, equal); action shas checked by `git ls-remote` (3 of 3); every Linux-runnable `run:`
+  script run under `bash -eo pipefail`, including failure paths; the procedure under Xvfb 5 of 5 exit 0,
+  1 with k1/k2/k3, 0 with a wrapper exiting 5 (m2); its text against R-251 (only the named lines differ);
+  `.gitattributes` on a toy repository and on an autocrlf clone (0 of 593 differ; base 587 of 588;
+  `schema` and `syntax_commands_are_read_only` pass in the clone); 20 mutants (12 killed by gate tests,
+  6 only by a procedure, 2 survived); the negative candidate `scratch/T-070-negative` at
+  `4bc231c3755d583707b8031bdfecb4d93fbb628f`. · findings: 4 defects (1 in the procedure, 3 document
+  sentences), 1 test gap, 2 spec gaps, 1 nit (`reviews/T-070-r1.md`). · CI-REQUEST:
+  4bc231c3755d583707b8031bdfecb4d93fbb628f as `ci/T-070-negative` (AC-6; what to read is in the review)
+  · not run: hosted runners; actionlint, shellcheck · next: director
 <!-- end reviewer log -->
