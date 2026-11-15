@@ -2,7 +2,7 @@
 id: T-057
 title: "Show the project tree in a panel beside the editor: expand and collapse directories, and open a file as the current document by clicking it"
 tier: medium            # ADR-0002 default (UI behaviour over existing commands; no dependency, gate path, persistence or process code); ≥ the claimed item's tier (`ui.project-panel`: low); fixed at specified (METHODOLOGY v1.4 §4)
-state: in_progress            # director only, written with every transition; see METHODOLOGY §3
+state: self_verified          # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: [ui.project-panel]
 depends_on: []          # T-055, T-056, T-065 merged (main 15555cc); nothing unmerged
@@ -486,6 +486,17 @@ changes the current-document rule in a way AC-4 must follow (T-058 is still a dr
   link or a FIFO are made only where the test can do so without a Unix-only API; otherwise they go the same way.
 - Arm: the task number is odd, so the implementer writes the acceptance tests first on `task/T-057-tests`,
   committed before any code, and runs the whole gate on a local merge of that branch before reporting (§6).
+
+### Rulings on the implementer's questions of R-265 (director, D-184)
+- **v1 (question 1).** The `truncated` marker of a sub-directory comes after everything shown below that
+  directory, as built. The reviewer checks the sub-directory case, which no acceptance test covers.
+- **v2 (question 2).** The FIFO and link cases of AC-5 and the `symlink` and `other` kinds of AC-1 and AC-3 go to
+  T-079 with AC-9: they need fixtures a test cannot make without a Unix-only API (Q-6). The reviewer shows them
+  once as a recorded procedure.
+- **v3 (question 3).** A successful expand leaves `Message` as it was; only a successful open or save clears it.
+  `docs/protocol/ui-project.md` says so in one sentence (the implementer adds it in the rework after review).
+- The sentence "a file the UI's `doc.save` creates appears after the next expand" is unverified: no script can make
+  a save create a file. It is removed from the document unless the reviewer finds a way to show it.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
