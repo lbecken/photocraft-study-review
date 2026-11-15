@@ -43,6 +43,12 @@ Several published texts are stale, cut or uneven, each found by an evaluator or 
 `docs/protocol/ui-editor.md`, the settle sentence, says "1,110 actions", the count of the first 22 acceptance
 tests; with all 28 the reviewer counted 1,135 (the figures themselves are unchanged: largest 20 frames).
 
+## Note from T-065's review round 2 (director, D-167)
+`docs/protocol/ui.md`, section "The window": "the clock is not read" is wrong as worded (the toolkit reads the
+clock and the window then overwrites the time; "the UI's time does not come from the clock" is what holds); and
+the sentence on a lost display says a panic message came in "one of four runs" where the reviewer saw it in 8 of 20
+("in some runs").
+
 ## Log
 ### director
 - 2026-11-14 filed as a draft (D-141).

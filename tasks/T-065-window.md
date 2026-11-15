@@ -2,7 +2,7 @@
 id: T-065
 title: "Open the Kiln UI in a desktop window on X11 that shows the current document, exit with status 2 when no window can be opened, and run a script in the window"
 tier: high              # ADR-0002: adds a dependency (eframe =0.37.0; lock 156 → 326 packages, none changes version at main f7fff5f: R-246); `ui.window` is a medium item (D-162: high is the larger)
-state: tests_joined
+state: queued
 owner_role: planner
 scorecard_items: [ui.window]
 depends_on: [T-056]     # merged at 30435d1 (D-162); spec check R-246 against main f7fff5f
