@@ -1,10 +1,15 @@
 # State
 
-_Last updated: 2026-11-15 05:25 UTC_
+_Last updated: 2026-11-15 16:20 UTC_
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.3** (D-146).
-**Cut 1 is reached and evaluated (D-170): the director has stopped to report to the owner; nothing is in flight.**
+Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run the retrospective, then go on to cut
+2, and make the editor multi-platform (Linux, macOS, Windows).**
+
+In flight (D-172): the retrospective of the stage to cut 1 (run R-254; `retrospectives/iter-2-stage-2-cut-1.md`) and
+the platform plan (run R-255; `docs/adr/0009-platforms.md`, draft tasks from T-069). Then: decisions on both
+(methodology v1.4 if changes are accepted; ADR-0009), the order of cut 2 (T-057, T-058, T-059) and the platform work.
 
 Scorecard on main: 64 items: 44 verified, 0 implemented, 0 failing, 20 planned (68.8%). Merged in this stage:
 T-055 (`kiln script`, the UI without a window, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (the
@@ -32,4 +37,4 @@ branch but joins and scorecard ties; a spec check is done by resuming the planne
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
 `handoffs/` (its last addendum first), then `tasks/` (state in front matter, role logs at the bottom), `metrics/`
 and `retrospectives/`. Worktrees live in `.worktrees/` (not pushed): after any restart run `uptime -s` and
-`git status` in each before touching it. The container restarted four times on 2026-11-14 (02:11Z, 02:59Z, 07:11Z, 18:15Z).
+`git status` in each before touching it. The container restarted four times on 2026-11-14 (02:11Z, 02:59Z, 07:11Z, 18:15Z) and on 2026-11-15 at 16:09Z.
