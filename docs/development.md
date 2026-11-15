@@ -563,15 +563,17 @@ A job's colour is its gate step's exit status (for `window-linux` the build's an
 procedure's, for `window-probe` the build's and the probe's): the steps that only record
 something (reports, the core-crates step, the full test output, disk and package lines) end with
 exit status 0 whatever they record, so they can neither hide a failure nor cause one; a setup step
-(checkout, toolchain, cache) or an upload that fails makes the job red. Steps run with
-`bash` (Git Bash on Windows), `CARGO_TERM_COLOR=always`, `CARGO_INCREMENTAL=0`, the toolchain
+(checkout, toolchain, cache, the package-list refresh) or an upload that fails makes the job
+red. Steps run with `bash` (Git Bash on Windows), `CARGO_TERM_COLOR=always`, `CARGO_INCREMENTAL=0`, the toolchain
 of `rust-toolchain.toml` installed by `rustup toolchain install` (the versions are printed);
 the gate jobs stop after 120 minutes, the window jobs after 60 (`timeout-minutes`).
 After the gate, whatever its result, each gate job prints the report and runs:
-- the **core-crates step**, `cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search
-  -p xtask` into `core-crates.txt`. It is reported, not required: its exit status never changes
-  the job's colour. These four packages do not depend on `kiln-workspace`, so on Windows, where
-  the workspace does not build until T-073, it is the only test evidence;
+- the **core-crates step**, one `cargo test --locked -p <package>` for each of `kiln-text`,
+  `kiln-syntax`, `kiln-search` and `xtask`, in that order, each appended to `core-crates.txt` with
+  its exit status (one run per package, because a package whose tests do not compile would stop
+  the others' tests in a single run naming several). It is reported, not required: its exit
+  status never changes the job's colour. These four packages do not depend on `kiln-workspace`,
+  so on Windows, where the workspace does not build until T-073, it is the only test evidence;
 - only when the gate step failed, `cargo test --workspace --locked --no-fail-fast` into
   `test-output.txt` (its exit status is recorded, not used);
 - a disk line: `df -h .` and `du -sh target`.
@@ -594,7 +596,9 @@ exits 0 only if it printed `WINDOW CASES PASS`, `PLAIN PASS` and either `AC-3 PA
 PRECONDITION FAILED` (a runner that has the two X libraries installed cannot check the start
 without them; that is reported as not checked there). `.github/` is a gate path, so only a
 high-tier task's test author changes it; the reviewer and the evaluator run it from `main`.
-Packages installed on the runner by the workflow: none.
+Packages installed on the runner by the workflow: none; `window-linux` refreshes the runner's
+package lists (`sudo apt-get update`) before the procedure, which fetches its two libraries with
+`apt-get download` into its scratch directory.
 
 **Line endings.** `.gitattributes` holds one line, `* -text`: no end-of-line conversion on
 checkout or commit for any path, whatever `core.autocrlf` says, so files are checked out as
