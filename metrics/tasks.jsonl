@@ -717,3 +717,4 @@
 {"kind":"transition","task":"T-058","iteration":2,"at":"2026-11-15T21:36:14Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-058","iteration":2,"at":"2026-11-15T21:36:14Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-059","iteration":2,"at":"2026-11-15T21:36:14Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-058","iteration":2,"at":"2026-11-15T21:37:06Z","from":"ready","to":"in_progress"}
