@@ -387,6 +387,29 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
     present; the Windows core-crates output has a `test result:` line for each of the three crates). AC-6 (the
     negative candidate) is still to run.
 <!-- end director log -->
+- **CI round 2 on the final candidate (AC-4, AC-5)**: run 43765532298 of `platforms.yml` on `ci/T-070` at the joined
+  head `3fac206ea934707dd42607b320c4c29c361b215c` (pushed 2026-11-15T21:46:25Z; extraction
+  `tasks/ci-runs/T-070-round-2.md`, read by a helper with the Actions tools). Per job, the same conclusions as round 1:
+  `gate-linux` success (`GATE PASSED in 396.6s`, 999 passed, 0 failed in 121 suites; core crates all 0; 10 min 6 s);
+  `window-linux` success (`WINDOW CASES PASS`, `AC-3 PASS`, `PLAIN PASS`; the echoed lines of `kiln` are indented by
+  two spaces and the verdicts start at column 0, which is g1 on a runner); `window-probe (macos-15)` success
+  (`PROBE: exit status 0`); `gate-macos` failure at Gate (`GATE FAILED in 488.3s: scorecard, test`; `xtask` 116
+  passed, 3 failed; the printed prefix of the full output 366 passed, 11 failed); `gate-windows` failure at Gate
+  (`clippy, schema, scorecard, test`; 6 compile errors in `kiln-workspace`, 4 in `xtask` tests naming
+  `xtask/src/hygiene.rs` and `xtask/src/publish.rs`); `window-probe (windows-2025)` failure at "Build kiln", and the
+  probe step ran and recorded `PROBE: not run (cargo build -p kiln: failure)`, which is g4's third property on a
+  runner. The macOS and Windows gates are red as ADR-0009 expects until T-072 to T-074.
+- **The negative candidate (AC-6, read as g5 rules)**: run 43764233597 on `ci/T-070-negative` at
+  `4bc231c3755d583707b8031bdfecb4d93fbb628f` (extraction `tasks/ci-runs/T-070-negative.md`). On each of the three gate
+  jobs the `CORE CRATES` line shows `kiln-text=101` (0 in rounds 1 and 2). `gate-linux` fails at "Gate" with
+  `GATE FAILED in 438.9s: test` (`622 passed, 1 failed`), and the log names the test
+  (`t070_negative_candidate_fails_on_purpose ... FAILED`, `-p kiln-text --test negative_t070`). **The panic sentence
+  is in none of the log parts read** (tails of 400 to 800 lines per gate job): the gate's summary and the "Full test
+  output" step show the failing test's name, not its message. On Windows no `test result:` line for `kiln-text` was
+  found, so that 101 may be the panic or a build failure: not determined. AC-6 holds as g5 words it (the exit
+  status, the failing gate step and the test's name are in the logs); that a failing test's message is not in a job
+  log is a limit of what these jobs report, noted in T-072 (the task that has to read macOS failures from them).
+
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
 - 2026-11-15 · R-261 · draft · did: spec check and completion against 15555cc (above) · not run: anything on a hosted runner · next: director (rulings Q-1–Q-4, specified)

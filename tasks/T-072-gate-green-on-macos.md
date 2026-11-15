@@ -34,6 +34,15 @@ the editor's keys. The confinement tests already compile on macOS; those that as
 Unknown until T-070 runs: **about 600,000** if only tests and sentences change; up to the high ceiling
 if `disk.rs` must change. Re-estimate at specification.
 
+## Notes from T-070's CI rounds (director, 2026-11-15)
+- Evidence to start from: `tasks/ci-runs/T-070-round-1.md` and `T-070-round-2.md` (`gate-macos`: the scorecard's 7
+  problems; `xtask` 116 passed, 3 failed, names not printed; the first 200 lines of the full output with 11 failing
+  tests named).
+- **What the jobs do not show**: a failing test's panic message is in no job log (seen on the negative candidate,
+  `tasks/ci-runs/T-070-negative.md`), the three failing `xtask` tests are not named, and the full output is cut at
+  200 lines. This task's spec decides whether the report steps print failing tests with their messages (a change
+  to `.github/workflows/platforms.yml`, a gate path) or the artefacts are read instead.
+
 ## Log
 ### director
 <!-- end director log -->
