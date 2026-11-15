@@ -247,7 +247,8 @@ T-065 the window; later tasks add panels):
 - a node labelled `Documents` (role `list`, inside a `scroll_view`) whose children are one node
   per open document, in id order, each with the document's path as its `value`;
 - a node labelled `Message` whose `value` is empty or absent, or, after a refused open by the
-  UI, begins with the refusal's `kind` (e.g. `not_found`) followed by free text.
+  UI and after a refused close from a tab (`docs/protocol/ui-tabs.md`), begins with the
+  refusal's `kind` (e.g. `not_found`, `unsaved_changes`) followed by free text.
 
 Clicking `Open` (or `Enter` in `Path`) asks the session to open the path in `Path` (a `doc.open`
 control request); `Path` keeps its text. A successful open clears `Message`. Every node of role `button` or `text_input` has a non-empty `label`. The scroll bar the

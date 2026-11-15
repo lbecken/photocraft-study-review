@@ -60,7 +60,8 @@ requests, which are in the session log.
 
 T3. A tab's close button closes its document with `doc.close`. A document with unsaved changes
 is not closed: `Message` begins with `unsaved_changes` and a `Discard` button appears, which
-closes it with `discard: true`. It stays until the document is closed or saved.
+closes it with `discard: true`. It stays until the document is closed or is no longer dirty (a
+save, or an undo back to clean, by the UI or by a control request).
 
 A successful close from a tab, with or without `discard`, clears `Message` and removes the tab;
 when the closed document was current, the open document with the highest id becomes current
@@ -75,10 +76,14 @@ dirty.
 
 T5. The tabs read `doc.list` in the frames after a change and never on an idle frame.
 
-- A **change** is a successful request of any source other than a read, or a change of the
-  current document (a tab or `Documents` click). In the first frame after one, while a document
-  is open, the tabs send one read-only `doc.list`; how many reads one action causes is not part
-  of this interface. With no document open they send nothing.
+- A **change** is any successful request that reaches the session from outside the UI's own
+  reads (the editor view's and the panels' read-only requests), a script's read-only control
+  request (`doc.list`, `buffer.text`, `project.tree`, …) included, or a change of the current
+  document (a tab or `Documents` click). The editor view and the tabs read again in the first
+  frame after one: while a document is open, the tabs then send one read-only `doc.list` (after a
+  `Documents` click, which the shell handles before it draws the strip, already in the frame of
+  the click); how many reads one action causes is not part of this interface. With no document
+  open they send nothing.
 - On an idle frame (no change since the last read) and on a `scroll` they send nothing. A script
   of control requests only runs no frame after its first request, so its `--log` stays
   `Host::log_script()`.
@@ -100,7 +105,11 @@ Linux gate, and for macOS and Windows it comes from CI once the platform jobs ru
 - With 300 open documents at the default size, most tabs are `offscreen`; a `click` on an
   `offscreen` tab is refused `not_actionable`, and every tab can be clicked after scrolling
   `Tabs`. The strip is taller than one `scroll` step, so a step skips no row of tabs.
-- A long path is painted whole on one row: tabs do not shorten paths.
+- A long path is painted on one row: tabs do not shorten paths. A path wider than the window
+  is cut at the window's edge: its tab's row then holds only the chars whose centre lies inside
+  the window, and its `label` is exact; how many chars remain depends on the chars, as for the
+  project panel (`docs/protocol/ui-project.md`). The `modified` mark after such a tab still
+  paints exactly `modified`, on one row.
 - T7. A path that contains a line break is painted on two rows; its label is exact and a click
   on it works.
 - A path that begins with right-to-left text has an exact `label`; its rows fall under
