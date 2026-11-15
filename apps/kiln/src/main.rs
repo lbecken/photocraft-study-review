@@ -37,8 +37,8 @@ const USAGE: &str = "usage:
 
   (none)  open the Kiln UI in a window on X11 over the root; each <path> is opened at
           start as for `script`. With --script <file>, the window takes its input from
-          the script and closes after its last line; the responses are those of
-          `script`, except the frame counts
+          the script only and closes after its last line; the responses are those
+          of `script` (the window's time is the script's: 1/60 s a frame)
 
   script  run the Kiln UI without a window: each line of <script> is a control request
           (answered as `kiln-cli control` answers it) or a UI request (an object with a

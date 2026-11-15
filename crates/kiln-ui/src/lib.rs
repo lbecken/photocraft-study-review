@@ -43,8 +43,9 @@
 //! [`run_window`] checks the root, starts the window system (eframe, glow, X11 only), opens the
 //! start paths as `kiln script` does and draws every frame with [`draw_frame`] after
 //! [`apply_style`]. Without a script it returns `Ok(None)` when the user has closed the window.
-//! With a script (its bytes) it runs the lines as [`Script`] does, with the window's frames in
-//! real time, closes the window after the last line and returns the responses ([`ScriptRun`]).
+//! With a script (its bytes) it runs the lines as [`Script`] does, on the window's frames with
+//! the script's time and input only (each frame 1/60 s, as in `kiln script`), closes the window
+//! after the last line and returns the responses ([`ScriptRun`]).
 //! If the user closes the window while a script runs, the lines not yet run are not run and
 //! [`ScriptRun::completed`] is false. A failure to start the window system, a panic while it
 //! starts included, is [`WindowError::NoWindow`] with one line of text.

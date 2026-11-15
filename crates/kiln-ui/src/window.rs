@@ -6,8 +6,9 @@
 //! does ([`Script`]'s parsing, targets, input and observation), except that the frames are the
 //! window's: the input of each frame is added to the window system's input
 //! (`eframe::App::raw_input_hook`), and what the frame produced (its accessibility update and
-//! shapes) is taken by an egui plugin's `output_hook`. Time is the window's real time (ruling
-//! Q-12 A).
+//! shapes) is taken by an egui plugin's `output_hook`. Under a script the window's time is the
+//! script's (ruling b1: frame `n` at `n / 60` s) and its input is the script's only; a plain
+//! window keeps real time and the real keyboard and pointer. No key closes the window (b2).
 
 use std::cell::{Cell, RefCell};
 use std::panic::AssertUnwindSafe;

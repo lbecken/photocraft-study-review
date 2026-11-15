@@ -9,8 +9,10 @@
 //! Every spawned process is killed after [`TIMEOUT`] (D-028 (8)).
 #![cfg(test)]
 
+use std::ffi::OsString;
 use std::fs;
 use std::io::Read;
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -26,6 +28,12 @@ struct Run {
 
 /// `kiln <args>` in `dir`, display variables removed, under [`TIMEOUT`].
 fn kiln(dir: &Path, args: &[&str]) -> Run {
+    let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    kiln_os(dir, &args)
+}
+
+/// As [`kiln`], with arguments that need not be UTF-8.
+fn kiln_os(dir: &Path, args: &[OsString]) -> Run {
     let mut child = Command::new(env!("CARGO_BIN_EXE_kiln"))
         .args(args)
         .current_dir(dir)
@@ -225,4 +233,28 @@ fn the_subcommand_script_still_needs_no_display() {
         "a usage error: {:?}",
         run.stderr
     );
+}
+
+#[test]
+fn an_argument_that_is_not_utf8_is_a_usage_error() {
+    let dir = fixture("not-utf8");
+    let usage = help(&dir);
+    let bad = || OsString::from_vec(b"caf\xe9.rs".to_vec());
+    for args in [
+        vec![OsString::from("--root"), OsString::from("d"), bad()],
+        vec![bad()],
+        vec![
+            OsString::from("script"),
+            OsString::from("s.jsonl"),
+            OsString::from("--root"),
+            OsString::from("d"),
+            bad(),
+        ],
+    ] {
+        let run = kiln_os(&dir, &args);
+        assert_eq!(run.code, 2, "{args:?}: {:?}", run.stderr);
+        assert!(run.stdout.is_empty(), "{args:?}");
+        assert!(run.stderr.contains(&usage), "{args:?}: {:?}", run.stderr);
+        assert!(!run.stderr.contains("panicked"), "{args:?}");
+    }
 }

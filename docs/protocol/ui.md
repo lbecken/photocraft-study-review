@@ -56,7 +56,8 @@ gate and the evidence of T-055 cover.
 ## The window
 
 T-065. `kiln [--root <dir>] [--script <file>] [<path>…]` shows the same UI as `kiln script`, in
-a desktop window of 1280×800 points, used with the real keyboard and pointer.
+a desktop window of 1280×800 points (smaller on a smaller screen, below), used with the real
+keyboard and pointer.
 
 - `--root <dir>` (default: the current directory) as for `kiln script`; each `<path>` is opened
   at start, in order, exactly as `kiln script`'s start paths. Options before or after the paths,
@@ -65,13 +66,20 @@ a desktop window of 1280×800 points, used with the real keyboard and pointer.
   and asks nothing (unsaved changes are lost).
 - `kiln` opens a window on X11 (not Wayland). If the window system cannot be started it exits 2
   with one line on stderr and nothing on stdout.
-- `kiln --script <file>` runs a script in the window: its output is that of `kiln script`
-  except the frame counts. The window closes after the last line and the responses are written
-  on stdout after it has closed; the exit codes are those of `kiln script`. The window runs in
-  real time: the `frames` and `settled` values of action responses and the `frames` total of a
-  snapshot may differ from those of `kiln script`.
+- `kiln --script <file>` runs a script in the window: its output is that of `kiln script`, the
+  frame counts and `settled` included. The window's time is the script's (each frame advances
+  it by 1/60 s, as in `kiln script`; the clock is not read), and its input is the script's only:
+  the window system's pointer, key and focus events are ignored while the script runs, and the
+  window counts as focused. Measured under Xvfb on a 1280×800 screen, debug and release builds:
+  every response line byte-equal to `kiln script`'s for the same script, root and start paths
+  (with and without `--root`), the same exit code and the same files afterwards. The window
+  closes after the last line and the responses are written on stdout after it has closed; the
+  exit codes are those of `kiln script`.
+- No key closes the window (the toolkit's quit shortcut `ctrl`+`Q` is not obeyed), with or
+  without `--script`; the window closes on the window system's close request.
 - Usage error (an unknown option, an option twice or without its value, `--log`, `--memory` or
-  `--size` without `script`): exit 2, a message and the usage on stderr, nothing on stdout. An
+  `--size` without `script`, an argument that is not UTF-8, the last also for `kiln script`):
+  exit 2, a message and the usage on stderr, nothing on stdout. An
   unreadable `--script` file or a bad root: exit 2, nothing on stdout, a message on stderr (a
   bad root's names it as given).
 
@@ -81,8 +89,20 @@ order → first frame.
 Files: the window reads `--script` once, whole, at start, and writes no file of its own;
 documents are saved only by `doc.save`.
 
-Limits: under Xvfb the window needs the libraries `libxkbcommon-x11` and `libxcb-xkb`; the GL
-driver may write its shader cache under the home directory.
+Limits:
+- Under Xvfb the window needs the libraries `libxkbcommon-x11` and `libxcb-xkb`; the GL driver
+  may write its shader cache under the home directory.
+- On a screen smaller than 1280×800 the window is smaller (the screen's size), so what a
+  snapshot shows differs from `kiln script` at its default size; it is what `kiln script
+  --size <w>x<h>` shows with the window's size. Measured: on Xvfb screens of 1024×768 and
+  800×600, `kiln --script` printed byte for byte what `kiln script --size 1024x768` and
+  `--size 800x600` print.
+- If the display goes away while the window is open, the window system ends the process with
+  exit status 1 and its message on stderr; responses not yet written are lost. Measured
+  (`Xvfb :87 &`, `DISPLAY=:87 kiln --root d a.rs [--script long.jsonl] &`, then `kill -9` of
+  Xvfb after 3 s): exit 1, nothing on stdout, the one line `X connection to :87 broken
+  (explicit kill or server shutdown).`; in one of four runs with a script, a panic message of
+  the window system came before it.
 
 ## Script lines
 
