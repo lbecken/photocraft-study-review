@@ -2,7 +2,7 @@
 id: T-067
 title: "Publish the evaluation at cut 1 of the second stage of iteration 2"
 tier: low
-state: in_progress
+state: queued
 owner_role: director
 scorecard_items: []
 depends_on: []
