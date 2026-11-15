@@ -31,6 +31,9 @@ Scorecard on main: 64 items: 44 verified, 1 implemented, 0 failing, 19 planned. 
 INC-001 closed in D-179), T-057 (project panel, `7e8a01c`, D-192). The product: `kiln [--root <dir>] [<path>…]`
 opens a window with a project panel and one editor; Linux with X11 only until the platform tasks merge.
 
+**Branches for the owner to delete (D-198; the director's deletion was refused with 403):** `ci/T-070`,
+`ci/T-070-negative`.
+
 Drafts: T-066, T-068, T-053, T-064, T-051, T-043, T-033, T-041 (last; owner told first), T-080, T-081, T-060 to
 T-063, T-022, T-024 to T-031, T-044 to T-048, T-050, T-007, T-009, T-034. T-052 abandoned.
 
