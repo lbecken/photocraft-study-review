@@ -21,7 +21,7 @@ use egui::{Event, Rect, ViewportCommand, ViewportId};
 use kiln_control::Host;
 
 use crate::script::{DEFAULT_SIZE, Pending, SETTLE_CAP, Script, Step, response_ok};
-use crate::{App, apply_style, draw_frame};
+use crate::{apply_style, draw_frame};
 
 /// Why the window did not run.
 #[derive(Debug)]
@@ -212,36 +212,58 @@ impl Driver {
     }
 }
 
-/// The UI a window shows: the app alone, or the app inside a script's driver.
-enum Shown<'a> {
-    Plain(&'a mut App),
-    Script(&'a mut Driver, Arc<Mutex<Capture>>),
-}
-
-/// The `eframe` application of the window.
+/// The `eframe` application of the window. Without a script the driver only holds the UI and
+/// its session (its start paths opened as with a script); its lines are empty and it is never
+/// asked for a frame's input.
 struct WindowApp<'a> {
-    shown: Shown<'a>,
+    driver: &'a mut Driver,
+    capture: Arc<Mutex<Capture>>,
+    scripted: bool,
     closing: bool,
+    /// The script's input handed to the frame about to run.
+    handed: Vec<Event>,
 }
 
 impl eframe::App for WindowApp<'_> {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        let Shown::Script(driver, capture) = &mut self.shown else {
-            return;
-        };
-        if self.closing {
+        if !self.scripted {
             return;
         }
-        let ran = capture
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        match driver.before_frame(ran) {
-            Next::Input(events) => raw_input.events.extend(events),
-            Next::Wait => {}
+        let next = if self.closing {
+            Next::Close
+        } else {
+            let ran = self
+                .capture
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            self.driver.before_frame(ran)
+        };
+        // Ruling b1: under a script the window's time is the script's, as in `kiln script`
+        // (frame `n` from 0 at `n / 60` s), never the clock, on every frame to the last: what
+        // the toolkit times (a double click, a scroll animation, settling) does not depend on
+        // the display's frame rate.
+        raw_input.time = Some(self.driver.script.frames() as f64 / 60.0);
+        raw_input.predicted_dt = 1.0 / 60.0;
+        // The input is the script's only, as in `kiln script`: the window system's events
+        // (pointer, keys, focus changes) are dropped and the window counts as focused. A close
+        // request is not an event here (it is in the viewport's info) and still closes.
+        raw_input.focused = true;
+        if let Some(info) = raw_input.viewports.get_mut(&ViewportId::ROOT) {
+            info.focused = Some(true);
+        }
+        match next {
+            Next::Input(events) => {
+                raw_input.events.clone_from(&events);
+                self.handed = events;
+            }
+            // The frame given input before has not run; eframe keeps that input with whatever
+            // came since: give it the script's input again, and nothing else.
+            Next::Wait => raw_input.events.clone_from(&self.handed),
             Next::Close => {
+                raw_input.events.clear();
                 self.closing = true;
-                capture
+                self.capture
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .active = false;
@@ -251,11 +273,7 @@ impl eframe::App for WindowApp<'_> {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let app = match &mut self.shown {
-            Shown::Plain(app) => &mut **app,
-            Shown::Script(driver, _) => driver.script.app_mut(),
-        };
-        draw_frame(ui, app);
+        draw_frame(ui, self.driver.script.app_mut());
     }
 }
 
@@ -276,12 +294,11 @@ pub fn run_window(
     script: Option<&[u8]>,
 ) -> Result<Option<ScriptRun>, WindowError> {
     let host = Host::on_disk(root).map_err(|e| WindowError::BadRoot(e.to_string()))?;
-    let mut plain = None;
-    let mut driver = None;
-    match script {
-        None => plain = Some(App::new(host)),
-        Some(bytes) => driver = Some(Driver::new(Script::with_host(host, DEFAULT_SIZE), bytes)),
-    }
+    let scripted = script.is_some();
+    let mut driver = Driver::new(
+        Script::with_host(host, DEFAULT_SIZE),
+        script.unwrap_or_default(),
+    );
     let capture = Arc::new(Mutex::new(Capture {
         active: true,
         ..Capture::default()
@@ -304,29 +321,33 @@ pub fn run_window(
         ..eframe::NativeOptions::default()
     };
     let creator_capture = Arc::clone(&capture);
-    let (plain_ref, driver_ref) = (&mut plain, &mut driver);
+    let driver_ref = &mut driver;
     let creator: eframe::AppCreator<'_> = Box::new(|cc| {
         started.set(true);
         restore_hook();
         apply_style(&cc.egui_ctx);
-        let shown = match (plain_ref.as_mut(), driver_ref.as_mut()) {
-            (_, Some(driver)) => {
-                cc.egui_ctx.enable_accesskit();
-                cc.egui_ctx.add_plugin(Observe(creator_capture));
-                driver.start(paths);
-                Shown::Script(driver, Arc::clone(&capture))
+        // Ruling b2: no key closes the window (egui's quit shortcut, ctrl+Q, is not obeyed);
+        // the window closes on the window system's close request.
+        cc.egui_ctx.options_mut(|o| o.quit_shortcuts.clear());
+        if scripted {
+            // eframe asks for a repaint while it sets up (it adds a font provider), so the first
+            // frame would count as "asked for immediately" and get a time step of 0 instead of
+            // `kiln script`'s 1/60 s; two passes without UI consume that request (measured: the
+            // start then settles in the frames of `kiln script`).
+            for _ in 0..2 {
+                let _ = cc.egui_ctx.run_logic(&egui::RawInput::default(), |_| {});
             }
-            (Some(app), None) => {
-                for path in paths {
-                    app.open(path);
-                }
-                Shown::Plain(app)
-            }
-            (None, None) => return Err("no UI to show".into()),
-        };
+            cc.egui_ctx.enable_accesskit();
+            cc.egui_ctx.add_plugin(Observe(creator_capture));
+        }
+        // Ruling b4: the start paths are opened by the same code with and without a script.
+        driver_ref.start(paths);
         Ok(Box::new(WindowApp {
-            shown,
+            driver: driver_ref,
+            capture: Arc::clone(&capture),
+            scripted,
             closing: false,
+            handed: Vec::new(),
         }))
     });
     let ran = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -334,7 +355,7 @@ pub fn run_window(
     }));
     restore_hook();
     match ran {
-        Ok(Ok(())) => Ok(driver.map(Driver::result)),
+        Ok(Ok(())) => Ok(scripted.then(|| driver.result())),
         // Every error of `run_native` is one of starting the window system or its renderer.
         Ok(Err(e)) => Err(WindowError::NoWindow(one_line(&e.to_string()))),
         Err(payload) if !started.get() => Err(WindowError::NoWindow(one_line(&panic_text(

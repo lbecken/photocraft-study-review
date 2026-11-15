@@ -311,8 +311,22 @@ fn bound_stderr(stderr: &str) -> String {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let outcome = if wants_help(&args) {
+    // Ruling b3: an argument that is not UTF-8 is a usage error (no panic), in every form.
+    let args: Result<Vec<String>, usize> = std::env::args_os()
+        .skip(1)
+        .enumerate()
+        .map(|(i, a)| a.into_string().map_err(|_| i + 1))
+        .collect();
+    let outcome = match args {
+        Err(n) => Outcome::usage(format!("argument {n} is not valid UTF-8")),
+        Ok(args) => run(&args),
+    };
+    finish(outcome)
+}
+
+/// The outcome of one invocation with UTF-8 arguments.
+fn run(args: &[String]) -> Outcome {
+    if wants_help(args) {
         Outcome {
             code: 0,
             stdout: format!("{USAGE}\n"),
@@ -321,8 +335,12 @@ fn main() -> ExitCode {
     } else if args.first().map(String::as_str) == Some("script") {
         script(&args[1..])
     } else {
-        window(&args)
-    };
+        window(args)
+    }
+}
+
+/// Write the outcome's streams and give its exit code.
+fn finish(outcome: Outcome) -> ExitCode {
     let mut out = std::io::stdout().lock();
     let written = out
         .write_all(outcome.stdout.as_bytes())
