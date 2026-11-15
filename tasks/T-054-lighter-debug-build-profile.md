@@ -1,54 +1,273 @@
 ---
 id: T-054
-title: "Make a debug build of the workspace take less disk and time with a lighter debug-info setting, keeping file and line in test backtraces"
-tier: high              # ADR-0002 "a gate path": the root Cargo.toml's [profile.*] tables are gate tables (docs/development.md, gate-path row); the approval row must contain `gate paths`
-state: draft
+title: "Make a debug build of the workspace about a third of its size, by line tables only, no debug info for dependencies and no incremental cache, with the same gate result and file and line still in panics and backtraces"
+tier: high              # ADR-0002 "a gate path": the root Cargo.toml's [profile.*] tables are gate tables (xtask/src/precheck.rs `gate_tables`); no claimed item; fixed at specified (METHODOLOGY v1.4 §4)
+state: draft            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: []
-depends_on: []
-touches:                # provisional, fixed at specification
-  - Cargo.toml          # GATE PATH: [profile.dev] (and [profile.test] if needed) only
-  - docs/development.md # the disk and build-time figures
-budget_tokens: 1100000  # high (v1.3); a small change, expected far below the ceiling
+depends_on: []          # nothing unmerged; ordering only: after T-070 merges (both edit docs/development.md), see "Collisions"
+touches:                # one role per path (D-153)
+  - Cargo.toml                       # GATE PATH: implementer: a new [profile.dev] table and a new [profile.dev.package."*"] table only (Interface)
+  - docs/development.md              # implementer: the passage "Measured on the bootstrap machine" (lines 82–88 on main 78e223b) and one new paragraph under it; nothing else
+  - xtask/tests/acceptance_t054.rs   # GATE PATH: test author
+  - xtask/tests/guard_t054.rs        # GATE PATH: test author (file and line in a backtrace: holds on base and after)
+budget_tokens: 1100000  # high (v1.4); a small change, expected far below the ceiling
 iteration: 2
-found_by: planner       # D-144 change 14 (retro-2s1 proposal 14); D-097 has the measurement
+found_by: planner       # D-144 change 14 (retro-2s1 proposal 14); D-097, D-182 (the disk filled)
 origin_task: null
 ---
 
-# T-054 A lighter debug build profile, before the UI's dependencies arrive
-
-This is a draft filed with the plan of the second stage (ADR-0007, run R-225). Interface, Pinned and
-acceptance criteria are written by a planner (METHODOLOGY v1.3).
+# T-054 A lighter debug build profile
 
 ## Goal
-Disk, not the builder cap, limited dispatch in the first stage: a task worktree's build takes
-about 6.3 GB, feature tasks were dispatched "as the disk allows (15 GB free before each dispatch)",
-and one join waited for disk (D-097, D-105; retro-2s1 section 8). The UI adds about 1 GB and about
-54 s to a debug build of the UI crates (ADR-0008 c2). After this task a debug build (the gate's
-`clippy` and `test` steps, a worktree, the queue) takes markedly less disk, with test failures
-still reporting file and line. It is dispatched before T-055 so that the UI's dependencies are
-first built under it (D-144 change 14).
+The session's writable disk is about 40 GB. A worktree with the windowing crate built takes 12 GB
+after the gate, and the base build a join makes in the tests worktree takes 7.9 GB. So two full
+builds do not fit side by side, and the disk filled while three builders compiled (D-182). After
+this task every debug and test build of the workspace is made with less debug info and no
+incremental cache. That covers the gate's `clippy`, `schema`, `scorecard` and `test` steps, a
+worktree build, the join and the queue. The gate gives **the same result** (same steps, same tests
+passing). The build tree shrinks to about a third: measured 7.6 GB → 2.6 GB for
+`cargo test --workspace --no-run` (Spec check R-270). A panic still names its file and line, and
+`RUST_BACKTRACE=1` still shows file and line for the workspace's frames. Build time was not shown
+to change by more than the noise of a shared machine (no time claim).
 
-## Evidence in the record
-- D-097: "a lighter debug-info setting was measured (2.5 GB for the workspace's test build)" against
-  about 6.3 GB per worktree build; the setting itself is not named in the row.
-- ADR-0008 c2 (R-225): the UI crates' debug build in a copy of the workspace, 962 MB and 54.32 s
-  with the default debug info; 728 MB and 36.20 s with `CARGO_PROFILE_DEV_DEBUG=line-tables-only`.
-- Gate time grew from 241 s to 574 s over the first stage (retro-2s1 section 8); retro change 14
-  asks for gate time to be reported per stage.
+Gate path: the root `Cargo.toml`'s `[profile.*]` tables (`xtask/src/precheck.rs`, `gate_tables`:
+`[workspace.lints]`, `[workspace.metadata]` and every `[profile.*]`), and `xtask/tests/`. The
+approval row must begin `Approve T-054` and contain the words `gate paths`. It needs no
+`dependency versions`: no dependency table changes, and `Cargo.lock` does not change
+(`dependency_tables` does not include `[profile.*]`). Independent test author (high tier).
 
-## Open questions for the specification
-- Which setting: `debug = "line-tables-only"` for the whole dev profile, or full debug info for
-  workspace members and less for dependencies (`[profile.dev.package."*"]`)? Measure both on the
-  workspace's test build (disk and `cargo xtask ci` wall time) and keep the one that keeps file
-  and line in a failing test's panic message.
-- Does any test or tool rely on full debug info (a backtrace assertion, the stale-binary guard)?
-- The change invalidates every existing `target/` once; the queue seeds worktrees from main's
-  `target/`: say what the first queue run after the merge costs.
+Reading list: `docs/development.md` ("The gate", "Task worktrees", "Merge queue", the gate-path
+row); `xtask/src/precheck.rs` (`is_gate_path`, `gate_tables`, `dependency_tables`); `xtask/src/seed.rs`
+(how a worktree is seeded from main's `target/`); the Cargo book, "Profiles" (`debug`,
+`incremental`, profile overrides, and `test` inheriting from `dev`).
+
+## Interface
+The root `Cargo.toml` gains exactly these tables. Today it has no `[profile.*]` table (main
+`78e223b`). Nothing else in the file changes:
+
+```toml
+# T-054 (D-182): smaller debug builds. Line tables keep file and line in panics and backtraces;
+# dependencies carry no debug info; no incremental cache. Release builds are unchanged.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+debug = false
+```
+
+That is option C of Q-1, measured as C6 below. `[profile.test]` inherits from `dev`, overrides
+included (Cargo's profile rules; the measurements ran `cargo test`, so they show it).
+`[profile.release]` and `[profile.bench]` are not written. Environment variables
+(`CARGO_PROFILE_DEV_*`, `CARGO_INCREMENTAL`) still override the file for whoever sets them; no
+tool of this repository sets them. `xtask` is a workspace member built with the dev profile, so it
+gets the same settings.
+
+What does not change: the gate's steps and their order, which tests exist and pass, the scorecard,
+release builds, `Cargo.lock`, `rust-toolchain.toml`, any tool configuration file, and the queue's
+preconditions (`gate-path` now applies to this task, as it does to any `[profile.*]` change).
+
+### Rust API used by tests
+None of the product. The tests are in `xtask/tests/` and read files and the test binary's own
+backtrace with the standard library (`std::backtrace::Backtrace`) and `toml` (already an `xtask`
+dependency). No new dependency.
+
+## Pinned
+- (a) Errors: n/a (no behaviour of the product changes).
+- (b) Files: only the root `Cargo.toml` (the two tables above) and `docs/development.md` (the
+  sentences of (i)). The first build after the merge rebuilds everything once, because every
+  unit's fingerprint changes. The queue's worktree seeded from main's `target/` (`seed.rs`) then
+  costs one full build, measured below at 62–117 s for `cargo test --workspace --no-run` on this
+  machine under load. An existing `target/` keeps its old artifacts until `cargo clean`; the size
+  figures are for an empty `target/`.
+- (c) Order: n/a.
+- (d) Platforms (ADR-0009): the settings are Cargo's own and apply on Linux, macOS and Windows.
+  The figures are Linux only, on this machine. On macOS (`split-debuginfo` defaults to `unpacked`)
+  and Windows (MSVC, `.pdb` files) sizes differ. `Cargo.toml` is a platform-sensitive path, so
+  once T-070 counts, the rebased head goes to `ci/T-054` before the queue. The guard of AC-2 runs
+  on all three there.
+- (e) Threat model (gate path): the change can make the gate differ only through compiled
+  artifacts. Debug assertions, overflow checks and `opt-level` stay at the dev defaults (not
+  written), so no test's behaviour depends on the change. The reviewer checks the gate's test
+  count is equal on base and branch (AC-1). No step reads debug info. The stale-binary guard and
+  `testbins.rs` locate binaries by path and Cargo's JSON messages, not by debug info.
+- (f) Tests that pin what this changes: none on main reads `[profile.*]`. `xtask/src/queue.rs`'s
+  unit tests use their own manifest texts. Not to be pinned: wall times, sizes in a test (sizes
+  are measured by people, AC-3), the text of a backtrace beyond file name and line.
+- (g) Worked examples (measurements, Spec check R-270): see the table there. Backtrace with C6:
+  `panicked at crates/kiln-commands/tests/probe_panic.rs:3:51:` and frame
+  `3: unwrap<alloc::vec::Vec<u8, alloc::alloc::Global>, serde_json::error::Error>` /
+  `at ./tests/probe_panic.rs:3:51` / `at ./tests/probe_panic.rs:2:18`. With `debug = false` for
+  the workspace (D0): the `panicked at …:3:51` line stays, the `at` lines are gone. So
+  `debug = false` for workspace crates is not acceptable, and line tables are.
+- (h) Evaluator calls: n/a (no scorecard item).
+- (i) Sentences for `docs/development.md`, worded for copying, with their evidence:
+  - D1 "Debug and test builds carry line tables only for the workspace's crates and no debug
+    info for dependencies, and keep no incremental cache (root `Cargo.toml`, `[profile.dev]`,
+    T-054). A panic names its file and line, and `RUST_BACKTRACE=1` shows file and line for
+    frames in the workspace's code. A debugger shows lines but not variables. Frames inside
+    dependencies can lack file and line. Release builds are unchanged." Evidence: (g); AC-2.
+  - D2 "Measured on the bootstrap machine (4 cores, Linux), from an empty `target/`:
+    `cargo test --workspace --no-run --locked` leaves 2.6 GB with these settings, against 7.6 GB
+    with Cargo's defaults (main `78e223b`, with the windowing crate)." Evidence: R-270 C6 and B0;
+    the implementer re-measures on the joined branch and copies its own figures if they differ
+    (AC-3).
+  - D3 "A rebuild after a one-line change is slower without the incremental cache: 14.8–23.2 s
+    against 10.8–12.2 s for the same edit in `kiln-commands` (one measurement each, on a shared
+    machine)." Evidence: R-270, rebuild runs. No time bound is stated.
+  - D4 (replacing the cold-build row's date context, not its figures): "The gate's figures above
+    are from the bootstrap; the build tree after a whole gate run in a worktree is <figure the
+    implementer measures> (12 GB before T-054, D-182)." To be measured by the implementer (AC-3);
+    it is not a guarantee.
+
+## Acceptance criteria
+- AC-1 (same gate result): `cargo xtask ci` is green on the joined branch. The implementer runs it,
+  then the queue. Its `test` step reports the same number of passed tests as on the base (the
+  implementer records both counts in its log; the reviewer compares them). Oracle: the gate's own
+  report, compared with the base.
+- AC-2 (file and line kept) — `guard_t054.rs`: a test captures a backtrace in its own body
+  (`std::backtrace::Backtrace::force_capture()`) and asserts that its text names this test's
+  source file with a line number. A second test catches a panic it raises, through
+  `std::panic::catch_unwind` with a hook that records `PanicHookInfo::location()`, and asserts the
+  location's file is this file and its line is the panicking line. Both pass on base (full debug
+  info) and on the branch. With `debug = false` for the workspace the first one fails (measured
+  as D0: no `at` lines), so it guards against a later, lighter setting. No wall time, no size.
+  Oracle: the test's own `file!()` and `line!()`.
+- AC-3 (smaller build tree) — measured, not tested: the implementer runs
+  `cargo test --workspace --no-run --locked` from an empty `target/` in its worktree, records
+  `du -sh target` before and after the change in its log, then deletes `target/`. The branch's
+  figure is at most 40% of the base's (measured: 2.6 of 7.6 GB, 34%). The implementer also records
+  `du -sh target` after its last `cargo xtask ci` (D4). The reviewer repeats the first measurement
+  once. Each measurement starts only with 14 GB free (`df -h /home/user`), one at a time.
+  Oracle: `du`.
+- AC-4 (the change is exactly the two tables) — `acceptance_t054.rs`: the test parses the root
+  `Cargo.toml` with `toml` and asserts: `profile.dev.debug` is `"line-tables-only"`,
+  `profile.dev.incremental` is `false`, and `profile.dev.package."*".debug` is `false`. It also
+  asserts that `profile.release` and `profile.bench` are absent, and that `profile.dev` sets no
+  `opt-level`, `debug-assertions` or `overflow-checks`. Fails on base: no `[profile.dev]` table.
+  Oracle: the manifest. (A test may read this one manifest; no drafted task changes the profile
+  tables. If one does, it changes this test in the same task.)
+
+## Out of scope and implementer notes
+- Out: `split-debuginfo` (not measured; on Linux the default `off` is what was measured); a
+  separate gate-only profile or `CARGO_INCREMENTAL=0` set by `xtask` (an `xtask/src` change:
+  Q-2 B); `[profile.release]`; build caches (`sccache`); a shared `target/` between worktrees
+  (forbidden, D-019); `cargo clean` of existing worktrees (the director's, after the merge).
+- Do not set `CARGO_TARGET_DIR` (AGENTS.md). Measure in the worktree.
+- Disk: one measurement at a time; delete each `target/` you measure.
+
+### Collisions and order
+- **T-070** (in flight): edits `docs/development.md`'s "CI" section and adds `.gitattributes`, a
+  workflow and `xtask/tests/acceptance_t070.rs`. It shares `docs/development.md` with this task
+  (§5.2 compares paths, not sections), so the two are **not in flight together**: T-054 is
+  dispatched after T-070 merges, or `docs/development.md` leaves this task's `touches` (Q-3).
+- **T-064**, **T-052**, **T-071**, **T-077**, **T-078** (drafts) also list `docs/development.md`:
+  one at a time with T-054.
+- **T-065** (merged) edited the root `Cargo.toml`'s dependency table. **T-073** (draft) adds a
+  dependency in `crates/kiln-workspace/Cargo.toml` and `Cargo.lock`, not the root manifest, so it
+  does not overlap by path. Any later task that edits the root `Cargo.toml` (a
+  `[workspace.dependencies]` entry) overlaps by path and is not in flight with T-054.
+- The first queue run after T-054 merges rebuilds main's `target/` from scratch. Queue the next
+  task only with the disk rule (14 GB free) in mind.
+
+## Questions and rulings
+Questions for the director, before dispatch:
+- **Q-1. Which setting.** All options were measured from an empty `target/` with
+  `cargo test --workspace --no-run --locked` (R-270):
+  - A: `debug = "line-tables-only"` only. 4.5 GB.
+  - B: A plus `incremental = false`. 3.5 GB.
+  - C: B plus no debug info for dependencies. 2.6 GB. This is the Interface.
+  - Panic file and line and the workspace's backtrace lines are kept in A, B and C (C shown
+    directly; A shares C's workspace setting). The cost of B and C is a slower rebuild after a
+    small edit (D3) and, for C, dependency frames that can lack lines.
+  - **Recommendation: C.** Disk is the binding limit (D-182), and the extra rebuild time is
+    seconds.
+- **Q-2. Incremental for builders, off for the gate only?**
+  - A: off for every debug build (as specified; measured).
+  - B: on in the manifest, and the gate, join and queue set `CARGO_INCREMENTAL=0`. This changes
+    `xtask/src` and is unmeasured: the probe it needs is a gate run in a worktree under B,
+    comparing `target/` with A's.
+  - **Recommendation: A.**
+- **Q-3. Waiting for T-070.**
+  - A: dispatch after T-070 merges (as specified).
+  - B: drop `docs/development.md` from `touches`, put D1–D3 in a comment above the tables in
+    `Cargo.toml`, and dispatch now. The figures would then live in a gate path, and the
+    development document would say nothing.
+  - **Recommendation: A**, unless the disk blocks T-070's own join first. In that case B, with
+    D1–D3 moved into `docs/development.md` by the next task that edits it.
+
+### Spec check R-270
+Planner run R-270 (booked to `iter-2`), at main `78e223b371366d1dcec20c2c8b2025b026e1336c` (ledger
+commits since R-262; nothing merged). The stub (R-225) had touches, a goal and open questions.
+
+Changed against the stub:
+- The setting is chosen and measured (Q-1 C). The stub's two candidates are both measured, plus
+  incremental off.
+- `touches` gained the two test files (test author). `[profile.test]` is not needed (inherits).
+- The figures and the order after T-070 are new.
+- Budget kept at the high ceiling.
+- The stub's question about the queue's seeding is answered in Pinned (b).
+
+Evidence (a copy of the workspace under the session's scratchpad, without `target/`, `.git`,
+`.worktrees`; settings passed as `cargo --config` or environment variables, the manifest
+unchanged; each `target/` deleted before the next build; `df -h /home/user` showed 15 GB, then
+14 GB free before every build; other builders were using the machine, so the times are noisy):
+
+| Run | Setting | `target/` after `cargo test --workspace --no-run --locked` | wall |
+|---|---|---|---|
+| B0 | Cargo defaults (today) | **7.6 GB** (`deps` 6.1 G, `incremental` 1.4 G, `build` 180 M) | 87.9 s |
+| C1 | `debug = "line-tables-only"` | 4.5 GB (`deps` 3.3 G, `incremental` 982 M) | 87.9 s; 118.4 s on a second run |
+| C3 | C1 + `incremental = false` | 3.5 GB (`deps` 3.3 G) | 62.0 s; 102.6 s |
+| C2 | dependencies `debug = false` only | 4.3 GB | 94.1 s |
+| C5 | `incremental = false` only | 6.2 GB | 153.0 s |
+| **C6** | C3 + dependencies `debug = false` (**Interface**) | **2.6 GB** | 117.0 s |
+
+- Rebuild after appending a comment to `crates/kiln-commands/src/doc.rs`, then
+  `cargo test --workspace --no-run`: C1 (incremental on) 12.21 s and 10.78 s; C3 (off) 23.20 s and
+  14.78 s.
+- Panic and backtrace (`RUST_BACKTRACE=1`, a test that unwraps a failing `serde_json::from_str`):
+  - B0, C3 and C6 print `panicked at …/probe_panic.rs:3:51:` and frames with
+    `at ./tests/probe_panic.rs:3:51`. With line tables a generic frame is named
+    `unwrap<…>` instead of `<core::result::Result<…>>::unwrap`.
+  - D0 (`debug = false` for everything) keeps the `panicked at` line and loses every `at` line.
+  - A panic inside `ropey` (`Rope::char` out of range) under C3 and C6 named
+    `ropey-1.6.1/src/rope.rs:803:13` in both, because that function was compiled into the calling
+    test. That frames compiled inside a dependency lose their lines under C6 is Cargo's documented
+    effect, not shown by this probe (D1 says "can").
+- Not measured: a whole `cargo xtask ci` run (it needs a git checkout, and a baseline gate run
+  needs about 12 GB, D-182, beside a review using 12 GB). The implementer measures it under the
+  disk rule (AC-3, D4). Also not measured: `split-debuginfo`, macOS, Windows, release builds, and
+  Q-2 B.
+- Gate-path and dependency rules read in `xtask/src/precheck.rs`: `is_gate_path` (lines 88–94),
+  `gate_tables` (lines 98–110: `profile`), `dependency_tables` (lines 189–231: no `profile`).
+
+### Rulings on spec R-270 (director, D-186)
+- **Q-1: C.** Line tables only for the workspace's crates, no debug info for dependencies, no incremental cache
+  (measured: the test build goes from 7.6 GB to 2.6 GB; a panic still names file and line, and a backtrace still
+  shows the workspace's frames with their lines).
+- **Q-2: A.** Incremental compilation is off for every debug build; setting it only for the gate through `xtask`
+  was not measured and is not taken.
+- **Q-3: A.** The task is dispatched after T-070 has merged (both edit `docs/development.md`).
+- **Until then, an interim that changes no file:** the director runs joins and queue runs, and builders build,
+  with `CARGO_PROFILE_DEV_DEBUG=line-tables-only` and `CARGO_INCREMENTAL=0` in the environment (the planner's
+  second-last row: 3.5 GB against 7.6 GB). CI keeps Cargo's defaults until this task merges; the profile changes no
+  test result.
 
 ## Log
+Append to your role's section only, above its end marker. One entry per run:
+`- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
+not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
+
 ### director
 <!-- end director log -->
 ### planner
 - 2026-11-14 · R-225 · (new) · did: filed as a draft for ADR-0007 (D-144 change 14). · gate attempts: 0 · missing context: the exact setting D-097 measured · next: director.
+- 2026-11-15 · R-270 · draft · did: measured six settings in a scratch copy, one at a time under the 14 GB rule; specified option C (line tables, no dependency debug info, no incremental: 7.6 → 2.6 GB for the test build); tier high (gate path `[profile.*]`), approval row `Approve T-054 … gate paths`, no `dependency versions`; 4 criteria, two of them tests in `xtask/tests/` (one fails on base, one guard); ordered after T-070 (shared `docs/development.md`). · gate attempts: 0 (scratch builds only) · not run: a whole gate run, macOS, Windows · missing context: none · next: director (Q-1 to Q-3).
 <!-- end planner log -->
+### implementer
+<!-- end implementer log -->
+### test author
+<!-- end test author log -->
+### reviewer
+<!-- end reviewer log -->
