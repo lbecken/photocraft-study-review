@@ -2,13 +2,13 @@
 id: T-054
 title: "Make a debug build of the workspace about a third of its size, by line tables only, no debug info for dependencies and no incremental cache, with the same gate result and file and line still in panics and backtraces"
 tier: high              # ADR-0002 "a gate path": the root Cargo.toml's [profile.*] tables are gate tables (xtask/src/precheck.rs `gate_tables`); no claimed item; fixed at specified (METHODOLOGY v1.4 §4)
-state: draft            # director only, written with every transition; see METHODOLOGY §3
+state: in_progress            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: []
-depends_on: []          # nothing unmerged; ordering only: after T-070 merges (both edit docs/development.md), see "Collisions"
+depends_on: []          # nothing unmerged (T-070 merged at c7af15f, R-284); ordering only, see "Collisions"
 touches:                # one role per path (D-153)
   - Cargo.toml                       # GATE PATH: implementer: a new [profile.dev] table and a new [profile.dev.package."*"] table only (Interface)
-  - docs/development.md              # implementer: the passage "Measured on the bootstrap machine" (lines 82–88 on main 78e223b) and one new paragraph under it; nothing else
+  - docs/development.md              # implementer: under "## The gate: `cargo xtask ci`", the paragraph beginning "Measured on the bootstrap machine" and its table (left as they are), and one new paragraph right after that table (D1–D5); nothing else, in particular not the "## CI" section (R-284)
   - xtask/tests/acceptance_t054.rs   # GATE PATH: test author
   - xtask/tests/guard_t054.rs        # GATE PATH: test author (file and line in a backtrace: holds on base and after)
 budget_tokens: 1100000  # high (v1.4); a small change, expected far below the ceiling
@@ -110,9 +110,18 @@ dependency). No new dependency.
     dependencies can lack file and line. Release builds are unchanged." Evidence: (g); AC-2.
   - D2 "Measured on the bootstrap machine (4 cores, Linux), from an empty `target/`:
     `cargo test --workspace --no-run --locked` leaves 2.6 GB with these settings, against 7.6 GB
-    with Cargo's defaults (main `78e223b`, with the windowing crate)." Evidence: R-270 C6 and B0;
-    the implementer re-measures on the joined branch and copies its own figures if they differ
-    (AC-3).
+    with Cargo's defaults (main `78e223b`, with the windowing crate)." Updated by R-284 to: "…leaves
+    2.6 GB with these settings, against 7.8 GB with Cargo's defaults (main `cbb54a2`)." Evidence:
+    R-284 (the tables written into the manifest of a copy of main `cbb54a2`, built without the
+    interim variables: 2.6 GB, against 7.8 GB with no `[profile.*]` table); R-270 measured 2.6
+    against 7.6 GB at `78e223b`. The implementer re-measures on the joined branch and copies its
+    own figures if they differ (AC-3).
+  - D5 (new, R-284): "Figures recorded before T-054 are records of their runs, made with Cargo's
+    default debug info: the bootstrap table above, the CI table under "Runners, wall times and
+    disk" (run 43752760283), and the 12 GB of a worktree after the gate (D-182). Both CI workflows
+    already set `CARGO_INCREMENTAL=0`." Evidence: `docs/development.md` as it stands at
+    `cbb54a2`; `.github/workflows/ci.yml` line 22, `platforms.yml` line 47. With D5, no sentence of
+    the file becomes untrue: each figure in it names its run or its machine.
   - D3 "A rebuild after a one-line change is slower without the incremental cache: 14.8–23.2 s
     against 10.8–12.2 s for the same edit in `kiln-commands` (one measurement each, on a shared
     machine)." Evidence: R-270, rebuild runs. No time bound is stated.
@@ -156,10 +165,18 @@ dependency). No new dependency.
   Q-2 B); `[profile.release]`; build caches (`sccache`); a shared `target/` between worktrees
   (forbidden, D-019); `cargo clean` of existing worktrees (the director's, after the merge).
 - Do not set `CARGO_TARGET_DIR` (AGENTS.md). Measure in the worktree.
+- **The interim environment (D-186) is not used by this task's builders.** `CARGO_PROFILE_DEV_DEBUG`
+  and `CARGO_INCREMENTAL` override the manifest, so a build made with them measures the
+  variables, not the tables. The implementer, the test author and the reviewer build, test, run
+  the gate and measure with both unset (`env -u CARGO_PROFILE_DEV_DEBUG -u CARGO_INCREMENTAL …`).
+  The director's dispatch message says so, and the director's join and queue run of this task run
+  without them too. After the merge the director drops the interim variables for every later build
+  (a decision row ends D-186's interim). The workflows' own `CARGO_INCREMENTAL=0` stays: it agrees
+  with the manifest.
 - Disk: one measurement at a time; delete each `target/` you measure.
 
 ### Collisions and order
-- **T-070** (in flight): edits `docs/development.md`'s "CI" section and adds `.gitattributes`, a
+- **T-070** (merged at `c7af15f`; this item kept for the record): edited `docs/development.md`'s "CI" section and adds `.gitattributes`, a
   workflow and `xtask/tests/acceptance_t070.rs`. It shares `docs/development.md` with this task
   (§5.2 compares paths, not sections), so the two are **not in flight together**: T-054 is
   dispatched after T-070 merges, or `docs/development.md` leaves this task's `touches` (Q-3).
@@ -170,7 +187,14 @@ dependency). No new dependency.
   does not overlap by path. Any later task that edits the root `Cargo.toml` (a
   `[workspace.dependencies]` entry) overlaps by path and is not in flight with T-054.
 - The first queue run after T-054 merges rebuilds main's `target/` from scratch. Queue the next
-  task only with the disk rule (14 GB free) in mind.
+  task only with the disk rule (14 GB free) in mind. In CI, the cache action's key covers the
+  manifests, so the first run after the merge also builds cold (one longer run; nothing to change).
+- **T-058** (in review): touches `crates/kiln-ui/`, `apps/kiln/tests/` and two protocol documents.
+  There is no shared path, so it may be in flight beside T-054. Its join and queue run are built
+  under the interim variables until T-054 merges.
+- **T-071** (draft, platform-test rule): its `touches` list `xtask/src/` files and
+  `docs/development.md`. It shares `docs/development.md`, so it is **not in flight with T-054**;
+  either order works.
 
 ## Questions and rulings
 Questions for the director, before dispatch:
@@ -255,6 +279,79 @@ unchanged; each `target/` deleted before the next build; `df -h /home/user` show
   second-last row: 3.5 GB against 7.6 GB). CI keeps Cargo's defaults until this task merges; the profile changes no
   test result.
 
+### Spec check R-284
+Planner run R-284 (booked to `iter-2`, resumed), at main `cbb54a2628afbd368087e82c5d7925eaa5b08625`
+(T-070 merged at `c7af15f`, T-057 at `7e8a01c`).
+
+1. `docs/development.md`: the passage named by line numbers is re-anchored by its heading and
+   text. T-070 added "## CI" with "Runners, wall times and disk", whose `du -sh target` figures
+   (`gate-linux` 8.6G, `gate-macos` 4.4G, `gate-windows` 2.5G) are introduced as what "Run
+   43752760283 … showed". They are records of a named run and stay true. So does the bootstrap
+   table ("Measured on the bootstrap machine"). So does "A seed costs roughly main's dependency
+   artifacts" under "Task worktrees": it gives no figure. No sentence of the file becomes untrue.
+   New sentence D5 says the earlier figures predate T-054, in this task's own paragraph, so
+   neither "## CI" nor any other task's section is edited. `touches` names exactly that paragraph.
+2. Workflows (gate paths, not in `touches`; nothing to change):
+   - `ci.yml` (job env, line 22) and `platforms.yml` (workflow env, line 47) set
+     `CARGO_INCREMENTAL: "0"`, which agrees with the manifest. Neither sets
+     `CARGO_PROFILE_*` or a debug level.
+   - `window-linux` and `window-probe` run `cargo build -p kiln --locked` and use
+     `target/debug/kiln`. The dev profile's directory stays `debug`, so
+     `xtask/tests/acceptance_t070.rs` `ac1_window_jobs_build_the_profile_whose_binary_they_run`
+     (which reads the workflow for `--release`/`--profile` and env keys) and its env check of
+     `CARGO_TERM_COLOR`/`CARGO_INCREMENTAL` (line 1655) read only the workflow and stay green. No
+     T-070 test reads the root `Cargo.toml` (`grep` for `profile`, `debug`, `CARGO_`).
+   - The cache action's key covers the manifests: one cold run after the merge.
+   - D-186's line "CI keeps Cargo's defaults until this task merges" is true for debug info only:
+     CI already builds without the incremental cache.
+3. Platforms (`platforms.yml` runs the gate on macOS and Windows, and `xtask`'s tests also in the
+   core-crates step, on Windows the only test evidence until T-073):
+   - `acceptance_t054.rs` (AC-4) reads one file with `std::fs` and `toml`: no Unix-only API. With
+     `.gitattributes` `* -text` the checkout is byte-identical on all three. Runs on all three.
+   - `guard_t054.rs` AC-2: the panic-location test uses only `std::panic` (the location is
+     compiled in, independent of debug info: shown in R-270 D0). Runs on all three.
+   - `guard_t054.rs` AC-2: the backtrace test uses `std::backtrace`, no Unix-only API. Whether a
+     backtrace names file and line with line tables on macOS (debug info left in object files,
+     `split-debuginfo = "unpacked"` by default there) and on Windows (MSVC, a `.pdb`) was **not
+     measured** (no such machine here). This test must not add a failure of its own on those runners
+     (Q-4).
+4. The interim environment: builders of this task build without it (implementer notes); the
+   director ends it by a decision row after the merge.
+5. Other changes on main:
+   - `xtask/src/precheck.rs` `gate_tables` still includes `profile` (lines 96–110 at `cbb54a2`),
+     so tier high and the approval words `gate paths` stand.
+   - The merged T-057 tests made the default test build larger. Re-measured, one build at a time
+     (20 GB free before each, in a copy under `/home/user`, deleted after):
+     - `cargo test --workspace --no-run --locked` with no `[profile.*]` table and the interim
+       variables unset: **7.8 GB, 125.4 s**;
+     - with the two tables of the Interface written into the copy's `Cargo.toml`: **2.6 GB,
+       88.0 s**.
+   - That confirms the tables themselves, not only the `--config` form R-270 used. D2 and AC-3's
+     figures are updated.
+
+New question:
+- **Q-4. The backtrace test on macOS and Windows.**
+  - A: before the queue, the director pushes the candidate to `ci/T-054` (already required:
+    `Cargo.toml` and `xtask/` are platform-sensitive) and records, per platform, whether
+    `guard_t054` passed. A platform where a backtrace lacks file and line is a platform difference:
+    the test asserts that platform's behaviour, D1 gets one sentence for it (ADR-0009 Decision 4),
+    and that is a ruling before the queue.
+  - B: drop the backtrace assertion and keep only the panic-location test (weaker: it would not
+    catch a later `debug = false`).
+  - **Recommendation: A.**
+
+Not checked: macOS and Windows (Q-4); a whole `cargo xtask ci` under the new profile (still the
+implementer's, AC-3/D4); the rebuild-time figures of D3 on current main (not re-measured: they are
+worded as one measurement each).
+
+### Rulings on spec check R-284 (director, D-200)
+- **Q-4: A.** Before the queue the director pushes the joined candidate to `ci/T-054` and records per platform
+  whether `guard_t054` passed. A platform whose backtrace lacks file and line becomes a stated difference by a
+  ruling before the queue.
+- Builders, reviewer, join and queue of this task run with `CARGO_PROFILE_DEV_DEBUG` and `CARGO_INCREMENTAL`
+  unset; the director ends the interim of D-186 with a decision row after the merge.
+- Not in flight with T-071 (`docs/development.md`); beside T-058 is allowed.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
@@ -265,6 +362,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### planner
 - 2026-11-14 · R-225 · (new) · did: filed as a draft for ADR-0007 (D-144 change 14). · gate attempts: 0 · missing context: the exact setting D-097 measured · next: director.
 - 2026-11-15 · R-270 · draft · did: measured six settings in a scratch copy, one at a time under the 14 GB rule; specified option C (line tables, no dependency debug info, no incremental: 7.6 → 2.6 GB for the test build); tier high (gate path `[profile.*]`), approval row `Approve T-054 … gate paths`, no `dependency versions`; 4 criteria, two of them tests in `xtask/tests/` (one fails on base, one guard); ordered after T-070 (shared `docs/development.md`). · gate attempts: 0 (scratch builds only) · not run: a whole gate run, macOS, Windows · missing context: none · next: director (Q-1 to Q-3).
+- 2026-11-15 · R-284 · draft · did: spec check against main `cbb54a2` (see "Spec check R-284"): `docs/development.md` passage re-anchored, D5 added so no figure of the file becomes untrue; workflows need no change (`CARGO_INCREMENTAL=0` already, `target/debug` kept, `acceptance_t070` stays green); per-test platform statement, Q-4 for the backtrace test; builders build without the interim variables; re-measured 7.8 → 2.6 GB with the tables in the manifest. · gate attempts: 0 · not run: macOS, Windows, a whole gate · missing context: none · next: director (Q-4).
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
