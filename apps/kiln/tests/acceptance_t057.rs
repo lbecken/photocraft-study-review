@@ -1041,7 +1041,7 @@ fn ac2_expand_and_collapse_follow_the_naive_model() {
         let mut st = Steps {
             dir: &dir,
             name: format!("seed-{seed:x}"),
-            args: ["--root", ROOT, "--size", "800x480"]
+            args: ["--root", ROOT, "--size", "800x320"]
                 .iter()
                 .map(|s| (*s).to_owned())
                 .collect(),
@@ -1120,7 +1120,7 @@ fn ac2_expand_and_collapse_follow_the_naive_model() {
     }
     assert!(
         scrolls > 0,
-        "precondition: some click needed a scroll first at 800x480"
+        "precondition: some click needed a scroll first at 800x320"
     );
     assert!(
         collapses_with_descendants > 0,
@@ -1188,17 +1188,40 @@ fn fold(name: &str) -> String {
     name.replace("e\u{301}", "\u{e9}").to_lowercase()
 }
 
+/// A generated tree: five files at the root that no pattern names (names without `.`, so that
+/// at least five files are listed whatever the patterns ignore), then the rest at random.
+fn gen_tree(rng: &mut Rng, budget: &mut usize) -> GenDir {
+    let mut anchors = Vec::new();
+    let mut keys: BTreeSet<String> = BTreeSet::new();
+    keys.insert(fold(".gitignore"));
+    while anchors.len() < 5 {
+        let name = gen_name(rng).replace('.', "_");
+        if keys.insert(fold(&name)) {
+            anchors.push(name);
+        }
+    }
+    let avoid: BTreeSet<String> = anchors.iter().cloned().collect();
+    *budget -= anchors.len();
+    let mut d = gen_dir(rng, 0, budget, &avoid, keys);
+    d.files.extend(anchors);
+    d
+}
+
 /// A generated directory at `depth` (the root is 0; entries of depth ≤ 4); `budget` bounds the
-/// whole tree's entries.
-fn gen_dir(rng: &mut Rng, depth: usize, budget: &mut usize) -> GenDir {
+/// whole tree's entries; `avoid` are names no pattern may name; `keys` the names already taken.
+fn gen_dir(
+    rng: &mut Rng,
+    depth: usize,
+    budget: &mut usize,
+    avoid: &BTreeSet<String>,
+    mut keys: BTreeSet<String>,
+) -> GenDir {
     let mut d = GenDir::default();
     let n = if depth == 0 {
-        6 + rng.below(3)
+        3 + rng.below(4)
     } else {
         rng.below(9)
     };
-    let mut keys: BTreeSet<String> = BTreeSet::new();
-    keys.insert(fold(".gitignore"));
     for _ in 0..n {
         if *budget == 0 {
             break;
@@ -1209,14 +1232,16 @@ fn gen_dir(rng: &mut Rng, depth: usize, budget: &mut usize) -> GenDir {
         }
         *budget -= 1;
         if depth < 3 && rng.below(3) == 0 {
-            let sub = gen_dir(rng, depth + 1, budget);
+            let mut sub_keys = BTreeSet::new();
+            sub_keys.insert(fold(".gitignore"));
+            let sub = gen_dir(rng, depth + 1, budget, avoid, sub_keys);
             d.dirs.push((name, sub));
         } else {
             d.files.push(name);
         }
     }
     if d.files.len() + d.dirs.len() < 8 && rng.below(3) == 0 {
-        d.gitignore = gen_patterns(rng, &d);
+        d.gitignore = gen_patterns(rng, &d, avoid);
     }
     d
 }
@@ -1232,9 +1257,10 @@ fn subtree_names(d: &GenDir, out: &mut Vec<String>) {
 
 /// One to three patterns of the forms `docs/protocol/project.md` guarantees (`*.x`, `/a`, `b/`,
 /// `!c`, `**/d`, `e/**`), naming entries of `d`'s subtree.
-fn gen_patterns(rng: &mut Rng, d: &GenDir) -> Vec<String> {
+fn gen_patterns(rng: &mut Rng, d: &GenDir, avoid: &BTreeSet<String>) -> Vec<String> {
     let mut names = Vec::new();
     subtree_names(d, &mut names);
+    names.retain(|n| !avoid.contains(n));
     if names.is_empty() {
         return Vec::new();
     }
@@ -1242,7 +1268,11 @@ fn gen_patterns(rng: &mut Rng, d: &GenDir) -> Vec<String> {
     for _ in 0..1 + rng.below(3) {
         match rng.below(6) {
             0 => {
-                let with_ext: Vec<&String> = d.files.iter().filter(|f| f.contains('.')).collect();
+                let with_ext: Vec<&String> = d
+                    .files
+                    .iter()
+                    .filter(|f| f.contains('.') && !avoid.contains(*f))
+                    .collect();
                 if let Some(f) = with_ext.get(rng.below(with_ext.len().max(1))) {
                     let ext = f.rsplit('.').next().expect("ext");
                     out.push(format!("*.{ext}"));
@@ -1256,6 +1286,7 @@ fn gen_patterns(rng: &mut Rng, d: &GenDir) -> Vec<String> {
                     .files
                     .iter()
                     .chain(d.dirs.iter().map(|(n, _)| n))
+                    .filter(|n| !avoid.contains(*n))
                     .collect();
                 if let Some(n) = all.get(rng.below(all.len().max(1))) {
                     out.push(format!("/{n}"));
@@ -1368,7 +1399,7 @@ fn ac3_generated_trees_fully_expanded() {
         let seed = 0x0057_0300 + k;
         let mut rng = Rng(seed * 0x9e37_79b9 + 1);
         let mut budget = 70;
-        let generated = gen_dir(&mut rng, 0, &mut budget);
+        let generated = gen_tree(&mut rng, &mut budget);
         let root = dir.join(ROOT);
         let _ = fs::remove_dir_all(&root);
         let mut counter = 0;
