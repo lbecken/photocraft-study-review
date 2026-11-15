@@ -2,4 +2,16 @@ id = "ui.project-panel"
 title = "The project tree panel opens a file on click"
 crate = "kiln-ui"
 tier = "low"
-tests = []
+tests = [
+    "kiln::acceptance_t057::ac1_click_on_project_lists_the_roots_entries",
+    "kiln::acceptance_t057::ac2_expand_and_collapse_follow_the_naive_model",
+    "kiln::acceptance_t057::ac3_generated_trees_fully_expanded",
+    "kiln::acceptance_t057::ac4_click_on_a_file_opens_it_and_makes_it_current",
+    "kiln::acceptance_t057::ac5_a_refused_open_changes_nothing_and_shows_its_kind",
+    "kiln::acceptance_t057::ac6a_control_requests_only_log_as_host",
+    "kiln::acceptance_t057::ac6b_idle_frames_after_the_panel_add_nothing",
+    "kiln::acceptance_t057::ac6c_collapse_sends_nothing_expand_reads_again",
+    "kiln::acceptance_t057::ac7_each_expand_reads_afresh_and_shows_that_read",
+    "kiln::acceptance_t057::ac8_a_truncated_root_listing_ends_with_a_marker",
+    "kiln::acceptance_t057::ac10_panel_text_belongs_to_panel_nodes_and_rows_equal_text",
+]
