@@ -341,6 +341,12 @@ The queue's linear rebase met again a conflict that the join merges had resolved
 `apps/kiln/Cargo.toml`). Either the join leaves a branch the queue can replay, or the queue accepts a branch with
 resolved merges; and the tool refuses a `touches` path edited on both branches unless a ruling names it.
 
+## Note from T-056 (director, D-162) — to add at specification
+A task re-tiered while in flight made the gate's `hygiene` step compare a review's `tier` with the branch's stale
+task file; the director's front-matter commits on the branch then failed the queue twice (the `front-matter`
+precondition; a rebase conflict with main's adjacent `state` line). The hygiene check reads the task's tier from
+main, or the queue takes main's front matter for the task file when it replays the branch.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
