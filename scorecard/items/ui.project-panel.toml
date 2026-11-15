@@ -14,4 +14,5 @@ tests = [
     "kiln::acceptance_t057::ac7_each_expand_reads_afresh_and_shows_that_read",
     "kiln::acceptance_t057::ac8_a_truncated_root_listing_ends_with_a_marker",
     "kiln::acceptance_t057::ac10_panel_text_belongs_to_panel_nodes_and_rows_equal_text",
+    "kiln::acceptance_t057::ac8b_nested_truncated_listings_put_each_marker_after_its_directory",
 ]
