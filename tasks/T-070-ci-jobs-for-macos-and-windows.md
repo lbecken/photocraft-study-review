@@ -857,4 +857,13 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   sentences), 1 test gap, 2 spec gaps, 1 nit (`reviews/T-070-r1.md`). · CI-REQUEST:
   4bc231c3755d583707b8031bdfecb4d93fbb628f as `ci/T-070-negative` (AC-6; what to read is in the review)
   · not run: hosted runners; actionlint, shellcheck · next: director
+- 2026-11-15 · R-281 · round 2 (final) · approve · reviewed `3fac206ea934707dd42607b320c4c29c361b215c`
+  (previous `3c7399b`). Rulings g1 to g7 (D-193) read in main's task file and accepted. · did: the
+  procedure under Xvfb (base 3 of 3 exit 0; k1, k2, k3, k4 and the new k5 each exit 1, with forged
+  lines indented); recording steps with failing `df`/`du`/`cat`/`ldconfig`/`dpkg-query` all exit 0; probe
+  watchdog (hang: 143 after 121 s; SIGTERM ignored: 137 after 125 s); the new doc figures checked
+  against `tasks/ci-runs/T-070-round-1.md`; 14 mutants, all killed (10 by gate tests: 6 acceptance,
+  4 guard; 4 only by a procedure). · round-1 findings: 1, 2, 3, 4, 5, 8 fixed; 6, 7 ruled (g5, g6).
+  · new: 1 test gap and 2 nits, all follow-ups (`reviews/T-070-r2.md`), with what the director's two
+  CI records should show · not run: the CI runs (the director's); actionlint, shellcheck · next: director
 <!-- end reviewer log -->
