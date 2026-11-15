@@ -580,6 +580,8 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   · not checked here: anything on a hosted runner (round 2 runs on the re-join); `kill -9` of a native
   process from Git Bash on Windows and the SIGKILL path on macOS (Linux only here); the whole gate
   (not run: the change is to the workflow, its docs and this log; the director re-joins).
+  · `cargo xtask hygiene` at 29e24bba296e4ae31034254340164eadf121929e: PASS (43 of 55 reviews checked, ok; session-paths: 594 tracked
+  files clean) · gate attempts this run: 0 · missing context: none · next: test author (g1, g4), director re-join.
 <!-- end implementer log -->
 ### test author
 - 2026-11-15 · R-264 · ready (base 0bc14b8) · did: read AGENTS.md, the test-author brief, METHODOLOGY
