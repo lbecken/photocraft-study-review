@@ -2,4 +2,11 @@ id = "ui.window"
 title = "The desktop app opens a window showing the open document"
 crate = "kiln-ui"
 tier = "medium"
-tests = []
+tests = [
+    "kiln::acceptance_t065::ac1_no_display_exits_2_with_one_line",
+    "kiln::acceptance_t065::ac1_no_display_every_window_form",
+    "kiln::acceptance_t065::ac1_wayland_only_or_unreachable_display_exits_2",
+    "kiln::acceptance_t065::ac1_bad_root_is_named_before_the_window",
+    "kiln::acceptance_t065::ac1_usage_errors_exit_2",
+    "kiln::acceptance_t065::ac1_unreadable_script_exits_2",
+]
