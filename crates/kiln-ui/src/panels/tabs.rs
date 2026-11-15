@@ -2,7 +2,8 @@
 //! `super`).
 //!
 //! - With at least one document open: a list of role `tab_list` labelled `Tabs`, inside its own
-//!   scroll area of at most [`MAX_ROWS`] rows. With none open the panel shows nothing.
+//!   scroll area of at most [`MAX_ROWS`] rows (and more than one scroll step). With none open
+//!   the panel shows nothing.
 //! - One tab per open document, in id order: a clickable node of role `tab` whose label is the
 //!   document's path and whose painted text is the path; no value; `toggled` (selected) exactly
 //!   for the current document.
@@ -32,7 +33,11 @@ use super::PanelView;
 use crate::shell::{accesskit_rect, scroll_view};
 
 /// The strip's height, at most, in rows of tabs; it scrolls beyond that.
-const MAX_ROWS: f32 = 3.0;
+const MAX_ROWS: f32 = 5.0;
+/// How far one `scroll` step moves a scroll area (points; the toolkit's distance for a scroll
+/// action). The strip, when it scrolls, is taller than this by a row, so that a step down or up
+/// never skips a row of tabs.
+const SCROLL_STEP: f32 = 100.0;
 /// The space left and right of a tab's path (points).
 const PAD: f32 = 6.0;
 /// The text of the node that follows the tab of a dirty document.
@@ -80,7 +85,8 @@ pub(crate) fn show(ui: &mut Ui, view: &mut PanelView<'_>) {
     let current = view.current();
 
     let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
-    let height = state.content.unwrap_or(row).clamp(row, row * MAX_ROWS);
+    let max = (row * MAX_ROWS).max(SCROLL_STEP + row);
+    let height = state.content.unwrap_or(row).clamp(row, max);
     let mut clicked = None;
     let mut content = height;
     ui.allocate_ui(vec2(ui.available_width(), height), |ui| {
@@ -113,7 +119,7 @@ pub(crate) fn show(ui: &mut Ui, view: &mut PanelView<'_>) {
         });
     });
     // The strip follows its content's height (up to `MAX_ROWS`) from the next frame.
-    let wanted = content.clamp(row, row * MAX_ROWS);
+    let wanted = content.clamp(row, max);
     if (wanted - height).abs() > 0.5 {
         ui.ctx().request_repaint();
     }
