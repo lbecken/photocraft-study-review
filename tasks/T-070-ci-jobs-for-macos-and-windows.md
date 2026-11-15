@@ -284,6 +284,21 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
 - 2026-11-15 · R-261 · draft · did: spec check and completion against 15555cc (above) · not run: anything on a hosted runner · next: director (rulings Q-1–Q-4, specified)
 <!-- end planner log -->
 ### implementer
+- 2026-11-15 · R-263 · start · rulings acknowledged, all accepted: Q-1 A (`gate-linux` not on pushes to
+  main; `ci.yml` stays the Linux gate there), Q-2 A (core-crates step reported, its exit status never
+  changes a job's colour), Q-3 B (the procedure is run by `window-linux` in CI and by the reviewer here,
+  not by the local gate), Q-4 A (`AC-3 PRECONDITION FAILED` on the runner is "not checked there", not a
+  failure: the test author's exit rule), D-180 (pushes of `ci/T-070` only through the director; no
+  test of mine uses a Unix-only API — I add no test). The criteria in my words: AC-1 the workflow
+  file's text has exactly the specified triggers (two branch patterns, the 18 ledger patterns in
+  `ledger.toml` order, schedule, dispatch, no PR trigger), `contents: read` only, no `concurrency`, no
+  `continue-on-error`, the five job ids on their labels, each gate job runs `cargo xtask ci
+  --keep-going --report`, `gate-linux` limited by the stated `if:`, every `uses:` pinned by 40 hex;
+  AC-2 `* -text` makes an autocrlf clone byte-equal; AC-3 the test author's procedure file; AC-4 on
+  the final candidate `gate-linux` and `window-linux` green and the procedure artefact shows the three
+  verdicts; AC-5 the macOS/Windows jobs and both probe legs complete and upload, Windows core-crates
+  shows the three core crates' results; AC-6 a deliberately failing test turns the three gate jobs red
+  and `test-output.txt` shows its panic; AC-7 the reviewer's local run of the procedure.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
