@@ -538,3 +538,20 @@ branch, so `git show task/T-NNN:<path> > <path>` brings each back.
 dispatch), Linux, `permissions: contents: read`, actions pinned by commit sha
 (`actions/checkout` v7.0.1, `Swatinem/rust-cache` v2.9.3). There is no `concurrency` group,
 so no run on `main` is cancelled or replaced.
+
+**What the confinement tests need from the machine.** The tests of `ws.path-confinement` that
+need a root the process under test cannot read (`acceptance_t036_workspace`,
+`confinement::root_that_cannot_be_opened_for_reading_is_refused_by_new`, `acceptance_t036_cli`,
+case (iii) of `guard_t036_removal_cli`, and the "as U" cases of `acceptance_t037_cli` and
+`guard_t037_cli`) run their scenario as an identity without a permission override. As an
+ordinary user, as on the CI runner, that is the test's own identity: it removes the read
+permission from a directory it owns below `std::env::temp_dir()` and needs nothing else from the
+machine. As uid 0, as on the bootstrap machine, permission bits do not apply, so the test runs
+its child (`kiln-cli`, or the test binary re-run) as uid/gid 65534 on a fixture given to 65534:
+uid 65534 must then be able to search every directory down to the checkout's `target/` and to
+the temporary directory. A checkout below a directory it cannot search (for example one of mode
+0700 owned by root) does not meet this; the test then fails with a `precondition:` message that
+names the directory that blocks it, and is never skipped. Run such a checkout's gate as an
+ordinary user, or move the checkout. The parent's snapshots read the fixture's mode-0000 control
+file with its owner's read bit added for that read only, so both identities check the same
+bytes (T-069).
