@@ -914,3 +914,94 @@ fn a_row_of_blanks_is_plain() {
         [("/* c".to_owned(), colour_of("comment").to_owned())]
     );
 }
+
+/// Ruling z1: a row's text is the laid-out text's chars in reading order (combining marks,
+/// joiners, Arabic-Indic digits, ligatures in proportional type), and a click's `at` column
+/// counts those chars.
+#[test]
+fn rows_report_the_text_and_clicks_count_its_chars() {
+    let dir = fresh("z1");
+    let lines = [
+        "e\u{301}b",
+        "ab\u{301}cd",
+        "x\u{200d}yz",
+        "\u{663}\u{663}",
+        "\u{663}\u{663} ab",
+        "modified fi office",
+    ];
+    let text = lines.join("\n") + "\n";
+    write_files(
+        &dir.join("root"),
+        &[("u.txt", text.as_bytes()), ("modified.rs", b"fn f() {}\n")],
+    );
+    let mut script = vec![
+        focus_editor("fo"),
+        json!({"id": "ty", "ui": "type", "text": "y"}),
+        snapshot("dirty"),
+        ctl("o", "doc.open", json!({"path": "u.txt"})),
+        frames("settle", 1),
+        snapshot("s"),
+    ];
+    let mut starts = Vec::new();
+    let mut at = 0;
+    for (r, line) in lines.iter().enumerate() {
+        starts.push(at);
+        at += line.chars().count() + 1;
+        for c in 0..=line.chars().count() {
+            script.push(json!({"id": format!("c{r}_{c}"), "ui": "click", "target": editor_target(), "at": {"row": r, "col": c}}));
+            script.push(ctl(&format!("g{r}_{c}"), "cursor.get", json!({"doc": 2})));
+        }
+    }
+    let r = run(&dir, &script, &["modified.rs"]);
+    let t = title(r.root("dirty"));
+    let title_node = labelled(r.root("dirty"), "Title").unwrap();
+    assert_eq!(row_texts(title_node).concat(), t);
+    assert_eq!(row_texts(editor(r.root("s"))), lines);
+    for (row, line) in lines.iter().enumerate() {
+        for c in 0..=line.chars().count() {
+            let head = sel(r.result(&format!("g{row}_{c}"))).1 as usize;
+            assert_eq!(head, starts[row] + c, "row {row} col {c}");
+        }
+    }
+}
+
+/// Ruling z2: growing a document at its end, when it is longer than the view, settles, and the
+/// caret's line is in view from the next frame on.
+#[test]
+fn growing_a_long_document_at_its_end_settles() {
+    let dir = fresh("z2");
+    let text: String = (0..300).map(|i| format!("line {i:03}\n")).collect();
+    write_files(&dir.join("root"), &[("long.txt", text.as_bytes())]);
+    let many: String = (0..80).map(|i| format!("\nadded {i:02}")).collect();
+    let end = text.chars().count();
+    let lines = [
+        ctl("cs", "cursor.set", json!({"doc": 1, "anchor": end})),
+        focus_editor("fo"),
+        key("en", "Enter", &[]),
+        json!({"id": "ty", "ui": "type", "text": "QQ"}),
+        key("en2", "Enter", &[]),
+        key("un", "Z", &["ctrl"]),
+        key("re", "Y", &["ctrl"]),
+        snapshot("s1"),
+        ctl(
+            "ins",
+            "doc.insert",
+            json!({"doc": 1, "offset": end + 4, "text": many}),
+        ),
+        frames("one", 1),
+        snapshot("s2"),
+        frames("settle", 60),
+        snapshot("s3"),
+    ];
+    let r = run(&dir, &lines, &["long.txt"]);
+    for id in ["en", "ty", "en2", "un", "re"] {
+        assert_eq!(r.by_id(id)["result"]["settled"], true, "{id}");
+    }
+    assert!(row_texts(editor(r.root("s1"))).contains(&"QQ".to_owned()));
+    assert!(row_texts(editor(r.root("s2"))).contains(&"added 79".to_owned()));
+    assert_eq!(r.by_id("settle")["result"]["settled"], true);
+    assert_eq!(
+        row_texts(editor(r.root("s2"))),
+        row_texts(editor(r.root("s3")))
+    );
+}
