@@ -468,6 +468,53 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   after the gate (181M at the start) · not run: AC-2/AC-3 by the test author's scripts (I do not have them); a
   release build; a real window manager; HiDPI; the CI runner · missing context: none · next: join with
   `task/T-065-tests`, review.
+- 2026-11-15 · R-250 · rework after review round 1 (`reviews/T-065-r1.md`, head `8d1117d`) · did: read the review and
+  the rulings b1 to b7 of D-165 in main's task file. **All acknowledged and accepted.** b1 (it reverses Q-12 A):
+  under `--script` the window's time is the script's. b2: no key closes the window. b3: a non-UTF-8 argument is a
+  usage error. b4: the start paths are opened by one piece of code. b5 and b6: limits, measured. b7: the nit is
+  left as it is.
+  **b1** (`window.rs`, `raw_input_hook`): under a script every frame, the last one included, gets `time = n/60`
+  (`n` = frames run) and `predicted_dt = 1/60`. Its input is the script's events only: the window system's
+  `PointerMoved(640,400)` and `WindowFocused(false)` at start, measured with a temporary trace, are dropped. The
+  window counts as focused, as `kiln script` sets it. A frame that has not run yet is given the script's input
+  again (`Wait`). Before the first frame, two `run_logic` passes without UI consume eframe's start-up repaint
+  request (the font provider, `egui context.rs:871`). Without this, frame 0 had a time step of 0 instead of 1/60,
+  and the start settled one frame later than in `kiln script`; this was measured with a temporary trace of
+  repaint causes, then removed. While closing, simulated time is still given; before that fix the last frame got
+  real time and egui panicked with "Time shouldn't move backwards". A plain window keeps real time and real
+  input.
+  **Measured, window (Xvfb, 1280×800 screen, recipe) against `kiln script`, byte for byte WITH frame counts and
+  `settled`:**
+  - AC-2-style script (17 lines), debug and release: byte-equal, exit 3 and 3, files equal.
+  - The reviewer's double click (`min_dbl`: focus `Path`, type, click, `frames 20`, click, type `Z`, snapshot),
+    debug and release: byte-equal.
+  - The reviewer's long scroll (10 × `scroll Editor down 100` + `up 2..11` with snapshots, 300 lines), debug and
+    release: byte-equal, no `settled:false`.
+  - `ctrl+Q`, `ctrl+shift+Q`, `command+Q` keys then a snapshot: byte-equal, exit 0 (the window stays open).
+  - Default root (cwd = the root, no `--root`), debug and release: byte-equal, files equal.
+  - The test author's `ac2.sh` as written: AC-2 `EQUAL` twice, `FILES EQUAL`, AC-3 pass.
+
+  So `ui.md` drops "except the frame counts" and says what was measured; the usage text says the window's time is
+  the script's. Release build: `cargo build --release -p kiln --locked` 2 m 36 s, 643M; deleted afterwards.
+  **b2**: `quit_shortcuts` cleared on the window's context in both forms. Under `--script` it is shown by the case
+  above. For a plain window I tried real keys through XTest (python ctypes on libXtst): the window stayed open
+  after ctrl+Q, but a control (click, type `z`, ctrl+S) did not change the file either. So the XTest keys
+  probably never reached the window, and **the plain window's ctrl+Q is not verified with real keys**; it is the
+  same line of code as under `--script`.
+  **b3** (`main.rs`): `args_os`; a non-UTF-8 argument → `kiln: argument N is not valid UTF-8` + usage, exit 2, in
+  every form (measured: `--root d caf\xe9.rs`, `script /dev/null --root d caf\xe9.rs`, `\xff` alone: exit 2, 24
+  lines, contains `--help`'s output, no panic). Own test `an_argument_that_is_not_utf8_is_a_usage_error`.
+  **b4**: a plain window is now a `Driver` with no lines, and `driver.start(paths)` (`Script::begin_start`) opens
+  the start paths in both forms.
+  **b5** (doc only): `Xvfb :87 &`, `DISPLAY=:87 kiln --root d a.rs [--script long.jsonl] &`, `kill -9` of Xvfb
+  after 3 s, 4 runs each: exit 1, nothing on stdout, the one line `X connection to :87 broken (explicit kill or
+  server shutdown).` In 1 of 4 runs with a script (and in a first run with `RUST_BACKTRACE=1`), a winit panic
+  message (`x11/window.rs:1200`, unwrap of a connection error) came before that line. `ui.md` says so; the
+  ruling's "one line" therefore holds only usually.
+  **b6** (doc only): on Xvfb screens of 1024×768 and 800×600, `kiln --script` printed byte for byte what `kiln
+  script --size 1024x768` / `--size 800x600` print, and differed from the default size.
+  · gate attempts: 1 (last: green, `GATE PASSED in 572.1s`, test 978 passed; `target/` 12G) · not run: real keys on a plain window (above); a real window manager;
+  HiDPI; the CI runner · missing context: none · next: reviewer round 2.
 <!-- end implementer log -->
 ### test author
 - 2026-11-15T02:03Z · R-248 · ready · did: wrote `apps/kiln/tests/acceptance_t065.rs` (AC-1, 6 tests,
