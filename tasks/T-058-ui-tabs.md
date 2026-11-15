@@ -38,6 +38,11 @@ Snapshot: tabs equal `doc.list` (paths, dirty marks); after a tab click, `Editor
 - Tests find nodes by label and role and check them against the commands in the same session;
   none pins a whole snapshot, a message text or the shell's layout (golden rule 9).
 
+## Note from the evaluation at cut 1 (director, D-169)
+Clicking a `Documents` entry does nothing and logs nothing today (`evaluations/iter-2-cut-1.md`, "Wired but
+inert"); this task gives documents their way of being made current, and the entry either becomes that control or
+stays a label the document calls a label.
+
 ## Log
 ### director
 <!-- end director log -->

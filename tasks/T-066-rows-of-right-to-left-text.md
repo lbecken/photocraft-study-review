@@ -45,6 +45,13 @@ The limit stated in `docs/protocol/ui.md` is slightly narrower than what the rev
 right-to-left row loses can turn up in another node's rows (`xt` in the `Documents` list, `ln` in a container).
 The specification states the full extent or removes it.
 
+## Note from the evaluation at cut 1 (director, D-169) — scope widened
+`evaluations/iter-2-cut-1.md`, NEW-1: after a combining mark at the start of a row the snapshot reports colours one
+char late (in a row `<combining acute>let x = 1;` it reports `l` plain, `x` in the keyword colour, `1` plain and
+`;` in the number colour); the text it reports is right and the real window paints the row with the right colours
+(528 colour mismatches in 8 of 60 seeded sessions with combining marks; 0 in 400 sessions without). This task
+covers it with the right-to-left rows: what a snapshot reports for shaped text, chars and colours.
+
 ## Log
 ### director
 - 2026-11-15 filed as a draft (D-160).

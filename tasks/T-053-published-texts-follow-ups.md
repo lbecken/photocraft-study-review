@@ -49,6 +49,14 @@ clock and the window then overwrites the time; "the UI's time does not come from
 the sentence on a lost display says a panic message came in "one of four runs" where the reviewer saw it in 8 of 20
 ("in some runs").
 
+## Note from the evaluation at cut 1 (director, D-169)
+`evaluations/iter-2-cut-1.md`: NEW-2 `docs/protocol/ui-editor.md` calls the rows' lines "consecutive" although an
+empty line has no row; NEW-3 `docs/protocol/ui.md` names the shader cache under `HOME` but not how to turn it off
+(`MESA_SHADER_CACHE_DISABLE=true`: 11 files without it, none with it); NEW-4 the sentence on smaller screens has no
+equivalent below the smallest `--size` (`--size 160x120` is refused while a window on a 160x120 screen opens);
+Q2 a target `value_contains: ""` does not match a node without a value (say so); Q3 the `scroll_bar` node of an
+overflowing list appears only once the list has settled (say so).
+
 ## Log
 ### director
 - 2026-11-14 filed as a draft (D-141).
