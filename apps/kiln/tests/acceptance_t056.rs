@@ -763,12 +763,13 @@ fn expected_row_colours(row: &[char], want: impl Fn(usize) -> String) -> Vec<Str
         .enumerate()
         .map(|(i, c)| (!blank(*c)).then(|| want(i)))
         .collect();
+    // x3 (D-157): in a row of blanks only, the blanks are painted `plain`.
     let first = out
         .iter()
         .flatten()
         .next()
         .cloned()
-        .unwrap_or_else(|| panic!("a row of blanks only (a test bug): {row:?}"));
+        .unwrap_or_else(|| PLAIN.to_owned());
     let mut prev = first;
     for c in &mut out {
         match c {
@@ -800,11 +801,6 @@ fn check_colours(ed: &Value, lines: &[Line], kind_at: &dyn Fn(usize) -> String, 
     for (row, line) in rs.iter().zip(&m) {
         let (cs, got) = row_char_colours(row);
         let start = lines[*line].start;
-        assert!(
-            cs.iter().any(|c| !blank(*c)),
-            "{what}: line {line} (`{}`) painted a row of blanks only: {row:?}",
-            lines[*line].string()
-        );
         let want = expected_row_colours(&cs, |i| colour_of(&kind_at(start + i)).to_owned());
         if let Some(i) = (0..cs.len()).find(|i| got[*i] != want[*i]) {
             panic!(
@@ -2762,5 +2758,298 @@ fn ac8_settled_false_after_a_control_request() {
         format!("q{A_RS}"),
         "the insert is shown"
     );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// =============================================================================================
+// Rulings of review round 1 (D-159): z1 rows are the shown chars, z2 settling, z4 test gaps.
+// =============================================================================================
+
+/// Lines whose chars the toolkit shapes into more or fewer glyphs than chars (z1): a combining
+/// acute after `e` and after `b`, a zero-width joiner, Arabic-Indic digits, ligature candidates.
+const SHAPED: &str = "e\u{301}b first\nab\u{301}cd\nx\u{200d}yz\n\u{663}\u{663}\noffice ffi fl\n";
+
+/// z1 (a), y5: for every node that shows text, its one painted row is exactly that text; the
+/// editor's rows are exactly its lines (none of these is long enough to be cut).
+#[test]
+fn z1_rows_equal_the_text_each_node_shows() {
+    let dir = case_dir("z1-rows");
+    let root = dir.join("proj");
+    write(&root.join("src/a.rs"), A_RS.as_bytes());
+    write(&root.join("z.txt"), SHAPED.as_bytes());
+    let script = vec![
+        open("o1", "src/a.rs"),
+        frames("f1", 1),
+        focus_editor("fe"),
+        type_text("ty", "w"),
+        snapshot("s1"),
+        open("o2", "z.txt"),
+        frames("f2", 1),
+        ui("fp", "focus", json!({"target": {"label": "Path"}})),
+        type_text("tp", "src/missing.rs"),
+        ui("c", "click", json!({"target": {"label": "Open"}})),
+        snapshot("s2"),
+        ctl("t2", "doc.text", json!({"doc": 2})),
+    ];
+    let s = run(&dir, "s", &script, &root_args());
+    for id in ["fe", "ty", "fp", "tp", "c"] {
+        s.act(id);
+    }
+    check_title(s.snap("s1"), "src/a.rs", true, "after an edit");
+    assert!(
+        message(s.snap("s2")).starts_with("not_found"),
+        "precondition: Message shows the refused open"
+    );
+    for snap in ["s1", "s2"] {
+        let root_node = s.snap(snap);
+        let mut seen = Vec::new();
+        for n in all_nodes(root_node) {
+            if label(n) == Some("Editor") || n.get("rows").is_none() {
+                continue;
+            }
+            let shown = n["value"]
+                .as_str()
+                .or_else(|| label(n))
+                .unwrap_or_else(|| panic!("{snap}: a node without text has rows: {}", short(n)));
+            assert_eq!(
+                row_texts(n),
+                [shown.to_owned()],
+                "{snap}: the rows of a {} node are not the text it shows",
+                n["role"]
+            );
+            seen.push(label(n).unwrap_or(shown).to_owned());
+        }
+        for want in ["Title", "Path", "Open"] {
+            assert!(
+                seen.iter().any(|l| l == want),
+                "{snap}: {want} was not checked: {seen:?}"
+            );
+        }
+    }
+    let text = s.text("t2");
+    assert_eq!(text, SHAPED, "doc.text");
+    let ed = editor(s.snap("s2"));
+    assert_eq!(editor_value(ed), text, "Editor value");
+    check_rows_from_line0(
+        &row_texts(ed),
+        &lines_of(&chars(&text)),
+        true,
+        "shaped lines",
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// z1 (b): a click with `at` on lines with combining marks, a joiner and shaped digits puts the
+/// caret on the char the column names (oracle: `cursor.get`; typing there, the naive model).
+#[test]
+fn z1_click_at_counts_chars_on_shaped_lines() {
+    let dir = case_dir("z1-click");
+    let root = dir.join("proj");
+    write(&root.join("z.txt"), SHAPED.as_bytes());
+    let lines = lines_of(&chars(SHAPED));
+    // (row, col): the rows of a fresh view are lines 0..k (checked below).
+    let clicks = [(1, 3), (1, 1), (0, 3), (2, 2), (3, 1), (1, 5)];
+    let mut script = vec![open("o", "z.txt"), frames("f", 1), snapshot("s0")];
+    for (k, (r, c)) in clicks.iter().enumerate() {
+        script.push(click_at(&format!("c{k}"), *r, *c, false));
+        script.push(ctl(&format!("g{k}"), "cursor.get", json!({"doc": 1})));
+        script.push(snapshot(&format!("s{}", k + 1)));
+    }
+    script.push(type_text("ty", "Q"));
+    script.push(ctl("t", "doc.text", json!({"doc": 1})));
+    let s = run(&dir, "s", &script, &root_args());
+    let m = check_rows_from_line0(&row_texts(editor(s.snap("s0"))), &lines, true, "fresh view");
+    assert!(
+        m.len() >= 4 && m[..4] == [0, 1, 2, 3],
+        "precondition: rows 0..4 are lines 0..4"
+    );
+    for (k, (r, c)) in clicks.iter().enumerate() {
+        s.act(&format!("c{k}"));
+        let want = lines[*r].start + c;
+        let sel = s.sel(&format!("g{k}"));
+        assert_eq!(
+            sel,
+            (want, want),
+            "click at row {r} col {c}: caret at char {want}"
+        );
+        assert_eq!(
+            editor_sel(editor(s.snap(&format!("s{}", k + 1)))),
+            sel,
+            "Editor selection"
+        );
+    }
+    s.act("ty");
+    let (r, c) = clicks[clicks.len() - 1];
+    let mut model = chars(SHAPED);
+    model.insert(lines[r].start + c, 'Q');
+    assert_eq!(chars(&s.text("t")), model, "Q typed at the clicked char");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// z2: in a document longer than the view, `Enter` with the caret at the very end, and an undo
+/// and a redo right after it, each settle within 60 frames.
+#[test]
+fn z2_enter_undo_redo_at_the_end_of_a_long_document_settle() {
+    let dir = case_dir("z2");
+    let root = dir.join("proj");
+    let text = lines300();
+    write(&root.join("l.txt"), text.as_bytes());
+    let end = text.chars().count();
+    let script = vec![
+        open("o", "l.txt"),
+        ctl("set", "cursor.set", json!({"doc": 1, "anchor": end})),
+        frames("f", 1),
+        focus_editor("focus"),
+        key("enter", "Enter", &[]),
+        ctl("t1", "doc.text", json!({"doc": 1})),
+        key("undo", "Z", &["ctrl"]),
+        ctl("t2", "doc.text", json!({"doc": 1})),
+        key("redo", "Y", &["ctrl"]),
+        ctl("t3", "doc.text", json!({"doc": 1})),
+        snapshot("s"),
+    ];
+    let s = run(&dir, "s", &script, &root_args());
+    s.act("focus");
+    for id in ["enter", "undo", "redo"] {
+        assert_eq!(
+            s.act(id)["settled"],
+            json!(true),
+            "`{id}` at the end of a long document did not settle within 60 frames"
+        );
+    }
+    assert_eq!(
+        s.text("t1"),
+        format!("{text}\n"),
+        "Enter inserted a line break"
+    );
+    assert_eq!(s.text("t2"), text, "undo");
+    assert_eq!(s.text("t3"), format!("{text}\n"), "redo");
+    assert_eq!(editor_value(editor(s.snap("s"))), s.text("t3"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// z4 (a): text with chars outside ASCII typed over a selection (either direction) leaves the
+/// caret after it, counted in chars (oracle: `cursor.get`, the naive model).
+#[test]
+fn z4_non_ascii_typed_over_a_selection_caret_counts_chars() {
+    let dir = case_dir("z4-type");
+    let root = dir.join("proj");
+    let initial = "h\u{e9}llo w\u{f6}rld\nsecond\n";
+    write(&root.join("u.txt"), initial.as_bytes());
+    let typed = "\u{3bb}\u{436}\u{e9}\u{1f600}";
+    let mut script = vec![open("o", "u.txt"), frames("f", 1), focus_editor("focus")];
+    for (k, (a, h)) in [(1, 4), (9, 2)].iter().enumerate() {
+        script.push(ctl(
+            &format!("set{k}"),
+            "cursor.set",
+            json!({"doc": 1, "anchor": a, "head": h}),
+        ));
+        script.push(frames(&format!("f{k}"), 1));
+        script.push(type_text(&format!("ty{k}"), typed));
+        script.push(ctl(&format!("t{k}"), "doc.text", json!({"doc": 1})));
+        script.push(ctl(&format!("c{k}"), "cursor.get", json!({"doc": 1})));
+        script.push(snapshot(&format!("s{k}")));
+    }
+    let s = run(&dir, "s", &script, &root_args());
+    let mut m = Model {
+        t: chars(initial),
+        a: 0,
+        h: 0,
+    };
+    for (k, (a, h)) in [(1, 4), (9, 2)].iter().enumerate() {
+        s.act(&format!("ty{k}"));
+        m.a = *a;
+        m.h = *h;
+        m.typed(typed);
+        assert_eq!(
+            chars(&s.text(&format!("t{k}"))),
+            m.t,
+            "text after typing over {a}..{h}"
+        );
+        let sel = s.sel(&format!("c{k}"));
+        assert_eq!(
+            sel,
+            (m.a, m.h),
+            "caret after typing over {a}..{h}, in chars"
+        );
+        assert_eq!(
+            editor_sel(editor(s.snap(&format!("s{k}")))),
+            sel,
+            "Editor selection"
+        );
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// z4 (b): a successful save through the UI clears `Message` (made non-empty by a refused open).
+#[test]
+fn z4_successful_ui_save_clears_message() {
+    let dir = case_dir("z4-save");
+    let root = dir.join("proj");
+    write(&root.join("src/a.rs"), A_RS.as_bytes());
+    let script = vec![
+        open("o", "src/a.rs"),
+        frames("f", 1),
+        ui("fp", "focus", json!({"target": {"label": "Path"}})),
+        type_text("tp", "src/missing.rs"),
+        ui("c", "click", json!({"target": {"label": "Open"}})),
+        snapshot("s0"),
+        focus_editor("fe"),
+        type_text("ty", "x"),
+        key("save", "S", &["ctrl"]),
+        snapshot("s1"),
+        ctl("i", "doc.info", json!({"doc": 1})),
+    ];
+    let s = run(&dir, "s", &script, &root_args());
+    for id in ["fp", "tp", "c", "fe", "ty", "save"] {
+        s.act(id);
+    }
+    assert!(
+        message(s.snap("s0")).starts_with("not_found"),
+        "precondition: Message shows the refused open"
+    );
+    assert_eq!(s.ok("i")["dirty"], json!(false), "the save succeeded");
+    assert_eq!(
+        fs::read(root.join("src/a.rs")).expect("read"),
+        format!("x{A_RS}").as_bytes()
+    );
+    assert_eq!(
+        message(s.snap("s1")),
+        "",
+        "a successful UI save clears Message"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// z4 (c): a path that only contains `.rs` is not a Rust document: painted all `plain`,
+/// although `syntax.highlight` gives its text other kinds.
+#[test]
+fn z4_a_path_that_only_contains_rs_is_plain() {
+    let dir = case_dir("z4-plain");
+    let root = dir.join("proj");
+    for p in ["x.rs.txt", "d.rs/a.txt", "a.rsx"] {
+        write(&root.join(p), A_RS.as_bytes());
+    }
+    let mut script = Vec::new();
+    for (i, p) in ["x.rs.txt", "d.rs/a.txt", "a.rsx"].iter().enumerate() {
+        let d = i + 1;
+        script.push(open(&format!("o{d}"), p));
+        script.push(frames(&format!("f{d}"), 1));
+        script.push(snapshot(&format!("s{d}")));
+        script.push(ctl(&format!("h{d}"), "syntax.highlight", json!({"doc": d})));
+    }
+    let s = run(&dir, "s", &script, &root_args());
+    let lines = lines_of(&chars(A_RS));
+    for (i, p) in ["x.rs.txt", "d.rs/a.txt", "a.rsx"].iter().enumerate() {
+        let d = i + 1;
+        let k = kinds(s.ok(&format!("h{d}")), A_RS.chars().count());
+        assert!(
+            k.iter().any(|x| x != "plain"),
+            "precondition: {p}'s text has non-plain kinds"
+        );
+        let root_node = s.snap(&format!("s{d}"));
+        check_title(root_node, p, false, p);
+        check_colours(editor(root_node), &lines, &|_| "plain".to_owned(), p);
+    }
     let _ = fs::remove_dir_all(&dir);
 }
