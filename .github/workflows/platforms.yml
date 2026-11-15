@@ -81,7 +81,9 @@ jobs:
       - name: Gate report
         if: always()
         run: |
+          set +e
           if [ -f gate-report.json ]; then cat gate-report.json; echo; else echo "GATE REPORT: none written"; fi
+          exit 0
 
       - name: Core crates (reported, not required)
         if: always()
@@ -115,9 +117,11 @@ jobs:
       - name: Disk
         if: always()
         run: |
+          set +e
           echo "DISK: df -h of the workspace's volume"
           df -h .
           if [ -d target ]; then echo "DISK: du -sh target"; du -sh target; else echo "DISK: no target/"; fi
+          exit 0
 
       - name: Upload reports
         if: always()
@@ -161,7 +165,9 @@ jobs:
       - name: Gate report
         if: always()
         run: |
+          set +e
           if [ -f gate-report.json ]; then cat gate-report.json; echo; else echo "GATE REPORT: none written"; fi
+          exit 0
 
       - name: Core crates (reported, not required)
         if: always()
@@ -195,9 +201,11 @@ jobs:
       - name: Disk
         if: always()
         run: |
+          set +e
           echo "DISK: df -h of the workspace's volume"
           df -h .
           if [ -d target ]; then echo "DISK: du -sh target"; du -sh target; else echo "DISK: no target/"; fi
+          exit 0
 
       - name: Upload reports
         if: always()
@@ -243,7 +251,9 @@ jobs:
       - name: Gate report
         if: always()
         run: |
+          set +e
           if [ -f gate-report.json ]; then cat gate-report.json; echo; else echo "GATE REPORT: none written"; fi
+          exit 0
 
       - name: Core crates (reported, not required)
         if: always()
@@ -277,9 +287,11 @@ jobs:
       - name: Disk
         if: always()
         run: |
+          set +e
           echo "DISK: df -h of the workspace's volume"
           df -h .
           if [ -d target ]; then echo "DISK: du -sh target"; du -sh target; else echo "DISK: no target/"; fi
+          exit 0
 
       - name: Upload reports
         if: always()
@@ -337,6 +349,7 @@ jobs:
           echo "dpkg-query: exit status $?"
           echo "APT LISTS: $(ls /var/lib/apt/lists 2>/dev/null | wc -l) files in /var/lib/apt/lists"
           ldconfig -p | grep -E 'libxkbcommon-x11|libxcb-xkb|libGLX_mesa|libEGL_mesa' || echo "LDCONFIG: none of the four libraries"
+          exit 0
 
       - name: Upload the procedure's output
         if: always()
@@ -381,7 +394,8 @@ jobs:
 
       - name: Window probe
         # One run of the window form with a three-line script, bounded to 120 s by a bash watchdog
-        # (GNU `timeout` is not assumed on macOS). The step's exit status is kiln's.
+        # (GNU `timeout` is not assumed on macOS): SIGTERM at 120 s, SIGKILL 5 s later if kiln is
+        # still running. The step's exit status is kiln's.
         if: always()
         env:
           BUILD_OUTCOME: ${{ steps.build.outcome }}
@@ -415,12 +429,22 @@ jobs:
             done
             : > timed_out
             kill "$kp" 2>/dev/null
+            # A kiln that ignores SIGTERM gets SIGKILL 5 s later.
+            j=0
+            while [ "$j" -lt 5 ]; do
+              sleep 1
+              kill -0 "$kp" 2>/dev/null || exit 0
+              j=$((j+1))
+            done
+            : > killed_hard
+            kill -9 "$kp" 2>/dev/null
           ) < /dev/null > /dev/null 2>&1 &
           wp=$!
           wait "$kp"; rc=$?
           wait "$wp"
           {
             if [ -f timed_out ]; then echo "PROBE: timed out after 120 s (killed)"; fi
+            if [ -f killed_hard ]; then echo "PROBE: SIGTERM ignored for 5 s, sent SIGKILL"; fi
             echo "PROBE: exit status $rc"
             echo "PROBE: stdout $(wc -c < stdout.txt) bytes, $(awk 'END{print NR}' stdout.txt) lines"
             echo "--- stdout"; cat stdout.txt
