@@ -259,16 +259,14 @@ fn editor_target() -> Value {
     json!({"label": "Editor"})
 }
 
-/// The lines of an open through `Path` and `Open`: focus `Path`, delete what it holds (`prev`,
-/// one `Backspace` per char after `End`; a surplus `Backspace` on an empty input does nothing),
-/// type `path`, click `Open`.
+/// The lines of an open through `Path` and `Open`: focus `Path`, delete what it holds (`prev`:
+/// one `Backspace` and one `Delete` per char, wherever the toolkit left the caret; surplus keys
+/// on an empty side do nothing), type `path`, click `Open`.
 fn ui_open_lines(id: &str, prev: &str, path: &str) -> Vec<String> {
-    let mut out = vec![
-        focus(&format!("{id}-fp"), json!({"label": "Path"})),
-        key(&format!("{id}-end"), "End", &[]),
-    ];
+    let mut out = vec![focus(&format!("{id}-fp"), json!({"label": "Path"}))];
     for k in 0..prev.chars().count() {
         out.push(key(&format!("{id}-bs{k}"), "Backspace", &[]));
+        out.push(key(&format!("{id}-del{k}"), "Delete", &[]));
     }
     out.push(type_text(&format!("{id}-tp"), path));
     out.push(click(&format!("{id}-open"), &json!({"label": "Open"})));
@@ -2068,12 +2066,15 @@ fn ac7c_a_control_edit_is_read_then_idle() {
         ),
         frames("f1", SETTLE_CAP),
         snapshot("s1"),
-        ctl("l1", "doc.list", json!({})),
     ];
+    // `l1` comes last in both sessions: a control request is itself a change.
     let mut with = prefix.clone();
     with.push(frames("idle", 600));
+    with.push(ctl("l1", "doc.list", json!({})));
+    let mut without = prefix;
+    without.push(ctl("l1", "doc.list", json!({})));
     let a = run(&dir, "with", &with, &root_args());
-    let b = run(&dir, "without", &prefix, &root_args());
+    let b = run(&dir, "without", &without, &root_args());
     let list = doc_list(b.ok("l1"));
     assert!(list[0].dirty && !list[1].dirty, "precondition: doc.list");
     check_tabs(
