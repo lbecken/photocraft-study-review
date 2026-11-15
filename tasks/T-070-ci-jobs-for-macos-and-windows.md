@@ -745,6 +745,10 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   `acceptance_t070` 3 passed, 8 failed by assertion (no workflow on this branch) · gate attempts:
   none of `cargo xtask ci` (not asked) · not run: the joined branch itself; anything on a hosted
   runner · next: director (join)
+- 2026-11-15 · R-273 · ready · ruling m9 (D-189) acknowledged and accepted before acting: the three
+  AC-3 tests move unchanged in what they assert to `xtask/tests/guard_t070.rs` (they pass on the
+  base, the procedure file being mine); the eight workflow and `.gitattributes` tests stay in
+  `acceptance_t070.rs`.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
