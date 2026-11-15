@@ -36,6 +36,10 @@ Q-5). If OpenGL is not available on a runner, the renderer question goes to the 
 ## Estimate
 Comparable to T-065 (887,544, D-168): **about 1,100,000**; more if a renderer change is decided.
 
+## Note from T-070's review (director, D-193)
+`xtask/tests/acceptance_t070.rs` pins the `window-probe` job this task changes: the file goes into this task's
+`touches` (test author) and each changed assertion is named.
+
 ## Log
 ### director
 <!-- end director log -->

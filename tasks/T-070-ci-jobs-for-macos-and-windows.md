@@ -2,7 +2,7 @@
 id: T-070
 title: "Run the gate in CI on macOS and Windows as tracking jobs, check files out byte for byte, keep the reports, probe the window on each platform, and run the Linux window procedure under Xvfb on every code push"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (.github/workflows/platforms.yml, .github/scripts/, xtask/tests/); the approval row must contain `gate paths`. No dependency change.
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # produces evidence; changes no behaviour of Kiln's binaries
 depends_on: [T-069]     # merged (30c66909, D-179): the existing CI job is green, so a run can be read
@@ -326,6 +326,33 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   fail on the base. They are tests of a file that does not depend on the implementation: they move, unchanged, to
   `xtask/tests/guard_t070.rs` (added to `touches`), where the join expects tests that pass on the base and on the
   joined branch. The eight tests of the workflow and of the attribute file stay in `acceptance_t070.rs`.
+
+### Rulings on review round 1 (director, D-193; `reviews/T-070-r1.md` at `3c7399be9767809cca0ea749686aa71a70a9760b`; told to both builders)
+- **g1 (finding 1, defect; test author).** The procedure's exit status cannot be turned by what `kiln` prints: a
+  line of `kiln`'s output that looks like a verdict is not a verdict (its echoed lines are told apart from the
+  procedure's own, for example by an indent on every echoed line), and the wrapper exits non-zero when any FAIL
+  or NOT RUN verdict was printed. The reviewer's forged `AC-3 PASS` case is added to the guard tests.
+- **g2 (finding 2; implementer).** Every recording step of the workflow ends with exit status 0 whatever its
+  commands return, the Disk step included, so that the sentence in `docs/development.md` is true.
+- **g3 (findings 3 and 4; implementer).** The CI section states wall times and disk as the recorded run shows
+  them (run 43752760283, in the task's director log on main and `tasks/ci-runs/T-070-round-1.md`): job wall times
+  `gate-linux` 15 min 34 s, `gate-macos` 21 min 20 s, `gate-windows` 9 min 15 s, `window-linux` 2 min 13 s,
+  `window-probe` 2 min 26 s (macOS) and 2 min 8 s (Windows); the `df` and `du` lines as printed. "14 GB disk each"
+  and "not measured yet" go.
+- **g4 (finding 5 and the two surviving mutants; test author).** The workflow tests also require: the procedure
+  step's exit status is not masked; the probe step exits with `kiln`'s status; the probe step runs whatever the
+  build's result and records "not run" when the build failed; the probe's time bound is the stated one; the window
+  job builds the profile whose binary the procedure runs.
+- **g5 (finding 6, spec gap).** AC-6 is read from the job logs of the run on `ci/T-070-negative`: on each of the
+  three gate jobs the `CORE CRATES` line shows `kiln-text=101` (round 1 showed 0), `gate-linux` fails at "Gate" with
+  a `GATE FAILED` line naming `test`, and the panic sentence is quoted where a log shows it; on Windows the
+  test-output shows compile errors, not the sentence, until T-073. Artefacts are read if the director's tools can
+  download them; the criterion does not depend on it.
+- **g6 (finding 7, spec gap).** T-077 changes `window-probe`, which these tests pin: `xtask/tests/acceptance_t070.rs`
+  is noted for T-077's `touches`.
+- **g7 (finding 8, nit; implementer).** The probe's watchdog ends a `kiln` that ignores the first signal.
+- AC-4 is read again on the final candidate: after the rework and the re-join the director pushes the joined head
+  to `ci/T-070` (round 2).
 
 ## Log
 ### director
