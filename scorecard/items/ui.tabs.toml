@@ -15,4 +15,6 @@ tests = [
     "kiln::acceptance_t058::ac7c_a_control_edit_is_read_then_idle",
     "kiln::acceptance_t058::ac8_generated_sessions_follow_the_naive_model",
     "kiln::acceptance_t058::ac9_every_tab_of_300_documents_can_be_reached_and_clicked",
+    "kiln::acceptance_t058::ac5_a_wide_dirty_path_keeps_its_row_and_its_mark",
+    "kiln::acceptance_t058::ac4_refused_close_then_undo_removes_discard",
 ]
