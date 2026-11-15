@@ -138,6 +138,13 @@ when it is absent, combined with a gate that runs on one machine and a CI result
 - ADR-0009: the gate runs on three platforms in CI, so a difference between machines shows on the next push.
 ```
 
+## Ruling on the implementer's question of R-256 (director, D-177)
+- **c1.** The cause stated in D-175 and in the incident text above was an inference and was wrong. Reproduced by
+  the implementer as uid 1000: the three tests panic in their own setup, where the fixture snapshot reads a control
+  file of mode 0000 that only uid 0 can read; the identity change is not what fails. The incident file states the
+  reproduced cause (the implementer corrects three sentences of it, run R-258); the text above stays as the record
+  of what was first ruled.
+
 ## Log
 ### director
 <!-- end director log -->
