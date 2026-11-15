@@ -60,3 +60,12 @@ panic = "deny"
 todo = "deny"
 unimplemented = "deny"
 dbg_macro = "deny"
+
+# T-054 (D-182): smaller debug builds. Line tables keep file and line in panics and backtraces;
+# dependencies carry no debug info; no incremental cache. Release builds are unchanged.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+debug = false
