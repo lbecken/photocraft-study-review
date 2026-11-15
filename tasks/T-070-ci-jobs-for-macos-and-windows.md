@@ -430,6 +430,65 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   verdicts; AC-5 the macOS/Windows jobs and both probe legs complete and upload, Windows core-crates
   shows the three core crates' results; AC-6 a deliberately failing test turns the three gate jobs red
   and `test-output.txt` shows its panic; AC-7 the reviewer's local run of the procedure.
+- 2026-11-15 · R-263 · round 0 (local, before any CI run) · did: `.gitattributes` (`* -text`, one
+  line); `.github/workflows/platforms.yml` with the five jobs of Interface (1); the "CI" section of
+  `docs/development.md` (the first paragraph rewritten and new paragraphs before the T-069 paragraph,
+  which is unchanged). Choices where the spec is silent: nightly cron `17 3 * * *` (03:17 UTC, stated
+  in the docs); `timeout-minutes` 120 for gate jobs, 60 for window jobs (stated); `fail-fast: false`
+  on the probe matrix (one leg must not cancel the other); a "Gate report" step (`if: always()`,
+  prints `gate-report.json`) between the gate and the core-crates step, as `ci.yml` has one; the
+  full-test-output step's condition is `failure() && steps.gate.outcome == 'failure'` (a failure of
+  the gate only, as the table says); the recording steps run with `set +e` and end `exit 0`, so only
+  the gate / build / procedure / probe step decides the colour; the probe's watchdog is a bash loop
+  (`kill -0` each second, kill at 120 s), which needs nothing but bash on all three runners.
+  · `actions/upload-artifact` v7.0.2 = `cf430e030ddbb5b0abf93d22962f4752f3646cd9`: `git ls-remote
+  https://github.com/actions/upload-artifact 'refs/tags/v7*'` (lightweight tag, equal to `v7` and
+  `main`), and the release page github.com/actions/upload-artifact/releases/tag/v7.0.2 (summarising
+  fetch: published, marked Latest, shows that sha). `actions/checkout` v7.0.1 `3d3c42e5…` and
+  `Swatinem/rust-cache` v2.9.3 `d1527c8f…` (peeled annotated tag) re-read the same way: equal to
+  `ci.yml`'s.
+  · Checked locally (scratch `impl-T-070/`, deleted at the end): (1) YAML parse (PyYAML) plus a script
+  that recomputes the `paths-ignore` list from `xtask/ledger.toml` (18 patterns, equal in order),
+  lists triggers, permissions, env, defaults, each job's `runs-on`/`if`/matrix, every step's
+  `if`/`id`, artefact names and retention, and checks every `uses:` against `@[0-9a-f]{40}` (all 15
+  pinned); no `concurrency`, no `continue-on-error`. (2) `actionlint` 1.7.12 (from the PyPI wrapper
+  `actionlint-py`, in a scratch venv) on `platforms.yml` and `ci.yml`: exit 0, no finding;
+  shellcheck was not available, so the `run:` scripts were not shell-linted. (3) Every `run:` step
+  extracted and run with `bash --noprofile --norc -eo pipefail` (as Actions runs `shell: bash`) from
+  the worktree root, Linux: toolchain (prints cargo 1.97.0, clippy 0.1.97, rustfmt 1.9.0); gate
+  `cargo xtask ci --keep-going --report gate-report.json` → `GATE PASSED in 581.8s`, the report
+  printed by the "Gate report" step, and that step without a report ("GATE REPORT: none written",
+  exit 0); core crates → `CORE CRATES: exit status 0`, 3 m 51 s here; disk (`df -h .`, `du -sh
+  target` = 2.0G); the package-record step (here: `xvfb` and three Mesa packages present,
+  `libxkbcommon-x11-0`, `libxcb-xkb1`, `libegl-mesa0` absent, exit 0); the probe step three ways:
+  the real `kiln` with no display → `PROBE: exit status 2`, stderr "kiln: no window: winit
+  EventLoopError …", step exit 2; `BUILD_OUTCOME=failure` → "PROBE: not run (cargo build -p kiln:
+  failure)", exit 0; a fake `kiln` that hangs, with the limit cut to 3 s in a copy → killed after
+  3.0 s, "timed out", exit 143, no process left; a fake whose window form runs the real `kiln
+  script` → exit 0 and three response lines (the three-line script is valid). The summary grep of
+  the full-test-output step was fixed after `rustc` 1.97 showed panic lines carry a thread id
+  (`thread 'w' (6944) panicked at …`). `sh … | tee` under `pipefail` keeps a failing exit status
+  (checked with `sh -c 'exit 1' | tee`). (4) AC-2's effect on a toy repository (one LF, one CRLF
+  file; clone with `-c core.autocrlf=true`): without `.gitattributes` the LF file differs from its
+  blob; with it both are byte-equal; `git check-attr text` on `crlf_lines.rs.txt` = `unset`.
+  · Not run here: the window procedure step (the file is the test author's and not on this branch;
+  only its command line is mine); the full-test-output step (it is `cargo test --workspace` again);
+  anything on a hosted runner: triggers, `paths-ignore` on a new `ci/` branch, uploads, any macOS or
+  Windows result, wall times, disk. `docs/development.md` states no measured runner figure.
+  · QUESTION (a): the colour of a `window-probe` leg is not pinned. I made the probe step exit with
+  `kiln`'s exit status (a timeout shows as 143), so a leg is green only when the window form
+  ran the script and exited 0, and red otherwise; the record is uploaded either way. Is that the
+  intended colour (it decides when a leg can become counted)?
+  · QUESTION (b): Interface (1)'s last bullet lists `window-linux` among the jobs that count only
+  from a decision row, while "Before queueing" says Linux counts and AC-4 needs `window-linux` green
+  on the candidate. I wrote it as tracking until its row (Interface (1)). Which is it?
+  · QUESTION (c): the procedure fetches the two libraries with `apt-get download`, which needs the
+  runner's package lists. If round 1 shows that fails, may the job run `sudo apt-get update` (no
+  install; the runner's own mirror, Pinned (e)) before the procedure? I added nothing for it yet;
+  the package-record step prints how many files `/var/lib/apt/lists` holds.
+  · gate attempts: 1 (`cargo xtask ci --keep-going --report …` through the workflow's own step, started
+  at accc222; the docs line of 8780a48 was written while it ran), PASSED in 581.8 s; final attempt after this entry below ·
+  missing context: none · next: director, CI round 1 on the head commit named in my report.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
