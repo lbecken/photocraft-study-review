@@ -565,7 +565,8 @@ something (reports, the core-crates step, the full test output, disk and package
 exit status 0 whatever they record, so they can neither hide a failure nor cause one; a setup step
 (checkout, toolchain, cache) or an upload that fails makes the job red. Steps run with
 `bash` (Git Bash on Windows), `CARGO_TERM_COLOR=always`, `CARGO_INCREMENTAL=0`, the toolchain
-of `rust-toolchain.toml` installed by `rustup toolchain install` (the versions are printed).
+of `rust-toolchain.toml` installed by `rustup toolchain install` (the versions are printed);
+the gate jobs stop after 120 minutes, the window jobs after 60 (`timeout-minutes`).
 After the gate, whatever its result, each gate job prints the report and runs:
 - the **core-crates step**, `cargo test --locked -p kiln-text -p kiln-syntax -p kiln-search
   -p xtask` into `core-crates.txt`. It is reported, not required: its exit status never changes
