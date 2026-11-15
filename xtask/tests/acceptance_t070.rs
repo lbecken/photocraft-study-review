@@ -450,6 +450,9 @@ struct Ctx {
     git_ref: &'static str,
     /// A previous step of the job failed.
     failed: bool,
+    /// The `id:` of the step that failed when `failed` (`steps.<id>.outcome` is `failure` for it
+    /// and `success` for every other step); empty when no step is named.
+    failed_step: &'static str,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -622,6 +625,13 @@ impl Ev<'_> {
                     .unwrap_or(self.ctx.git_ref)
                     .into(),
             ),
+            x if x.starts_with("steps.")
+                && (x.ends_with(".outcome") || x.ends_with(".conclusion")) =>
+            {
+                let id = x["steps.".len()..x.rfind('.').unwrap()].to_owned();
+                let failed = self.ctx.failed && !id.is_empty() && id == self.ctx.failed_step;
+                V::S(if failed { "failure" } else { "success" }.into())
+            }
             x => panic!("the test cannot evaluate {x} in {:?}", self.src),
         }
     }
@@ -666,6 +676,7 @@ fn ok(event: &'static str, git_ref: &'static str) -> Ctx {
         event,
         git_ref,
         failed: false,
+        failed_step: "",
     }
 }
 
@@ -673,12 +684,145 @@ const FAILED: Ctx = Ctx {
     event: "push",
     git_ref: "refs/heads/main",
     failed: true,
+    failed_step: "",
 };
 const PASSED: Ctx = Ctx {
     event: "push",
     git_ref: "refs/heads/main",
     failed: false,
+    failed_step: "",
 };
+
+/// The context after the step with `id:` `id` failed (`""` when the step has no `id:`).
+fn failed_at(id: &str) -> Ctx {
+    Ctx {
+        failed_step: Box::leak(id.to_owned().into_boxed_str()),
+        ..FAILED
+    }
+}
+
+const CORE_PACKAGES: [&str; 4] = ["kiln-text", "kiln-syntax", "kiln-search", "xtask"];
+
+/// Ruling m1 (D-182): the core-crates step runs one `cargo test --locked -p <package>` per
+/// package of [`CORE_PACKAGES`] (written out, or as a `for <v> in <packages>; do … -p "$v" …`
+/// loop), each appending to `core-crates.txt` (`>>` or `tee -a`, on the command or on the
+/// loop's `done`), and none stops the others or the step: the job's `bash` runs with `-e`, so
+/// each invocation (or the loop) is followed by `||`, or the run has `set +e` and ends in
+/// `true`, `:` or `exit 0`. One invocation naming several packages fails (with one
+/// `cargo test -p a -p b`, cargo runs no test when one package's tests do not compile).
+fn core_crates_check(run: &str) -> Result<(), String> {
+    let text = run.replace("\\\n", " ");
+    let lines: Vec<&str> = text.lines().map(|l| strip_comment(l).trim()).collect();
+    let unq = |t: &str| {
+        t.trim_matches(|c| c == '"' || c == '\'' || c == '{' || c == '}')
+            .to_owned()
+    };
+    let appends = |st: &str| {
+        let t: Vec<&str> = st.split_whitespace().collect();
+        t.windows(2)
+            .any(|w| w[0] == ">>" && w[1].trim_matches('"') == "core-crates.txt")
+            || t.contains(&">>core-crates.txt")
+            || t.windows(3).any(|w| {
+                w[0] == "tee"
+                    && (w[1] == "-a" || w[1] == "--append")
+                    && w[2].trim_matches('"') == "core-crates.txt"
+            })
+    };
+    let set_e_off = lines.iter().any(|l| l.starts_with("set +e"));
+    let last = lines
+        .iter()
+        .rev()
+        .find(|l| !l.is_empty())
+        .copied()
+        .unwrap_or("");
+    let ends_ok = ["true", ":", "exit 0"].contains(&last);
+    let mut loop_: Option<(String, Vec<String>)> = None;
+    let mut done_ok = (false, false); // (appends, followed by ||)
+    for l in &lines {
+        if let Some(rest) = l.strip_prefix("for ") {
+            let head = rest
+                .split("; do")
+                .next()
+                .unwrap_or(rest)
+                .split(";do")
+                .next()
+                .unwrap_or(rest);
+            if let Some((v, list)) = head.split_once(" in ") {
+                loop_ = Some((
+                    v.trim().to_owned(),
+                    list.split_whitespace().map(unq).collect(),
+                ));
+            }
+        }
+        if let Some(d) = l.split(';').map(str::trim).find(|x| x.starts_with("done")) {
+            done_ok = (appends(d), d.contains("||"));
+        }
+    }
+    let mut covered: Vec<String> = Vec::new();
+    for l in &lines {
+        for st in l.split(';').flat_map(|x| x.split("&&")) {
+            if !st.contains("cargo test") {
+                continue;
+            }
+            let t: Vec<&str> = st.split_whitespace().collect();
+            let ps: Vec<usize> = (0..t.len())
+                .filter(|&i| t[i] == "-p" || t[i] == "--package")
+                .collect();
+            if ps.len() != 1 {
+                return Err(format!(
+                    "`{}` names {} packages; one `cargo test --locked -p <package>` per package (m1)",
+                    st.trim(),
+                    ps.len()
+                ));
+            }
+            if !t.contains(&"--locked") {
+                return Err(format!("`{}` has no --locked", st.trim()));
+            }
+            let pkg = unq(t.get(ps[0] + 1).copied().unwrap_or(""));
+            let in_loop = match (&loop_, pkg.strip_prefix('$')) {
+                (Some((v, list)), Some(var)) if var == v => {
+                    covered.extend(list.iter().cloned());
+                    true
+                }
+                (_, Some(var)) => {
+                    return Err(format!(
+                        "`{}`: ${var} is not a loop over the packages",
+                        st.trim()
+                    ));
+                }
+                _ => {
+                    covered.push(pkg.clone());
+                    false
+                }
+            };
+            // The invocation's own redirect: what follows `||` runs only after a failure.
+            let own = st.split("||").next().unwrap_or(st);
+            if !(appends(own) || (in_loop && done_ok.0)) {
+                return Err(format!(
+                    "`{}` does not append to core-crates.txt (>> or tee -a)",
+                    st.trim()
+                ));
+            }
+            if !(st.contains("||") || (in_loop && done_ok.1) || (set_e_off && ends_ok)) {
+                return Err(format!(
+                    "`{}` stops the step on failure (bash -e): follow it with `||`, or `set +e` and end in `true`",
+                    st.trim()
+                ));
+            }
+        }
+    }
+    let mut got = covered.clone();
+    got.sort();
+    got.dedup();
+    let mut want: Vec<String> = CORE_PACKAGES.iter().map(|p| (*p).to_owned()).collect();
+    want.sort();
+    if got != want || covered.len() != CORE_PACKAGES.len() {
+        return Err(format!(
+            "the step tests {covered:?}, not each of {CORE_PACKAGES:?} once"
+        ));
+    }
+    Ok(())
+}
 
 // ---- workflow helpers ---------------------------------------------------------------------------
 
@@ -945,14 +1089,12 @@ fn ac1_gate_jobs_run_the_gate_and_upload_the_reports_whatever_its_result() {
             "runs the core-crates tests into core-crates.txt",
             |s| {
                 let r = run_of(s);
-                r.contains("cargo test")
-                    && r.contains("--locked")
-                    && ["kiln-text", "kiln-syntax", "kiln-search", "xtask"]
-                        .iter()
-                        .all(|p| r.contains(&format!("-p {p}")))
-                    && r.contains("core-crates.txt")
+                r.contains("cargo test") && r.contains("core-crates.txt")
             },
         );
+        if let Err(e) = core_crates_check(run_of(&st[core])) {
+            panic!("job `{id}`: the core-crates step: {e}");
+        }
         let tout = step_idx(
             id,
             st,
@@ -986,10 +1128,13 @@ fn ac1_gate_jobs_run_the_gate_and_upload_the_reports_whatever_its_result() {
                 "job `{id}`: the {what} step does not run whatever the gate's result"
             );
         }
+        // "Only when the gate failed": `failure()`, or `failure() && steps.<gate id>.outcome ==
+        // 'failure'` (accepted by the director, D-182), and any equivalent form.
         let c = st[tout].get("if");
+        let gate_id = st[gate].get("id").and_then(Y::str).unwrap_or("");
         assert!(
-            runs(c, FAILED) && !runs(c, PASSED),
-            "job `{id}`: the test-output step must run on failure only"
+            runs(c, failed_at(gate_id)) && !runs(c, PASSED),
+            "job `{id}`: the test-output step must run when the gate failed and only then (if: {c:?})"
         );
         let with = st[up].get("with").cloned().unwrap_or(Y::Null);
         assert_eq!(
@@ -1054,6 +1199,12 @@ fn ac1_window_jobs_build_run_and_upload() {
         build < proc_ && proc_ < up,
         "window-linux: build, procedure, upload out of order"
     );
+    // m3 (D-182): the upload runs whatever the procedure's result.
+    let c = st[up].get("if");
+    assert!(
+        runs(c, FAILED) && runs(c, PASSED),
+        "window-linux: the upload does not run whatever the procedure's result (if: {c:?})"
+    );
 
     let id = "window-probe";
     let st = steps(job(&w, id));
@@ -1093,6 +1244,19 @@ fn ac1_window_jobs_build_run_and_upload() {
     assert!(
         build < probe && probe < up,
         "window-probe: build, probe, upload out of order"
+    );
+    // m3 (D-182): the upload runs whatever the probe's result, and one leg failing does not
+    // cancel the other (`fail-fast` is true unless set to false).
+    let c = st[up].get("if");
+    assert!(
+        runs(c, FAILED) && runs(c, PASSED),
+        "window-probe: the upload does not run whatever the probe's result (if: {c:?})"
+    );
+    let ff = job(&w, id).at(&["strategy", "fail-fast"]).and_then(Y::str);
+    assert_eq!(
+        ff,
+        Some("false"),
+        "window-probe: `strategy.fail-fast` must be false, or one leg's failure cancels the other"
     );
 }
 
@@ -1278,13 +1442,38 @@ fn r251_block() -> Vec<String> {
     block
 }
 
+/// The lines of the R-251 block the procedure file replaces, and nothing else: the usage line
+/// (Interface (3)), and the three lines that take a window run's exit status from `xvfb-run`
+/// (ruling m2, D-182: the status is `kiln`'s own, recorded inside the wrapped command): the two
+/// window lines of `case_` and AC-3's.
+const R251_REPLACED: [&str; 4] = [
+    "Usage: sh ac2.sh",
+    r#"    xv sh -c 'exec "$0" "$@" 2>"w_'"$n"'.err"' "$K" --root "w_$n" "$@" --script "$s" > "w_$n.out"; wc=$?"#,
+    r#"    (cd "w_$n" && xv sh -c 'exec "$0" "$@" 2>"../w_'"$n"'.err"' "$K" "$@" --script "../$s" > "../w_$n.out"); wc=$?"#,
+    r#"    xvfb-run -a -s "-screen 0 1280x800x24" sh -c "exec '$K' --root n a.rs 2>n.err" > n.out; e=$?"#,
+];
+
 #[test]
 fn ac3_procedure_holds_every_line_of_r251_in_order() {
     let block = r251_block();
     let text = subject(PROCEDURE);
     let file: Vec<&str> = text.lines().collect();
+    for r in R251_REPLACED {
+        assert_eq!(
+            block.iter().filter(|l| l.contains(r)).count(),
+            1,
+            "precondition: R-251's block has the replaced line {r:?} once"
+        );
+        assert!(
+            !file.iter().any(|l| l.contains(r)),
+            "{PROCEDURE} still has R-251's line {r:?} (replaced: Interface (3), ruling m2)"
+        );
+    }
     let mut from = 0;
-    for want in block.iter().filter(|l| !l.contains("Usage: sh ac2.sh")) {
+    for want in block
+        .iter()
+        .filter(|l| !R251_REPLACED.iter().any(|r| l.contains(r)))
+    {
         match (from..file.len()).find(|&i| file[i] == want) {
             Some(i) => from = i + 1,
             None => {

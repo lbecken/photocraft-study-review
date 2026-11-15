@@ -683,6 +683,50 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   it), m5 and m6 (noted; nothing for my tests), the test-output condition
   `failure() && steps.gate.outcome == 'failure'` (my test accepts it and `failure()`), round 1 on
   the joined branch, and the disk rule (23 GB free on `/home/user` at start).
+  · did, by ruling (D-182):
+  m1: `ac1_gate_jobs_…` now requires the core-crates step to run one `cargo test --locked -p <p>`
+  per package (four lines, or a `for v in <the four>; do … -p "$v" …` loop), each appending
+  (`>>` or `tee -a`, on the command or the loop's `done`); a `cargo test` naming 2+ packages fails
+  the test. Because the job's `bash` runs with `-e`, it also requires that a failing package does
+  not stop the others or the step (`||` after each, or after the loop; or `set +e` and a final
+  `true`/`:`/`exit 0`): that is what the ruling's purpose needs. m2: in the procedure the
+  wrapped command writes `kiln`'s status to `w_<case>.st` (AC-3: `n.st`) in the scratch directory
+  (outside the fixture copies, so `diff -r` is unchanged) and the case reads it there; not written
+  means `WINDOW EXIT NOT RECORDED …` and the case fails (AC-3: `exit=not-recorded`, AC-3 FAIL); a
+  wrapper status that differs is printed (`wrapper exit=N (not kiln's; not used)`). The R-251
+  lines allowed to differ, now named in `R251_REPLACED` and required to be absent: the usage line;
+  `xv sh -c 'exec "$0" "$@" 2>"w_'"$n"'.err"' … > "w_$n.out"; wc=$?` (root case);
+  `(cd "w_$n" && xv sh -c 'exec … > "../w_$n.out"); wc=$?` (noroot case);
+  `xvfb-run -a … sh -c "exec '$K' --root n a.rs 2>n.err" > n.out; e=$?` (AC-3). One line is added
+  after the CASE line. AC-3's line is my extension of m2 (the same wrapper, the same risk); the
+  director may rule it out. m3: `ac1_window_jobs_…` requires `strategy.fail-fast: false` on
+  `window-probe` and that the uploads of `window-linux` and `window-probe` run on a failed and a
+  passed run. m6: the evaluator now reads `steps.<id>.outcome`/`.conclusion` (before this it
+  panicked on them); the test-output step must run when the gate step (by its `id:`) failed and
+  not on a passed run, so `failure()` and `failure() && steps.gate.outcome == 'failure'` both pass.
+  m4: nothing forbids `sudo apt-get update` (mutant below).
+  · procedure under Xvfb (kiln built from this branch, 23 then 14 GB free): 10 of 10 runs exit 0,
+  each with `WINDOW CASES PASS`, `AC-3 PASS`, `PLAIN PASS`; cases ac2/ac2x3/dblclick/scroll100/
+  ctrlq/noroot exit window/headless 0/0, 3/3, 0/0, 0/0, 0/0, 0/0 in every run; no `wrapper exit`
+  line (the status-5 run of R-264 did not recur). Forced: an `xvfb-run` that runs the real one and
+  exits 5: exit 0, every case PASS with `wrapper exit=5 … not used`; an `xvfb-run` that runs
+  nothing: exit 1, 6 × `WINDOW EXIT NOT RECORDED`, `AC-3: exit=not-recorded`, AC-3 FAIL. Broken
+  kiln variants, each exit 1: first window line altered (NOT EQUAL in ac2, ac2x3, noroot; my
+  wrapper also exits 0 there, so ac2x3 shows EXIT DIFFERS too); plain window drops its path
+  (`PLAIN FAIL`); no-window exits 0 (`AC-3: exit=0`, AC-3 FAIL); window exits 4 in dblclick only
+  (`exit window=4 headless=0`, EXIT DIFFERS, WINDOW CASES FAIL).
+  · self-check: scratch stub workflow + `* -text` (deleted, never committed): 11 of 11 pass. 22
+  mutants: killed: single 4-package invocation, loop without xtask, no `||`, `>` not `>>`, no
+  `--locked`, `set +e` without a final `true`, test-output naming another step / `always()` /
+  gate step without `id:`, fail-fast removed / true, window-linux upload without `if:`, probe
+  upload without `if:` / `success()`, each of the three R-251 lines reverted; pass as they
+  should: four written-out lines, `set +e` + `tee -a` + `true`, test-output `failure()`, uploads
+  `success() || failure()`, no `apt-get update`. (`>` first survived, the `|| echo … >>` on the
+  same line matched; fixed: only the invocation's part before `||` counts.) Clippy `-D warnings`
+  clean with the stub. Committed state: `acceptance_t070` 3 passed, 8 failed by assertion
+  (no workflow, no `.gitattributes` on this branch), as before · gate attempts: none of
+  `cargo xtask ci` (not asked; acceptance_t070, clippy, hygiene run) · not run: anything on a
+  hosted runner; my tests against the implementer's workflow (the join) · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
