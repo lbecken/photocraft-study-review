@@ -8,4 +8,5 @@ tests = [
     "kiln::acceptance_t056::ac7_replay_of_the_undo_save_session",
     "kiln::acceptance_t056::ac7_idle_frames_add_nothing",
     "kiln::acceptance_t056::ac8_settled_false_after_a_control_request",
+    "kiln::acceptance_t056::z4_successful_ui_save_clears_message",
 ]

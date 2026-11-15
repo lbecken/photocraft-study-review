@@ -20,4 +20,9 @@ tests = [
     "kiln::acceptance_t056::ac5_caret_line_stays_in_view",
     "kiln::acceptance_t056::ac6_undo_redo_save_agree_with_a_second_session",
     "kiln::acceptance_t056::ac6_refused_save_is_shown",
+    "kiln::acceptance_t056::z1_rows_equal_the_text_each_node_shows",
+    "kiln::acceptance_t056::z1_click_at_counts_chars_on_shaped_lines",
+    "kiln::acceptance_t056::z2_enter_undo_redo_at_the_end_of_a_long_document_settle",
+    "kiln::acceptance_t056::z4_non_ascii_typed_over_a_selection_caret_counts_chars",
+    "kiln::acceptance_t056::z4_a_path_that_only_contains_rs_is_plain",
 ]
