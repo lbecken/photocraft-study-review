@@ -804,6 +804,11 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   adds it)` (6 the workflow, 2 `.gitattributes`); clippy `-D warnings` clean · gate attempts:
   none of `cargo xtask ci` (not asked) · not run: the joined branch; no stub re-run (the
   acceptance tests' code is unchanged, only deleted around) · next: director (join)
+- 2026-11-15 · R-278 · ready · review round 1 (`reviews/T-070-r1.md` at 3c7399b) read; rulings of
+  D-193 (read in the task file on main) acknowledged and accepted before acting: g1 (echoed lines
+  of `kiln` are told apart from verdicts; the wrapper exits non-zero on any FAIL or NOT RUN verdict;
+  forged cases in the guard tests) and g4 (five more workflow requirements in the acceptance tests)
+  are mine; g2, g3, g7 are the implementer's; g5, g6 and the round-2 reading of AC-4 noted.
 <!-- end test author log -->
 ### reviewer
 - 2026-11-15 · R-274 · round 1 · request-changes · reviewed `bbbb0e52cd51497e33f3b045e3c067500f2343e7`
