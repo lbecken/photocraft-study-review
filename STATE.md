@@ -1,15 +1,16 @@
 # State
 
-_Last updated: 2026-11-15 16:20 UTC_
+_Last updated: 2026-11-15 16:50 UTC_
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.3** (D-146).
 Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run the retrospective, then go on to cut
 2, and make the editor multi-platform (Linux, macOS, Windows).**
 
-In flight (D-172): the retrospective of the stage to cut 1 (run R-254; `retrospectives/iter-2-stage-2-cut-1.md`) and
-the platform plan (run R-255; `docs/adr/0009-platforms.md`, draft tasks from T-069). Then: decisions on both
-(methodology v1.4 if changes are accepted; ADR-0009), the order of cut 2 (T-057, T-058, T-059) and the platform work.
+Decided since: the retrospective to cut 1 (D-174), ADR-0009 on platforms (D-175; signed installers out of scope,
+D-173). **In flight: T-069 only** (the fix of INC-001). Order after main is green in CI (ADR-0009 Q-4): T-070 (CI
+jobs for macOS and Windows) and T-071 (the platform-test rule), then cut 2 (T-057, T-058, T-059) interleaved with
+T-072 to T-076, with T-066 and T-043 in that batch; T-077, T-078 after. Next free task number: T-079.
 
 Scorecard on main: 64 items: 44 verified, 0 implemented, 0 failing, 20 planned (68.8%). Merged in this stage:
 T-055 (`kiln script`, the UI without a window, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (the
@@ -29,9 +30,11 @@ What comes next is the owner's choice (D-170):
 - Further drafts: T-060 to T-063 (UI modules), T-022, T-024 to T-031 (features), T-044 to T-048, T-050, T-007,
   T-009, T-034. Next free task number: T-069.
 
-Rules added in this stage (D-153, D-158, D-162, D-163): a `touches` path belongs to one role; a task's tier is the
-highest tier among the items it claims and is fixed at specification; the director commits nothing on a task
-branch but joins and scorecard ties; a spec check is done by resuming the planner that drafted the spec.
+Methodology **v1.4** is in force (D-176): among its rules, a task's tier is at least the highest tier of the items
+it claims and is fixed at `specified`; rulings live on main and the director commits only joins and scorecard ties
+on a task branch; a `touches` path belongs to one role; **after every push the director reads the CI run of the
+pushed commit and records it** (INC-001: CI on main has been red since T-036; the fix is T-069, in progress, run
+R-256; dispatching of other tasks is stopped until main is green in CI).
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in

@@ -30,7 +30,10 @@ For every criterion write at least one test that asserts an effect an outside ca
 observe, using the criterion's oracle (naive model, round-trip, pinned corpus, exact value), plus
 the edge and hostile inputs the spec implies. Every scorecard item needs at least one test
 through the CLI or control protocol (T-010, T-011 could not be confirmed without one). Tests must
-be deterministic, and every process a test spawns has a timeout (D-028 (8)). No test or guard
+be deterministic, and every process a test spawns has a timeout (D-028 (8)). Every test runs on
+every supported platform: where behaviour differs by platform, it asserts each platform's
+specified behaviour and never passes without checking (METHODOLOGY §8.1). Each path in `touches`
+belongs to one role; a line you need in the implementer's path is added by it on a ruling (D-153). No test or guard
 pins a message text, a whole document or a command list that a drafted task changes; that this
 task left something alone is the reviewer's diff check, not a permanent guard (D-043, D-069).
 

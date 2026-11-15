@@ -14,7 +14,8 @@ not_evaluated: []        # item IDs not reached, with reason below
 ## Setup
 How the product was built and started (commands), fixture projects used. Fixture data read (only
 what the brief or the director names, e.g. `crates/kiln-syntax/tests/corpus/`): … Checkout path,
-reachable by other user identities (yes / no): …
+reachable by other user identities (yes / no): … Ledger records left out of the clone, and any
+that `cargo xtask scorecard` needed kept: …
 
 ## Items
 One block per scorecard item with status `implemented`.
@@ -23,7 +24,8 @@ One block per scorecard item with status `implemented`.
 - Claimed behaviour (from the scorecard): …
 - What I did (exact CLI / control-protocol requests, UI snapshot steps): …
 - What I observed (output excerpt, snapshot path): …
-- Verdict: confirmed / rejected. If rejected: filed T-NNN.
+- Verdict: confirmed / rejected, per platform (Linux observed here; macOS, Windows only from a CI run
+  at the evaluated commit, run id). If rejected: filed T-NNN.
 - Inert-feature check: did the setting/command change anything observable? yes / no.
 
 ## Wired but inert

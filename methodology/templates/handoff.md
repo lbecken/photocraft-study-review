@@ -2,7 +2,7 @@
 date: YYYY-MM-DD         # one handoff file per day
 role: director
 iteration: N
-methodology: v1.3
+methodology: v1.4
 main_sha: <sha>
 main_green: true         # last gate / CI result on main
 ---
@@ -35,6 +35,7 @@ D-NNN rows and ADRs added.
 - Runs not yet in `metrics/`: run, role, tokens, start, end. Spec checks are booked to `iter-N`.
 - Usage-limit stops: time, resume scheduled (yes / no). Restarts: `uptime -s`, `git status` run in
   every worktree (yes / no). Stopped agents resumed with a restart notice (yes / no).
+- CI run of every pushed commit read and its result recorded: yes / no (run ids; red ⇒ incident).
 - Free disk at the end (`df -h`): … GB; worktrees and scratch builds removed: yes / no.
 
 ## Incidents

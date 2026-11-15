@@ -4,6 +4,36 @@ Each version lists what changed and the evidence behind it. From v1.1 on, every 
 metric (file, field, value) or an incident (`INC-NNN`) from this repository; v1.0 cites the
 PhotoCraft study (`/home/user/photocraft-study/deliverables/`), because no Kiln data exists yet.
 
+## v1.4 — 2026-11-15
+
+Adopted by D-174 from the retrospective of iteration 2 to cut 1 of stage 2
+(`retrospectives/iter-2-stage-2-cut-1.md`, "retro-2c1", run R-254; numbers as in its section 13,
+commands in `retrospectives/scripts/iter2s2_metrics.py` and `iter2s2_git.sh`), and by D-175
+(INC-001, ADR-0009 with its rulings at acceptance). Tooling: T-033 (3, 4), T-043 (1, 13), T-071 (14).
+
+| # | What changed (METHODOLOGY § unless named) | Decision | Evidence |
+|---|---|---|---|
+| 1 | A task's tier is at least the highest tier of its items, fixed at `specified`, unchanged in flight; tool check pending T-043 (§4, task template, planner brief). | D-174 (1), D-158, D-162 | T-056 re-tiered at the join; two queue failures followed (D-162). |
+| 2 | Rulings live on `main`; on a task branch the director commits only joins and scorecard ties, never front matter; replaces "committed on the task branch(es)" (§2.1, task template, reviewer and implementer briefs). | D-174 (2), D-162 | Front-matter commits on T-056's branch: one refusal, one conflict (D-162). |
+| 3 | One role per `touches` path; the owner adds a line the other role needs on a ruling; join check pending T-033 (§5.6, task template, planner, implementer and test-author briefs). | D-174 (3), D-153 | D-153, D-154: 2 queue failures, 18,525 tokens. |
+| 4 | A rebuilt branch is confirmed by a tree-identity check by the tool (T-033); until then by the reviewer's confirmation record, which is not a review round (§7, §13, reviewer brief). | D-174 (4) | R-235, R-236, R-245: 23,935 tokens for three confirmations filed as round 3. |
+| 5 | Text or colour items: the round-1 differential run uses generated text from a stated alphabet with ligatures, combining marks, joiners and right-to-left text (§6, reviewer brief, review template). | D-174 (5) | T-055's row-text defect passed two rounds with no shaped input; NEW-1. |
+| 6 | A figure "to be measured by the implementer" must be measurable by it; otherwise the reviewer measures it (§5.7, planner and reviewer briefs). | D-174 (6) | T-056's QUESTION, ruling y2, round-1 defect #3. |
+| 7 | An option a spec check calls unmeasured is probed before the ruling; a resumed drafting planner (preferred for cost) checks facts against main and does not choose alone between its draft and an alternative (§5.7, planner brief). | D-174 (7), D-163 | Q-12 A reversed by b1 (R-246); 34,769 against 366,707 tokens (D-163). |
+| 8 | Window evidence in the gate where it can be (Linux procedure under Xvfb in CI on every code push); otherwise the item is procedure-only and the procedure is rerun when the window code changes (§6, reviewer brief). | D-174 (8), ADR-0009 Q-3 | No gate test of `ui.window` opens a window; 7 of 17 T-065 r1 mutants only by a real window. |
+| 9 | Mutant kills by gate tests (`killed_by_acceptance`) and by a manual procedure (`killed_by_procedure`) are counted apart (§7, §13, review template, reviewer brief). | D-174 (9) | T-065 r1: 13 = 4 + 9, misread in D-165 and D-167. |
+| 10 | A number in a decision row names the command or record it comes from (§2.1). | D-174 (10) | Eight figures in rows and a handoff contradicted by the records (retro-2c1 §6). |
+| 11 | The rules of D-153, D-158/D-162 and D-163 are in the text, each once (changes 1, 2, 3, 7). | D-174 (11) | None of them was in `methodology/`; STATE worded D-158 against D-163. |
+| 12 | The evaluator's clone leaves out the ledger records it may not read, as far as `cargo xtask scorecard` still runs there (§9, evaluator brief, evaluation template). | D-174 (12) | R-253 printed part of D-165. |
+| 13 | Queue refusals are written to `queue.jsonl`, pending T-043 (was marked T-033) (§8, §16). | D-174 (13) | 2 refusals in rows only (D-154, D-162). |
+| 14 | New §8.1 Platforms and CI: what "supported" means, CI evidence from hosted runners, who reads and records a CI run, counted jobs from their first green run on main, the `ci/T-NNN` run for platform-sensitive paths, claims from CI logs, the test rule replacing D-166 b8 (T-071) (§8.1, §16, reviewer, evaluator, implementer and test-author briefs, evaluation template). | D-174 (14), D-175, ADR-0009 | ADR-0009 probe a0–e5; 31 Unix-only test files (retro-2c1 §12). |
+| 15 | A question the join can answer may be ruled after the join's result, and the ruling cites it (§2.1, task template). | D-174 (15) | T-055 joined 3 min before its rulings; the join's failure was useful evidence. |
+| 16 | After every push the director reads and records the CI run; "main is green" means the local gate and CI; red CI on main is an incident at once; red-main minutes are counted from CI runs (§8, §13, analyst brief, retrospective, incident and handoff templates). | D-175 | INC-001: CI on main red since run 257 (ADR-0009 e5; runs 353–357 confirmed, D-175) while the record said 0 red-main minutes. |
+
+Removed: rulings "committed on the task branch(es)"; D-166 ruling b8 (Unix-only test files accepted);
+`killed_by_acceptance` as a count that mixed gate tests and manual procedures; "until T-052 merges"
+(T-052 abandoned for T-069, D-175).
+
 ## v1.3 — 2026-11-14
 
 Adopted by D-144 from the retrospective of iteration 2, stage 1 (`retrospectives/iter-2-stage-1.md`,

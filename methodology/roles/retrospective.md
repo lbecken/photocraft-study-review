@@ -33,6 +33,8 @@ number must be reproducible by running a named command.
    `cargo xtask metrics report` disagrees with the records, report both and say why (in
    iteration 0 it read only the first join, so it showed 0 acceptance-caught defects against 2
    recorded). The director's cost is not measured (METHODOLOGY §13); do not report it as zero.
+   Count red-main minutes from the CI runs on main, per counted platform, not from the absence of
+   incident files: CI was red for about 36 hours while the record said 0 (INC-001, D-175).
 3. **The experiment arm** (METHODOLOGY §6). Compare medium tasks with independent test authors
    (even ids) and with implementer-written tests (odd ids) on escaped defects, review findings
    by class, acceptance kill rate and tokens per merged task. State the sample per arm and

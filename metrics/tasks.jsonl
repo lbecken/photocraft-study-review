@@ -667,3 +667,4 @@
 {"kind":"transition","task":"T-069","iteration":2,"at":"2026-11-15T16:39:12Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-069","iteration":2,"at":"2026-11-15T16:39:13Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-069","iteration":2,"at":"2026-11-15T16:40:32Z","from":"ready","to":"in_progress"}
+{"kind":"run","task":"iter-2","iteration":2,"run":"R-257","role":"planner","tier":null,"started_at":"2026-11-15T16:40:34Z","ended_at":"2026-11-15T16:45:55Z","wall_s":321,"tokens":96938,"tool_calls":33,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"methodology edit: v1.3 to v1.4 on D-174 and D-175 and ADR-0009 (16 items; a new section 8.1 on platforms and CI; reading CI after every push; rulings on main only); METHODOLOGY.md 338 to 384 lines; role files, templates and CHANGELOG updated; outside sentences that now disagree listed for T-064"}

@@ -4,8 +4,9 @@ title: "<what broke>"
 class: red-main          # red-main | escaped-defect | process | data-loss
 detected_at: YYYY-MM-DDTHH:MMZ
 detected_by: <GitHub Actions run on main / local gate / evaluator / role>
-red_from: YYYY-MM-DDTHH:MMZ    # completion of the first red run on main (red-main only)
-green_at: YYYY-MM-DDTHH:MMZ    # completion of the next green run on main
+platform: linux          # linux | macos | windows: the counted CI job that is red (METHODOLOGY §8.1)
+red_from: YYYY-MM-DDTHH:MMZ    # completion of the first red CI run on main, with its run id (red-main only)
+green_at: YYYY-MM-DDTHH:MMZ    # completion of the next green CI run on main, with its run id
 red_minutes: 0
 origin_task: T-NNN       # task whose merge introduced it, if known
 fix_task: T-NNN

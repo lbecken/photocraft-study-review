@@ -27,12 +27,24 @@ of them, so be thorough. You did not write any of it.
 - **Mutation spot-check.** Seed at least ten bugs, one at a time, in the implementation (removed
   check, off-by-one, wrong error kind, skipped write, ignored parameter); run the acceptance
   tests, then the full suite; restore the file after each (`git diff` empty before you commit).
-  Record `mutants: {introduced, equivalent, killed, killed_by_acceptance, survived}` in front
-  matter, and each mutant in the body. A surviving non-equivalent mutant is a test gap.
+  Record `mutants: {introduced, equivalent, killed, killed_by_acceptance, killed_by_procedure,
+  survived}` in front matter, and each mutant in the body: `killed_by_acceptance` counts kills by
+  acceptance tests in the gate, `killed_by_procedure` kills seen only by a manual procedure (in
+  T-065 round 1 the two were read as one). A surviving non-equivalent mutant is a test gap.
 - **Differential run (every tier, round 1).** Where a reference tool for an item is already on the
   machine (git for ignore rules, rustc for the corpus), make one seeded differential run of the
   built binary against it and record the seed, the number of cases and the differences (NEW-1:
-  12 hand fixtures missed what 600 fuzzed patterns found).
+  12 hand fixtures missed what 600 fuzzed patterns found). Where an item reports text or colours,
+  draw the run's text from a generator over an alphabet you state in the review that includes
+  ligatures, combining marks, joiners and right-to-left text: a row-text defect passed both rounds
+  of T-055 because no input held shaped text.
+- **Figures left to measure.** A Pinned figure marked "to be measured by the implementer" that the
+  implementer could not measure (it depends on the acceptance tests) is yours to measure in round 1.
+- **Window.** Where an item's window evidence is procedure-only and the task changes the window
+  code, rerun the window procedure and record what it showed.
+- **CI logs.** For platform-dependent behaviour, read the job logs of the CI run the director
+  names and name it in the review; claim only what the log shows ran and passed, per platform
+  (METHODOLOGY §8.1).
 - **High tier: adversarial probing.** Attack the boundary the task crosses: file system
   (symlinks, long names, permissions, FIFOs), processes (hangs, huge output), gate paths (a task
   that weakens its own gate), security claims in documents. Use toy repositories outside the
@@ -57,12 +69,15 @@ The front matter names `previous_sha`. Review the delta: confirm each earlier fi
 resolved and look for defects in the changed code. Round 2 is **final**. A defect you find
 anywhere, inside or outside the delta, still means `request-changes`; test gaps, spec gaps and
 nits outside the delta go to the Follow-ups list with `approve`, and the director makes
-follow-up tasks. Round 3 only confirms the fix of a round-2 defect; there is no round 4. Why:
+follow-up tasks. Round 3 only confirms the fix of a round-2 defect; there is no round 4. A
+confirmation that a rebuilt branch's tree is identical to the one you approved, which the
+director may ask for until the tool checks it (T-033), is a record, not a review round: name the
+new head and the identity check, and review nothing again. Why:
 rounds 2–3 cost 1.2 M tokens of rework in iteration 0 and all 18 of their findings were in code
 written to implement rulings (retro-0).
 
 ## Rulings
-A ruling is a diff to the task file. Acknowledge each one in your log (accept it, or question it
+A ruling is a diff to the task file on `main`; read rulings there, not from the branch. Acknowledge each one in your log (accept it, or question it
 with the evidence) before acting on it.
 
 ## What you produce

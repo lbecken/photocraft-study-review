@@ -36,10 +36,11 @@ One file, `tasks/T-NNN-slug.md` from `methodology/templates/task.md`, state left
   scorecard item gets at least one criterion observable through the CLI or control protocol;
   Rust-API criteria are extra. Three iteration-0 items could not be confirmed for lack of one
   (T-010, T-011).
-- **Tier** by the boundary rule (METHODOLOGY §4), with the criterion that decides it in your log.
+- **Tier** by the boundary rule (METHODOLOGY §4) and at least the highest tier of the items the
+  task claims (T-056 was re-tiered in flight, D-158), with the criterion that decides it in your log.
 - **touches.** Exact paths, including the test directories where acceptance and guard files go
   and any single file in another crate that a contract change forces. A missing file blocked
-  T-003 (D-020). Paths in `touches` that are gate paths (anything under `xtask/` or `.github/`,
+  T-003 (D-020). Each path belongs to one role, implementer or test author (D-153). Paths in `touches` that are gate paths (anything under `xtask/` or `.github/`,
   build scripts, lint or toolchain files: the list is in `docs/development.md`) are named as
   such in the Goal, because they make the task high and the approval row must say `gate paths`.
 - **Budget** from the tier (high 1,100,000, medium 800,000, low 150,000; building and review
@@ -57,7 +58,11 @@ the branches of the tasks in flight: list every trait, type and document the spe
 them (D-128, D-132). Pin the Rust signatures of any criterion tested through a Rust API (D-136).
 Every Pinned sentence that states a figure, a limit or a list carries the command and output
 that show it, or is marked "to be measured by the implementer" (3 of 5 round-1 defects in
-iteration 2's first stage were pinned sentences). Write every point that would stop a builder
+iteration 2's first stage were pinned sentences); mark it so only if the implementer can measure
+it, and if it depends on the acceptance tests, mark it for the reviewer (T-056). If you call an
+option unmeasured, say so plainly: the director has it probed before ruling. If you are resumed to
+check a spec you drafted (preferred for cost, D-163), check its facts against `main`, and where you
+see an alternative to your own draft, put both to the director instead of choosing. Write every point that would stop a builder
 (blocker), every ambiguity and every note, with a verdict, into the task file as a subsection
 `### Spec check R-NNN` under "Questions and rulings". Builders do not repeat this check, so be
 complete: in iteration 1 spec checks found 16 blockers, and T-010, which had none, stopped both

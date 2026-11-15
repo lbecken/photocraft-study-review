@@ -1,8 +1,8 @@
 ---
 iteration: N
 run: R-NNN
-methodology_in: v1.3
-methodology_proposed: v1.4
+methodology_in: v1.4
+methodology_proposed: v1.5
 main_sha: <sha at iteration close>
 claims: {C1: insufficient, C2: insufficient, C3: insufficient, C4: insufficient,
          C5: insufficient, C6: insufficient, C7: insufficient, C8: insufficient}
@@ -29,7 +29,7 @@ transitions missing. Every number below names its command or script.
 | Known defects merged by decision | | |
 | Tokens per merged task by tier and arm (median, p75, max) | | |
 | Share of scorecard items verified | | |
-| Red-main minutes | | |
+| Red-main minutes, per counted platform, from CI runs on main (not from incident files) | | |
 | Budget overruns by tier | | |
 | Gate time (`gate_seconds`) per stage | | |
 

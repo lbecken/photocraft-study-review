@@ -9,7 +9,8 @@ previous_sha: null       # round ≥ 2: the sha of the last verdict (review only
 verdict: request-changes # approve | request-changes
 findings: {defect: 0, spec_gap: 0, test_gap: 0, nit: 0}
 doc_sentences: 0         # findings above that are sentences in documents or published descriptions
-mutants: {introduced: 0, equivalent: 0, killed: 0, killed_by_acceptance: 0, survived: 0}
+mutants: {introduced: 0, equivalent: 0, killed: 0, killed_by_acceptance: 0, killed_by_procedure: 0, survived: 0}
+                         # killed_by_acceptance: by gate acceptance tests; killed_by_procedure: only by a manual procedure
 follow_ups: 0            # findings sent to a follow-up task (round ≥ 2, or spec gaps)
 ---
 
@@ -30,9 +31,11 @@ Exact commands and result lines (gate, focused tests, CLI or control calls, toy 
 - Determinism in L0–L4; invalid params rejected; no panic on hostile input.
 - High: boundary probed adversarially — what I tried: …
 - Round 1, where a reference tool is on the machine (git, rustc): differential run — seed, cases, differences: …
+- Text or colour items: generated text — alphabet stated (ligatures, combining marks, joiners, right-to-left): …
+- Platform-dependent behaviour: CI run read (id, head, platforms, conclusion): …
 
 ## Mutation spot-check (≥ 10 in round 1; round ≥ 2: in the delta)
-| # | Bug seeded (path:line, change) | Killed by (test) or survived | Equivalent? |
+| # | Bug seeded (path:line, change) | Killed by (gate test, or manual procedure) or survived | Equivalent? |
 |---|---|---|---|
 
 ## Findings

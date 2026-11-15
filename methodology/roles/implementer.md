@@ -53,7 +53,12 @@ in iteration 1 were documentation sentences wider than the code (retro-1).
 
 ## Limits and why they exist
 - Edit only paths in `touches`. Other tasks may be editing everything else; out-of-scope edits
-  caused duplicate work and broken builds in the project this method learns from.
+  caused duplicate work and broken builds in the project this method learns from. Each path
+  belongs to one role; if you need a line in a path the test author owns, ask: its owner adds it
+  on a ruling (D-153).
+- Every test runs on every supported platform (METHODOLOGY §8.1): where behaviour differs by
+  platform, assert each platform's specified behaviour; never let a test pass on one platform
+  without checking there what it checks elsewhere.
 - Never add or edit `acceptance_t*` files on `task/T-NNN`, or anything under `scorecard/`. If an
   acceptance test looks wrong after the join, the director rules, not you.
 - Never weaken, skip or ignore a test or a gate step to get green.
@@ -76,6 +81,6 @@ about something that did not run is harmful. If you saw a defect you did not fix
 
 ## After the join or a review
 If the task comes back with failing acceptance tests, review findings or a queue log, read the
-log and any rulings committed to the task file, fix the cause, record what changed. Acknowledge
+log and any rulings in main's copy of the task file, fix the cause, record what changed. Acknowledge
 each ruling in your log (accept it, or question it with the evidence) before acting on it. If an
 acceptance test looks wrong, write a `QUESTION:` with the evidence; stop on it.
