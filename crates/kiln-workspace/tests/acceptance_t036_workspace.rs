@@ -79,6 +79,14 @@ impl Identity {
         }
     }
 
+    /// Precondition of the identity change (T-069): when the child is dropped to U, U must
+    /// reach `path` (`what`); see [`assert_reachable`].
+    fn must_reach(&self, what: &str, path: &Path) {
+        if self.drop {
+            assert_reachable(self.uid, self.gid, what, path);
+        }
+    }
+
     /// Give `path` and everything below it (links not followed) to U.
     fn give(&self, path: &Path) {
         if self.drop {
@@ -95,6 +103,62 @@ impl Identity {
 
 fn set_mode(path: &Path, mode: u32) {
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+/// Precondition of the identity change (T-069): the test runs as uid 0 and runs its child as
+/// `uid`/`gid`, so that identity must reach `path` (`what`): `path` and every directory above
+/// it must grant it search (for a file, execute) permission. Judged from the mode bits, which
+/// is what the kernel checks here (no ACLs are set by the tests). Fails naming the
+/// precondition and the first path that blocks it; it never passes in place of the test.
+fn assert_reachable(uid: u32, gid: u32, what: &str, path: &Path) {
+    let full = fs::canonicalize(path).unwrap_or_else(|e| {
+        panic!(
+            "precondition: cannot resolve {what} {}: {e}",
+            path.display()
+        )
+    });
+    let mut at = PathBuf::new();
+    for part in full.components() {
+        at.push(part);
+        let m = fs::metadata(&at)
+            .unwrap_or_else(|e| panic!("precondition: cannot stat {}: {e}", at.display()));
+        let bit = if m.uid() == uid {
+            0o100
+        } else if m.gid() == gid {
+            0o010
+        } else {
+            0o001
+        };
+        assert!(
+            m.mode() & bit != 0,
+            "precondition: this test runs as uid 0 and runs its child as uid {uid}, which must \
+             reach {what} {}; {} (mode {:04o}, owner uid {}, group gid {}) does not let uid {uid} \
+             search it. Run the test as an ordinary user, or put the checkout and the temporary \
+             directory where uid {uid} can reach them (docs/development.md)",
+            full.display(),
+            at.display(),
+            m.mode() & 0o7777,
+            m.uid(),
+            m.gid()
+        );
+    }
+}
+
+/// The bytes of the regular file `p` for a snapshot. A file the test made unreadable (the
+/// mode-0000 control) is read with its owner's read bit added for the read, and its mode is
+/// restored at once: uid 0 reads it without that, an ordinary user cannot (T-069).
+fn read_bytes(p: &Path) -> Vec<u8> {
+    match fs::read(p) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            let mode = fs::metadata(p).unwrap().permissions().mode() & 0o7777;
+            set_mode(p, mode | 0o400);
+            let bytes = fs::read(p);
+            set_mode(p, mode);
+            bytes.unwrap_or_else(|e| panic!("snapshot: cannot read {}: {e}", p.display()))
+        }
+        Err(e) => panic!("snapshot: cannot read {}: {e}", p.display()),
+    }
 }
 
 /// A fresh `work/` (mode 0755) under `std::env::temp_dir()`, with `outside/secret.txt`;
@@ -164,7 +228,7 @@ fn snapshot(dir: &Path) -> BTreeMap<String, String> {
                 walk(base, &p, out);
                 "dir".to_owned()
             } else if ft.is_file() {
-                format!("file {}", fs::read(&p).unwrap().escape_ascii())
+                format!("file {}", read_bytes(&p).escape_ascii())
             } else {
                 "other".to_owned()
             };
@@ -292,6 +356,8 @@ fn parent_run() {
     assert_eq!(fs::read(w.at("root/f.txt")).unwrap(), F_BYTES);
     let before = (snapshot(&w.at("root")), snapshot(&w.at("open")));
     let exe = std::env::current_exe().unwrap();
+    id.must_reach("this test binary", &exe);
+    id.must_reach("the fixture", &w.dir);
 
     // Both modes run before anything is asserted, so a failure reports every mode.
     let mut failures = Vec::new();

@@ -93,6 +93,14 @@ impl Identity {
         }
     }
 
+    /// Precondition of the identity change (T-069): when the child is dropped to U, U must
+    /// reach `path` (`what`); see [`assert_reachable`].
+    fn must_reach(&self, what: &str, path: &Path) {
+        if self.drop {
+            assert_reachable(self.uid, self.gid, what, path);
+        }
+    }
+
     /// Give `path` and everything below it (links not followed) to U.
     fn give(&self, path: &Path) {
         if self.drop {
@@ -108,6 +116,45 @@ impl Identity {
 
 fn set_mode(path: &Path, mode: u32) {
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+/// Precondition of the identity change (T-069): the test runs as uid 0 and runs its child as
+/// `uid`/`gid`, so that identity must reach `path` (`what`): `path` and every directory above
+/// it must grant it search (for a file, execute) permission. Judged from the mode bits, which
+/// is what the kernel checks here (no ACLs are set by the tests). Fails naming the
+/// precondition and the first path that blocks it; it never passes in place of the test.
+fn assert_reachable(uid: u32, gid: u32, what: &str, path: &Path) {
+    let full = fs::canonicalize(path).unwrap_or_else(|e| {
+        panic!(
+            "precondition: cannot resolve {what} {}: {e}",
+            path.display()
+        )
+    });
+    let mut at = PathBuf::new();
+    for part in full.components() {
+        at.push(part);
+        let m = fs::metadata(&at)
+            .unwrap_or_else(|e| panic!("precondition: cannot stat {}: {e}", at.display()));
+        let bit = if m.uid() == uid {
+            0o100
+        } else if m.gid() == gid {
+            0o010
+        } else {
+            0o001
+        };
+        assert!(
+            m.mode() & bit != 0,
+            "precondition: this test runs as uid 0 and runs its child as uid {uid}, which must \
+             reach {what} {}; {} (mode {:04o}, owner uid {}, group gid {}) does not let uid {uid} \
+             search it. Run the test as an ordinary user, or put the checkout and the temporary \
+             directory where uid {uid} can reach them (docs/development.md)",
+            full.display(),
+            at.display(),
+            m.mode() & 0o7777,
+            m.uid(),
+            m.gid()
+        );
+    }
 }
 
 /// A fresh `work/` (mode 0755) under `std::env::temp_dir()` holding the spec's fixture, with the
@@ -505,6 +552,8 @@ fn refused_case(c: &Refused, case: &str) -> (Session, Work, Expect) {
         w.file(&format!("{}/locked.txt", c.root_rel), b"locked\n");
         set_mode(&w.in_root("locked.txt"), 0o000);
         id.give(&w.dir);
+        id.must_reach("kiln-cli", Path::new(env!("CARGO_BIN_EXE_kiln-cli")));
+        id.must_reach("the fixture", &w.dir);
         id
     } else {
         Identity::SELF

@@ -453,6 +453,46 @@ mod t036 {
         }
     }
 
+    /// Precondition of the identity change (T-069): the test runs as uid 0 and runs its child as
+    /// `uid`/`gid`, so that identity must reach `path` (`what`): `path` and every directory above
+    /// it must grant it search (for a file, execute) permission. Judged from the mode bits, which
+    /// is what the kernel checks here (no ACLs are set by the tests). Fails naming the
+    /// precondition and the first path that blocks it; it never passes in place of the test.
+    fn assert_reachable(uid: u32, gid: u32, what: &str, path: &Path) {
+        use std::os::unix::fs::MetadataExt;
+        let full = fs::canonicalize(path).unwrap_or_else(|e| {
+            panic!(
+                "precondition: cannot resolve {what} {}: {e}",
+                path.display()
+            )
+        });
+        let mut at = PathBuf::new();
+        for part in full.components() {
+            at.push(part);
+            let m = fs::metadata(&at)
+                .unwrap_or_else(|e| panic!("precondition: cannot stat {}: {e}", at.display()));
+            let bit = if m.uid() == uid {
+                0o100
+            } else if m.gid() == gid {
+                0o010
+            } else {
+                0o001
+            };
+            assert!(
+                m.mode() & bit != 0,
+                "precondition: this test runs as uid 0 and runs its child as uid {uid}, which must \
+                 reach {what} {}; {} (mode {:04o}, owner uid {}, group gid {}) does not let uid {uid} \
+                 search it. Run the test as an ordinary user, or put the checkout and the temporary \
+                 directory where uid {uid} can reach them (docs/development.md)",
+                full.display(),
+                at.display(),
+                m.mode() & 0o7777,
+                m.uid(),
+                m.gid()
+            );
+        }
+    }
+
     /// The parent: builds the fixture, hands it to U, runs the child as U under a timeout.
     pub fn parent() {
         use std::os::unix::fs::{MetadataExt, chown};
@@ -481,6 +521,13 @@ mod t036 {
                     stack.extend(fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
                 }
             }
+            assert_reachable(
+                65534,
+                65534,
+                "this test binary",
+                &std::env::current_exe().unwrap(),
+            );
+            assert_reachable(65534, 65534, "the fixture", &work);
             child.uid(65534).gid(65534);
         }
         let mut child = child.spawn().unwrap_or_else(|e| {
