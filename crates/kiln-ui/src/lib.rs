@@ -14,7 +14,8 @@
 //! `Editor` with syntax colours, caret, selection and scrolling; `docs/protocol/ui-editor.md`),
 //! the empty places of the later panels, and [`Script`], the runner of `kiln script`, which
 //! drives the UI without a window from control requests and UI requests and reports what each
-//! frame shows (`docs/protocol/ui.md`). The window is T-065.
+//! frame shows (`docs/protocol/ui.md`), and [`run_window`], the desktop window of T-065, which
+//! draws the same frames on X11 and can run the same script against the real window.
 //!
 //! ## The frame function (shared with T-065)
 //!
@@ -31,6 +32,22 @@
 //! as `Path` and `Open` do (the start paths); [`App::handle_line`] sends one control request
 //! line; [`App::log_script`] is the session log. [`apply_style`] sets the theme and style the
 //! script mode uses (dark, no caret blink).
+//!
+//! ## The window (T-065)
+//!
+//! ```text
+//! pub fn run_window(root: &Path, paths: &[&str], script: Option<&[u8]>)
+//!     -> Result<Option<ScriptRun>, WindowError>
+//! ```
+//!
+//! [`run_window`] checks the root, starts the window system (eframe, glow, X11 only), opens the
+//! start paths as `kiln script` does and draws every frame with [`draw_frame`] after
+//! [`apply_style`]. Without a script it returns `Ok(None)` when the user has closed the window.
+//! With a script (its bytes) it runs the lines as [`Script`] does, with the window's frames in
+//! real time, closes the window after the last line and returns the responses ([`ScriptRun`]).
+//! If the user closes the window while a script runs, the lines not yet run are not run and
+//! [`ScriptRun::completed`] is false. A failure to start the window system, a panic while it
+//! starts included, is [`WindowError::NoWindow`] with one line of text.
 
 mod editor;
 mod json;

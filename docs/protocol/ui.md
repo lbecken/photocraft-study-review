@@ -11,6 +11,7 @@ covers the UI requests and the mode.
 
 ```text
 kiln script <script> [--root <dir> | --memory] [--log <file>] [--size <w>x<h>] [<path>…]
+kiln [--root <dir>] [--script <file>] [<path>…]
 kiln --help | -h | script --help
 ```
 
@@ -30,8 +31,7 @@ kiln --help | -h | script --help
   `doc.open`.
 - Options may come before or after the positional arguments, each at most once.
 - `--help`, `-h` (alone or after `script`): the usage on stdout, exit 0.
-- `kiln` with no subcommand still only says that the desktop window is not built and exits 1
-  (the window is T-065).
+- `kiln` with no subcommand opens the window (below, "The window").
 
 Order of checks at start: usage (options, `--size` range) → script readable → root (or
 `--memory`) → log file writable → start paths in order → frames until settled → requests. The conventions are those of `kiln-cli run`: a usage
@@ -52,6 +52,37 @@ script" (`docs/control-protocol.md`). The root is touched only through control r
 UI's included). No other file is written; nothing is read from or written to the user's
 configuration or home directory. No display variable is read in script mode. Linux is what the
 gate and the evidence of T-055 cover.
+
+## The window
+
+T-065. `kiln [--root <dir>] [--script <file>] [<path>…]` shows the same UI as `kiln script`, in
+a desktop window of 1280×800 points, used with the real keyboard and pointer.
+
+- `--root <dir>` (default: the current directory) as for `kiln script`; each `<path>` is opened
+  at start, in order, exactly as `kiln script`'s start paths. Options before or after the paths,
+  each at most once; a first argument `script` always names the subcommand.
+- Without `--script` the window runs until the user closes it; exit 0. Closing saves nothing
+  and asks nothing (unsaved changes are lost).
+- `kiln` opens a window on X11 (not Wayland). If the window system cannot be started it exits 2
+  with one line on stderr and nothing on stdout.
+- `kiln --script <file>` runs a script in the window: its output is that of `kiln script`
+  except the frame counts. The window closes after the last line and the responses are written
+  on stdout after it has closed; the exit codes are those of `kiln script`. The window runs in
+  real time: the `frames` and `settled` values of action responses and the `frames` total of a
+  snapshot may differ from those of `kiln script`.
+- Usage error (an unknown option, an option twice or without its value, `--log`, `--memory` or
+  `--size` without `script`): exit 2, a message and the usage on stderr, nothing on stdout. An
+  unreadable `--script` file or a bad root: exit 2, nothing on stdout, a message on stderr (a
+  bad root's names it as given).
+
+Order of checks at start: usage → `--script` readable → root → window system → start paths in
+order → first frame.
+
+Files: the window reads `--script` once, whole, at start, and writes no file of its own;
+documents are saved only by `doc.save`.
+
+Limits: under Xvfb the window needs the libraries `libxkbcommon-x11` and `libxcb-xkb`; the GL
+driver may write its shader cache under the home directory.
 
 ## Script lines
 

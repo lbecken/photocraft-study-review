@@ -145,7 +145,10 @@ fn an_unreadable_script_is_reported_before_the_root() {
     assert!(run.stdout.is_empty());
     assert!(run.stderr.contains("missing.jsonl"), "{:?}", run.stderr);
     // Ruling a2: with a bad root as well, the script is what is reported.
-    let run = kiln(&dir, &["--root", "no-such-root", "--script", "missing.jsonl"]);
+    let run = kiln(
+        &dir,
+        &["--root", "no-such-root", "--script", "missing.jsonl"],
+    );
     assert_eq!(run.code, 2);
     assert!(run.stdout.is_empty());
     assert!(run.stderr.contains("missing.jsonl"), "{:?}", run.stderr);
@@ -171,7 +174,13 @@ fn usage_errors_print_a_message_and_the_usage() {
         &["--size", "800x600"],
         &["--root", "d", "src/a.rs", "--log", "l.jsonl"],
         // Usage comes first: before the script, the root and the window system.
-        &["--root", "no-such-root", "--script", "missing.jsonl", "--bogus"],
+        &[
+            "--root",
+            "no-such-root",
+            "--script",
+            "missing.jsonl",
+            "--bogus",
+        ],
     ] {
         let run = kiln(&dir, args);
         assert_eq!(run.code, 2, "{args:?}");
@@ -211,5 +220,9 @@ fn the_subcommand_script_still_needs_no_display() {
     let run = kiln(&dir, &["script"]);
     assert_eq!(run.code, 2);
     assert!(run.stdout.is_empty());
-    assert!(run.stderr.lines().count() > 1, "a usage error: {:?}", run.stderr);
+    assert!(
+        run.stderr.lines().count() > 1,
+        "a usage error: {:?}",
+        run.stderr
+    );
 }

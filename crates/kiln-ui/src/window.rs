@@ -463,7 +463,10 @@ mod tests {
         assert!(failed, "the script has refusals");
         assert_eq!(run.responses, expected);
         assert_eq!(expected.lines().count(), 13);
-        assert!(expected.contains(r#""value":"b.txt — modified — Kiln""#), "{expected}");
+        assert!(
+            expected.contains(r#""value":"b.txt — modified — Kiln""#),
+            "{expected}"
+        );
     }
 
     #[test]
