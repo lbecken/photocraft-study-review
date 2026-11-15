@@ -125,10 +125,8 @@ pub(crate) fn scroll_view_with(
                 // area the clip rectangle spans the parent's full width (T-057 F1).
                 let clip = ui.clip_rect();
                 let own = ui.max_rect().x_range();
-                let visible = egui::Rect::from_x_y_ranges(
-                    clip.x_range().intersection(own),
-                    clip.y_range(),
-                );
+                let visible =
+                    egui::Rect::from_x_y_ranges(clip.x_range().intersection(own), clip.y_range());
                 ui.ctx().accesskit_node_builder(ui.unique_id(), |node| {
                     node.set_bounds(accesskit_rect(visible));
                 });
