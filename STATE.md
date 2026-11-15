@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-15 18:10 UTC_
+_Last updated: 2026-11-15 18:20 UTC_
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.3** (D-146).
@@ -11,10 +11,15 @@ Decided since: the retrospective to cut 1 (D-174), ADR-0009 on platforms (D-175;
 D-173), methodology v1.4 (D-176). **INC-001 (CI on main red since T-036) is closed: T-069 merged, CI run 366 green
 at 2026-11-15T18:02:59Z (D-179).**
 
-In flight: planning of the next batch — the spec check of T-070 (CI jobs for macOS and Windows) and the spec of
-T-071 (the platform-test rule) by the planner of ADR-0009; the spec of T-057 (project panel, cut 2) by the planner
-of ADR-0007. Order (ADR-0009 Q-4): T-070 and T-071, then cut 2 (T-057, T-058, T-059) interleaved with T-072 to
-T-076, with T-066 and T-043 in that batch; T-077, T-078 after. Next free task number: T-079.
+In flight:
+- **T-070** (CI jobs for macOS and Windows, the Linux window procedure as a CI job; high): implementer run R-263 in
+  `.worktrees/T-070`, independent test author run R-264 in `.worktrees/T-070-tests`. Three of its criteria need
+  candidate commits pushed to `ci/T-070`; **the owner has been asked for permission to push `ci/…` branches**
+  (D-180) and the director holds any `CI-REQUEST` until the owner answers.
+- **T-057** (project panel, cut 2; medium, implementer writes the acceptance tests first): implementer run R-265 in
+  `.worktrees/T-057` and `.worktrees/T-057-tests` (D-181).
+Next (ADR-0009 Q-4): T-071 (the platform-test tool) and T-079 (marking the product test files) after T-070; T-058,
+T-059; T-066; T-043; T-072 to T-076; T-077, T-078. Next free task number: T-081.
 
 Scorecard on main: 64 items: 44 verified, 0 implemented, 0 failing, 20 planned (68.8%). Merged in this stage:
 T-055 (`kiln script`, the UI without a window, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (the
