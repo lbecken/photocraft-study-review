@@ -374,6 +374,16 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   the `test result:` lines of core-crates, `DISK:` with the two figures, `COMMAND`/`PACKAGE`/`APT
   LISTS`/`LDCONFIG` lines, every `PROBE` line and the first 5 lines of stderr, the procedure's
   verdict lines, and the wall time of every job.
+- 2026-11-15 · R-266 · rework · rulings of D-182 acknowledged, all accepted: m1 (one `cargo test
+  --locked -p <package>` per core package inside the one step, each appending to `core-crates.txt`;
+  the step still ends with exit 0); m2 (the test author's: the procedure reads `kiln`'s own status;
+  nothing of mine changes); m3 (`fail-fast: false` stays; every upload of the window jobs runs
+  whatever the procedure's or probe's result); m4 (`window-linux` runs `sudo apt-get update` before
+  the procedure, installs nothing); m5 (a probe leg's colour is `kiln`'s exit status: as built);
+  m6 (`window-linux` tracked until its decision row; the docs stay); the test-output condition
+  accepted; round 1 of CI runs on the joined branch, my CI-REQUEST for 6f469df is not used; disk
+  rule (no build below 14 GB free; this rework runs no build and no whole gate, by the director's
+  instruction).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
