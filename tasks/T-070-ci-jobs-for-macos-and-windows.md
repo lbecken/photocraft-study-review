@@ -2,7 +2,7 @@
 id: T-070
 title: "Run the gate in CI on macOS and Windows as tracking jobs, check files out byte for byte, keep the reports, probe the window on each platform, and run the Linux window procedure under Xvfb on every code push"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (.github/workflows/platforms.yml, .github/scripts/, xtask/tests/); the approval row must contain `gate paths`. No dependency change.
-state: self_verified
+state: in_progress
 owner_role: planner
 scorecard_items: []     # produces evidence; changes no behaviour of Kiln's binaries
 depends_on: [T-069]     # merged (30c66909, D-179): the existing CI job is green, so a run can be read
@@ -12,6 +12,7 @@ touches:                # one role per path (D-153)
   - docs/development.md                      # implementer: the "CI" section only (lines 535–540 on main 15555cc), not the T-069 paragraph after it
   - .github/scripts/window-procedure.sh      # GATE PATH: test author (new; the T-065 procedure as a file, Interface (3))
   - xtask/tests/acceptance_t070.rs           # GATE PATH: test author
+  - xtask/tests/guard_t070.rs                # GATE PATH: test author (m9, D-189: the three tests of the procedure file, which pass on the tests branch)
 budget_tokens: 1100000  # high (v1.4)
 iteration: 2
 found_by: planner       # ADR-0009 (R-255)
@@ -316,6 +317,15 @@ Against main `15555cce3bfafdd8a579127ff49c3acd7f717ba6` (v1.4; D-175 to D-179). 
   reader takes the echoed text for an invocation. The step is as m1 rules it: a loop over the four packages with
   one `cargo test --locked -p "$p"` each, appended to `core-crates.txt`, under `set +e` with a final `exit 0`. The
   test counts invocations, not text inside an `echo` or a quoted string.
+
+### Ruling after the refused join (director, D-189; told to the test author)
+- **m9.** The join refused the task (`refused_base_passes`): the three AC-3 tests
+  (`ac3_procedure_holds_every_line_of_r251_in_order`, `ac3_usage_line_names_the_file`,
+  `ac3_exit_status_is_1_when_no_verdict_passes`) pass on the tests branch, because the file they test,
+  `.github/scripts/window-procedure.sh`, is the test author's own and is on that branch; an acceptance test must
+  fail on the base. They are tests of a file that does not depend on the implementation: they move, unchanged, to
+  `xtask/tests/guard_t070.rs` (added to `touches`), where the join expects tests that pass on the base and on the
+  joined branch. The eight tests of the workflow and of the attribute file stay in `acceptance_t070.rs`.
 
 ## Log
 ### director
