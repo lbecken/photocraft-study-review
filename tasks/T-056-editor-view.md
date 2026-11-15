@@ -1081,4 +1081,5 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   (1,135 actions, max 20). Verdict approve (`reviews/T-056-r2.md`); 2 follow-ups (RTL limit
   sentence narrower than shown; stale action count). · gate attempts: 0 · not run: full
   `cargo xtask ci`, release build · missing context: none · next: director.
+- 2026-11-15 · R-245 · round 3 (confirmation only) · did: tree at rebuilt head `d6caf15` identical to round-2 head `084b740` (+ reviews), review files byte-identical, tests branch ancestor, no merges, trailers and roles ok · verdict approve (`reviews/T-056-r3.md`) · gate attempts: 0 · not run: gate (tree identical) · missing context: none · next: director.
 <!-- end reviewer log -->
