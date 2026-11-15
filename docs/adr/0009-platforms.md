@@ -1,11 +1,11 @@
 ---
 id: ADR-0009             # file docs/adr/0009-platforms.md
 title: "Kiln is built and tested on Linux, macOS and Windows; evidence for macOS and Windows comes from CI jobs on hosted runners, and a platform job counts for main's colour once it has been green"
-status: proposed
+status: accepted
 date: 2026-11-15
 task: null               # a plan, carried by the tasks it orders (T-069 to T-078)
 charter_section: "§2 the product (platforms, new sentence); §4 the gate (identical locally and in CI) and CI; METHODOLOGY §8 (main green), the no-skip rule (D-166 ruling b8)"
-approval: null           # the director's row when decided (D-171 asks for a decision after the retrospective R-254)
+approval: D-175
 supersedes: null
 superseded_by: null
 ---
@@ -58,7 +58,9 @@ by a command), **INFERRED** (reasoning from verified facts), **PROPOSED** (this 
   `kiln_cli::guard_t036_removal_cli::root_made_unreadable_after_start_stays_protected_through_control`)
   fail on the runner, and the page is then stale. These tests re-run themselves as uid 65534 from uid 0
   (`acceptance_t036_workspace.rs:7,38,47,78`); this machine runs as uid 0, the hosted runner does not
-  (KNOWN: the runner user is an ordinary user with `sudo`). No decision row, incident or retrospective
+  (KNOWN: the runner user is an ordinary user with `sudo`). They are the family of the deferred
+  draft T-052 (tests that need a checkout another identity can reach; `evaluations/iter-2.md` NEW-3),
+  which D-147 deferred "until what they remove starts to cost": on CI it has cost every run since. No decision row, incident or retrospective
   records it (`ls incidents`: absent; `retrospectives/iter-2-stage-1.md` "Red-main minutes: 0 recorded").
   INFERRED: the process has no step in which anyone reads a CI result. Evidence that can come only from
   CI (macOS, Windows) is worth nothing until that step exists. This is the first thing to fix, and it is
@@ -68,7 +70,9 @@ by a command), **INFERRED** (reasoning from verified facts), **PROPOSED** (this 
 Scratch directory `…/scratchpad/platform-probe/` (outside the repository), a `git archive` copy of
 main `30917a5` (`ws/`) and a clone with `core.autocrlf=true` (`crlf/`); toolchain 1.97.0; every command
 under `timeout`; logs in `logs/`. Nothing was installed on the system; four Rust standard libraries
-were added to the existing toolchain with `rustup target add`. Builds deleted at the end.
+were added to the existing toolchain with `rustup target add` (left installed). Builds deleted at the
+end. Disclosure: the brief's limit of 8 GB in scratch was exceeded — the full gate in `crlf/` (c2) built
+9.2 GB beside 4.1 GB in `ws/target`, 13.3 GB at the peak (`du -sh` before deletion); 27 GB were free.
 
 | # | Question | Command (abridged) | Result |
 |---|---|---|---|
@@ -81,8 +85,9 @@ were added to the existing toolchain with `rustup target add`. Builds deleted at
 | a6 | A portable root identity | scratch copy: `same-file = "=1.0.6"` added to `kiln-workspace`, a function comparing `same_file::Handle`s; `cargo check -p kiln-workspace --lib` for the host and for `x86_64-pc-windows-msvc`; `diff` of `Cargo.lock` | both compile; the lock gains one line (`"same-file"` in `kiln-workspace`'s dependency list) and **no package and no version** — `same-file 1.0.6` is already in the lock through `ignore → walkdir` (VERIFIED, `cargo tree -i walkdir --target all`). Reverted afterwards |
 | b1 | Unix APIs in product code | `grep -rn "std::os::unix\|cfg(unix)" --include=*.rs crates apps xtask` minus `/tests/` | product code: **only `disk.rs:86`** (the rest is inside `#[cfg(test)]` modules: `disk.rs` from `:535`, `doc.rs` from `:1312`, `registry.rs` from `:965`, `hygiene.rs`, `publish.rs`). 37 files in all, 31 of them under `tests/` (VERIFIED) |
 | b2 | Items whose tests cannot build on Windows today | script over `scorecard/items/*.toml` (`logs/b-items-win.txt`) | every item with a test in `kiln-workspace` or a crate above it: **38 of the 44 tested items** (only `text.*`, `undo.*` items of `kiln-text` — 6 — are untouched); of these, 8 items list a test in a file that does not compile on Windows even with a4's stand-in: `ws.path-confinement` 28/28, `ws.open-project` 7/7, `ui.window` 7/7, `syntax.outline` 4/4, `nav.workspace-symbol` 3/3, `nav.goto-line` 2/2, `nav.goto-symbol` 1/1, `control.errors` 1/6 (VERIFIED) |
-| c1 | Line endings on checkout | `git clone -c core.autocrlf=true` of main; `cargo xtask fmt`, `cargo xtask schema`, then `cargo xtask ci --keep-going` | every one of 574 tracked files gets CR bytes; `fmt` passes; **`schema` fails: "docs/commands.json is stale"** (VERIFIED; it compares the committed file with the generated text byte for byte, `xtask/src/schema.rs:89`; `scorecard.rs:383` does the same for `docs/scorecard.md`). The full gate's result is in "Probe c2" below. `core.autocrlf=true` is the default of Git for Windows and of the Windows runner image (KNOWN, not verified here) |
-| c2 | Gate steps and the platform | reading `xtask/src/` | see (c) below |
+| c1 | Line endings on checkout | `git clone -c core.autocrlf=true` of main; `cargo xtask fmt`, `cargo xtask schema`, then `cargo xtask ci --keep-going` | every one of 574 tracked files gets CR bytes; `fmt` passes; **`schema` fails: "docs/commands.json is stale"** (VERIFIED; it compares the committed file with the generated text byte for byte, `xtask/src/schema.rs:89`; `scorecard.rs:383` does the same for `docs/scorecard.md`). `core.autocrlf=true` is the default of Git for Windows and of the Windows runner image (KNOWN, not verified here) |
+| c2 | The whole gate on that checkout | `cargo xtask ci --keep-going --report …` in `crlf/` (236.5 s) | `GATE FAILED … schema, scorecard, test`. Caused by the line endings (VERIFIED by running the same test in the LF copy `ws/`, where it passes): `schema` and `kiln_cli::acceptance_t020_cli::syntax_commands_are_read_only` ("a valid corpus file without CR": every corpus file now has CR). Not caused by them (fail in `ws/` as well): five `ws.path-confinement` tests that re-run as another identity and cannot reach a checkout below `/tmp/claude-0` (mode 0700) — the known T-052 (`evaluations/iter-2.md` NEW-3). `hygiene`, `fmt`, `clippy`, `no-skip` pass |
+| c3 | Gate steps and the platform | reading `xtask/src/` | see (c) below |
 | d1 | Runners | docs.github.com "GitHub-hosted runners" (fetched, summarised) | public repositories: "free and unlimited"; `ubuntu-24.04` 4 CPU/16 GB/14 GB x64; `windows-2025` (`windows-latest`) 4/16/14 x64; `windows-11-arm` 4/16/14 arm64; `macos-15` (`macos-latest`) 3 CPU (M1)/7 GB/14 GB arm64; `macos-15-intel` 4/14/14 x64; "During periods of high demand, jobs that run on macOS runners may take longer to start" (KNOWN, summarised page) |
 | d2 | Runner images | `actions/runner-images` readmes, Ubuntu 24.04 and Windows 2025 (fetched, summarised) | Ubuntu image 20261111: `xvfb` installed; `libxkbcommon-x11-0`, `libxcb-xkb1`, Mesa not listed; Windows image 20261111: Visual Studio 2022 with VC++ tools, Git 2.56.1; no mention of a desktop session, a screen or OpenGL (KNOWN, summarised) |
 | d3 | CI's own wall time today | `actions_list` of `ci.yml` (100 latest completed runs, `logs/d-ci-runs-p1.txt`) | 97 failures, 3 successes; the successes (runs 254–256, whole gate) took 347–490 s; failing runs stop at `scorecard` (median 181 s) (VERIFIED) |
@@ -247,7 +252,7 @@ Read in `xtask/src/` (VERIFIED by reading; not run on another platform):
 |---|---|---|---|
 | CI is green on main (`ci.yml`; METHODOLOGY §8) | Linux (runner, non-root) | three `ws.path-confinement` tests assume uid 0 | T-069 |
 | `docs/development.md` "CI" (one Linux job) and the gate's line-ending assumption | all | jobs per platform; CRLF checkout fails `schema` (c1) | T-070 |
-| `no-skip` (D-166 b8), the scorecard step | all | the rule of Decision 4 | T-071 |
+| `no-skip` (D-166 b8), the scorecard step; `xtask`'s own Unix-only tests (`hygiene.rs`, `publish.rs` test modules, `acceptance_t005_r3/r4`, `acceptance_t013_hygiene`, `guard_t005`) | all / Windows | the rule of Decision 4; the gate's tests must run where the gate runs | T-071 |
 | `ws.path-confinement` (28 tests); `paths.md` "The root", "The rule", "Residual limits: Unix only" | macOS | case-insensitive names; `nobody` uid; `PATH_MAX` 1,024; runner not root | T-072 |
 | same; `disk.rs` module docs ("Unix only, D-014") | Windows | root identity and holding it open; directory open; reparse points, junctions, drive and `\\?\` prefixes, reserved names, streams, case, ACLs; no FIFOs | T-073 (build, identity), T-074 (confinement rules) |
 | `io.save-atomic`, `ws.vfs`; `control-protocol.md:133` "(on Unix)"; `disk.rs:14-17` modes | Windows | modes are not bits; rename over an open file; directory sync | T-073 |
@@ -260,6 +265,22 @@ Read in `xtask/src/` (VERIFIED by reading; not run on another platform):
 | unsigned binaries | all | release build and artefact | T-078 |
 
 ## Consequences
+
+- **Tasks** (drafts filed with this ADR; tiers by ADR-0002 and D-162; estimates in builder and review
+  tokens, from the figures under "Token cost" below):
+
+  | Task | What | Tier | Depends on | Estimate |
+  |---|---|---|---|---|
+  | T-069 | CI green again on an ordinary runner (absorbs T-052) | low | — | 150,000 |
+  | T-070 | macOS and Windows gate jobs (tracking), byte-exact checkout, reports kept, window probes, Linux window procedure in CI | high | T-069 | 850,000 |
+  | T-071 | the platform-test rule in `no-skip` and the scorecard step; `xtask`'s tests portable | high | T-070 | 1,000,000 |
+  | T-072 | gate green on macOS; macOS sentences | high (provisional) | T-070, T-071 | 600,000 |
+  | T-073 | Windows: workspace builds; root identity, held root, save | high | T-070, T-071 | 1,100,000 |
+  | T-074 | Windows confinement rules | high | T-073 | 1,300,000 |
+  | T-075 | portable tests: `kiln-workspace`, `kiln-commands` | low (Q-8) | T-071, T-074 | 350,000 |
+  | T-076 | portable tests: `kiln-cli`, `kiln` | low (Q-8) | T-071, T-074 | 300,000 |
+  | T-077 | the window on macOS and Windows; per-target toolkit features; keys | high | T-070, T-068, T-076 | 1,100,000 |
+  | T-078 | unsigned release binaries as artefacts; `kiln script` identical on three platforms | high | T-076 | 700,000 |
 
 - **Order** (with reasons; the director decides it after the retrospective R-254, D-172):
   1. **T-069 first**: main is red in CI now (Context); no platform evidence means anything while the one
@@ -302,9 +323,14 @@ Read in `xtask/src/` (VERIFIED by reading; not run on another platform):
 - **Token cost** (from the record): high tasks of this stage 887,544 (T-065), 997,800 (T-055), 1,190,305
   (T-056) (D-168, D-155, D-162); stage-1 medians high 810,888, medium 686,472, low 84,466–124,444; a fresh
   spec check about 327,000 on average (`retrospectives/iter-2-stage-1.md` §7, Metrics), a spec check by
-  the planner that drafted the task 34,769 (D-163). Estimates per task are in each draft; together about
-  6.4–8.0 M tokens for T-069 to T-078, spec checks included — comparable with the whole of cut 1
-  (4,645,569 booked, D-170). The largest uncertainty is T-074 (Windows confinement).
+  the planner that drafted the task 34,769 (D-163). Estimates per task are in each draft; their sum for
+  T-069 to T-078 is about **7.45 M** builder and review tokens; with spec checks of the eight non-low
+  tasks by the planner that drafted them (about 35,000 each, D-163) about 7.7 M, with fresh spec checks
+  (about 327,000 each) about 10.1 M — between 1.7 and 2.2 times the whole of cut 1 (4,645,569 booked,
+  D-170). The largest uncertainties are T-074 (Windows confinement) and T-072 (unknown until T-070 runs).
+  A cut line: after T-073 and T-075 the CLI and `kiln script` would be built and tested on Windows
+  without the Windows confinement rules being stated, which is not shippable (paths could be refused or
+  followed differently from the document); the first useful cut is after T-074 and T-076 (about 5.6 M).
 
 ## Verification
 
@@ -355,3 +381,29 @@ turns out unreliable (flaky start, no macOS slot), it goes back to tracking by a
   evidence of a high confinement item. **Recommendation:** low, and the director has the diff read by a
   reviewer before queueing (no tier change), because weakening a confinement test there would be
   invisible to the gate.
+- **Q-8. Who writes the platform-test registry's entries.** The registry is under `xtask/` (a gate
+  path), so a test-only task that adds an entry becomes high (T-075, T-076). A: T-071 adds every entry
+  the existing tests need (it knows the list from probe a4), so T-075 and T-076 stay low. B: T-075 and
+  T-076 are high. C: the registry lives outside `xtask/` (a non-gate path read by the gate), which
+  weakens the gate-path rule. **Recommendation: A.**
+- **Q-9. T-052.** T-069 covers T-052's tests and its document paragraph. **Recommendation:** abandon
+  T-052 in favour of T-069 (one decision row), rather than run both.
+
+## Rulings at acceptance (director, D-175)
+- Q-1 A: the macOS and Windows jobs count for main's colour from their first green run on main; until then they
+  are tracked and their results recorded.
+- Q-2 A: a pre-merge run on a `ci/T-NNN` branch is made for tasks that touch platform-sensitive paths.
+- Q-3 A: the Linux window procedure runs under Xvfb in CI on every code push (this is also the retrospective's
+  change 8, D-174: window evidence in the gate where it can be).
+- Q-4 A: T-069 first (INC-001), then T-070 and T-071, then cut 2 (T-057 to T-059) interleaved with T-072 to
+  T-076; T-066 and T-043 are in that batch too (D-174).
+- Q-5 A: where a hosted runner cannot open a window, the item is "built, not observed" on that platform and the
+  owner is told.
+- Q-6 B: on Windows, reparse points are refused as outside the root in this stage.
+- Q-7 A: T-069 is low tier with a reviewer's read of the diff.
+- Q-8 A: T-071 writes all entries of the platform-test registry, so T-075 and T-076 stay low; their budgets are
+  restated when they are specified (the planner expects them over the low ceiling).
+- Q-9: T-052 is abandoned in favour of T-069.
+- Signed installers, notarisation and packaging are out of scope (the owner, D-173); T-078 ends at unsigned
+  workflow artefacts.
+- From now on the director reads the CI run of every pushed commit and records its result (INC-001).

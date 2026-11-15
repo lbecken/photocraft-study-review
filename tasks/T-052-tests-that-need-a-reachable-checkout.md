@@ -32,6 +32,10 @@ Five tests tied to `ws.path-confinement` re-run themselves under another identit
 ## Open questions for the specification
 - Should the tests place their child binary and fixtures in a directory they make reachable themselves, so the precondition goes away? That edits merged tests of a high-tier task and would raise the tier.
 
+## Abandoned in favour of T-069 (director, D-175)
+The same tests and the same cause family are fixed by T-069, which also covers the hosted runner (INC-001). This
+draft is not dispatched.
+
 ## Log
 ### director
 - 2026-11-14 filed as a draft (D-141).
