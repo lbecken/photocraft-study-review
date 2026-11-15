@@ -73,6 +73,12 @@ impl<'a> PanelView<'a> {
         self.session.set_current(doc);
     }
 
+    /// The session's change counter (`Session::changes`): it changes with every successful
+    /// request other than a read, and with every change of the current document.
+    pub(crate) fn changes(&self) -> u64 {
+        self.session.changes()
+    }
+
     /// The open documents `(id, path)` in id order.
     pub(crate) fn open_documents(&self) -> &[(u64, String)] {
         self.session.docs()
