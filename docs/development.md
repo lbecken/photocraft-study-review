@@ -87,6 +87,23 @@ Measured on the bootstrap machine (4 cores, 15 GB RAM, no GPU), `time cargo xtas
 | warm, nothing changed | 1.4 s |
 | in the queue, worktree seeded from main's `target/`, one crate changed | 6–11 s |
 
+Debug and test builds carry line tables only for the workspace's crates and no debug info for
+dependencies, and keep no incremental cache (root `Cargo.toml`, `[profile.dev]`, T-054). A panic
+names its file and line, and `RUST_BACKTRACE=1` shows file and line for frames in the workspace's
+code. A debugger shows lines but not variables. Frames inside dependencies can lack file and
+line. Release builds are unchanged. Measured on the bootstrap machine (4 cores, Linux), from an
+empty `target/`, on 2026-11-15: `cargo test --workspace --no-run --locked` leaves 2.6 GB with
+these settings, against 7.8 GB with Cargo's defaults (main `dc0b30b`). A rebuild after a
+one-line change is slower without the incremental cache: 14.4–24.2 s against 7.3–9.6 s for the
+same edit in `kiln-commands` (`cargo test --workspace --no-run --locked` after appending a comment
+to `crates/kiln-commands/src/doc.rs`, two runs each, on a shared machine). The gate's figures
+above are from the bootstrap; the build tree after a whole gate run in a worktree is 3.8 GB
+(`du -sh target` after `cargo xtask ci` from an empty `target/`, same machine and date; 12 GB
+before T-054, D-182). Figures recorded before T-054 are records of their runs, made with Cargo's
+default debug info: the bootstrap table above, the CI table under "Runners, wall times and disk"
+(run 43752760283), and the 12 GB of a worktree after the gate (D-182). Both CI workflows already
+set `CARGO_INCREMENTAL=0`.
+
 ## Scorecard: `cargo xtask scorecard [--check]`
 
 An item is `scorecard/items/<id>.toml`:
