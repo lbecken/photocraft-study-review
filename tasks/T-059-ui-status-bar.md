@@ -377,6 +377,12 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 
 ### director
 <!-- end director log -->
+- 2026-11-16 **Pre-merge platform run** (ADR-0009 Decision 5; D-212): run 43787215183 of `platforms.yml` on `ci/T-059` at
+  `6f32d1093ab530015e7e02b8e8e54a03e669093d` (the branch rebased onto main `51ee7c1`, which holds T-054's profile).
+  The two counted jobs are green: `window-linux` success, `window-probe (macos-15)` success.
+  `window-probe (windows-2025)` fails at "Build kiln" as on main; the three gate jobs were running or red when read
+  (01:41Z) and are not counted (D-202).
+
 ### planner
 - 2026-11-14 · R-225 · (new) · did: filed as a draft for ADR-0007. · gate attempts: 0 · missing context: T-056's merged shell · next: director.
 - 2026-11-15 · R-276 · draft · did: specified the status bar against main `c288f7f` with a prototype (all 110 merged `kiln` tests green); tier medium (item low ⇒ medium), implementer-first arm (odd); 5 criteria, AC-2 on generated text; reads after a change only; depends on T-058 (`PanelView::changes`), so not in flight with it; spec check after T-058 merges. · gate attempts: 0 (scratch builds only) · not run: macOS, Windows, the window · missing context: T-058 as merged · next: director (Q-1 to Q-4).
