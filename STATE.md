@@ -3,6 +3,9 @@
 _Last updated: 2026-11-15 23:22 UTC_
 
 ## Now
+**Owner's instruction of 2026-11-16 (D-207): the `ci/…` branches can stay; finish cut 2 (T-059, evaluation B, report),
+then pause. No new platform task is dispatched; T-054 (in review) is finished or stopped cleanly.**
+
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.4** (D-176).
 Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run the retrospective, then go on to cut
 2, and make the editor multi-platform (Linux, macOS, Windows).** Signed installers are out of scope (D-173); `ci/…`
