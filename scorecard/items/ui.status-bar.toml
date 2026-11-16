@@ -2,4 +2,14 @@ id = "ui.status-bar"
 title = "The status bar shows line and column, encoding and line-ending style"
 crate = "kiln-ui"
 tier = "low"
-tests = []
+tests = [
+    "kiln::acceptance_t059::ac1_encoding_and_line_ending_follow_doc_info",
+    "kiln::acceptance_t059::ac2_line_and_column_follow_cursor_get_over_generated_steps",
+    "kiln::acceptance_t059::ac3_switching_shows_the_current_documents_values",
+    "kiln::acceptance_t059::ac4a_control_requests_only_log_as_host",
+    "kiln::acceptance_t059::ac4b_idle_frames_add_nothing",
+    "kiln::acceptance_t059::ac4c_a_control_cursor_set_is_read_then_idle",
+    "kiln::acceptance_t059::ac4d_a_read_only_control_request_then_idle",
+    "kiln::acceptance_t059::ac5_no_document_no_bar",
+    "kiln::acceptance_t059::ac5_a_click_on_the_bar_does_nothing",
+]
