@@ -421,4 +421,14 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   - `cargo clippy -p xtask --tests -- -D warnings` clean, `cargo fmt --check` clean, `cargo xtask hygiene` PASS. · gate attempts: 0 (whole gate not run) · not run: `cargo xtask ci`, macOS, Windows (Q-4 A: the director reads `guard_t054` on `ci/T-054`) · missing context: none · next: director (join).
 <!-- end test author log -->
 ### reviewer
+- 2026-11-16 00:30 UTC · R-291 · tests_joined · round 1 · request-changes · reviewed `213df3e048dd436f34e2eb6d4652eabc471817cc` (base `dc0b30b`; main since moved by ledger paths only). Rulings read in main's task file and accepted: Q-1 C, Q-2 A, Q-3 A, Q-4 A, i1. All builds with `CARGO_PROFILE_DEV_DEBUG` and `CARGO_INCREMENTAL` unset. did:
+  - scope per commit and role (Cargo.lock and workflows unchanged);
+  - whole gate from an empty `target/` on the head: green, 1025 passed, tree 3.8G;
+  - AC-3 from empty, one at a time with 16G free: branch 2.6G, base 8013 MiB (7.8 GiB), 33%;
+  - D3 rebuilds: 12.9–14.2 s off against 6.3–6.9 s on;
+  - panic and backtrace probes in a test, a workspace library and a dependency (non-generic egui frames lose `at` lines; on base they have them); gdb shows lines and no locals;
+  - the gate's `test` report with one seeded failure is identical with and without the tables;
+  - release: 185 units Fresh after removing the tables;
+  - 23 mutants: 18 killed (16 acceptance, 2 guard only), 1 equivalent, 4 survived (M17, M18, M21, M23 `[profile.test] debug = true`).
+  Findings: 1 test gap, 1 spec gap (AC-4 does not pin `[profile.test]` or extra keys), 1 nit; doc_sentences 0. A base run that overlapped the disk-full minute (about 00:05Z) was discarded and re-run. · gate attempts: 1 (last: green, scratch clone) · not run: macOS, Windows (expectation in the review); the whole-tree size of M23 · missing context: none · next: director (ruling on finding 2, then test author).
 <!-- end reviewer log -->
