@@ -2,7 +2,7 @@
 id: T-059
 title: "Show the current document's caret line and column, encoding and line-ending style in a status bar below the editor, re-read only after a change"
 tier: medium            # ADR-0002 default (UI behaviour over existing commands; no high criterion); ≥ the claimed item's tier (`ui.status-bar`: low; items ⇒ medium); fixed at specified (METHODOLOGY v1.4 §4)
-state: tests_joined            # director only, written with every transition; see METHODOLOGY §3
+state: queued            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: [ui.status-bar]
 depends_on: [T-058]     # merged at 7acf7ce (`PanelView::changes`); spec check R-295 done
@@ -359,6 +359,16 @@ layout-dependent tests.
 - The values `Ln <n>` and `Col <n>` (a bare number could make a merged test's `{"role":"label","value":…}` click
   ambiguous) are accepted; ruling Q-1 A (1-based) stands.
 - Before the queue the rebased head goes to `ci/T-059`; `window-linux` and `window-probe (macos-15)` must be green.
+
+### Rulings on review round 1 (director, D-212; `reviews/T-059-r1.md` at `f0ab0260e2a6bc1e886ca3dc87829237349967fe`: approve)
+- **k1 (finding 1, spec gap).** A document whose path equals a value the bar is showing (`Ln 1`, `Col 1`, an
+  encoding name, a line-ending value) makes the `Documents` target `{"role":"label","value":<path>}` ambiguous.
+  Not changed in this task (the review approves; no rework round): T-083 states the limit in `ui-status.md` or
+  gives the bar's nodes a role of their own. Noted there.
+- **k2 (finding 2, nit).** The limit's paragraph is incomplete, not wrong (a window lower than about 305 points
+  hides the bar even with one tab): T-083.
+- The two changes to the acceptance file after its first commit (`b935ad9`) are test defects (the reviewer re-ran
+  the first version: 7 passed, 2 failed; no assertion weakened): acceptance-test defects of this task = 2.
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:

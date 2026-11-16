@@ -36,7 +36,7 @@ INC-001 closed in D-179), T-057 (project panel, `7e8a01c`, D-192). The product: 
 opens a window with a project panel and one editor; Linux with X11 only until the platform tasks merge.
 
 **Branches for the owner to delete (D-198; the director's deletion was refused with 403):** `ci/T-070`,
-`ci/T-070-negative`, `ci/T-054` (pushed 23:36Z for ruling Q-4 A of T-054), `ci/T-058` (pushed 23:51Z).
+`ci/T-070-negative`, `ci/T-054` (pushed 23:36Z for ruling Q-4 A of T-054), `ci/T-058` (pushed 23:51Z), `ci/T-059` (pushed 01:36Z). The owner said on 2026-11-16 that they can stay for now (D-207).
 
 Drafts: T-066, T-068, T-053, T-064, T-051, T-043, T-033, T-041 (last; owner told first), T-080, T-081, T-060 to
 T-063, T-022, T-024 to T-031, T-044 to T-048, T-050, T-007, T-009, T-034. T-052 abandoned.

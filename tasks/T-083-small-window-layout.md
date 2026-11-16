@@ -33,6 +33,10 @@ shows.
   not `offscreen`, and none has a row.
 - The same run's side finding: at that size a `Documents` click did not change `Title` (cause not investigated;
   T-058's criteria click `Documents` at the default size only).
+- `reviews/T-059-r1.md` (run R-300), finding 1: a document whose path equals a value the bar shows (`Ln 1`,
+  `Col 1`, `utf-8`, `lf`) makes its `Documents` click target `ambiguous_target`: this task states the limit in
+  `ui-status.md` or gives the bar's nodes a role of their own. Finding 2: with one document the bar has no rows at
+  1280x300, 400x300 and 200x300, and rows from 1280x305: the limit's paragraph is to say so.
 
 ## Open questions for the specification
 - Is the `Documents` finding a defect of T-058 (the click is refused, or lands on another node) or the script's
