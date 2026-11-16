@@ -2,10 +2,10 @@
 id: T-059
 title: "Show the current document's caret line and column, encoding and line-ending style in a status bar below the editor, re-read only after a change"
 tier: medium            # ADR-0002 default (UI behaviour over existing commands; no high criterion); ≥ the claimed item's tier (`ui.status-bar`: low; items ⇒ medium); fixed at specified (METHODOLOGY v1.4 §4)
-state: specified            # director only, written with every transition; see METHODOLOGY §3
+state: in_progress            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: [ui.status-bar]
-depends_on: [T-058]     # `PanelView::changes`, added by T-058; not merged when this spec was written: spec check required
+depends_on: [T-058]     # merged at 7acf7ce (`PanelView::changes`); spec check R-295 done
 touches:                # one role per path (D-153); no gate path
   - crates/kiln-ui/src/panels/status.rs      # implementer: the panel (created empty by T-056)
   - apps/kiln/tests/acceptance_t059.rs       # implementer, on task/T-059-tests first (odd arm, METHODOLOGY §6)
@@ -47,8 +47,8 @@ When there is a current document, four nodes of role `label`, each with an acces
 
 | `label` | `value` | Source |
 |---|---|---|
-| `Line` | the caret's line, 1-based, in decimal (`cursor.get` `line` + 1) | `cursor.get` |
-| `Column` | the caret's column, 1-based, in chars (`cursor.get` `col` + 1): a combining mark, a joiner or a tab each count as one char | `cursor.get` |
+| `Line` | `Ln ` followed by the caret's line, 1-based, in decimal (`cursor.get` `line` + 1), e.g. `Ln 2` (R-295: a bare number could equal a generated document path, Pinned (f)) | `cursor.get` |
+| `Column` | `Col ` followed by the caret's column, 1-based, in chars (`cursor.get` `col` + 1): a combining mark, a joiner or a tab each count as one char; e.g. `Col 6` | `cursor.get` |
 | `Encoding` | exactly `doc.info`'s `encoding`: `utf-8`, `utf-8-bom`, `utf-16le` or `utf-16be` | `doc.info` |
 | `Line ending` | exactly `doc.info`'s `line_ending` (`lf`, `crlf`, `cr`, `none`), followed by ` (mixed)` when `mixed_line_endings` is true | `doc.info` |
 
@@ -59,8 +59,13 @@ When there is a current document, four nodes of role `label`, each with an acces
 - Not shown: dirty state (`Title` and the tab show it), selection size, language or syntax mode.
   No command reports a language: the editor colours a document by its path's suffix, which is the
   UI's rule, not a command's result.
-- Where the bar sits ("below the editor", `panels/mod.rs`) and its layout are not specified for
-  tests. The bar is one row tall.
+- Where the bar sits: below the editor, at the bottom of the document area, under the tab strip,
+  `Title`, the project panel and the editor (`panels/mod.rs`; the shell draws it first, bottom
+  up). Its layout is not specified for tests. The bar is one row tall.
+- Measured (R-295, prototype on main `c772117`): at the default size with 300 open documents, the
+  four nodes are on screen and each paints exactly its value. At `--size 800x320` with 300 open
+  documents, the four nodes exist and are not `offscreen`, but **none has a row**: no char of the
+  bar is reported as painted in it. Q-5 decides whether that must be fixed here.
 
 ### UI requests that act on it
 None: the bar is a display. It takes no focus, and a click on it does nothing (stated as
@@ -68,9 +73,14 @@ behaviour in `ui-status.md`, so the evaluator's inert check (O5) does not report
 
 ### Control requests the bar sends, and when
 - **Reads**: read-only `cursor.get {"doc": <current>}` and `doc.info {"doc": <current>}` in the
-  first frame after a change. A change is a successful request of any source other than a read,
-  or a change of the current document: `PanelView::changes()` (T-058) or `PanelView::current()`
-  differs from what the bar last read for. Both reads are logged.
+  first frame after a change, in the words of `docs/protocol/ui-tabs.md` (T-058 ruling h3,
+  D-201). A **change** is any successful request that reaches the session from outside the UI's
+  own reads (the editor view's and the panels' read-only requests), a script's read-only control
+  request (`doc.list`, `buffer.text`, `project.tree`, …) included, or a change of the current
+  document (a tab or `Documents` click). The bar reads again in the first frame after one; how
+  many reads one action causes is not part of this interface. The bar detects a change by
+  `PanelView::changes()` or `PanelView::current()` differing from what it last read for. Both
+  reads are logged.
 - **Nothing** on an idle frame, on a scroll or a click that sends no request, or with no document
   open. A script of control requests only writes `Host::log_script()` (L7).
 - A refused read (it cannot happen for an open document) leaves the bar empty and `Message`
@@ -87,17 +97,17 @@ affect only the `Column` count, which is in chars as `cursor.get` reports it.
 No platform difference: the values are the commands' own. Test files use no Unix-only API.
 Evidence for macOS and Windows comes from CI once T-070 has merged.
 
-### Rust items this builds on (on main `c288f7f`, plus T-058's method; not used by tests)
+### Rust items this builds on (on main `c772117`, T-058 merged; not used by tests)
 ```rust
 pub(crate) fn show(ui: &mut egui::Ui, view: &mut PanelView<'_>);    // panels/status.rs, kept
 impl<'a> PanelView<'a> {
     pub(crate) fn read(&mut self, command: &str, params: serde_json::Value) -> Result<serde_json::Value, (String, String)>;
     pub(crate) fn current(&self) -> Option<u64>;
-    pub(crate) fn changes(&self) -> u64;                              // added by T-058
+    pub(crate) fn changes(&self) -> u64;   // merged, panels/mod.rs:78; counts every successful request through the session (`Session::handle_line`), a script's read-only ones included, and every change of the current document; not the panels' and the editor's `read`s (session.rs:44–66, 84–91)
 }
 ```
-The shell gives `show` a bottom-up `Ui` (`panels/mod.rs`). The spec check after T-058 merges pins
-`changes()` as merged.
+The shell gives `show` a bottom-up `Ui` (`panels/mod.rs`). `changes()`'s doc comment says "other
+than a read"; the code counts a script's read-only control requests too, as h3 says (R-295).
 
 ### Rust API used by tests
 None. All criteria are tested through the built `kiln` binary, with `kiln_control::Host` as the
@@ -113,16 +123,30 @@ only Rust oracle (T-055's signatures).
 - (d) Line and column as `cursor.get` gives them, plus one. Linux evidence until T-070.
 - (e) Threat model: n/a (two read-only requests per change).
 - (f) Facts the merged tests rely on, which this task keeps:
-  - F2: the four nodes each paint exactly their value. No new node carries a value equal to a
-    `Documents` path, so no merged `{"value":…}` target changes.
+  - F2: the four nodes each paint exactly their value (one row) wherever they have a row.
+  - **No target collision (R-295).** Merged tests target `Documents` entries as
+    `{"role":"label","value":<path>}` (`acceptance_t058.rs:255`, `tabs_t058.rs:199`). The bar's
+    nodes are also of role `label`. `acceptance_t058.rs`'s generator (`PIECES`, line 2309) can make
+    a root file named `7` and so a document path `7`, which a bare line or column number could
+    equal: then that Documents click would be `ambiguous_target`. Hence the `Ln `/`Col ` prefixes.
+    No path the merged generators make can equal `Ln …`, `Col …`, an encoding name, or a line-ending
+    value: `PIECES` and `JOINS` contain no `L`, `C`, `u`, `t`, `l`, `o`, `c`, and `T-057`'s
+    generator is the same alphabet. The bar adds no node labelled `Close …`, `Discard …`, `Tabs`,
+    `Project`, `Project files`, `Path`, `Open`, `Documents`, `Editor`, `Title` or `Message`. It
+    adds no node with value `modified`, and none inside the `Tabs` subtree, so `acceptance_t058`'s
+    group bounds (each tab's group ends with the `Tabs` subtree) and its "nowhere outside the
+    strip" checks are unaffected. `{"value_contains":"."}` (expected ambiguous) gains no match.
   - L1–L8: L4 the bar takes no focus; L5 none of the labels `Line`, `Column`, `Encoding`,
     `Line ending` is `Path`, `Open`, `Documents` or `Message`, or contains `Pat` or `Ope`; L7; L8
     (settling within 60 frames: measured 3–5 with the bar, E2).
   - T-057's layout-dependent tests (`ac2_…` at 800x320, `ac3_…` at 1280x8192): passed with the bar
     and the tab strip both present (E1). `acceptance_t057.rs` is not in `touches`. A failure is a
     `QUESTION:`.
-  - T-058's acceptance tests: not on main yet. The spec check after T-058 merges lists what they
-    assume about the space below the editor.
+  - T-058's tests (`acceptance_t058.rs`, `tabs_t058.rs`, on main) and T-057's layout-dependent
+    tests: with the prototype bar on main `c772117`, every target of `apps/kiln` passed, including
+    `acceptance_t058` (14) with `ac5_a_wide_dirty_path_keeps_its_row_and_its_mark` and `ac9`'s 300
+    documents, `tabs_t058` (12), `acceptance_t057` (12) with `ac2`/`ac3`: 158 tests in all, 0 failed
+    (R-295, E3). `acceptance_t058.rs` and `acceptance_t057.rs` are not in `touches`.
   Not to be pinned: a whole snapshot, the bar's position, its separators or decoration, which
   reads the editor sends.
 - (g) Worked examples, executed with `kiln script` on a scratch build of main `c288f7f` plus the
@@ -134,15 +158,16 @@ only Rust oracle (T-055's signatures).
   - `bom.txt` answers `encoding: "utf-8-bom"`;
   - `b.txt` (`b\r\nc\r\n`) answers `line_ending: "crlf"`;
   - in `src/a.rs` (`fn main() {\n    let x = 1;\n}\n`), a click `at {row:1, col:4}` on `Editor` and
-    `type "z"` give `cursor.get` line 1, col 5 (head 17, T-056 (g)), and the bar shows `Line` `2`,
-    `Column` `6`.
+    `type "z"` give `cursor.get` line 1, col 5 (head 17, T-056 (g)), and the bar shows `Line`
+    `Ln 2`, `Column` `Col 6` (the prototype showed `2` and `6`, without the prefixes added by
+    R-295).
 - (h) Evaluator calls for `ui.status-bar` (ADR-0008 (O1)–(O5)): `kiln script` with documents of
   each encoding and line-ending kind (including mixed and none), caret moves by keys and clicks;
   snapshots before and after, the four values against `cursor.get` and `doc.info` in the same
   session; `--log` for the bar's reads (read-only, none on idle frames).
 - (i) Sentences for `docs/protocol/ui-status.md`, worded for copying, with their evidence:
-  - S1 "The status bar shows, for the current document, the caret's line and column (both
-    counted from 1; the column in chars, as `cursor.get` counts it), the encoding as `doc.info`
+  - S1 "The status bar shows, for the current document, the caret's line and column (as
+    `Ln <n>` and `Col <n>`, both counted from 1; the column in chars, as `cursor.get` counts it), the encoding as `doc.info`
     names it, and the line ending as `doc.info` names it, followed by ` (mixed)` when the line
     endings are mixed." Evidence: E2; AC-1, AC-2.
   - S2 "With no document open the bar shows nothing." Evidence: AC-5.
@@ -165,15 +190,23 @@ implementer commits them failing on `task/T-059-tests` first.
   `e`+U+0301, a zero-width joiner, `ffi`, `漢字`, `😀`, `שלום`, `سلام`, `٣`, LF, CRLF and CR
   breaks), and 40 random caret steps through the UI (arrow keys with and without `ctrl` and
   `shift`, `Home`, `End`, clicks `at` a random visible row and column, typed text, `Enter`,
-  `Backspace`). After every step `Line` = `cursor.get` `line` + 1 and `Column` = `col` + 1.
+  `Backspace`). After every step `Line` = `Ln ` + (`cursor.get` `line` + 1) and `Column` =
+  `Col ` + (`col` + 1).
   Oracle: `cursor.get` in the same session.
-- AC-3 (switching): with two documents open, switching by a tab click (T-058), by a `Documents`
-  click and by a control `doc.open` (`already_open`) shows the newly current document's values.
-  Oracle: `cursor.get` and `doc.info` of that document.
+- AC-3 (switching, T-058's switching clause): with two documents of different encodings and line
+  endings and different carets open, switching by a tab click, by a `Documents` click and by a
+  control `doc.open` (`already_open`) shows the newly current document's values. After a refused
+  close (`Close <path>` of a dirty document, `unsaved_changes`) the four values are unchanged.
+  After closing the current document (a clean one, by `Close <path>`) they are those of the open
+  document with the highest id. Oracle: `cursor.get` and `doc.info` of that document;
+  `docs/protocol/ui-editor.md`'s rule.
 - AC-4 (reads and idle): (a) a script of control requests only writes `Host::log_script()`;
-  (b) 600 frames with a document open add nothing to the log; (c) after a control `cursor.set` on
-  the current document, the frames until the UI settles add read-only requests only, and the
-  bar's `Line` and `Column` follow the new head. Oracle: log comparison; `cursor.get`.
+  (b) 600 frames with a document open, run after the last control request, add nothing to the log;
+  (c) after a control `cursor.set` on the current document, the frames until the UI settles add
+  read-only requests only, and the bar's `Line` and `Column` follow the new head; (d) after a
+  script's read-only control request (e.g. `doc.list`), the frames that follow may add read-only
+  requests and 600 further frames add nothing. No read count is pinned. Oracle: log comparison;
+  `cursor.get`.
 - AC-5 (no document; display only): a fresh session and a session after the last document is
   closed have none of the four nodes. A `click` on `Line` changes no node's value, adds nothing to
   the log, and settles. Oracle: snapshot, log.
@@ -181,13 +214,28 @@ implementer commits them failing on `task/T-059-tests` first.
 ## Out of scope and implementer notes
 - Out: dirty state, selection size, a language or syntax mode, the document's length, a clickable
   bar (go-to-line from the bar: T-060's), configuring the bar.
-- Do not edit `mod.rs` (T-058 adds `changes()`; if more is needed, `QUESTION:`), `observe.rs`
+- Test notes (R-295): a click on a tab leaves the keyboard nowhere (draft T-082), so every test
+  that types or sends a key to the editor first gives it focus with `focus` on `Editor` or a
+  `click` on it; none relies on focus after a tab click. Tests compare logs only for frames run
+  after their last control request, or put the same control reads in both sessions (a script's
+  read-only control request is a change, h3). The tests use no Unix-only API.
+- Order of delivery (odd arm): `apps/kiln/tests/acceptance_t059.rs` is committed first, failing
+  on base, on `task/T-059-tests`; then `status.rs`, `status_t059.rs` and `ui-status.md` on
+  `task/T-059`; then the implementer runs the whole gate (`no-skip` included) on a local scratch
+  merge of the two branches before reporting. All four paths belong to the implementer.
+- Do not edit `mod.rs` (if more than `changes()` is needed, `QUESTION:`), `observe.rs`
   (T-066), `script.rs`, `window.rs` (T-068), `ui.md`, `editor.rs`, `shell.rs`, or merged tests.
 
 ### Collisions and order
-- **T-058**: must merge first (`PanelView::changes`). Not in flight together: T-059's spec builds
-  on a method T-058's branch adds.
-- **T-066, T-068, T-071, T-054**: no shared path; may be in flight beside T-059.
+- **T-058**: merged at `7acf7ce`.
+- **T-054** (`Cargo.toml`, `docs/development.md`, `xtask/tests/`), **T-071** (`xtask/` only),
+  **T-066** (`observe.rs`, `ui.md`), **T-068** (`script.rs`, `window.rs`, `ui.md`): no shared
+  path; may be in flight beside T-059.
+- **T-082** (draft: `tabs.rs`, `shell.rs`, `ui-tabs.md`): no shared path unless Q-5 A adds
+  `shell.rs`, in which case they are not in flight together.
+- Platforms: `apps/` is platform-sensitive (ADR-0009 Decision 5). The director pushes the rebased
+  head to `ci/T-059` and queues only when the counted jobs are green: `window-linux` and
+  `window-probe (macos-15)` count since D-202.
 - **T-060, T-061**: no shared path. **T-062, T-063**: they edit `shell.rs`, which T-059 does not
   touch; no conflict by path.
 
@@ -212,6 +260,19 @@ Questions for the director, before dispatch:
   - A: T-058 first, adding `PanelView::changes` (as specified).
   - B: T-059 first, adding it itself; then T-058 depends on T-059.
   - **Recommendation: A** (the tabs carry the medium item and the switching a user needs).
+
+- **Q-5 (R-295). The bar at a small window with many tabs.** At `--size 800x320` with 300 open
+  documents the four nodes have no rows (measured, the bar not shown as painted).
+  - A: require that each node has exactly one row equal to its value at that size too, and allow
+    `crates/kiln-ui/src/shell.rs` in `touches` (implementer: keeping the area above the bar from
+    covering it). **Unmeasured**: no fix was probed (the scratch disk was below the 8 GB stop line
+    after one build). It needs a probe first: a prototype that clips the area above the bar, then
+    `acceptance_t057`/`acceptance_t058`/`tabs_t058` at 800x320.
+  - B: state it as a limit in `ui-status.md`, with the measurement, and file a follow-up that
+    probes A (measured; no `shell.rs` change, so no collision with T-082).
+  - **Recommendation: B**, with the follow-up dispatched after T-082 (both would edit `shell.rs`).
+    If B is ruled, `ui-status.md` gets S5: "In a small window with many tabs the bar can be
+    covered: at 800x320 with 300 open documents its values are not painted (R-295)."
 
 ### Rulings (director, D-194)
 - **Q-1: A.** Line and column are 1-based.
@@ -247,6 +308,58 @@ after this run):
 
 Not checked: T-058's final shape (not merged); macOS and Windows; a release build; the window.
 
+### Spec check R-295
+Planner run R-295 (booked to `iter-2`, resumed), at main `c77211720b2f89bc2998acc337ba3a77c95d2a3c`
+(T-058 merged at `7acf7ce`).
+
+What changed:
+- The read rule is worded as h3 (D-201). AC-4 now names no read count and adds case (d) for a
+  script's read-only control request.
+- `changes()` is pinned as merged, and its doc comment's "other than a read" is noted as narrower
+  than the code (`Session::handle_line` counts a script's read-only requests).
+- The values of `Line` and `Column` gain the prefixes `Ln ` and `Col `. Reading
+  `acceptance_t058.rs` showed that a bare number can collide with a generated document path in a
+  Documents-click target of role `label`. The prototype tests passed, but only by the seeds' luck:
+  a root file `7` is possible.
+- AC-3 covers the switching clause (tab and `Documents` clicks), a refused close, and the close of
+  the current document. AC-5 covers the last close.
+- Focus and log-comparison test notes added; the arm's order of delivery stated; `ci/T-059` and
+  the two counted jobs (D-202).
+- Q-5 is new (a small window).
+
+Measured (one scratch tree under `/home/user/kiln-plan-T-059/`, `CARGO_PROFILE_DEV_DEBUG=line-tables-only
+CARGO_INCREMENTAL=0`; `df -h /home/user` showed 8.0 GB free before the build and 6.2 GB after; the
+tree was deleted after the runs (7.7 GB free), and no second build was made, being under the 8 GB
+stop line):
+- E3: the R-276 bar prototype on current main; `cargo test -p kiln --locked --no-fail-fast` passed
+  every target: 0, 26, 28, 12, 14, 7, 14, 2, 5, 9, 12, 7 (158 passed, 0 failed), among them
+  `acceptance_t058` (incl. ac5 and ac9) and `tabs_t058`.
+- E4: 300 control opens, `frames 2`, then snapshot, a `Documents` click on `f010.txt`, snapshot, a
+  control `doc.close` of doc 300, `frames 2`, snapshot:
+  - at the default size, `Line`, `Column`, `Encoding`, `Line ending` on screen with rows `1`, `1`,
+    `utf-8`, `lf`. `Title` followed the `Documents` click (`f010.txt — Kiln`) and stayed after
+    closing a non-current document;
+  - at `--size 800x320` the four nodes exist, are not `offscreen` and have no rows (Q-5). There the
+    `Documents` click did not change `Title` (`f299.txt` stayed): at that size with 300 tabs the
+    click did not reach the entry. Not investigated (no second build): a matter for T-058's
+    follow-ups, and T-059's criteria do not click `Documents` at that size.
+
+Not checked: a fix for Q-5 A; macOS and Windows; the window; a release build; why the
+`Documents` click had no effect at 800x320 with 300 tabs (reported to the director).
+
+Estimate: about 690,000 tokens, below the medium ceiling of 800,000. That is the stage's medium
+median of 686,472 (retro-2s1). The task is smaller than T-058 (909,094 with an independent test
+author): one panel file, display only, no close or switching logic, and in the implementer-first
+arm one fewer agent. The risk is Q-5 A, if ruled, which adds a layout change and a re-run of the
+layout-dependent tests.
+
+### Rulings on spec check R-295 (director, D-206)
+- **Q-5: B.** That nothing of the bar is painted at `--size 800x320` with 300 tabs is stated as a limit in
+  `docs/protocol/ui-status.md` with the measurement; T-083 (draft) takes the layout at small sizes.
+- The values `Ln <n>` and `Col <n>` (a bare number could make a merged test's `{"role":"label","value":…}` click
+  ambiguous) are accepted; ruling Q-1 A (1-based) stands.
+- Before the queue the rebased head goes to `ci/T-059`; `window-linux` and `window-probe (macos-15)` must be green.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
@@ -257,6 +370,7 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 ### planner
 - 2026-11-14 · R-225 · (new) · did: filed as a draft for ADR-0007. · gate attempts: 0 · missing context: T-056's merged shell · next: director.
 - 2026-11-15 · R-276 · draft · did: specified the status bar against main `c288f7f` with a prototype (all 110 merged `kiln` tests green); tier medium (item low ⇒ medium), implementer-first arm (odd); 5 criteria, AC-2 on generated text; reads after a change only; depends on T-058 (`PanelView::changes`), so not in flight with it; spec check after T-058 merges. · gate attempts: 0 (scratch builds only) · not run: macOS, Windows, the window · missing context: T-058 as merged · next: director (Q-1 to Q-4).
+- 2026-11-16 · R-295 · draft · did: spec check against main `c772117` (T-058 merged): read rule in h3's words, `changes()` pinned, `Ln `/`Col ` prefixes after a target-collision finding, AC-3/AC-4/AC-5 extended, focus and delivery notes, Q-5 (bar unpainted at 800x320 with 300 tabs). Prototype re-run: 158 `kiln` tests green. · gate attempts: 0 · not run: a Q-5 fix (disk), macOS, Windows · missing context: none · next: director (Q-5).
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
