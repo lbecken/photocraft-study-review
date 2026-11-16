@@ -1430,9 +1430,11 @@ fn ac4c_a_control_cursor_set_is_read_then_idle() {
         &json!({"doc": 1, "anchor": 1, "head": 13}),
         "k2",
     );
-    assert_eq!(
-        log.len() - 1,
-        log_index(&log, i2 + 1, "cursor.get", &json!({"doc": 1}), "g")
+    // The script's last request `g` (a read that runs no frame) is the log's last entry.
+    let last_entry = log.last().expect("a log");
+    assert!(
+        last_entry["command"] == json!("cursor.get") && params_of(last_entry) == json!({"doc": 1}),
+        "the log ends with `g`: {last_entry}"
     );
     for (from, to, what) in [(i1, i2, "after k1"), (i2, log.len() - 1, "after k2")] {
         let window = &log[from + 1..to];
@@ -1464,10 +1466,12 @@ fn ac4d_a_read_only_control_request_then_idle() {
         focus("fe", &editor_target()),
         type_text("ty", "w"),
         key("k", "ArrowRight", &["shift"]),
-        ctl("l", "doc.list", json!({})),
-        frames("f1", SETTLE),
-        snapshot("s"),
     ];
+    let prefix_before_list = prefix.clone();
+    let mut prefix = prefix;
+    prefix.push(ctl("l", "doc.list", json!({})));
+    prefix.push(frames("f1", SETTLE));
+    prefix.push(snapshot("s"));
     let mut with = prefix.clone();
     with.push(frames("idle", 600));
     with.push(cursor_get("g", 1));
@@ -1483,8 +1487,23 @@ fn ac4d_a_read_only_control_request_then_idle() {
         want_bar(b.ok("g"), b.ok("i")),
         "the bar of b.txt"
     );
+    // The script's `doc.list` is logged right after what the same script up to the key logs
+    // (the panels read `doc.list` too, so it is found by position, not by content).
+    let mut upto = prefix_before_list;
+    upto.push(snapshot("u"));
+    let c = run(&dir, "upto", &upto, &root_args());
     let log = b.log_entries();
-    let at = log_index(&log, 0, "doc.list", &json!({}), "the script's doc.list");
+    let before = c.log_entries();
+    assert!(
+        log.len() > before.len() && log[..before.len()] == before[..],
+        "the log does not extend that of the script up to the key (not deterministic)"
+    );
+    let at = before.len();
+    assert!(
+        log[at]["command"] == json!("doc.list") && params_of(&log[at]) == json!({}),
+        "the script's doc.list follows: {}",
+        log[at]
+    );
     all_read_only(&log[at + 1..], "after the script's doc.list");
     assert_eq!(
         a.log, b.log,
