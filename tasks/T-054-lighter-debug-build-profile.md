@@ -434,4 +434,11 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   - release: 185 units Fresh after removing the tables;
   - 23 mutants: 18 killed (16 acceptance, 2 guard only), 1 equivalent, 4 survived (M17, M18, M21, M23 `[profile.test] debug = true`).
   Findings: 1 test gap, 1 spec gap (AC-4 does not pin `[profile.test]` or extra keys), 1 nit; doc_sentences 0. A base run that overlapped the disk-full minute (about 00:05Z) was discarded and re-run. · gate attempts: 1 (last: green, scratch clone) · not run: macOS, Windows (expectation in the review); the whole-tree size of M23 · missing context: none · next: director (ruling on finding 2, then test author).
+- 2026-11-16 · R-298 · tests_joined · round 2 (final) · approve · reviewed `6264d27fe6f88a1502207123b4925638cc104d10`, delta since `500da2a`. Rulings j1 and j2 (D-208, main's task file) read and accepted. All runs with `CARGO_PROFILE_DEV_DEBUG` and `CARGO_INCREMENTAL` unset, in the worktree's `target/`. did:
+  - delta scope: only `xtask/tests/acceptance_t054.rs` and the test author's log;
+  - head 7 + 2 passed; base manifest: 7 acceptance tests fail, 2 guards pass;
+  - 10 mutants (round 1's four survivors and six new ones aimed at the key-set checks), all killed by `acceptance_t054`;
+  - 4 equivalent spellings pass;
+  - no Unix-only API; nothing pinned beyond j1.
+  Findings: none. · gate attempts: 0 (manifest and product unchanged; join reported green, 1027 tests) · not run: macOS, Windows (director's CI reading) · missing context: none · next: director (approval row, queue).
 <!-- end reviewer log -->
