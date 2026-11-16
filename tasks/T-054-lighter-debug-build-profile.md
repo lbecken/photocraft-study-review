@@ -366,6 +366,17 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
 
 ### director
 <!-- end director log -->
+- 2026-11-16 **CI round 1 (ruling Q-4 A)**: run 43775682214 of `platforms.yml` on `ci/T-054` at the joined head
+  `213df3e048dd436f34e2eb6d4652eabc471817cc` (pushed 2026-11-15T23:36Z; extraction `tasks/ci-runs/T-054-round-1.md`,
+  the job logs by a helper, the test verdicts from the uploaded artefacts by the planner, run R-294). **Linux and
+  macOS: `guard_t054` 2 passed (`ac2_backtrace_names_this_file_and_line ... ok`,
+  `ac2_panic_location_is_this_file_and_line ... ok`) and `acceptance_t054` 5 passed.** Windows: no verdict, because
+  no `xtask` test binary compiles there until T-071 (`could not compile xtask (test "guard_t005")`); the Windows
+  verdict of the backtrace guard is read on T-071's CI round (noted there), and a difference found then is ruled
+  then. Jobs: `gate-linux` success (`GATE PASSED in 462.9s`, 1025 tests; `du -sh target` 4.2G against 8.6G in
+  run 43765532298); `window-linux` and `window-probe (macos-15)` success (the two counted jobs); the macOS and
+  Windows gates red as on main; macOS totals 1,003 passed and 22 failed, the same 22 names as before the change.
+
 ### planner
 - 2026-11-14 · R-225 · (new) · did: filed as a draft for ADR-0007 (D-144 change 14). · gate attempts: 0 · missing context: the exact setting D-097 measured · next: director.
 - 2026-11-15 · R-270 · draft · did: measured six settings in a scratch copy, one at a time under the 14 GB rule; specified option C (line tables, no dependency debug info, no incremental: 7.6 → 2.6 GB for the test build); tier high (gate path `[profile.*]`), approval row `Approve T-054 … gate paths`, no `dependency versions`; 4 criteria, two of them tests in `xtask/tests/` (one fails on base, one guard); ordered after T-070 (shared `docs/development.md`). · gate attempts: 0 (scratch builds only) · not run: a whole gate run, macOS, Windows · missing context: none · next: director (Q-1 to Q-3).

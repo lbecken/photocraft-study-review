@@ -303,6 +303,12 @@ Against main `cbb54a2628afbd368087e82c5d7925eaa5b08625` (T-070 merged at `c7af15
   22 failed, none a product fault by the panic messages; the "366 passed, 11 failed" in the director's records of
   T-070 was the printed prefix. The 6 `xtask` failures are this task's, the 16 product-test failures T-079's.
 
+### Note from T-054 (director, D-205)
+When `xtask`'s tests compile on Windows (AC-5, AC-6), this task's CI round on `ci/T-071` is the first run that
+gives `guard_t054::ac2_backtrace_names_this_file_and_line` a verdict on Windows (ruling Q-4 A of T-054: a backtrace
+with line tables only must name file and line). The director reads it from the artefact and records it; if it
+fails there, it is ruled as a stated platform difference before this task is queued.
+
 ## Log
 ### director
 <!-- end director log -->
