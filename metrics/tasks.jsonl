@@ -789,3 +789,4 @@
 {"kind":"transition","task":"T-084","iteration":2,"at":"2026-11-16T02:42:14Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-084","iteration":2,"at":"2026-11-16T02:42:14Z","from":"self_verified","to":"queued"}
 {"kind":"transition","task":"T-084","iteration":2,"at":"2026-11-16T02:50:14Z","from":"queued","to":"merged"}
+{"kind":"run","task":"iter-2","iteration":2,"run":"R-303","role":"planner","tier":null,"started_at":"2026-11-16T03:02:46Z","ended_at":"2026-11-16T03:03:01Z","wall_s":15,"tokens":89076,"tool_calls":6,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"CI reading (a helper, not a planner's work): ci.yml runs 431 to 436 and 438 on main success, 437 in progress; platforms.yml on main at 20f63f4 (T-059's merge) and at 995b176 (the evaluation's publish): window-linux and window-probe (macos-15) success in both, the uncounted jobs red or running"}
