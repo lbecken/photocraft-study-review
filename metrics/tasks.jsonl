@@ -781,3 +781,4 @@
 {"kind":"transition","task":"T-059","iteration":2,"at":"2026-11-16T01:36:22Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-059","iteration":2,"at":"2026-11-16T01:36:22Z","from":"reviewed","to":"queued"}
 {"kind":"run","task":"iter-2","iteration":2,"run":"R-301","role":"planner","tier":null,"started_at":"2026-11-16T01:40:26Z","ended_at":"2026-11-16T01:40:45Z","wall_s":19,"tokens":86559,"tool_calls":6,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"CI reading (a helper, not a planner's work): platforms.yml run 43787215183 on ci/T-059 at 6f32d10 and run 43786525032 on main at 51ee7c1 (the push with T-054's merge): in both window-linux and window-probe (macos-15) success, the uncounted jobs red or running; ci.yml run 429 on 51ee7c1 success"}
+{"kind":"transition","task":"T-059","iteration":2,"at":"2026-11-16T01:51:48Z","from":"queued","to":"merged"}
