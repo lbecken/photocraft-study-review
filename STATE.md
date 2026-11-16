@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-16 01:56 UTC_
+_Last updated: 2026-11-16 03:00 UTC_
 
 ## Now
 **Owner's instruction of 2026-11-16 (D-207): the `ci/…` branches can stay; finish cut 2 (T-059, evaluation B, report),
@@ -11,13 +11,11 @@ Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run t
 2, and make the editor multi-platform (Linux, macOS, Windows).** Signed installers are out of scope (D-173); `ci/…`
 branches may be pushed and are deleted after their task merges (D-185).
 
-In flight:
-- **Evaluation B at cut 2** (run R-302, a fresh evaluator): clean clone of main `20f63f499905803ccfe9ee2578964429d8bede09`
-  at `/home/user/kiln-eval-cut2/clone`, work and drivers in `/home/user/kiln-eval-cut2/work`, brief at
-  `/home/user/kiln-eval-cut2/brief.md`. When it reports: book it (`iter-2`), assign task numbers to its `NEW-n`
-  findings (next free: T-084), publish with `cargo xtask publish T-NNN --title … --iteration 2 <path>` (the
-  evaluation gets its own task number, as T-067 did at cut 1), record the decision row, **report to the owner and
-  pause** (D-207). Nothing else is in flight; no worktree exists.
+**PAUSED at cut 2 (D-207, D-216).** Nothing is in flight; no worktree exists. The evaluation at cut 2 is published
+(`evaluations/iter-2-cut-2.md`, T-084, D-215): the three cut-2 items confirmed, none rejected. Waiting for the
+owner's choice of what comes next: the platform track (T-071, T-079, T-072 to T-078), the 17 planned items, or
+the follow-ups (T-082, T-083, T-085, T-086, T-066, T-068, T-053), and a retrospective of cut 2 (material: D-180
+to D-216). Next free task number: T-087. Next run id: R-303. Next decision: D-217.
 
 Merged since cut 1: T-069 (CI fix), T-057 (project panel), T-070 (`platforms.yml`: gate on three systems, the
 Linux window procedure, window probes), T-058 (tabs), T-054 (lighter debug profile; the interim variables of
@@ -32,7 +30,7 @@ round.
 CI on main: `ci.yml` run 429 on `51ee7c1` (T-054's merge) green and the two counted platform jobs green there
 (D-213); the runs on the push with T-059's merge (`20f63f4`) are read at the next addendum.
 
-Scorecard on main: 64 items: 44 verified, 3 implemented, 0 failing, 17 planned. Merged in this stage: T-055
+Scorecard on main: 64 items: 47 verified, 0 implemented, 0 failing, 17 planned. Merged in this stage: T-055
 (`kiln script`, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (evaluation at cut 1), T-069 (CI fix,
 INC-001 closed in D-179), T-057 (project panel, `7e8a01c`, D-192). The product: `kiln [--root <dir>] [<path>…]`
 opens a window with a project panel and one editor; Linux with X11 only until the platform tasks merge.
