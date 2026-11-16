@@ -39,6 +39,10 @@ it states the reason and carries a path of the build machine; after this task it
   send such requests today.
 - T-057 to T-063 add panels that may scroll sideways or take a secondary click: the rule must not forbid them.
 
+## Note from the evaluation at cut 2 (director, D-215)
+`scroll` with `left` or `right` on `Tabs` and on `Project files` does nothing, although long tab and entry names
+are cut at the edge (`evaluations/iter-2-cut-2.md`, "Inert"): within this task.
+
 ## Log
 ### director
 - 2026-11-15 filed as a draft (D-169).

@@ -57,6 +57,12 @@ equivalent below the smallest `--size` (`--size 160x120` is refused while a wind
 Q2 a target `value_contains: ""` does not match a node without a value (say so); Q3 the `scroll_bar` node of an
 overflowing list appears only once the list has settled (say so).
 
+## Note from the evaluation at cut 2 (director, D-215)
+`evaluations/iter-2-cut-2.md`, "NEW-3" (this task is its number): `docs/protocol/ui.md`, "The shell", says when
+`Message` gets a refusal's kind and when it is cleared more narrowly than the binary and the module documents do:
+it also gets one from refused UI saves and refused panel expands, and successful saves and tab closes clear it.
+The cut-1 findings named in this task were seen again (the shader-cache sentence, "the lines consecutive").
+
 ## Log
 ### director
 - 2026-11-14 filed as a draft (D-141).

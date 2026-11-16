@@ -35,6 +35,10 @@ entries directly inside one directory, so that a panel can show every level it e
 ## Open questions for the specification
 - A new parameter (a depth) or a new command? Either changes the published schema of a verified item.
 
+## Note from the evaluation at cut 2 (director, D-215)
+Seen again: one unreadable directory anywhere below the root refuses the root's expand, so the panel cannot be
+opened at all (`evaluations/iter-2-cut-2.md`, "Known tasks seen again").
+
 ## Log
 ### director
 - 2026-11-15 filed as a draft (D-181).

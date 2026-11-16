@@ -37,6 +37,10 @@ shows.
   `Col 1`, `utf-8`, `lf`) makes its `Documents` click target `ambiguous_target`: this task states the limit in
   `ui-status.md` or gives the bar's nodes a role of their own. Finding 2: with one document the bar has no rows at
   1280x300, 400x300 and 200x300, and rows from 1280x305: the limit's paragraph is to say so.
+- `evaluations/iter-2-cut-2.md`, "NEW-2" (run R-302; this task is its number): at `--size` 300x300 and 400x300,
+  even with one document, the bar's text is painted inside `Editor`'s rows (`" 1utf-8lf"`) and the bar's nodes have
+  no rows; the real window draws the same overlap; at 200x200 and 300x200 `Editor` is offscreen and some actions
+  run 60 frames without settling. The 800x320 counts of T-059's limit reproduced (22 painted, 23 not).
 
 ## Open questions for the specification
 - Is the `Documents` finding a defect of T-058 (the click is refused, or lands on another node) or the script's
