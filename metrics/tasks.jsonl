@@ -776,3 +776,4 @@
 {"kind":"transition","task":"T-054","iteration":2,"at":"2026-11-16T01:11:24Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-054","iteration":2,"at":"2026-11-16T01:11:24Z","from":"reviewed","to":"queued"}
 {"kind":"transition","task":"T-059","iteration":2,"at":"2026-11-16T01:11:24Z","from":"self_verified","to":"tests_joined"}
+{"kind":"transition","task":"T-054","iteration":2,"at":"2026-11-16T01:29:02Z","from":"queued","to":"merged"}

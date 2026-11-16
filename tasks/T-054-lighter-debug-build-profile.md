@@ -2,7 +2,7 @@
 id: T-054
 title: "Make a debug build of the workspace about a third of its size, by line tables only, no debug info for dependencies and no incremental cache, with the same gate result and file and line still in panics and backtraces"
 tier: high              # ADR-0002 "a gate path": the root Cargo.toml's [profile.*] tables are gate tables (xtask/src/precheck.rs `gate_tables`); no claimed item; fixed at specified (METHODOLOGY v1.4 §4)
-state: queued            # director only, written with every transition; see METHODOLOGY §3
+state: merged            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: []
 depends_on: []          # nothing unmerged (T-070 merged at c7af15f, R-284); ordering only, see "Collisions"
