@@ -2,7 +2,7 @@
 id: T-059
 title: "Show the current document's caret line and column, encoding and line-ending style in a status bar below the editor, re-read only after a change"
 tier: medium            # ADR-0002 default (UI behaviour over existing commands; no high criterion); ≥ the claimed item's tier (`ui.status-bar`: low; items ⇒ medium); fixed at specified (METHODOLOGY v1.4 §4)
-state: self_verified            # director only, written with every transition; see METHODOLOGY §3
+state: tests_joined            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: [ui.status-bar]
 depends_on: [T-058]     # merged at 7acf7ce (`PanelView::changes`); spec check R-295 done
