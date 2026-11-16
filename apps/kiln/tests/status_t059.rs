@@ -125,7 +125,11 @@ fn bar(r: &HashMap<String, Value>, id: &str) -> [String; 4] {
                     .collect()
             })
             .collect();
-        assert_eq!(rows, [v.clone()], "{id}: {name} paints its value");
+        assert_eq!(
+            rows.as_slice(),
+            std::slice::from_ref(&v),
+            "{id}: {name} paints its value"
+        );
         v
     })
 }
