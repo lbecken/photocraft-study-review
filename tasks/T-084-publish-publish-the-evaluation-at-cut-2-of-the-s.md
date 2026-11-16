@@ -2,7 +2,7 @@
 id: T-084
 title: "Publish the evaluation at cut 2 of the second stage of iteration 2"
 tier: low
-state: queued
+state: merged
 owner_role: director
 scorecard_items: []
 depends_on: []

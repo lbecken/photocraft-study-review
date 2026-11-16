@@ -788,3 +788,4 @@
 {"kind":"transition","task":"T-084","iteration":2,"at":"2026-11-16T02:30:37Z","from":"ready","to":"in_progress"}
 {"kind":"transition","task":"T-084","iteration":2,"at":"2026-11-16T02:42:14Z","from":"in_progress","to":"self_verified"}
 {"kind":"transition","task":"T-084","iteration":2,"at":"2026-11-16T02:42:14Z","from":"self_verified","to":"queued"}
+{"kind":"transition","task":"T-084","iteration":2,"at":"2026-11-16T02:50:14Z","from":"queued","to":"merged"}
