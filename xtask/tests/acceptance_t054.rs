@@ -4,7 +4,11 @@
 //! The root manifest is parsed with `toml` (Rust API used by tests) and the tests assert, as AC-4
 //! states them: `profile.dev.debug` is `"line-tables-only"`, `profile.dev.incremental` is `false`,
 //! `profile.dev.package."*".debug` is `false`; `profile.release` and `profile.bench` are absent;
-//! `profile.dev` sets no `opt-level`, `debug-assertions` or `overflow-checks`. Nothing else of
+//! `profile.dev` sets no `opt-level`, `debug-assertions` or `overflow-checks`. Ruling j1 (D-208)
+//! reads AC-4 as "the `[profile.*]` tables are exactly the Interface's": `[profile]` holds only
+//! `dev`; `[profile.dev]` only `debug`, `incremental` and `package` (so no `build-override`, no
+//! other setting); `package` only `"*"`; `package."*"` only `debug`. Key sets are compared, so
+//! any TOML spelling of the same tables passes (inline tables, `package.'*'`). Nothing else of
 //! the file is read (no whole-file comparison, no key order, no comment text).
 //!
 //! The values are compared as the TOML values the Interface writes (a string and two booleans):
@@ -119,4 +123,55 @@ fn ac4_release_and_bench_profiles_are_absent() {
             "the root Cargo.toml has a [profile.{name}] table (AC-4: not written)"
         );
     }
+}
+
+/// The key set of `t`, sorted.
+fn keys(t: &toml::Table) -> Vec<&str> {
+    let mut k: Vec<&str> = t.keys().map(String::as_str).collect();
+    k.sort_unstable();
+    k
+}
+
+/// `t[key]` as a table; absent or not a table is an assertion failure.
+fn table<'a>(t: &'a toml::Table, key: &str, what: &str) -> &'a toml::Table {
+    t.get(key)
+        .and_then(toml::Value::as_table)
+        .unwrap_or_else(|| panic!("the root Cargo.toml has no {what} table"))
+}
+
+#[test]
+fn ac4_dev_is_the_only_profile_table() {
+    // Ruling j1 (D-208): no other profile (`test`, `release`, `bench` or any other name).
+    let m = manifest();
+    let p = profile(&m);
+    assert_eq!(
+        keys(p),
+        vec!["dev"],
+        "the profile tables of the root Cargo.toml (j1: only [profile.dev])"
+    );
+}
+
+#[test]
+fn ac4_dev_tables_hold_only_the_interface_keys() {
+    // Ruling j1 (D-208): [profile.dev] holds only `debug`, `incremental`, `package` (no
+    // `build-override`, no other setting); `package` only "*"; `package."*"` only `debug`.
+    let m = manifest();
+    let d = dev(&m);
+    assert_eq!(
+        keys(d),
+        vec!["debug", "incremental", "package"],
+        "the keys of [profile.dev] (j1)"
+    );
+    let pkg = table(d, "package", "[profile.dev.package]");
+    assert_eq!(
+        keys(pkg),
+        vec!["*"],
+        "the keys of [profile.dev.package] (j1: only \"*\")"
+    );
+    let star = table(pkg, "*", "[profile.dev.package.\"*\"]");
+    assert_eq!(
+        keys(star),
+        vec!["debug"],
+        "the keys of [profile.dev.package.\"*\"] (j1)"
+    );
 }
