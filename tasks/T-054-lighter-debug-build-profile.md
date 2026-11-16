@@ -2,7 +2,7 @@
 id: T-054
 title: "Make a debug build of the workspace about a third of its size, by line tables only, no debug info for dependencies and no incremental cache, with the same gate result and file and line still in panics and backtraces"
 tier: high              # ADR-0002 "a gate path": the root Cargo.toml's [profile.*] tables are gate tables (xtask/src/precheck.rs `gate_tables`); no claimed item; fixed at specified (METHODOLOGY v1.4 §4)
-state: tests_joined            # director only, written with every transition; see METHODOLOGY §3
+state: in_progress            # director only, written with every transition; see METHODOLOGY §3
 owner_role: planner
 scorecard_items: []
 depends_on: []          # nothing unmerged (T-070 merged at c7af15f, R-284); ordering only, see "Collisions"
@@ -358,6 +358,19 @@ worded as one measurement each).
   planner's figures of R-270: a figure in a document comes from a command of the run that writes it. The spec's
   D3 wording "one measurement each" is read as this.
 - The 14 GB free before a measured build (AC-3) is the rule; the dispatch's 9 GB was the director's slip.
+
+### Rulings on review round 1 (director, D-208; `reviews/T-054-r1.md` at `500da2a05c384cf05c0da7c39f5c5ef416d725c6`)
+- **j1 (findings 1 and 2: a spec gap, closed here; test author).** AC-4 is read as: **the `[profile.*]` tables of
+  the root manifest are exactly the Interface's.** There is no other profile table (`test`, `release`, `bench` or
+  any other name); `[profile.dev]` holds only the keys `debug`, `incremental` and `package`; `package` holds only
+  `"*"`; `package."*"` holds only `debug`; there is no `build-override`. `acceptance_t054.rs` asserts this; each
+  of the reviewer's four surviving mutants (a `[profile.test]` table with `debug = true`, `split-debuginfo`,
+  `codegen-units`, `build-override`) fails a test. The tests still fail on base (no `[profile.dev]` there). No
+  change to `Cargo.toml` or the document.
+- **j2 (finding 3, nit).** No change: with line tables an inlined frame loses its module path; file and line stay.
+- Known consequence accepted with the task (the reviewer's runs): non-generic dependency frames in a backtrace
+  have no file and line, and a debugger shows lines but no locals. A developer who needs them overrides the
+  profile for a run (`--config profile.dev.debug=true`).
 
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
