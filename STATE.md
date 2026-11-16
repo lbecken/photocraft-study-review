@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-15 23:22 UTC_
+_Last updated: 2026-11-16 01:56 UTC_
 
 ## Now
 **Owner's instruction of 2026-11-16 (D-207): the `ci/…` branches can stay; finish cut 2 (T-059, evaluation B, report),
@@ -12,25 +12,27 @@ Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run t
 branches may be pushed and are deleted after their task merges (D-185).
 
 In flight:
-- **T-058** (tabs, cut 2; medium; ceiling extended to 1,100,000 by D-196): review round 1 was request-changes
-  (D-201, rulings h1 to h8); both builders reworked; second join running at `1f895df`; then review round 2
-  (resume the round-1 reviewer), queue.
-- **T-054** (lighter build profile; high; D-200): test author done (`28164d8`, R-287); implementer R-286 running in
-  `.worktrees/T-054`. Its builders, join and queue run with the interim variables UNSET. Before the queue the
-  joined head goes to `ci/T-054` (ruling Q-4 A).
-- **T-059** (status bar, cut 2; `specified`): spec check after T-058 merges.
-- **T-071** (platform-test rule in the tools; high) and **T-079** (mark the product tests by platform; high):
-  `specified` (D-199). Order: T-054, T-071, T-079, T-072, T-073. The macOS gate's 22 failing tests are all
-  Linux assumptions of tests by the planner's reading (D-199).
-After T-058 and T-059: evaluation B, then **stop and report to the owner at cut 2**. Next free task number: T-083.
+- **Evaluation B at cut 2** (run R-302, a fresh evaluator): clean clone of main `20f63f499905803ccfe9ee2578964429d8bede09`
+  at `/home/user/kiln-eval-cut2/clone`, work and drivers in `/home/user/kiln-eval-cut2/work`, brief at
+  `/home/user/kiln-eval-cut2/brief.md`. When it reports: book it (`iter-2`), assign task numbers to its `NEW-n`
+  findings (next free: T-084), publish with `cargo xtask publish T-NNN --title … --iteration 2 <path>` (the
+  evaluation gets its own task number, as T-067 did at cut 1), record the decision row, **report to the owner and
+  pause** (D-207). Nothing else is in flight; no worktree exists.
 
-Merged since the last note: **T-070** (`c7af15f`, D-197): `platforms.yml` is on main. Counted jobs (D-202):
-`window-linux`, `window-probe (macos-15)`; not yet green: `gate-macos`, `gate-windows`, `window-probe (windows-2025)`.
+Merged since cut 1: T-069 (CI fix), T-057 (project panel), T-070 (`platforms.yml`: gate on three systems, the
+Linux window procedure, window probes), T-058 (tabs), T-054 (lighter debug profile; the interim variables of
+D-186 are gone, D-211), T-059 (status bar, `60cc322`, D-214). **Cut 2 is built.**
 
-CI on main: `ci.yml` runs 405 (`786b686`, T-070's merge) and 406 green (read 23:00Z); `platforms.yml` run
-43770955835 read (D-202).
+Platform track (paused by D-207): counted jobs `window-linux`, `window-probe (macos-15)` (D-202); not yet green
+`gate-macos` (22 tests that assume Linux, D-199), `gate-windows` and `window-probe (windows-2025)` (does not
+compile). Specified and waiting: T-071, T-079; drafts T-072 to T-078. Order when resumed: T-071, T-079, T-072,
+T-073, T-074, T-075, T-076, T-077, T-078. The Windows verdict of T-054's backtrace guard is read on T-071's CI
+round.
 
-Scorecard on main: 64 items: 44 verified, 1 implemented, 0 failing, 19 planned. Merged in this stage: T-055
+CI on main: `ci.yml` run 429 on `51ee7c1` (T-054's merge) green and the two counted platform jobs green there
+(D-213); the runs on the push with T-059's merge (`20f63f4`) are read at the next addendum.
+
+Scorecard on main: 64 items: 44 verified, 3 implemented, 0 failing, 17 planned. Merged in this stage: T-055
 (`kiln script`, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (evaluation at cut 1), T-069 (CI fix,
 INC-001 closed in D-179), T-057 (project panel, `7e8a01c`, D-192). The product: `kiln [--root <dir>] [<path>…]`
 opens a window with a project panel and one editor; Linux with X11 only until the platform tasks merge.
