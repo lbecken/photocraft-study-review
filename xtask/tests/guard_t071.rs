@@ -446,30 +446,40 @@ fn guard_skips_toml_still_allowlists_until_expiry_and_refuses_unused_entries() {
     assert_eq!(o.code, Some(1), "an unused skips.toml entry:\n{}", o.text);
 }
 
-/// Interface (1): only the listed cfg forms mean a platform; a registry entry does not admit
-/// a test behind any other cfg.
+/// Interface (1) and ruling p5 (D-220): exactly the six cfg forms mean a platform;
+/// `target_os = "windows"`, `any(...)`, `all(...)` and every other cfg on a test stay
+/// `cfg-disabled`, registered or not.
 #[test]
-fn guard_other_cfgs_stay_cfg_disabled_even_when_registered() {
+fn guard_other_cfgs_stay_cfg_disabled_registered_or_not() {
     let t = Toy::no_skip("other-cfgs");
-    for form in [
-        "feature = \"x\"",
-        "target_os = \"freebsd\"",
-        "all(unix, feature = \"x\")",
+    for (form, platforms) in [
+        ("feature = \"x\"", "unix"),
+        ("target_os = \"freebsd\"", "unix"),
+        ("all(unix, feature = \"x\")", "unix"),
+        ("target_os = \"windows\"", "windows"),
+        ("any(unix, windows)", "unix"),
     ] {
         t.write(
             PLAT,
             &format!("// toy\n#[cfg({form})] #[test] fn gated() {{ assert_eq!(1, 1); }}\n"),
         );
-        set_reg(&t, &[entry(PLAT, "gated", "unix", NONE)]);
-        let o = t.run_no_skip();
-        assert_eq!(o.code, Some(1), "cfg({form}), registered:\n{}", o.text);
-        assert!(
-            kind_lines(&o, "cfg-disabled")
-                .iter()
-                .any(|l| has_token(l, "gated") && names_at(l, PLAT, &(2..=2))),
-            "cfg({form}): a `cfg-disabled` line naming {PLAT}:2 and `gated`:\n{}",
-            o.text
-        );
+        for registered in [false, true] {
+            if registered {
+                set_reg(&t, &[entry(PLAT, "gated", platforms, NONE)]);
+            } else {
+                set_reg(&t, &[]);
+            }
+            let o = t.run_no_skip();
+            let case = format!("cfg({form}), registered: {registered}");
+            assert_eq!(o.code, Some(1), "{case}:\n{}", o.text);
+            assert!(
+                kind_lines(&o, "cfg-disabled")
+                    .iter()
+                    .any(|l| has_token(l, "gated") && names_at(l, PLAT, &(2..=2))),
+                "{case}: a `cfg-disabled` line naming {PLAT}:2 and `gated`:\n{}",
+                o.text
+            );
+        }
     }
 }
 

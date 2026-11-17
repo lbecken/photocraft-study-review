@@ -7,9 +7,9 @@
 //! - AC-1: one toy per new finding kind of Interface (2), with exactly that fault: exactly one
 //!   FAIL line of that kind, naming `<file>:<line>` and the item; the same toy corrected passes.
 //!   The items sit on one source line each, so the line is the same whichever of an item's
-//!   lines (cfg attribute, `#[test]`, `fn`) the tool reports. For a finding about a registry
-//!   entry the spec does not say whether `<file>:<line>` is the item's place or the entry's
-//!   place in `xtask/platform-tests.toml`; both are accepted (see the test author's log).
+//!   lines (cfg attribute, `#[test]`, `fn`) the tool reports. A finding about a registry entry
+//!   names `xtask/platform-tests.toml:<line of the entry's [[test]] header>` and the entry's
+//!   `file::item` (ruling p1, D-220).
 //! - AC-2: a correct registry passes and the detail line counts it
 //!   (`<n> platform test(s) registered (<p> pending)`); malformed registries stop the step.
 //! - AC-3: the `inert-helper` rule on the `acceptance_t002.rs` pattern, real twins, a single
@@ -373,8 +373,14 @@ fn src(file: &str, line: usize) -> Place {
     (file.to_owned(), line..=line)
 }
 
+/// The `[[test]]` header line of entry `i` (ruling p1, D-220).
 fn entry_place(reg: &Reg, i: usize) -> Place {
-    (REGISTRY.to_owned(), reg.ranges[i].0..=reg.ranges[i].1)
+    (REGISTRY.to_owned(), reg.ranges[i].0..=reg.ranges[i].0)
+}
+
+/// `<file>::<item>`, as a finding about an entry names it (ruling p1, D-220).
+fn fi(file: &str, item: &str) -> String {
+    format!("{file}::{item}")
 }
 
 /// The step fails with exactly one FAIL line of `kind`, naming one of `places` and `item`.
@@ -531,12 +537,34 @@ fn ac1_platform_mismatch_names_file_line_and_item() {
     assert_one(
         &o,
         "platform-mismatch",
-        &[src(PLAT, 2), entry_place(&r, 0)],
-        "unix_only",
+        &[entry_place(&r, 0)],
+        &fi(PLAT, "unix_only"),
         "`unix_only` registered as windows",
     );
     set_reg(&t, &[entry(PLAT, "unix_only", "unix", NONE)]);
     assert_pass(&t.run_no_skip(), "`unix_only` registered as unix");
+    // Ruling p6 (D-220): an entry for an existing test with no platform cfg (all three
+    // platforms) is `platform-mismatch`, not `platform-unused`.
+    let r = set_reg(
+        &t,
+        &[
+            entry(PLAT, "unix_only", "unix", NONE),
+            entry(PLAT, "everywhere", "unix", NONE),
+        ],
+    );
+    let o = t.run_no_skip();
+    assert_one(
+        &o,
+        "platform-mismatch",
+        &[entry_place(&r, 1)],
+        &fi(PLAT, "everywhere"),
+        "`everywhere` (no cfg) registered as unix",
+    );
+    assert!(
+        kind_lines(&o, "platform-unused").is_empty(),
+        "an entry for an existing test is not `platform-unused`:\n{}",
+        o.text
+    );
 }
 
 /// Interface (1): the cfg forms that mean each platform name, and nothing else.
@@ -564,8 +592,8 @@ fn ac1_platform_mismatch_each_cfg_form_means_exactly_its_platform() {
                 assert_one(
                     &o,
                     "platform-mismatch",
-                    &[src(PLAT, 2), entry_place(&r, 0)],
-                    "gated",
+                    &[entry_place(&r, 0)],
+                    &fi(PLAT, "gated"),
                     &case,
                 );
             }
@@ -590,8 +618,8 @@ fn ac1_platform_unused_names_the_entry() {
         assert_one(
             &o,
             "platform-unused",
-            &[(file.to_owned(), 0..=usize::MAX), entry_place(&r, 1)],
-            item,
+            &[entry_place(&r, 1)],
+            &fi(file, item),
             &format!("entry for `{item}` in {file}"),
         );
         set_reg(&t, std::slice::from_ref(&good));
@@ -614,8 +642,8 @@ fn ac1_platform_sentence_missing_doc_or_quote() {
         assert_one(
             &o,
             "platform-sentence",
-            &[src(PLAT, 2), entry_place(&r, 0)],
-            "unix_only",
+            &[entry_place(&r, 0)],
+            &fi(PLAT, "unix_only"),
             case,
         );
         set_reg(&t, &[entry(PLAT, "unix_only", "unix", NONE)]);
@@ -640,32 +668,30 @@ fn ac1_platform_counterpart_must_exist_and_cover_the_left_out_platforms() {
         entry(PLAT, "not_unix_case", "windows", NONE),
     ];
     let p = |item: &str| format!("{PLAT}::{item}");
-    // (item under test, its platforms, its line, counterpart, accepted?)
-    let cases: Vec<(&str, &str, usize, String, bool)> = vec![
+    // (item under test, its platforms, counterpart, accepted?)
+    let cases: Vec<(&str, &str, String, bool)> = vec![
         (
             "unix_only",
             "unix",
-            2,
             "crates/toy/tests/nofile.rs::x".into(),
             false,
         ),
-        ("unix_only", "unix", 2, p("no_such_test"), false),
-        ("unix_only", "unix", 2, p("helper"), false),
-        ("unix_only", "unix", 2, p("no_tests"), false),
-        ("unix_only", "unix", 2, p("unix_twin"), false),
-        ("linux_case", "linux", 7, p("win_case"), false),
-        ("unix_only", "unix", 2, p("win_case"), true),
-        ("unix_only", "unix", 2, p("not_unix_case"), true),
-        ("unix_only", "unix", 2, p("everywhere"), true),
-        ("unix_only", "unix", 2, p("portable"), true),
+        ("unix_only", "unix", p("no_such_test"), false),
+        ("unix_only", "unix", p("helper"), false),
+        ("unix_only", "unix", p("no_tests"), false),
+        ("unix_only", "unix", p("unix_twin"), false),
+        ("linux_case", "linux", p("win_case"), false),
+        ("unix_only", "unix", p("win_case"), true),
+        ("unix_only", "unix", p("not_unix_case"), true),
+        ("unix_only", "unix", p("everywhere"), true),
+        ("unix_only", "unix", p("portable"), true),
         (
             "unix_only",
             "unix",
-            2,
             "crates/toy/src/lib.rs::tests::portable_lib".into(),
             true,
         ),
-        ("linux_case", "linux", 7, p("everywhere"), true),
+        ("linux_case", "linux", p("everywhere"), true),
     ];
     let t = Toy::no_skip("counterpart");
     t.write(PLAT, &source);
@@ -673,7 +699,7 @@ fn ac1_platform_counterpart_must_exist_and_cover_the_left_out_platforms() {
         "crates/toy/src/lib.rs",
         "//! toy\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn portable_lib() {\n        assert_eq!(1, 1);\n    }\n}\n",
     );
-    for (item, platforms, line, counterpart, ok) in cases {
+    for (item, platforms, counterpart, ok) in cases {
         // The item under test with the counterpart; the other of unix_only/linux_case: `none`.
         let other = if item == "unix_only" {
             entry(PLAT, "linux_case", "linux", NONE)
@@ -691,8 +717,8 @@ fn ac1_platform_counterpart_must_exist_and_cover_the_left_out_platforms() {
             assert_one(
                 &o,
                 "platform-counterpart",
-                &[src(PLAT, line), entry_place(&r, 0)],
-                item,
+                &[entry_place(&r, 0)],
+                &fi(PLAT, item),
                 &case,
             );
         }
@@ -710,12 +736,12 @@ fn ac1_platform_pending_expired_date_and_task_file() {
             &pending(TASK, "2026-11-19"),
         )],
     );
-    let places = |r: &Reg| [src(PLAT, 2), entry_place(r, 0)];
+    let places = |r: &Reg| [entry_place(r, 0)];
     assert_one(
         &t.run_no_skip(),
         "platform-pending-expired",
         &places(&r),
-        "unix_only",
+        &fi(PLAT, "unix_only"),
         "pending, expired the day before today",
     );
     for expires in [TODAY, "2026-12-31"] {
@@ -742,7 +768,7 @@ fn ac1_platform_pending_expired_date_and_task_file() {
         &t.run_no_skip(),
         "platform-pending-expired",
         &places(&r),
-        "unix_only",
+        &fi(PLAT, "unix_only"),
         "pending, task file missing",
     );
     t.write("tasks/T-901-toy-second.md", "# T-901 toy\n");
@@ -762,7 +788,7 @@ fn ac1_platform_pending_expired_date_and_task_file() {
         &o,
         "platform-pending-expired",
         &places(&r),
-        "unix_only",
+        &fi(PLAT, "unix_only"),
         "pending expired 2026-12-01, HEAD dated 2026-12-05, no --today",
     );
     assert_pass(
@@ -825,33 +851,42 @@ fn ac1_platform_statement_names_file_line_and_item() {
 fn ac1_platform_statement_same_block_and_use_exemption() {
     let file = "crates/toy/tests/stmt.rs";
     let t = Toy::no_skip("statement-block");
-    // The complement in the outer block does not answer the statement in the inner block
-    // (line 5); the outer statement (line 7) has no complement in its block either.
-    t.write(
-        file,
-        "// toy\n#[test]\nfn modes() {\n    {\n        #[cfg(unix)] assert_eq!(1, 1);\n    }\n    #[cfg(windows)] assert_eq!(3, 3);\n}\n",
-    );
-    let o = t.run_no_skip();
-    assert_eq!(o.code, Some(1), "complement in another block:\n{}", o.text);
-    assert!(
-        kind_lines(&o, "platform-statement")
-            .iter()
-            .any(|l| has_token(l, "modes") && names_at(l, file, &(5..=5))),
-        "complement in another block: a `platform-statement` line naming {file}:5 and `modes`:\n{}",
-        o.text
+    // Ruling p3 (D-220): a block is in order exactly when the union of its platform-cfg
+    // statements' sets is all three platforms. Whether a block gives one line or one per
+    // statement is not pinned, so each faulty block below sits on one line (line 4).
+    let fails = |src: &str, case: &str| {
+        t.write(file, src);
+        let o = t.run_no_skip();
+        assert_eq!(o.code, Some(1), "{case}:\n{}", o.text);
+        assert!(
+            kind_lines(&o, "platform-statement")
+                .iter()
+                .any(|l| has_token(l, "modes") && names_at(l, file, &(4..=4))),
+            "{case}: a `platform-statement` line naming {file}:4 and `modes`:\n{}",
+            o.text
+        );
+    };
+    // The windows statement in the outer block does not answer the inner block's unix one.
+    fails(
+        "// toy\n#[test]\nfn modes() {\n    { #[cfg(unix)] assert_eq!(1, 1); }\n    #[cfg(windows)] assert_eq!(3, 3);\n}\n",
+        "complement in another block",
     );
     // Two statements for the same platform do not complement each other.
+    fails(
+        "// toy\n#[test]\nfn modes() {\n    { #[cfg(unix)] assert_eq!(1, 1); #[cfg(not(windows))] assert_eq!(2, 2); }\n}\n",
+        "two Unix statements, nothing in their place on Windows",
+    );
+    // linux + windows leaves macOS out.
+    fails(
+        "// toy\n#[test]\nfn modes() {\n    { #[cfg(target_os = \"linux\")] assert_eq!(1, 1); #[cfg(windows)] assert_eq!(2, 2); }\n}\n",
+        "a linux statement with only a windows one beside it",
+    );
+    // linux + macos + windows is all three.
     t.write(
         file,
-        "// toy\n#[test]\nfn modes() {\n    #[cfg(unix)] assert_eq!(1, 1);\n    #[cfg(not(windows))] assert_eq!(2, 2);\n}\n",
+        "// toy\n#[test]\nfn modes() {\n    #[cfg(target_os = \"linux\")]\n    assert_eq!(1, 1);\n    #[cfg(target_os = \"macos\")]\n    assert_eq!(2, 2);\n    #[cfg(windows)]\n    panic!(\"no /proc on Windows\");\n}\n",
     );
-    let o = t.run_no_skip();
-    assert_eq!(
-        kind_lines(&o, "platform-statement").len(),
-        2,
-        "two Unix statements, nothing in their place on Windows:\n{}",
-        o.text
-    );
+    assert_pass(&t.run_no_skip(), "linux, macos and windows statements");
     // Same block, the not(windows)/windows pair, and an exempt `use`: passes.
     t.write(
         file,
