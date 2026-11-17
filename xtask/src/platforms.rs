@@ -593,7 +593,7 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
             }
         };
         let at = label(&e.file, &e.item);
-        let before = errors.len();
+        let mut errs: Vec<String> = Vec::new();
         let empty = |s: &str| s.trim().is_empty();
         for (field, value) in [
             ("file", &e.file),
@@ -602,28 +602,25 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
             ("quote", &e.quote),
         ] {
             if empty(value) {
-                errors.push(format!("{at}: empty `{field}`"));
+                errs.push(format!("empty `{field}`"));
             }
         }
         if e.file.contains('\\') {
-            errors.push(format!("{at}: `file` must be `/`-separated"));
+            errs.push(format!("`file` must be `/`-separated"));
         }
         let platforms = Set::from_name(&e.platforms);
         if platforms.is_none() {
-            errors.push(format!(
-                "{at}: platforms `{}` is not unix | windows | linux | macos",
+            errs.push(format!(
+                "platforms `{}` is not unix | windows | linux | macos",
                 e.platforms
             ));
         }
         if e.reason.as_deref().is_some_and(empty) {
-            errors.push(format!("{at}: empty `reason`"));
+            errs.push(format!("empty `reason`"));
         }
         let counterpart = match e.counterpart.as_str() {
             "none" | "pending" if e.reason.is_none() => {
-                errors.push(format!(
-                    "{at}: counterpart `{}` needs a `reason`",
-                    e.counterpart
-                ));
+                errs.push(format!("counterpart `{}` needs a `reason`", e.counterpart));
                 None
             }
             "none" => Some(Counterpart::None),
@@ -631,13 +628,13 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
                 let task = e.task.clone().unwrap_or_default();
                 let expires = e.expires.clone().unwrap_or_default();
                 if !crate::util::valid_task_id(&task) {
-                    errors.push(format!(
-                        "{at}: a pending counterpart needs `task = \"T-NNN\"` (got `{task}`)"
+                    errs.push(format!(
+                        "a pending counterpart needs `task = \"T-NNN\"` (got `{task}`)"
                     ));
                 }
                 if !valid_date(&expires) {
-                    errors.push(format!(
-                        "{at}: a pending counterpart needs `expires = \"YYYY-MM-DD\"` (got `{expires}`)"
+                    errs.push(format!(
+                        "a pending counterpart needs `expires = \"YYYY-MM-DD\"` (got `{expires}`)"
                     ));
                 }
                 Some(Counterpart::Pending { task, expires })
@@ -648,8 +645,8 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
                     item: it.to_owned(),
                 }),
                 _ => {
-                    errors.push(format!(
-                        "{at}: counterpart `{named}` is not `<file>::<item>`, `none` or `pending`"
+                    errs.push(format!(
+                        "counterpart `{named}` is not `<file>::<item>`, `none` or `pending`"
                     ));
                     None
                 }
@@ -658,16 +655,17 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
         if e.counterpart != "pending" {
             for (field, v) in [("task", &e.task), ("expires", &e.expires)] {
                 if v.is_some() {
-                    errors.push(format!("{at}: `{field}` is only for a pending counterpart"));
+                    errs.push(format!("`{field}` is only for a pending counterpart"));
                 }
             }
         }
         if !seen.insert((e.file.clone(), e.item.clone())) {
-            errors.push(format!("{at}: the same test is listed twice"));
+            errs.push(format!("the same test is listed twice"));
         }
-        if errors.len() == before
-            && let (Some(platforms), Some(counterpart)) = (platforms, counterpart)
-        {
+        if !errs.is_empty() {
+            // One line per faulty entry.
+            errors.push(format!("{at}: {}", errs.join("; ")));
+        } else if let (Some(platforms), Some(counterpart)) = (platforms, counterpart) {
             entries.push(Entry {
                 index,
                 line,
@@ -1259,6 +1257,18 @@ reason = "nothing to compare with"
             "counterpart = \"none\"",
             "counterpart = \"none\"\ntask = \"T-075\"",
             "only for a pending",
+        );
+        // Two faults in one entry: one line naming it, with both.
+        let two = GOOD
+            .replacen("platforms = \"unix\"", "platforms = \"bsd\"", 1)
+            .replacen("quote = \"FIFOs are refused\"", "quote = \"\"", 1);
+        let e = parse("reg", &two).unwrap_err();
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(
+            e[0].starts_with("reg:2: entry 1 (crates/a/tests/t.rs::fifo): ")
+                && e[0].contains("empty `quote`")
+                && e[0].contains("platforms `bsd`"),
+            "{e:?}"
         );
         let e = parse("reg", "[[test]\n").unwrap_err();
         assert_eq!(e.len(), 1);

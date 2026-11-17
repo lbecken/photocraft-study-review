@@ -70,14 +70,32 @@ queue). Every step can also run alone: `cargo xtask <step>`.
 | `ui-commands` | every path in `crates/kiln-ui/**/*.rs` that names a lower crate (`kiln_text::…`) must match `xtask/ui-allowlist.toml` (whole-segment prefix) | runs a self-test first: `xtask/fixtures/ui-commands/violation.rs` must yield exactly its 6 known violations and `clean.rs` none; fails if `kiln-ui/src/lib.rs` is missing |
 | `hygiene` | two text checks (ADR-0003). `reviews`: every `reviews/T-NNN-rN.md` whose task file has tier medium/high and `iteration ≥ 1` has front matter `task`/`round` matching the file name, `tier` and `arm` matching the task (arm: `independent` for high and even-numbered medium, `implementer` for odd-numbered medium), and `mutants` (flow map `{…}` as in the template, or an indented block) with the five non-negative integers `introduced`, `equivalent`, `killed`, `killed_by_acceptance`, `survived`, `equivalent + killed + survived = introduced`, `killed_by_acceptance ≤ killed`, and `introduced ≥ 10` in round 1. `session-paths`: no file listed by `git ls-files` contains a match of `/tmp/claude-[0-9]+/[^/[:space:]]+/<UUID>` (non-UTF-8 files skipped); a match is reported as `<path>:<line>`, never the text. Each FAIL line names its check | never EMPTY: `session-paths` always runs; a review without a task file fails; no allowlist |
 | `schema` | `kiln-cli commands --audit` (each example's params validate, the example runs on a fresh context and returns exactly its stated result, which validates against the result schema), then unique names, docs, both schemas, ≥1 example per command, and `docs/commands.json` byte-equal to the dump | zero commands fails |
-| `scorecard` | `scorecard --check` (below) | an empty `scorecard/items` fails; a listed test that does not exist fails |
+| `scorecard` | `scorecard --check` (below). Per platform (METHODOLOGY §8.1): on Linux the page is computed and compared, and a listed test that "Platform tests" (below) registers for platforms without Linux is "registered absent here", not missing; on macOS and Windows every listed test built there is run, a failing or ignored one fails, a listed test absent there fails (`… which does not exist on <platform>`) unless an entry excludes that platform, and the page is neither compared nor written (detail `<platform>: <n> items; <m> tests ran; <k> registered absent here; page not compared (computed on Linux)`) | an empty `scorecard/items` fails; a listed test that does not exist (and is not registered absent) fails |
 | `test` | `cargo test --workspace --locked` (unit, integration, doc tests) | zero passed tests fails |
-| `no-skip` | no `#[ignore]`, `#[cfg_attr(…, ignore)]`, `skip*` call/macro or conditional `return` in a test, `cfg` other than `cfg(test)` on a test or test module, or ```` ```ignore ```` doc test — unless listed in `xtask/skips.toml` with reason and unexpired `expires` (today = HEAD's commit date) | self-test on `xtask/fixtures/no-skip/` (9 known findings, clean file 0); unused or expired allowlist entries fail |
+| `no-skip` | no `#[ignore]`, `#[cfg_attr(…, ignore)]`, `skip*` call/macro or conditional `return` in a test, `cfg` other than `cfg(test)` or a platform form (below) on a test or test module, or ```` ```ignore ```` doc test — unless listed in `xtask/skips.toml` with reason and unexpired `expires` (today = HEAD's commit date). Then the platform-test rule (METHODOLOGY §8.1, "Platform tests" below), reported after those, each FAIL line naming `<file>:<line>`, the item and the kind: `platform-unlisted` (a test fn, a module containing tests or a file's inner cfg behind a platform form, with no entry), `platform-mismatch` (the entry's `platforms` is not the item's cfg), `platform-unused` (an entry matching no such item; it names the registry line), `platform-sentence` (`doc` missing or without `quote`), `platform-counterpart` (the named counterpart is not a test fn or a module containing tests, or is behind a cfg that leaves out a platform the entry's `platforms` leaves out), `platform-pending-expired` (a `pending` entry past `expires`, or whose `task` has no `tasks/T-NNN-*.md`), `inert-helper` (a non-test function defined more than once under platform forms where one body does nothing: no statement, or one expression that is a literal, `None`, `()`, `Ok(())`, `Default::default()`, or a tuple or struct of these), `platform-statement` (in a test, a statement or match arm behind a platform form with none for the other platforms in the same block or match; `use` items exempt; a `#[cfg(not(unix))] panic!(…)` beside a `#[cfg(unix)] {…}` passes). A malformed registry stops the step with one FAIL line per faulty entry. Detail: `self-test ok (<n> known findings); <f> files scanned, <s> allowlisted skip(s), <p> platform test(s) registered (<q> pending), today = <date>` | self-test on `xtask/fixtures/no-skip/` (18 known findings: 9 skips in `violations.rs`, and 9 platform findings with the fixture registry `platform-tests.toml` beside it, one or more per new kind; clean file 0); unused or expired allowlist entries fail; unused registry entries fail; skips of a platform kind cannot be allowlisted in `skips.toml` |
 | `fuzz` | `xtask/fuzz.toml` | EMPTY while nothing is registered; FAILS for any registered target until a runner exists |
 | `budgets` | `xtask/budgets.toml` | same as `fuzz` |
 
 EMPTY is listed in the final line (`GATE PASSED … 2 step(s) EMPTY (nothing registered): fuzz,
 budgets`); it is never reported as a pass of that step.
+
+### Platform tests: `xtask/platform-tests.toml`
+
+Every test runs on Linux, macOS and Windows (METHODOLOGY §8.1). A test of a facility one platform
+lacks may sit behind a platform form — `cfg(unix)` or `cfg(not(windows))` (Linux and macOS),
+`cfg(windows)` or `cfg(not(unix))`, `cfg(target_os = "linux")`, `cfg(target_os = "macos")` —
+only with an entry in the registry `xtask/platform-tests.toml`: `file` (relative to the root,
+`/`-separated), `item` (module path, then the fn or mod name; `<file>` for an inner
+`#![cfg(…)]`), `platforms` (`unix` | `windows` | `linux` | `macos`, the item's cfg), `doc` and
+`quote` (a document and a substring of it that the test checks; runs of whitespace, line breaks
+included, compare as one space), `counterpart` (`<file>::<item>` of the test that checks the
+sentence on the other platforms, `none`, or `pending`), `reason` (required for `none` and
+`pending`), and for `pending` only `task` (`T-NNN`) and `expires` (`YYYY-MM-DD`). It is parsed
+strictly: an unknown key, an empty `file`, `item`, `doc`, `quote` or `reason`, another
+`platforms` value, a malformed date, a missing `reason`, `task` or `expires`, or the same test
+listed twice is an error of the `no-skip` step; a missing file is an empty registry. Any other
+`cfg` on a test stays a `cfg-disabled` skip. `xtask/` is a gate path, so only a high-tier task
+changes the registry (METHODOLOGY §4).
 
 Measured on the bootstrap machine (4 cores, 15 GB RAM, no GPU), `time cargo xtask ci`:
 
@@ -130,7 +148,11 @@ Unknown fields are errors, so a hand-written `status` is rejected. Status is der
 
 `cargo xtask scorecard` writes `docs/scorecard.md`; `--check` (in the gate) fails if it is stale,
 if an item is malformed, lists a missing/failing/ignored test, or an evaluation names an unknown
-item or confirms one without a record block.
+item or confirms one without a record block. The page is computed on Linux: a listed test that
+the platform-test registry places only on other platforms is left out of its item's status
+there (an item none of whose tests is left is `planned`), and on macOS and Windows
+`cargo xtask scorecard` exits 1 with `scorecard: refused: docs/scorecard.md is computed on Linux`
+and writes nothing (`--check` there: the `scorecard` row of the gate table).
 
 Test names: `<crate_ident>::<path>` for unit tests of a library (and of a binary named like its
 package), `<crate_ident>::<target>::<path>` for integration tests and other binaries — e.g.

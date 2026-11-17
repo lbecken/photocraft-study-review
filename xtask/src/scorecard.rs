@@ -550,4 +550,62 @@ mod tests {
         assert_eq!(v.get("a.three"), None);
         assert_eq!(problems.len(), 2, "{problems:?}");
     }
+
+    #[test]
+    fn registered_absent_tests_are_left_out_of_the_derivation() {
+        let mut st = BTreeMap::new();
+        st.insert("a".to_string(), TestState::Ran(Outcome::Passed));
+        st.insert("w".to_string(), TestState::RegisteredAbsent);
+        st.insert("b".to_string(), TestState::Ran(Outcome::Failed));
+        assert_eq!(derive(&item(&["a", "w"]), &st, false), Status::Implemented);
+        assert_eq!(derive(&item(&["a", "w"]), &st, true), Status::Verified);
+        assert_eq!(derive(&item(&["b", "w"]), &st, false), Status::Failing);
+        assert_eq!(derive(&item(&["w"]), &st, true), Status::Planned);
+    }
+
+    fn toy(tag: &str) -> crate::util::testutil::TempDir {
+        let d = crate::util::testutil::TempDir::new(tag);
+        let r = d.path();
+        std::fs::create_dir_all(r.join("xtask")).unwrap();
+        std::fs::create_dir_all(r.join("scorecard/items")).unwrap();
+        std::fs::create_dir_all(r.join("docs")).unwrap();
+        std::fs::write(
+            r.join("xtask/layers.toml"),
+            "testkit_max_layer = 4\nheadless_forbidden = []\n[[crate]]\nname = \"kiln-text\"\nlayer = 0\n",
+        )
+        .unwrap();
+        std::fs::write(
+            r.join("scorecard/items/text.insert.toml"),
+            "id = \"text.insert\"\ntitle = \"x\"\ncrate = \"kiln-text\"\ntier = \"low\"\n",
+        )
+        .unwrap();
+        d
+    }
+
+    #[test]
+    fn off_linux_the_page_is_neither_compared_nor_written() {
+        let d = toy("score-host");
+        for host in [Platform::Macos, Platform::Windows] {
+            for check in [true, false] {
+                let r = run_on(d.path(), check, host).unwrap();
+                assert_eq!(r.status, crate::util::Status::Pass, "{}", r.detail);
+                assert_eq!(
+                    r.detail,
+                    format!(
+                        "{}: 1 items; 0 tests ran; 0 registered absent here; page not compared (computed on Linux)",
+                        host.name()
+                    )
+                );
+                assert!(!d.path().join("docs/scorecard.md").exists());
+            }
+        }
+        // On Linux the same tree has no page yet: stale.
+        let r = run_on(d.path(), true, Platform::Linux).unwrap();
+        assert_eq!(r.status, crate::util::Status::Fail);
+        assert!(
+            r.detail.contains("docs/scorecard.md is stale"),
+            "{}",
+            r.detail
+        );
+    }
 }
