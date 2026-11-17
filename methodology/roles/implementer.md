@@ -33,7 +33,14 @@ and carry on with the rest: the director answers all builders at once, in the ta
 the join (D-027). Then plan, edit, build, test, and look at the behaviour from outside through
 `kiln-cli` or the control protocol, because a test that never reaches the code proves nothing.
 Use focused `cargo` commands while iterating and finish with `cargo xtask ci`; each run of it is
-a gate attempt, and you report how many you used.
+a gate attempt, and you report how many you used. Where the task needs a CI run (a platform no
+agent can run), commit and log `CI-REQUEST: <40-hex sha>`; only the director pushes it, and you
+read only its CI record under `tasks/ci-runs/`, never job logs. Each CI round counts as one gate
+attempt (METHODOLOGY §8.1).
+
+A Pinned figure marked "to be measured by the director" names the record that will hold it; copy
+the figure from that record once the director passes it to you before the join, and if it has not
+come, leave the sentence to the reviewer and say so in your log (T-070 #3).
 
 **Commit early**, at every step that builds: the container restart and the usage-limit stop of
 iteration 0 lost only uncommitted work (D-022, D-024). Never use `git stash`: all worktrees share

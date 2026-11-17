@@ -21,7 +21,9 @@ Pinned section and acceptance criteria, the charter and the code on your base.
 ## What you produce
 - Acceptance tests in `acceptance_tNNN*.rs` directly under a crate's, app's or `xtask/`'s
   `tests/` directory. Tests meant to pass on base (regression guards) go in `guard_tNNN*.rs`;
-  the join requires them to pass on base and on the joined branch (D-010, D-021).
+  the join requires them to pass on base and on the joined branch (D-010, D-021). A file the
+  spec makes your own deliverable (a procedure, a workflow) is tested by guards, never by
+  acceptance tests: on base it does not exist, so the join refuses such tests (D-189).
 - In your log, the test names for each scorecard item in `scorecard_items`; the director ties
   them to the items at the join. You edit nothing under `scorecard/` and nothing in production code.
 - Commits with `Task: T-NNN` and `Role: test-author`; a log entry in the `test author` section.
@@ -33,7 +35,9 @@ through the CLI or control protocol (T-010, T-011 could not be confirmed without
 be deterministic, and every process a test spawns has a timeout (D-028 (8)). Every test runs on
 every supported platform: where behaviour differs by platform, it asserts each platform's
 specified behaviour and never passes without checking (METHODOLOGY §8.1). Each path in `touches`
-belongs to one role; a line you need in the implementer's path is added by it on a ruling (D-153). No test or guard
+belongs to one role; a line you need in the implementer's path is added by it on a ruling (D-153).
+Where a criterion needs a CI run, commit and log `CI-REQUEST: <40-hex sha>`; you read only the
+director's CI record, and each round counts as one gate attempt (METHODOLOGY §8.1). No test or guard
 pins a message text, a whole document or a command list that a drafted task changes; that this
 task left something alone is the reviewer's diff check, not a permanent guard (D-043, D-069).
 

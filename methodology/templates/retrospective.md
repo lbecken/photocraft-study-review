@@ -1,8 +1,8 @@
 ---
 iteration: N
 run: R-NNN
-methodology_in: v1.4
-methodology_proposed: v1.5
+methodology_in: v1.5
+methodology_proposed: v1.6
 main_sha: <sha at iteration close>
 claims: {C1: insufficient, C2: insufficient, C3: insufficient, C4: insufficient,
          C5: insufficient, C6: insufficient, C7: insufficient, C8: insufficient}
@@ -36,7 +36,7 @@ transitions missing. Every number below names its command or script.
 ## Experiment arm (METHODOLOGY §6)
 | Measure | Independent (even) | Implementer-written (odd) | n each |
 |---|---|---|---|
-| Escaped defects / review findings / kill rate / tokens per merged task | | | |
+| Escaped defects / review findings / kill rate (acceptance, own tests) / acceptance-test defects by finder / tokens per merged task | | | |
 
 ## Claims
 | Claim | Verdict | Numbers that decide it | What would change the verdict |

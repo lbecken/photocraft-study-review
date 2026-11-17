@@ -12,7 +12,8 @@ references (`E07-018`, `F1`) point to `/home/user/photocraft-study/deliverables/
 
 Every rule names its check: **mechanical** (a command fails), **director** (at a named moment)
 or **unchecked** (practice diverges exactly there: E02 §4, retro-0). **(T-033)** / **(T-041)** /
-**(T-043)** / **(T-071)** marks tooling as it will be once that task merges; *Interim* says what the director does until then.
+**(T-043)** / **(T-071)** / **(T-072)** marks tooling as it will be once that task merges; *Interim*
+says what the director does until then.
 
 ## 1. Principles
 
@@ -244,10 +245,11 @@ only as a low-tier publish task through the queue (`cargo xtask publish`; D-034)
 
 Before any dispatch or queue run the director has the recorded result of the newest CI run on main
 that changed a non-ledger path; ledger-only pushes are read in a batch at the next handoff addendum,
-until T-041 stops CI for them (retro-2c2: 16 of 73 runs were read under "every push"). "Main is green" means the local
-gate and CI (§8.1), and a red CI run on main is an incident at once (INC-001, D-175). If `main` is found red: stop dispatching and
-queueing, open `incidents/INC-NNN-*.md`, land a fix or revert through the queue, and name a
-permanent fix (a mechanical check or a justified "rule only").
+until T-041 stops CI for them (retro-2c2: 16 of 73 runs were read under "every push"). "Main is
+green" means the local gate and CI (§8.1), and a red CI run on main is an incident at once (INC-001,
+D-175). If `main` is found red: stop dispatching and queueing, open `incidents/INC-NNN-*.md`, land a
+fix or revert through the queue, and name a permanent fix (a mechanical check or a justified "rule
+only").
 
 ### 8.1 Platforms and CI (ADR-0009)
 
@@ -292,12 +294,16 @@ At the end of each iteration a fresh evaluator run (booked to `iter-N`) receives
 (`cargo xtask scorecard`), the CLI and control-protocol docs, the UI snapshot mechanism and the
 fixture data its brief names (e.g. `crates/kiln-syntax/tests/corpus/`, D-141) — not source, tests,
 logs or reviews — in a clone other identities can reach (NEW-3; until T-051 and T-069 merge)
-that leaves out the ledger records it may not read, made by this command and reported in the
-evaluation's Setup (R-302's clone held them all; tried at the next evaluation, D-219):
-`git clone --no-checkout <repo> <dir> && git -C <dir> sparse-checkout set --no-cone '/*'
-'!/docs/decisions.md' '!/tasks/' '!/reviews/' '!/handoffs/' '!/STATE.md' && git -C <dir> checkout
---detach <sha>`. If `cargo xtask scorecard` needs one of those files there, it is named here. For each `implemented` item it tries the behaviour through a public interface,
-records what it ran and saw, and confirms or rejects; it hunts for features wired but inert.
+that leaves out the ledger records it may not read, made by the command below and reported in the
+evaluation's Setup (R-302's clone held them all; tried at the next evaluation, D-219). If `cargo
+xtask scorecard` needs one of those files there, it is named here.
+
+    git clone --no-checkout <repo> <dir>
+    git -C <dir> sparse-checkout set --no-cone '/*' '!/docs/decisions.md' '!/tasks/' '/tasks/ci-runs/' '!/reviews/' '!/handoffs/' '!/STATE.md'
+    git -C <dir> checkout --detach <sha>
+
+For each `implemented` item it tries the behaviour through a public interface, records what it ran
+and saw, and confirms or rejects; it hunts for features wired but inert.
 Output `evaluations/iter-N.md`; `confirmed_items` is what `scorecard` reads to grant `verified`.
 Each rejection, inert feature or wrong behaviour becomes a `draft` task (`found_by: evaluator`,
 `origin_task`) or a question to the director; iteration 0 left 2 unfiled.
@@ -326,10 +332,11 @@ short run and exposed a director error. Checked: director (1 agent-reported); 2 
 `budget_tokens` covers building and review runs only; planner runs and spec checks go to `iter-N`
 (§13). Ceilings: **high 1,100,000, medium 800,000 (provisional), low 150,000** (retro-2s1: p75 of
 the tier pooled with iteration 1, rounded up to 50k; kept by retro-2c1 and retro-2c2); a draft
-carrying an older budget is restated when it is re-specified (§5.7). The queue refuses a task over its ceiling without an `Extend T-NNN to
-<N>` row (mechanical, `budget`). The director writes the row before dispatching the next run of a
-task that has reached its ceiling. Checked: director at dispatch. Latency budgets are gate steps
-(CHARTER §4); an unenforced one is not "held". Recalibrate only at a retrospective.
+carrying an older budget is restated when it is re-specified (§5.7). The queue refuses a task over
+its ceiling without an `Extend T-NNN to <N>` row (mechanical, `budget`). The director writes the
+row before dispatching the next run of a task that has reached its ceiling. Checked: director at
+dispatch. Latency budgets are gate steps (CHARTER §4); an unenforced one is not "held".
+Recalibrate only at a retrospective.
 
 ## 12. Continuity and provenance
 

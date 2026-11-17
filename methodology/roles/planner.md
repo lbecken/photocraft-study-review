@@ -32,7 +32,10 @@ One file, `tasks/T-NNN-slug.md` from `methodology/templates/task.md`, state left
   defects in iteration 1 were documentation sentences wider than the code (retro-1).
 - **No brittle pins.** Ask for no test that pins a message text, a whole document or a command
   list that a drafted task changes; "this task left X alone" is the reviewer's diff check.
-- **Acceptance criteria.** Behaviour an outside caller can observe, with its oracle. Every
+- **Acceptance criteria.** Behaviour an outside caller can observe, with its oracle. A criterion
+  that something is absent, limited or the only form is written as equality to a stated set
+  ("exactly the Interface's tables"), not as a list of absent things: T-054's list let four mutants
+  survive (retro-2c2). Every
   scorecard item gets at least one criterion observable through the CLI or control protocol;
   Rust-API criteria are extra. Three iteration-0 items could not be confirmed for lack of one
   (T-010, T-011).
@@ -40,7 +43,9 @@ One file, `tasks/T-NNN-slug.md` from `methodology/templates/task.md`, state left
   task claims (T-056 was re-tiered in flight, D-158), with the criterion that decides it in your log.
 - **touches.** Exact paths, including the test directories where acceptance and guard files go
   and any single file in another crate that a contract change forces. A missing file blocked
-  T-003 (D-020). Each path belongs to one role, implementer or test author (D-153). Paths in `touches` that are gate paths (anything under `xtask/` or `.github/`,
+  T-003 (D-020). Each path belongs to one role, implementer or test author (D-153). A test author's
+  own deliverable (a file it adds) is tested by guards, not acceptance tests (D-189). Paths in
+  `touches` that are gate paths (anything under `xtask/` or `.github/`,
   build scripts, lint or toolchain files: the list is in `docs/development.md`) are named as
   such in the Goal, because they make the task high and the approval row must say `gate paths`.
 - **Budget** from the tier (high 1,100,000, medium 800,000, low 150,000; building and review
@@ -56,17 +61,23 @@ The director may dispatch you to check a spec before it is dispatched (METHODOLO
 against `main` as it now is, including the merged dependencies' tests, guards and documents, and
 the branches of the tasks in flight: list every trait, type and document the spec shares with
 them (D-128, D-132). Pin the Rust signatures of any criterion tested through a Rust API (D-136).
-Every Pinned sentence that states a figure, a limit or a list carries the command and output
-that show it, or is marked "to be measured by the implementer" (3 of 5 round-1 defects in
-iteration 2's first stage were pinned sentences); mark it so only if the implementer can measure
-it, and if it depends on the acceptance tests, mark it for the reviewer (T-056). If you call an
-option unmeasured, say so plainly: the director has it probed before ruling. If you are resumed to
+For every criterion of absence or limit, name one variant outside its list that it must reject.
+Every Pinned sentence meant for a document carries a command you ran on your prototype or the base
+binary, with its output, or is marked "unchecked" (the reviewer checks it first): 4 of 9 document
+defects at cut 2 were copied spec sentences. A figure may instead be marked "to be measured by
+the implementer" only if the implementer can measure it (if it depends on the acceptance tests,
+mark it for the reviewer, T-056), or "to be measured by the director", naming the record that will
+hold it (T-070 #3). Do not put a fact you know but did not verify into a document sentence. If you
+call an option unmeasured, say so plainly: it is not chosen without a probe. If you are resumed to
 check a spec you drafted (preferred for cost, D-163), check its facts against `main`, and where you
-see an alternative to your own draft, put both to the director instead of choosing. Write every point that would stop a builder
-(blocker), every ambiguity and every note, with a verdict, into the task file as a subsection
-`### Spec check R-NNN` under "Questions and rulings". Builders do not repeat this check, so be
-complete: in iteration 1 spec checks found 16 blockers, and T-010, which had none, stopped both
-builders.
+see an alternative to your own draft, put both to the director instead of choosing. A spec is
+checked again after any task whose `touches` overlap its own merges (R-295 after T-058), and a
+draft last edited before the methodology version in force is re-specified in full: budget, a
+platform statement per test file, the pre-merge CI run expected (METHODOLOGY §5.7). Write every
+point that would stop a builder (blocker), every ambiguity and every note, with a verdict, into
+the task file as a subsection `### Spec check R-NNN` under "Questions and rulings". Builders do
+not repeat this check, so be complete: in iteration 1 spec checks found 16 blockers, and T-010,
+which had none, stopped both builders.
 
 ## What you must not do
 Do not write code or tests, or set state beyond `draft`. Do not put implementation hints in the

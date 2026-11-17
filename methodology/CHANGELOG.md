@@ -4,6 +4,36 @@ Each version lists what changed and the evidence behind it. From v1.1 on, every 
 metric (file, field, value) or an incident (`INC-NNN`) from this repository; v1.0 cites the
 PhotoCraft study (`/home/user/photocraft-study/deliverables/`), because no Kiln data exists yet.
 
+## v1.5 — 2026-11-17
+
+Adopted by D-219 from the retrospective of iteration 2 from cut 1 to cut 2 of stage 2
+(`retrospectives/iter-2-stage-2-cut-2.md`, "retro-2c2", run R-304; numbers as in its section 12,
+scripts `retrospectives/scripts/iter2s2c2_*`). All 16 changes accepted, with D-219's notes on 1, 9,
+11, 14 and 16. Ceilings unchanged (its budget section). Tooling: T-043 (1, 9, 11), T-072 (1).
+
+| # | What changed (where) | Decision | Evidence (retro-2c2) |
+|---|---|---|---|
+| 1 | CI evidence from the uploaded artefacts: evidence jobs run every test binary and print failing tests with messages (T-072); the CI record is extracted by an `xtask` command (T-043) into `tasks/ci-runs/`; agents read that file, not job logs (§8.1 "CI records", §8.1 "Claims from CI", §13, reviewer and evaluator briefs, review template). | D-219 (1) | 952,269 tokens of CI reading (15.2 %); a 200-line prefix read as 366/11 where the artefact held 977/22. |
+| 2 | Before any dispatch or queue run the newest CI run on main that changed a non-ledger path is read; ledger-only pushes in a batch at the next addendum; replaces "after every push" (§8, §16, handoff template). | D-219 (2) | 16 of 73 `ci.yml` runs recorded; run 433 read after R-302 and T-084. |
+| 3 | A criterion of absence, limit or only form is an equality to a stated set; the spec check names one variant outside the list (§5.7, planner brief, task template). | D-219 (3) | T-054 AC-4: 4 surviving mutants; T-070 #1, #5. |
+| 4 | Every Pinned document sentence carries a command run on the prototype or base binary, or is marked "unchecked" (the reviewer's first check); a KNOWN-not-verified fact is not copied into a document; replaces "figures, limits and lists" (§5.7, §6 "Pins and documents", planner and reviewer briefs, task template (i), review template). | D-219 (4) | 4 of 9 document defects were copied spec sentences. |
+| 5 | A test author's own deliverable is tested by guards (§6 "Files", planner and test-author briefs). | D-219 (5) | D-189 refused join (m9). |
+| 6 | A figure "to be measured by the director" names the record that will hold it, passed to the implementer before the join, or the reviewer writes the sentence (§5.7, implementer and reviewer briefs). | D-219 (6) | T-070 #3. |
+| 7 | An option a spec check calls unmeasured is not chosen without a probe; replaces "probed before the director rules" (§5.7, §16, planner brief). | D-219 (7) | Four unmeasured options declined, none probed. |
+| 8 | A UI review states its driver's conventions and runs one variant without each: no frame after a control request, the minimum `--size`, the rows of every node (§7, reviewer brief, review template). | D-219 (8) | NEW-1, NEW-2 of the cut-2 evaluation. |
+| 9 | `killed_by_own_tests` in the mutants line; `acc_test_defects` with who found each; in the review template now, in the tools with T-043 (§6 "Experiment arm", §7, §13, review and retrospective templates, reviewer brief). | D-219 (9) | Own tests 19/19 vs acceptance 18/19 (T-058) counted from prose; acceptance-test defects only in prose (D-212). |
+| 10 | A spec is checked again after an overlapping task merges; in a planned chain the resumed drafter checks each spec after its predecessor merges (§5.7, planner brief). | D-219 (10) | R-295 after T-058; 19 of 36 overlapping pairs in the platform batch. |
+| 11 | CI tasks: the `CI-REQUEST` protocol; a CI round counts as one gate attempt; a pending CI criterion is recorded at the join and written in the approval or queue row until T-043's queue check (§8.1 "CI tasks", §10, implementer and test-author briefs). | D-219 (11) | Protocol only in T-070's spec; T-079 AC-6. |
+| 12 | Free disk at dispatch ≥ the measured tree size of every build that will run at once, the director's own included, plus 5 GB; replaces "≥ 15 GB" (§2.1). | D-219 (12) | Disk full twice (D-182, D-205). |
+| 13 | A pause or stage-close row lists every accepted decision of the last retrospective and ADR not yet done, and where it went (§2.1, §14, handoff template). | D-219 (13) | T-043 and T-066 dropped without a row. |
+| 14 | The evaluator's clone is made by a stated sparse-checkout command that leaves the ledger out, reported in the evaluation; tried at the next evaluation (§9, evaluator brief, evaluation template). | D-219 (14) | R-302's clone held every record. |
+| 15 | A draft last edited before the methodology version in force is re-specified in full (budget, platform statement per test file, pre-merge CI) (§5.7, §11, planner brief). | D-219 (15) | Nine feature drafts older than v1.4; T-024 "(d) Unix". |
+| 16 | `ci/` branches are reused, not deleted: one `ci/candidate` if a forced push is allowed there, else one `ci/T-NNN` per task (§8.1 "`ci/` branches"). | D-219 (16), D-207 | Deleting refused with 403 (D-198). |
+
+Removed: "after every push the director reads the CI run of the pushed commit"; "reads the run's job
+logs" (reviewer) and "whose log shows" (evaluator); "free disk ≥ 15 GB"; "probed before the
+director rules"; "each Pinned sentence that states a figure, a limit or a list" (widened by 4).
+
 ## v1.4 — 2026-11-15
 
 Adopted by D-174 from the retrospective of iteration 2 to cut 1 of stage 2

@@ -28,9 +28,12 @@ of them, so be thorough. You did not write any of it.
   check, off-by-one, wrong error kind, skipped write, ignored parameter); run the acceptance
   tests, then the full suite; restore the file after each (`git diff` empty before you commit).
   Record `mutants: {introduced, equivalent, killed, killed_by_acceptance, killed_by_procedure,
-  survived}` in front matter, and each mutant in the body: `killed_by_acceptance` counts kills by
-  acceptance tests in the gate, `killed_by_procedure` kills seen only by a manual procedure (in
-  T-065 round 1 the two were read as one). A surviving non-equivalent mutant is a test gap.
+  killed_by_own_tests, survived}` in front matter, and each mutant in the body:
+  `killed_by_acceptance` counts kills by acceptance tests in the gate, `killed_by_procedure` kills
+  seen only by a manual procedure (in T-065 round 1 the two were read as one), `killed_by_own_tests`
+  kills by the implementer's own tests (the arms are compared on it). Record defects you or the
+  builders found in the acceptance tests as `acc_test_defects`, each with who found it. A
+  surviving non-equivalent mutant is a test gap.
 - **Differential run (every tier, round 1).** Where a reference tool for an item is already on the
   machine (git for ignore rules, rustc for the corpus), make one seeded differential run of the
   built binary against it and record the seed, the number of cases and the differences (NEW-1:
@@ -38,13 +41,20 @@ of them, so be thorough. You did not write any of it.
   draw the run's text from a generator over an alphabet you state in the review that includes
   ligatures, combining marks, joiners and right-to-left text: a row-text defect passed both rounds
   of T-055 because no input held shaped text.
+- **Your driver's conventions.** In a UI review, state the conventions your driver uses (frames
+  after control requests, window sizes, which rows are checked) and run at least one variant
+  without each: no frame after a control request, the minimum `--size`, the rows of every node.
+  The cut-2 evaluator's two findings were hidden by such conventions (NEW-1: a frame after every
+  control request; NEW-2: the bar's values only, at small sizes).
 - **Figures left to measure.** A Pinned figure marked "to be measured by the implementer" that the
-  implementer could not measure (it depends on the acceptance tests) is yours to measure in round 1.
+  implementer could not measure (it depends on the acceptance tests) is yours to measure in round 1;
+  so is the sentence of a figure "to be measured by the director" whose record did not reach the
+  implementer before the join. A Pinned sentence marked "unchecked" is your first document check.
 - **Window.** Where an item's window evidence is procedure-only and the task changes the window
   code, rerun the window procedure and record what it showed.
-- **CI logs.** For platform-dependent behaviour, read the job logs of the CI run the director
-  names and name it in the review; claim only what the log shows ran and passed, per platform
-  (METHODOLOGY §8.1).
+- **CI records.** For platform-dependent behaviour, read the CI record under `tasks/ci-runs/` of
+  the run the director names (not job logs) and name the run in the review; claim only what the
+  record shows ran and passed, per platform (METHODOLOGY §8.1).
 - **High tier: adversarial probing.** Attack the boundary the task crosses: file system
   (symlinks, long names, permissions, FIFOs), processes (hangs, huge output), gate paths (a task
   that weakens its own gate), security claims in documents. Use toy repositories outside the
@@ -77,8 +87,8 @@ rounds 2–3 cost 1.2 M tokens of rework in iteration 0 and all 18 of their find
 written to implement rulings (retro-0).
 
 ## Rulings
-A ruling is a diff to the task file on `main`; read rulings there, not from the branch. Acknowledge each one in your log (accept it, or question it
-with the evidence) before acting on it.
+A ruling is a diff to the task file on `main`; read rulings there, not from the branch.
+Acknowledge each one in your log (accept it, or question it with the evidence) before acting on it.
 
 ## What you produce
 `reviews/T-NNN-rN.md` from `methodology/templates/review.md`, committed with `Task: T-NNN` and

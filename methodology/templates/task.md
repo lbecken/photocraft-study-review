@@ -8,7 +8,7 @@ scorecard_items: []     # e.g. [text-undo-redo]; non-empty ⇒ tier ≥ medium
 depends_on: []          # task IDs that must be merged first
 touches:                # exact paths the task may change, incl. test dirs; mark gate paths; one role per path
   - crates/kiln-xxx/src/yyy.rs
-budget_tokens: 800000   # building and review runs only: low 150000, medium 800000, high 1100000 (v1.4)
+budget_tokens: 800000   # building and review runs only: low 150000, medium 800000, high 1100000 (v1.5)
 iteration: 1
 found_by: planner       # planner | evaluator | reviewer | incident | task:T-NNN (who found the defect)
 origin_task: null       # the task whose defect this fixes, if any
@@ -30,11 +30,12 @@ Answer each, or "n/a" with a reason (checked at `specified`, METHODOLOGY §3):
 - (e) threat model (gate/security): … · (f) tests pinning a snapshot this changes (in `touches`): …
 - (g) worked examples, each executed against a naive model (command and output):
 - (h) per scorecard item, the CLI or control-protocol call the evaluator will use:
-- (i) each guarantee or limit sentence this task adds to `docs/protocol/`, worded, with its evidence:
+- (i) each sentence this task adds to a document, worded, with the command run on the prototype or base binary and its output, or marked "to be measured by the implementer", "to be measured by the director" (name the record) or "unchecked":
 
 ## Acceptance criteria
 Observable behaviour through the interface, with its oracle; ≥ 1 per scorecard item via CLI/control.
 - AC-1: Given …, when <command/CLI call>, then <observable result>. Oracle: <naive model / round-trip / corpus / exact value>.
+A criterion of absence or limit is an equality to a stated set ("exactly …"); the spec check names one variant outside it that must be rejected.
 
 ## Out of scope and implementer notes
 What a reasonable implementer might do but must not, and which task covers it. Unit-test

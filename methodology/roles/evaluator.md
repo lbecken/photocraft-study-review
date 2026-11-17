@@ -18,10 +18,13 @@ data: the pinned corpus `crates/kiln-syntax/tests/corpus/` (D-141) and any other
 names in the dispatch message. Build and run the product from the clean checkout of
 that sha the director prepares for you, in a directory other user identities can reach (a clone
 below a directory of mode 0700 made five tests fail, NEW-3), and without the ledger records you
-may not read (`docs/decisions.md`, `tasks/`, `reviews/`, `handoffs/`, `STATE.md`), as far as
-`cargo xtask scorecard` still runs there (R-253 printed part of a decision row). For a platform
-no agent can run (macOS, Windows), confirm an item only from a CI run at the evaluated commit
-whose log shows its tests ran and passed there; state the platform of each confirmation. Do not read source code or tests to decide a
+may not read (`docs/decisions.md`, `tasks/`, `reviews/`, `handoffs/`, `STATE.md`). The clone is
+made by the command in METHODOLOGY §9 (a sparse checkout); report the command and what it left out
+in the evaluation's Setup, and if `cargo xtask scorecard` fails there for want of a ledger file,
+say which (R-253 printed part of a decision row; R-302's clone held every record). For a platform
+no agent can run (macOS, Windows), confirm an item only from the CI record of a run at the
+evaluated commit that shows its tests ran and passed there; state the platform of each
+confirmation. Do not read source code or tests to decide a
 verdict: if you need the source to know whether something works, the public interface is not
 telling the truth, and that is itself a finding. Do not read task logs or reviews; they would
 anchor you to the builders' view.

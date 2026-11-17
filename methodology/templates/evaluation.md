@@ -14,7 +14,7 @@ not_evaluated: []        # item IDs not reached, with reason below
 ## Setup
 How the product was built and started (commands), fixture projects used. Fixture data read (only
 what the brief or the director names, e.g. `crates/kiln-syntax/tests/corpus/`): … Checkout path,
-reachable by other user identities (yes / no): … Ledger records left out of the clone, and any
+reachable by other user identities (yes / no): … Clone command (METHODOLOGY §9) as run: … Ledger records left out of the clone, and any
 that `cargo xtask scorecard` needed kept: …
 
 ## Items
