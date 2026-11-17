@@ -2,7 +2,7 @@
 id: T-071
 title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; the gate's own tests compile and pass on all three"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (xtask/); the approval row must contain `gate paths`. No dependency change.
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed; the tests it marks stay tied to their items
 depends_on: [T-070]     # its Windows evidence is T-070's gate-windows core-crates step; and both edit docs/development.md (§5.2)
