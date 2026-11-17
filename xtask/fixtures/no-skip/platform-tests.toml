@@ -1,6 +1,7 @@
 # Self-test registry of `cargo xtask no-skip`, applied to `violations.rs` beside it. Paths are
-# relative to this directory. Each entry below yields exactly one finding, except the pending
-# one (two: past its date, and no tasks/T-901-*.md here); `platform::unlisted` has no entry.
+# relative to this directory, the root of the self-test (ruling p7, D-220). Each entry below
+# yields exactly one finding of its own kind (the pending one is past its date and there is no
+# tasks/T-901-*.md here: one line); `platform::unlisted` has no entry.
 
 [[test]]
 file = "violations.rs"

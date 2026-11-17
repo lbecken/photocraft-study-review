@@ -558,8 +558,9 @@ const SCANNED: &[&str] = &["crates", "apps", "xtask"];
 const EXCLUDED: &[&str] = &["xtask/fixtures"];
 
 /// Known findings of `xtask/fixtures/no-skip/violations.rs` with the fixture registry
-/// `platform-tests.toml` beside it: 9 skips and 9 platform findings.
-const FIXTURE_FINDINGS: usize = 18;
+/// `platform-tests.toml` beside it: 9 skips and exactly one finding of each of the 8 platform
+/// kinds.
+const FIXTURE_FINDINGS: usize = 17;
 
 /// The scan of a set of files, gathered for the platform rules.
 #[derive(Default)]
@@ -678,15 +679,17 @@ fn self_test(root: &Path, today: &str) -> Result<usize> {
     let missing: Vec<&str> = want
         .iter()
         .filter(|k| {
-            !found
+            found
                 .iter()
-                .any(|l| l.contains(&format!(": {}: ", k.name())))
+                .filter(|l| l.contains(&format!(": {}: ", k.name())))
+                .count()
+                != 1
         })
         .map(|k| k.name())
         .collect();
     if !missing.is_empty() || bad.skips.len() + found.len() != FIXTURE_FINDINGS {
         bail!(
-            "self-test failed: violations fixture gave {} skip(s) and platform findings {found:?} (missing kinds: {missing:?})",
+            "self-test failed: violations fixture gave {} skip(s) and platform findings {found:?} (kinds not found exactly once: {missing:?})",
             bad.skips.len()
         );
     }
@@ -862,18 +865,23 @@ mod tests {
             kinds,
             [
                 "platform-unlisted",
+                "inert-helper",
+                "platform-statement",
                 "platform-mismatch",
+                "platform-unused",
                 "platform-sentence",
                 "platform-counterpart",
                 "platform-pending-expired",
-                "platform-pending-expired",
-                "inert-helper",
-                "platform-statement",
-                "platform-unused",
             ],
             "{got:#?}"
         );
         assert!(got[0].starts_with("violations.rs:"), "{got:?}");
+        assert!(
+            got[3].starts_with(
+                "reg:6: `violations.rs::platform::listed_as_linux`: platform-mismatch"
+            ),
+            "{got:?}"
+        );
     }
 
     #[test]

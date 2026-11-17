@@ -402,16 +402,14 @@ fn expr_attrs(e: &Expr) -> &[Attribute] {
 /// inspected; nested items are not.
 pub fn unpaired_statements(body: &Block) -> Vec<usize> {
     struct V(Vec<usize>);
+    /// A block (or match) is in order exactly when the union of its platform-cfg statements'
+    /// sets is all three platforms (ruling p3, D-220); otherwise one finding, at the first.
     fn group(out: &mut Vec<usize>, marked: &[(Set, usize)]) {
-        for (i, (s, line)) in marked.iter().enumerate() {
-            let others = marked
-                .iter()
-                .enumerate()
-                .filter(|(j, _)| *j != i)
-                .fold(Set::NONE, |acc, (_, (o, _))| acc.union(*o));
-            if s.union(others) != Set::ALL {
-                out.push(*line);
-            }
+        let union = marked.iter().fold(Set::NONE, |acc, (s, _)| acc.union(*s));
+        if let Some((_, first)) = marked.first()
+            && union != Set::ALL
+        {
+            out.push(*first);
         }
     }
     impl<'a> Visit<'a> for V {
@@ -793,7 +791,10 @@ pub fn task_file_exists(root: &Path, task: &str) -> bool {
 
 /// Apply the registry rules to the scan: items behind platform cfgs, every test of the scan,
 /// and the located findings of the scan. `root` is where `doc` and `tasks/` are read; `today`
-/// is `YYYY-MM-DD`. Returns problems in scan order, then the unused entries.
+/// is `YYYY-MM-DD`. Findings located in a source file (`platform-unlisted`, `inert-helper`,
+/// `platform-statement`) name `<file>:<line>` and come first, in scan order; findings about an
+/// entry name `<registry>:<line of its [[test]] header>` and its `file::item`, in registry order
+/// (ruling p1, D-220).
 pub fn apply(
     reg: &Registry,
     items: &[PlatformItem],
@@ -804,7 +805,6 @@ pub fn apply(
     today: &str,
 ) -> Vec<String> {
     let mut out: Vec<Problem> = Vec::new();
-    let mut used = BTreeSet::new();
     let mut push = |file: &str, line: usize, item: &str, kind: Kind, what: String| {
         out.push(Problem {
             file: file.to_owned(),
@@ -814,54 +814,82 @@ pub fn apply(
         });
     };
     for it in items {
-        let name = it.platforms.name().unwrap_or("?");
-        let Some(e) = reg
+        if !reg
             .entries
             .iter()
-            .find(|e| e.file == it.file && e.item == it.item)
-        else {
+            .any(|e| e.file == it.file && e.item == it.item)
+        {
             push(
                 &it.file,
                 it.line,
                 &it.item,
                 Kind::Unlisted,
                 format!(
-                    "a test behind cfg `{name}` that is not in {registry_name}; list it with its sentence and counterpart, or make it run on every platform"
+                    "a test behind cfg `{}` that is not in {registry_name}; list it with its sentence and counterpart, or make it run on every platform",
+                    it.platforms.name().unwrap_or("?")
                 ),
             );
+        }
+    }
+    for l in located {
+        let what = match l.kind {
+            Kind::InertHelper => "a helper defined per platform whose body here does nothing; give it a real body on every platform or make the caller fail here, naming why".to_owned(),
+            _ => "statements behind platform cfgs in this block do not cover Linux, macOS and Windows together; add one that checks on the platforms left out (or fails there, naming why)".to_owned(),
+        };
+        push(&l.file, l.line, &l.item, l.kind, what);
+    }
+    out.sort();
+    let mut lines: Vec<String> = out.into_iter().map(|p| p.text).collect();
+
+    for e in &reg.entries {
+        let mut entry = |kind: Kind, what: String| {
+            lines.push(format!(
+                "{registry_name}:{}: `{}::{}`: {}: entry {}: {what}",
+                e.line,
+                e.file,
+                e.item,
+                kind.name(),
+                e.index
+            ));
+        };
+        let platform_item = items
+            .iter()
+            .find(|it| it.file == e.file && it.item == e.item);
+        let Some(it) = platform_item else {
+            if tests.contains_key(&(e.file.clone(), e.item.clone())) {
+                entry(
+                    Kind::Mismatch,
+                    format!(
+                        "platforms = \"{}\", but the item has no platform cfg (it runs on every platform)",
+                        e.platforms.name().unwrap_or("?")
+                    ),
+                );
+            } else {
+                entry(
+                    Kind::Unused,
+                    "no such test fn, module with tests or file in the scan; remove the entry"
+                        .into(),
+                );
+            }
             continue;
         };
-        used.insert(e.index);
-        let n = e.index;
         if e.platforms != it.platforms {
-            push(
-                &it.file,
-                it.line,
-                &it.item,
+            entry(
                 Kind::Mismatch,
                 format!(
-                    "entry {n} says platforms = \"{}\", the item is behind cfg `{name}`",
-                    e.platforms.name().unwrap_or("?")
+                    "platforms = \"{}\", but the item ({}:{}) is behind cfg `{}`",
+                    e.platforms.name().unwrap_or("?"),
+                    it.file,
+                    it.line,
+                    it.platforms.name().unwrap_or("?")
                 ),
             );
         }
         match std::fs::read_to_string(root.join(&e.doc)) {
-            Err(_) => push(
-                &it.file,
-                it.line,
-                &it.item,
+            Err(_) => entry(Kind::Sentence, format!("doc `{}` does not exist", e.doc)),
+            Ok(text) if !squash(&text).contains(&squash(&e.quote)) => entry(
                 Kind::Sentence,
-                format!("entry {n}: doc `{}` does not exist", e.doc),
-            ),
-            Ok(text) if !squash(&text).contains(&squash(&e.quote)) => push(
-                &it.file,
-                it.line,
-                &it.item,
-                Kind::Sentence,
-                format!(
-                    "entry {n}: `{}` does not contain the quote \"{}\"",
-                    e.doc, e.quote
-                ),
+                format!("`{}` does not contain the quote \"{}\"", e.doc, e.quote),
             ),
             Ok(_) => {}
         }
@@ -870,22 +898,16 @@ pub fn apply(
             Counterpart::Named { file, item } => {
                 let needed = e.platforms.complement();
                 match tests.get(&(file.clone(), item.clone())) {
-                    None => push(
-                        &it.file,
-                        it.line,
-                        &it.item,
+                    None => entry(
                         Kind::Counterpart,
                         format!(
-                            "entry {n}: counterpart `{file}::{item}` is not a test or a module with tests"
+                            "counterpart `{file}::{item}` is not a test fn or a module with tests"
                         ),
                     ),
-                    Some(s) if !s.covers(needed) => push(
-                        &it.file,
-                        it.line,
-                        &it.item,
+                    Some(s) if !s.covers(needed) => entry(
                         Kind::Counterpart,
                         format!(
-                            "entry {n}: counterpart `{file}::{item}` exists on {} only, not on every one of {}",
+                            "counterpart `{file}::{item}` exists on {} only, not on every one of {}",
                             s.list(),
                             needed.list()
                         ),
@@ -894,48 +916,22 @@ pub fn apply(
                 }
             }
             Counterpart::Pending { task, expires } => {
+                // Satisfied exactly while `expires` is today or later and the task file exists
+                // (ruling p2, D-220): one line naming what fails.
+                let mut why = Vec::new();
                 if expires.as_str() < today {
-                    push(
-                        &it.file,
-                        it.line,
-                        &it.item,
-                        Kind::PendingExpired,
-                        format!(
-                            "entry {n}: pending counterpart expired on {expires} (today is {today})"
-                        ),
-                    );
+                    why.push(format!("expired on {expires} (today is {today})"));
                 }
                 if !task_file_exists(root, task) {
-                    push(
-                        &it.file,
-                        it.line,
-                        &it.item,
+                    why.push(format!("there is no tasks/{task}-*.md"));
+                }
+                if !why.is_empty() {
+                    entry(
                         Kind::PendingExpired,
-                        format!("entry {n}: pending on {task}, but there is no tasks/{task}-*.md"),
+                        format!("pending on {task}: {}", why.join("; ")),
                     );
                 }
             }
-        }
-    }
-    for l in located {
-        let what = match l.kind {
-            Kind::InertHelper => "a helper defined per platform whose body here does nothing; give it a real body on every platform or make the caller fail here, naming why".to_owned(),
-            _ => "a statement behind a platform cfg with no statement for the other platforms in the same block; add one that checks there (or fails, naming why)".to_owned(),
-        };
-        push(&l.file, l.line, &l.item, l.kind, what);
-    }
-    out.sort();
-    let mut lines: Vec<String> = out.into_iter().map(|p| p.text).collect();
-    for e in &reg.entries {
-        if !used.contains(&e.index) {
-            lines.push(format!(
-                "{registry_name}:{}: `{}::{}`: {}: entry {} matches no platform-conditional test; remove it",
-                e.line,
-                e.file,
-                e.item,
-                Kind::Unused.name(),
-                e.index
-            ));
         }
     }
     lines
@@ -1122,12 +1118,12 @@ mod tests {
             unpaired_statements(&body("{ a(); if x { #[cfg(windows)] let y = 1; } }")),
             [1]
         );
-        // linux + windows leaves macOS out: both are reported.
+        // linux + windows leaves macOS out: one finding for the block, at its first.
         assert_eq!(
             unpaired_statements(&body(
                 "{\n#[cfg(target_os = \"linux\")]\na();\n#[cfg(windows)]\nb();\n}"
             )),
-            [2, 4]
+            [2]
         );
         assert!(
             unpaired_statements(&body(
@@ -1322,15 +1318,26 @@ reason = "nothing to compare with"
         mism[2].platforms = Set::UNIX;
         assert!(
             one(&mism, &tests, "2026-11-17", Kind::Mismatch)
-                .starts_with(&format!("{f}:15: `never`"))
+                .starts_with("reg:21: `crates/a/tests/t.rs::never`: platform-mismatch")
+        );
+        // An entry for an existing test without a platform cfg: mismatch, not unused (p6).
+        let mut plain = tests.clone();
+        plain.insert((f.into(), "never".into()), Set::ALL);
+        assert!(
+            one(&items[..2], &plain, "2026-11-17", Kind::Mismatch)
+                .starts_with("reg:21: `crates/a/tests/t.rs::never`: platform-mismatch")
         );
         let fewer = &items[..2];
         assert!(
             one(fewer, &tests, "2026-11-17", Kind::Unused)
-                .starts_with("reg:21: `crates/a/tests/t.rs::never`")
+                .starts_with("reg:21: `crates/a/tests/t.rs::never`: platform-unused")
         );
         let mut unix_only = TestIndex::new();
         unix_only.insert((f.into(), "fifo_windows".into()), Set::UNIX);
+        assert!(
+            one(&items, &unix_only, "2026-11-17", Kind::Counterpart)
+                .starts_with("reg:2: `crates/a/tests/t.rs::fifo`: platform-counterpart")
+        );
         assert!(
             one(&items, &unix_only, "2026-11-17", Kind::Counterpart)
                 .contains("not on every one of windows")
@@ -1341,8 +1348,14 @@ reason = "nothing to compare with"
         );
         assert!(
             one(&items, &tests, "2027-01-01", Kind::PendingExpired)
+                .starts_with("reg:10: `crates/a/tests/t.rs::later`: platform-pending-expired")
+        );
+        assert!(
+            one(&items, &tests, "2027-01-01", Kind::PendingExpired)
                 .contains("expired on 2026-12-31")
         );
+        // The last day still counts.
+        assert!(apply(&reg, &items, &tests, &[], root, "reg", "2026-12-31").is_empty());
         std::fs::remove_file(root.join("tasks/T-075-later.md")).unwrap();
         assert!(
             one(&items, &tests, "2026-11-17", Kind::PendingExpired).contains("no tasks/T-075-*.md")
