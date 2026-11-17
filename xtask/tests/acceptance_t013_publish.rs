@@ -707,6 +707,7 @@ fn committed_state(r: &Repo) -> String {
 }
 
 #[cfg(test)]
+#[cfg(target_os = "linux")] // used by the Linux-only lock test only
 /// Every file under `dir` with its length and modification time (empty if `dir` is absent).
 fn tree_snap(dir: &Path) -> Vec<String> {
     let mut out = Vec::new();

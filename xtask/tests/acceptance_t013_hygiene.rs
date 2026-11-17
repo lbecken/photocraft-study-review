@@ -470,10 +470,12 @@ fn ci_and_charter_list_hygiene_between_ui_commands_and_schema() {
 }
 
 /// A symbolic link at `link` whose target text is `target`, by the platform's own call.
+#[cfg(test)]
 #[cfg(unix)]
 fn symlink(target: &str, link: &Path) {
     std::os::unix::fs::symlink(target, link).unwrap();
 }
+#[cfg(test)]
 #[cfg(windows)]
 fn symlink(target: &str, link: &Path) {
     std::os::windows::fs::symlink_file(target, link).unwrap();
