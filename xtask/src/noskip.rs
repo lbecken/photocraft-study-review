@@ -6,9 +6,15 @@
 //! * in a test function: a call or macro whose name starts with `skip`, and a `return` inside a
 //!   conditional, loop or `let … else` (an early exit that makes the test pass without running);
 //!   closures and nested functions are not inspected;
-//! * a `#[cfg(…)]` other than exactly `cfg(test)` on a test function, on a module that contains
-//!   tests (inline, or the file it loads), or as an inner `#![cfg(…)]` of a file with tests;
+//! * a `#[cfg(…)]` other than exactly `cfg(test)` or a platform form (`crate::platforms`) on a
+//!   test function, on a module that contains tests (inline, or the file it loads), or as an
+//!   inner `#![cfg(…)]` of a file with tests;
 //! * a doc-test fence marked `ignore`.
+//!
+//! Then the platform-test rule (METHODOLOGY §8.1): a test, test module or file behind a platform
+//! cfg must be listed in `xtask/platform-tests.toml` (`crate::platforms`), a helper defined per
+//! platform must not do nothing on one of them, and a platform statement in a test needs one for
+//! the other platforms beside it.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -18,6 +24,7 @@ use serde::Deserialize;
 use syn::visit::{self, Visit};
 use syn::{Attribute, Expr, ItemFn, ItemMod, Meta};
 
+use crate::platforms::{self, HelperDef, ItemCfg, Located, PlatformItem, Set, TestIndex};
 use crate::util::{StepResult, rel, rust_files};
 
 /// What kind of skip was found.
@@ -31,7 +38,7 @@ pub enum Kind {
     SkipCall,
     /// A conditional `return` in a test.
     EarlyReturn,
-    /// A test or test module behind a `cfg` other than `test`.
+    /// A test or test module behind a `cfg` other than `test` or a platform form.
     CfgDisabled,
     /// A ```` ```ignore ```` doc test.
     DocIgnore,
@@ -75,17 +82,6 @@ fn is_test_attr(a: &Attribute) -> bool {
 
 fn is_test_fn(attrs: &[Attribute]) -> bool {
     attrs.iter().any(is_test_attr)
-}
-
-/// A `#[cfg(...)]` that is not exactly `#[cfg(test)]`.
-fn non_test_cfg(attrs: &[Attribute]) -> Option<&Attribute> {
-    attrs.iter().find(|a| {
-        a.path().is_ident("cfg")
-            && match &a.meta {
-                Meta::List(l) => l.tokens.to_string().trim() != "test",
-                _ => true,
-            }
-    })
 }
 
 fn line_of(span: proc_macro2::Span) -> usize {
@@ -191,7 +187,20 @@ impl<'a> Visit<'a> for Body<'_> {
 struct FileScan<'f> {
     file: PathBuf,
     module: Vec<String>,
+    /// Platforms the enclosing file and modules exist on.
+    env: Set,
     out: &'f mut Vec<Finding>,
+    side: &'f mut Side,
+}
+
+/// What the scan collects for the platform-test rule.
+#[derive(Debug, Default)]
+struct Side {
+    platform: Vec<(String, usize, Set)>,
+    tests: Vec<(String, Set)>,
+    helpers: Vec<HelperDef>,
+    located: Vec<(String, usize, platforms::Kind)>,
+    modules: Vec<(PathBuf, Set)>,
 }
 
 impl FileScan<'_> {
@@ -267,17 +276,45 @@ impl FileScan<'_> {
     }
 }
 
+impl FileScan<'_> {
+    /// The item's own cfg: a non-platform cfg is a `cfg-disabled` skip; a platform cfg makes it
+    /// a platform item. Returns the platforms it exists on (with the enclosing ones).
+    fn classify_test_item(&mut self, item: &str, attrs: &[Attribute]) -> Set {
+        let cfg = platforms::item_cfg(attrs);
+        match cfg {
+            ItemCfg::Other(line) => self.out.push(Finding {
+                item: item.to_owned(),
+                line,
+                kind: Kind::CfgDisabled,
+            }),
+            ItemCfg::Platform(set, line) => self.side.platform.push((item.to_owned(), line, set)),
+            ItemCfg::Unconditional => {}
+        }
+        self.env.inter(cfg.set())
+    }
+
+    fn helper(&mut self, item: String, attrs: &[Attribute], block: &syn::Block) {
+        if let ItemCfg::Platform(_, line) = platforms::item_cfg(attrs) {
+            self.side.helpers.push(HelperDef {
+                item,
+                line,
+                trivial: platforms::is_trivial_body(block),
+            });
+        }
+    }
+}
+
 impl<'a> Visit<'a> for FileScan<'_> {
     fn visit_item_fn(&mut self, f: &'a ItemFn) {
         let item = self.name(&f.sig.ident.to_string());
         self.check_attrs(&item, &f.attrs);
         if is_test_fn(&f.attrs) {
-            if let Some(a) = non_test_cfg(&f.attrs) {
-                self.out.push(Finding {
-                    item: item.clone(),
-                    line: line_of(a.pound_token.span),
-                    kind: Kind::CfgDisabled,
-                });
+            let set = self.classify_test_item(&item, &f.attrs);
+            self.side.tests.push((item.clone(), set));
+            for line in platforms::unpaired_statements(&f.block) {
+                self.side
+                    .located
+                    .push((item.clone(), line, platforms::Kind::PlatformStatement));
             }
             let mut body = Body {
                 item,
@@ -287,6 +324,8 @@ impl<'a> Visit<'a> for FileScan<'_> {
             for stmt in &f.block.stmts {
                 body.visit_stmt(stmt);
             }
+        } else {
+            self.helper(item, &f.attrs, &f.block);
         }
         // Nested fns inside a fn are rare in tests; not descended.
     }
@@ -295,28 +334,36 @@ impl<'a> Visit<'a> for FileScan<'_> {
         let name = m.ident.to_string();
         let item = self.name(&name);
         self.check_attrs(&item, &m.attrs);
-        if let Some(a) = non_test_cfg(&m.attrs) {
-            let has_tests = match &m.content {
-                Some((_, items)) => contains_tests(items),
-                None => self.module_file(m).is_some_and(|p| {
-                    std::fs::read_to_string(p)
-                        .ok()
-                        .and_then(|s| syn::parse_file(&s).ok())
-                        .is_some_and(|f| contains_tests(&f.items))
-                }),
-            };
-            if has_tests {
-                self.out.push(Finding {
-                    item: item.clone(),
-                    line: line_of(a.pound_token.span),
-                    kind: Kind::CfgDisabled,
-                });
-            }
+        let file = match &m.content {
+            Some(_) => None,
+            None => self.module_file(m),
+        };
+        let has_tests = match &m.content {
+            Some((_, items)) => contains_tests(items),
+            None => file.as_ref().is_some_and(|p| {
+                std::fs::read_to_string(p)
+                    .ok()
+                    .and_then(|s| syn::parse_file(&s).ok())
+                    .is_some_and(|f| contains_tests(&f.items))
+            }),
+        };
+        let set = if has_tests {
+            let set = self.classify_test_item(&item, &m.attrs);
+            self.side.tests.push((item.clone(), set));
+            set
+        } else {
+            self.env.inter(platforms::item_cfg(&m.attrs).set())
+        };
+        if let Some(p) = file {
+            self.side.modules.push((p, set));
         }
         if m.content.is_some() {
+            let env = self.env;
+            self.env = set;
             self.module.push(name);
             visit::visit_item_mod(self, m);
             self.module.pop();
+            self.env = env;
         }
     }
 
@@ -325,9 +372,14 @@ impl<'a> Visit<'a> for FileScan<'_> {
             syn::Item::Fn(f) => self.visit_item_fn(f),
             syn::Item::Mod(m) => self.visit_item_mod(m),
             syn::Item::Impl(imp) => {
+                // Twins of a method live in one impl block: the block's line names it.
+                let block = line_of(imp.impl_token.span);
                 for ii in &imp.items {
                     if let syn::ImplItem::Fn(f) = ii {
-                        self.check_attrs(&self.name(&f.sig.ident.to_string()), &f.attrs);
+                        let name = self.name(&f.sig.ident.to_string());
+                        self.check_attrs(&name, &f.attrs);
+                        let key = self.name(&format!("<impl@{block}>::{}", f.sig.ident));
+                        self.helper(key, &f.attrs, &f.block);
                     }
                 }
                 self.check_attrs("<impl>", &imp.attrs);
@@ -350,26 +402,42 @@ impl<'a> Visit<'a> for FileScan<'_> {
     }
 }
 
-/// Findings in one source file.
-pub fn scan_file(file: &Path, source: &str) -> Result<Vec<Finding>> {
+/// Everything the scan of one file yields.
+#[derive(Debug, Default)]
+pub struct Scan {
+    /// The skip findings (the six kinds of `Kind`).
+    pub findings: Vec<Finding>,
+    /// Tests, test modules and `<file>` behind a platform cfg: (item, line, platforms).
+    pub platform: Vec<(String, usize, Set)>,
+    /// Every test fn, module with tests and `<file>` (if it has tests), with the platforms it
+    /// exists on as far as this file says.
+    pub tests: Vec<(String, Set)>,
+    /// `inert-helper` and `platform-statement` findings: (item, line, kind).
+    pub located: Vec<(String, usize, platforms::Kind)>,
+    /// Out-of-line modules declared here: (the file they load, the platforms they exist on).
+    pub modules: Vec<(PathBuf, Set)>,
+}
+
+/// Scan one source file.
+pub fn scan(file: &Path, source: &str) -> Result<Scan> {
     let parsed = syn::parse_file(source).with_context(|| format!("parse {}", file.display()))?;
     let mut out = Vec::new();
+    let mut side = Side::default();
     {
         let mut scan = FileScan {
             file: file.to_path_buf(),
             module: Vec::new(),
+            env: Set::ALL,
             out: &mut out,
+            side: &mut side,
         };
         scan.check_attrs("<file>", &parsed.attrs);
-        if let Some(a) = non_test_cfg(&parsed.attrs)
-            && contains_tests(&parsed.items)
-        {
-            let line = line_of(a.pound_token.span);
-            scan.out.push(Finding {
-                item: "<file>".into(),
-                line,
-                kind: Kind::CfgDisabled,
-            });
+        if contains_tests(&parsed.items) {
+            let set = scan.classify_test_item("<file>", &parsed.attrs);
+            scan.side.tests.push(("<file>".into(), set));
+            scan.env = set;
+        } else {
+            scan.env = platforms::item_cfg(&parsed.attrs).set();
         }
         for item in &parsed.items {
             scan.visit_item(item);
@@ -377,7 +445,24 @@ pub fn scan_file(file: &Path, source: &str) -> Result<Vec<Finding>> {
     }
     out.sort();
     out.dedup();
-    Ok(out)
+    for (item, line) in platforms::inert_helpers(&side.helpers) {
+        side.located
+            .push((item, line, platforms::Kind::InertHelper));
+    }
+    side.located.sort_by_key(|(_, l, _)| *l);
+    Ok(Scan {
+        findings: out,
+        platform: side.platform,
+        tests: side.tests,
+        located: side.located,
+        modules: side.modules,
+    })
+}
+
+/// Skip findings in one source file.
+#[cfg(test)]
+pub fn scan_file(file: &Path, source: &str) -> Result<Vec<Finding>> {
+    Ok(scan(file, source)?.findings)
 }
 
 #[derive(Debug, Deserialize)]
@@ -472,15 +557,97 @@ const SCANNED: &[&str] = &["crates", "apps", "xtask"];
 /// Excluded: the self-test fixtures.
 const EXCLUDED: &[&str] = &["xtask/fixtures"];
 
-/// Run the self-test, scan the workspace and apply the allowlist.
-pub fn check(root: &Path, today: &str) -> Result<StepResult> {
-    if !valid_date(today) {
-        bail!("today `{today}` is not YYYY-MM-DD");
+/// Known findings of `xtask/fixtures/no-skip/violations.rs` with the fixture registry
+/// `platform-tests.toml` beside it: 9 skips and 9 platform findings.
+const FIXTURE_FINDINGS: usize = 18;
+
+/// The scan of a set of files, gathered for the platform rules.
+#[derive(Default)]
+struct Gathered {
+    skips: Vec<(String, Finding)>,
+    items: Vec<PlatformItem>,
+    tests: TestIndex,
+    located: Vec<Located>,
+}
+
+impl Gathered {
+    fn add(&mut self, root: &Path, file: &Path, s: Scan, module_sets: &mut Vec<(String, Set)>) {
+        let r = rel(root, file);
+        for f in s.findings {
+            self.skips.push((r.clone(), f));
+        }
+        for (item, line, platforms) in s.platform {
+            self.items.push(PlatformItem {
+                file: r.clone(),
+                item,
+                line,
+                platforms,
+            });
+        }
+        for (item, set) in s.tests {
+            self.tests.insert((r.clone(), item), set);
+        }
+        for (item, line, kind) in s.located {
+            self.located.push(Located {
+                file: r.clone(),
+                item,
+                line,
+                kind,
+            });
+        }
+        for (p, set) in s.modules {
+            module_sets.push((rel(root, &p), set));
+        }
     }
+
+    /// A file loaded by `#[cfg(…)] mod x;` exists only where the declaration does.
+    fn narrow(&mut self, module_sets: &[(String, Set)]) {
+        for (file, set) in module_sets {
+            for ((f, _), s) in self.tests.iter_mut() {
+                if f == file {
+                    *s = s.inter(*set);
+                }
+            }
+        }
+    }
+
+    fn platform_problems(
+        &self,
+        reg: &platforms::Registry,
+        root: &Path,
+        registry_name: &str,
+        today: &str,
+    ) -> Vec<String> {
+        platforms::apply(
+            reg,
+            &self.items,
+            &self.tests,
+            &self.located,
+            root,
+            registry_name,
+            today,
+        )
+    }
+}
+
+fn gather(root: &Path, files: &[PathBuf]) -> Result<Gathered> {
+    let mut g = Gathered::default();
+    let mut module_sets = Vec::new();
+    for f in files {
+        let src = std::fs::read_to_string(f).with_context(|| format!("read {}", f.display()))?;
+        g.add(root, f, scan(f, &src)?, &mut module_sets);
+    }
+    g.narrow(&module_sets);
+    Ok(g)
+}
+
+/// The self-test: the violations fixture yields exactly its known findings (skips and, with
+/// the fixture registry, platform findings), the clean fixture none. Returns their number.
+fn self_test(root: &Path, today: &str) -> Result<usize> {
     let fx = root.join("xtask/fixtures/no-skip");
     let bad_path = fx.join("violations.rs");
-    let bad = scan_file(&bad_path, &std::fs::read_to_string(&bad_path)?)?;
-    let kinds: BTreeSet<Kind> = bad.iter().map(|f| f.kind).collect();
+    let bad = gather(&fx, std::slice::from_ref(&bad_path))?;
+    let kinds: BTreeSet<Kind> = bad.skips.iter().map(|(_, f)| f.kind).collect();
     let all = BTreeSet::from([
         Kind::Ignore,
         Kind::CfgAttrIgnore,
@@ -489,36 +656,87 @@ pub fn check(root: &Path, today: &str) -> Result<StepResult> {
         Kind::CfgDisabled,
         Kind::DocIgnore,
     ]);
-    if kinds != all || bad.len() != 9 {
-        bail!("self-test failed: violations fixture gave {bad:?}");
+    if kinds != all || bad.skips.len() != 9 {
+        bail!("self-test failed: violations fixture gave {:?}", bad.skips);
+    }
+    let reg_name = "xtask/fixtures/no-skip/platform-tests.toml";
+    let reg_text =
+        std::fs::read_to_string(root.join(reg_name)).with_context(|| format!("read {reg_name}"))?;
+    let reg = platforms::parse(reg_name, &reg_text)
+        .map_err(|e| anyhow::anyhow!("self-test failed: {}", e.join("; ")))?;
+    let found = bad.platform_problems(&reg, &fx, reg_name, today);
+    let want = [
+        platforms::Kind::Unlisted,
+        platforms::Kind::Mismatch,
+        platforms::Kind::Unused,
+        platforms::Kind::Sentence,
+        platforms::Kind::Counterpart,
+        platforms::Kind::PendingExpired,
+        platforms::Kind::InertHelper,
+        platforms::Kind::PlatformStatement,
+    ];
+    let missing: Vec<&str> = want
+        .iter()
+        .filter(|k| {
+            !found
+                .iter()
+                .any(|l| l.contains(&format!(": {}: ", k.name())))
+        })
+        .map(|k| k.name())
+        .collect();
+    if !missing.is_empty() || bad.skips.len() + found.len() != FIXTURE_FINDINGS {
+        bail!(
+            "self-test failed: violations fixture gave {} skip(s) and platform findings {found:?} (missing kinds: {missing:?})",
+            bad.skips.len()
+        );
     }
     let clean_path = fx.join("clean.rs");
-    let clean = scan_file(&clean_path, &std::fs::read_to_string(&clean_path)?)?;
-    if !clean.is_empty() {
-        bail!("self-test failed: clean fixture gave {clean:?}");
+    let clean = gather(&fx, std::slice::from_ref(&clean_path))?;
+    let clean_platform =
+        clean.platform_problems(&platforms::Registry::default(), &fx, reg_name, today);
+    if !clean.skips.is_empty() || !clean_platform.is_empty() {
+        bail!(
+            "self-test failed: clean fixture gave {:?} {clean_platform:?}",
+            clean.skips
+        );
     }
+    Ok(FIXTURE_FINDINGS)
+}
 
-    let mut findings = Vec::new();
-    let mut files = 0;
-    for dir in SCANNED {
-        for f in rust_files(root, &root.join(dir), EXCLUDED)? {
-            files += 1;
-            let src = std::fs::read_to_string(&f)?;
-            for finding in scan_file(&f, &src)? {
-                findings.push((rel(root, &f), finding));
-            }
-        }
+/// Run the self-test, scan the workspace, apply the allowlist, then the platform-test rules.
+pub fn check(root: &Path, today: &str) -> Result<StepResult> {
+    if !valid_date(today) {
+        bail!("today `{today}` is not YYYY-MM-DD");
     }
-    if files == 0 {
+    let known = self_test(root, today)?;
+
+    let mut files = Vec::new();
+    for dir in SCANNED {
+        files.extend(rust_files(root, &root.join(dir), EXCLUDED)?);
+    }
+    if files.is_empty() {
         bail!("no Rust files found to scan");
     }
+    let g = gather(root, &files)?;
     let skips =
         std::fs::read_to_string(root.join("xtask/skips.toml")).context("read xtask/skips.toml")?;
-    let problems = apply_allowlist(&findings, &skips, today)?;
-    let listed = findings.len();
+    let mut problems = apply_allowlist(&g.skips, &skips, today)?;
+    let listed = g.skips.len();
+    let (registered, pending) = match platforms::load(root) {
+        Ok(reg) => {
+            problems.extend(g.platform_problems(&reg, root, platforms::REGISTRY, today));
+            (reg.entries.len(), reg.pending())
+        }
+        Err(errors) => {
+            // A malformed registry stops the step: its errors, one line per entry.
+            problems.extend(errors);
+            return Ok(StepResult::from_problems("", "skip problems", &problems));
+        }
+    };
     Ok(StepResult::from_problems(
         format!(
-            "self-test ok; {files} files scanned, {listed} allowlisted skip(s), today = {today}"
+            "self-test ok ({known} known findings); {} files scanned, {listed} allowlisted skip(s), {registered} platform test(s) registered ({pending} pending), today = {today}",
+            files.len()
         ),
         "skip problems",
         &problems,
@@ -622,5 +840,92 @@ mod tests {
         let got = scan_file(&lib, "#[cfg(feature = \"slow\")] mod slow;").unwrap();
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].kind, Kind::CfgDisabled);
+    }
+
+    #[test]
+    fn self_test_counts_the_fixture() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        assert_eq!(self_test(root, "2026-11-17").unwrap(), FIXTURE_FINDINGS);
+        let fx = root.join("xtask/fixtures/no-skip");
+        let g = gather(&fx, &[fx.join("violations.rs")]).unwrap();
+        let reg = platforms::parse(
+            "reg",
+            &std::fs::read_to_string(fx.join("platform-tests.toml")).unwrap(),
+        )
+        .unwrap();
+        let got = g.platform_problems(&reg, &fx, "reg", "2026-11-17");
+        let kinds: Vec<&str> = got
+            .iter()
+            .map(|l| l.split(": ").nth(2).unwrap_or_default())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "platform-unlisted",
+                "platform-mismatch",
+                "platform-sentence",
+                "platform-counterpart",
+                "platform-pending-expired",
+                "platform-pending-expired",
+                "inert-helper",
+                "platform-statement",
+                "platform-unused",
+            ],
+            "{got:#?}"
+        );
+        assert!(got[0].starts_with("violations.rs:"), "{got:?}");
+    }
+
+    #[test]
+    fn platform_cfgs_are_not_skips_but_items() {
+        let src = "#[cfg(test)]\nmod t {\n    #[test]\n    #[cfg(unix)]\n    fn a() {}\n    #[test]\n    #[cfg(all(test, unix))]\n    fn b() {}\n}\n";
+        let s = super::scan(Path::new("x.rs"), src).unwrap();
+        assert_eq!(
+            s.findings
+                .iter()
+                .map(|f| (f.item.as_str(), f.kind))
+                .collect::<Vec<_>>(),
+            [("t::b", Kind::CfgDisabled)]
+        );
+        assert_eq!(s.platform, [("t::a".to_string(), 4, Set::UNIX)]);
+        assert!(s.tests.contains(&("t::a".to_string(), Set::UNIX)));
+        assert!(s.tests.contains(&("t".to_string(), Set::ALL)));
+        // A test in a module behind cfg(windows) exists on Windows only.
+        let s = super::scan(
+            Path::new("x.rs"),
+            "#[cfg(windows)]\nmod w {\n    #[test]\n    fn c() {}\n}\n",
+        )
+        .unwrap();
+        assert_eq!(s.platform, [("w".to_string(), 1, Set::WINDOWS)]);
+        assert!(s.tests.contains(&("w::c".to_string(), Set::WINDOWS)));
+    }
+
+    #[test]
+    fn inert_twins_are_found_with_the_trivial_line() {
+        let src = "mod s {\n    #[cfg(unix)]\n    pub fn m() -> Option<u32> {\n        Some(1)\n    }\n    #[cfg(not(unix))]\n    pub fn m() -> Option<u32> {\n        None\n    }\n    #[cfg(unix)]\n    pub fn only() {}\n}\n";
+        let s = super::scan(Path::new("x.rs"), src).unwrap();
+        assert_eq!(
+            s.located,
+            [("s::m".to_string(), 6, platforms::Kind::InertHelper)]
+        );
+    }
+
+    #[test]
+    fn a_file_loaded_behind_a_platform_cfg_exists_only_there() {
+        let d = crate::util::testutil::TempDir::new("noskip-plat-mod");
+        std::fs::create_dir_all(d.path().join("src")).unwrap();
+        std::fs::write(d.path().join("src/w.rs"), "#[test] fn t() {}").unwrap();
+        std::fs::write(d.path().join("src/lib.rs"), "#[cfg(windows)] mod w;").unwrap();
+        let g = gather(
+            d.path(),
+            &[d.path().join("src/lib.rs"), d.path().join("src/w.rs")],
+        )
+        .unwrap();
+        assert_eq!(
+            g.tests.get(&("src/w.rs".to_string(), "t".to_string())),
+            Some(&Set::WINDOWS)
+        );
+        assert_eq!(g.items.len(), 1);
+        assert_eq!(g.items[0].item, "w");
     }
 }

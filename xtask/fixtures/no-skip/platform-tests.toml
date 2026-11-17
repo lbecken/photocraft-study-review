@@ -1,0 +1,49 @@
+# Self-test registry of `cargo xtask no-skip`, applied to `violations.rs` beside it. Paths are
+# relative to this directory. Each entry below yields exactly one finding, except the pending
+# one (two: past its date, and no tasks/T-901-*.md here); `platform::unlisted` has no entry.
+
+[[test]]
+file = "violations.rs"
+item = "platform::listed_as_linux"
+platforms = "linux"
+doc = "platform-doc.md"
+quote = "Mode bits are kept"
+counterpart = "none"
+reason = "mismatch case: the item is behind cfg(windows)"
+
+[[test]]
+file = "violations.rs"
+item = "platform::removed_long_ago"
+platforms = "unix"
+doc = "platform-doc.md"
+quote = "Mode bits are kept"
+counterpart = "none"
+reason = "unused case: no such item"
+
+[[test]]
+file = "violations.rs"
+item = "platform::quote_not_in_doc"
+platforms = "unix"
+doc = "platform-doc.md"
+quote = "a sentence the document does not have"
+counterpart = "none"
+reason = "sentence case"
+
+[[test]]
+file = "violations.rs"
+item = "platform::counterpart_missing"
+platforms = "unix"
+doc = "platform-doc.md"
+quote = "Mode bits are kept"
+counterpart = "violations.rs::platform::no_such_test"
+
+[[test]]
+file = "violations.rs"
+item = "platform::pending_past_date"
+platforms = "macos"
+doc = "platform-doc.md"
+quote = "Mode bits are kept"
+counterpart = "pending"
+reason = "pending case"
+task = "T-901"
+expires = "2000-01-01"

@@ -9,6 +9,12 @@
 //!
 //! `--check` fails if the committed doc is stale, an item is malformed, a listed test does not
 //! exist or does not pass, or an evaluation is malformed or names an unknown item.
+//!
+//! Platforms (METHODOLOGY §8.1): the page is computed on Linux. A listed test that
+//! `xtask/platform-tests.toml` says does not exist on the host is "registered absent here", not
+//! missing. On macOS and Windows every listed test built there is run and must pass, a listed
+//! test absent without such an entry is a problem, and the page is neither compared nor written
+//! (`cargo xtask scorecard` without `--check` is refused there by `main`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -17,6 +23,7 @@ use std::path::Path;
 use anyhow::{Context as _, Result, bail};
 use serde::Deserialize;
 
+use crate::platforms::{self, Platform};
 use crate::testbins::{self, Outcome};
 use crate::util::{StepResult, rel};
 
@@ -67,21 +74,22 @@ impl fmt::Display for Status {
 pub enum TestState {
     /// No such test.
     Missing,
+    /// Not built on this platform, as the platform-test registry says.
+    RegisteredAbsent,
     /// Ran with this outcome.
     Ran(Outcome),
 }
 
-/// The pure derivation.
+/// The pure derivation. A test registered absent on this platform is left out; an item none of
+/// whose tests is left is `planned`.
 pub fn derive(item: &Item, tests: &BTreeMap<String, TestState>, confirmed: bool) -> Status {
-    if item.tests.is_empty() {
-        return Status::Planned;
-    }
     let states: Vec<TestState> = item
         .tests
         .iter()
         .map(|t| tests.get(t).copied().unwrap_or(TestState::Missing))
+        .filter(|s| *s != TestState::RegisteredAbsent)
         .collect();
-    if states.contains(&TestState::Missing) {
+    if states.is_empty() || states.contains(&TestState::Missing) {
         Status::Planned
     } else if states.iter().any(|s| *s != TestState::Ran(Outcome::Passed)) {
         Status::Failing
@@ -288,15 +296,29 @@ fn workspace_members(root: &Path) -> Result<BTreeSet<String>> {
     Ok(table.crates.into_iter().map(|c| c.name).collect())
 }
 
-/// Resolve and run every listed test.
-fn test_states(root: &Path, items: &[Item]) -> Result<BTreeMap<String, TestState>> {
+/// Resolve and run every listed test. A listed test not built here that `absent` covers is
+/// `RegisteredAbsent`. On Linux a failed build stops the step; elsewhere the tests that were
+/// built are run and the failed targets are returned as problems.
+fn test_states(
+    root: &Path,
+    items: &[Item],
+    host: Platform,
+    absent: &[(String, platforms::Set)],
+) -> Result<(BTreeMap<String, TestState>, Vec<String>)> {
     let wanted: BTreeSet<&String> = items.iter().flat_map(|i| &i.tests).collect();
     let mut states = BTreeMap::new();
+    let mut problems = Vec::new();
     if wanted.is_empty() {
-        return Ok(states);
+        return Ok((states, problems));
     }
     let build = testbins::build(root, None)?;
-    if !build.ok {
+    if !build.ok && host != Platform::Linux {
+        problems.push(format!(
+            "building test executables failed on {} ({}); their tests are not run",
+            host.name(),
+            build.failed.join(", ")
+        ));
+    } else if !build.ok {
         bail!(
             "building test executables failed ({}):\n{}",
             build.failed.join(", "),
@@ -324,6 +346,9 @@ fn test_states(root: &Path, items: &[Item]) -> Result<BTreeMap<String, TestState
                 .entry(*i)
                 .or_default()
                 .push((w.clone(), name.clone())),
+            None if platforms::is_registered_absent(absent, w) => {
+                states.insert(w.clone(), TestState::RegisteredAbsent);
+            }
             None => {
                 states.insert(w.clone(), TestState::Missing);
             }
@@ -337,30 +362,49 @@ fn test_states(root: &Path, items: &[Item]) -> Result<BTreeMap<String, TestState
             states.insert(q, TestState::Ran(o));
         }
     }
-    Ok(states)
+    Ok((states, problems))
 }
 
-/// Derive, then write the doc (`check == false`) or compare with it (`check == true`).
+/// Derive, then write the doc (`check == false`) or compare with it (`check == true`), on the
+/// host's platform.
 pub fn run(root: &Path, check: bool) -> Result<StepResult> {
+    run_on(root, check, Platform::host())
+}
+
+/// `run` as if on `host`. Off Linux the page is neither compared nor written.
+pub fn run_on(root: &Path, check: bool, host: Platform) -> Result<StepResult> {
     let members = workspace_members(root)?;
     let (items, mut problems) = load_items(root, &members)?;
     let known: BTreeSet<String> = items.iter().map(|i| i.id.clone()).collect();
     let (verdicts, eval_problems) = load_evaluations(root, &known)?;
     problems.extend(eval_problems);
-    let states = test_states(root, &items)?;
+    let absent = match platforms::load(root) {
+        Ok(reg) => platforms::absent_on(root, &reg, host),
+        Err(errors) => {
+            problems.extend(errors);
+            Vec::new()
+        }
+    };
+    let (states, build_problems) = test_states(root, &items, host, &absent)?;
+    problems.extend(build_problems);
+    let here = if host == Platform::Linux {
+        String::new()
+    } else {
+        format!(" on {}", host.name())
+    };
     let mut rows = Vec::new();
     for item in &items {
         for t in &item.tests {
             match states.get(t) {
                 Some(TestState::Missing) => problems.push(format!(
-                    "{}: lists test `{t}`, which does not exist",
+                    "{}: lists test `{t}`, which does not exist{here}",
                     item.id
                 )),
                 Some(TestState::Ran(Outcome::Failed)) => {
-                    problems.push(format!("{}: test `{t}` fails", item.id))
+                    problems.push(format!("{}: test `{t}` fails{here}", item.id))
                 }
                 Some(TestState::Ran(Outcome::Ignored)) => {
-                    problems.push(format!("{}: test `{t}` is ignored", item.id))
+                    problems.push(format!("{}: test `{t}` is ignored{here}", item.id))
                 }
                 _ => {}
             }
@@ -372,13 +416,30 @@ pub fn run(root: &Path, check: bool) -> Result<StepResult> {
         );
         rows.push((item.clone(), status));
     }
+    let count = |want: fn(&TestState) -> bool| states.values().filter(|s| want(s)).count();
+    let registered_absent = count(|s| *s == TestState::RegisteredAbsent);
+    if host != Platform::Linux {
+        let ran = count(|s| matches!(s, TestState::Ran(_)));
+        return Ok(StepResult::from_problems(
+            format!(
+                "{}: {} items; {ran} tests ran; {registered_absent} registered absent here; page not compared (computed on Linux)",
+                host.name(),
+                items.len()
+            ),
+            "scorecard problems",
+            &problems,
+        ));
+    }
     let doc = render(&rows);
     let path = root.join("docs/scorecard.md");
-    let summary = doc
+    let mut summary = doc
         .lines()
         .find(|l| l.contains(" items: "))
         .unwrap_or_default()
         .to_owned();
+    if registered_absent > 0 {
+        summary.push_str(&format!(" {registered_absent} registered absent here."));
+    }
     if check {
         let current = std::fs::read_to_string(&path).unwrap_or_default();
         if current != doc {

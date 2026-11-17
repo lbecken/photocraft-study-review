@@ -13,6 +13,7 @@ mod join;
 mod layers;
 mod metrics;
 mod noskip;
+mod platforms;
 mod policy;
 mod precheck;
 mod provenance;
@@ -147,6 +148,13 @@ fn real_main() -> Result<bool> {
         "scorecard" => {
             let check = flag(&mut args, "--check");
             no_more(&args)?;
+            if !check && platforms::Platform::host() != platforms::Platform::Linux {
+                // T-071 Interface (3): the page is computed on Linux; nothing is written here.
+                return Err(util::Refused(
+                    "scorecard: refused: docs/scorecard.md is computed on Linux".into(),
+                )
+                .into());
+            }
             Ok(print_step(
                 "scorecard",
                 &scorecard::run(&util::repo_root()?, check)?,
