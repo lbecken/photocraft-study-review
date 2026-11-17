@@ -606,7 +606,7 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
             }
         }
         if e.file.contains('\\') {
-            errs.push(format!("`file` must be `/`-separated"));
+            errs.push("`file` must be `/`-separated".to_owned());
         }
         let platforms = Set::from_name(&e.platforms);
         if platforms.is_none() {
@@ -616,7 +616,7 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
             ));
         }
         if e.reason.as_deref().is_some_and(empty) {
-            errs.push(format!("empty `reason`"));
+            errs.push("empty `reason`".to_owned());
         }
         let counterpart = match e.counterpart.as_str() {
             "none" | "pending" if e.reason.is_none() => {
@@ -660,7 +660,7 @@ pub fn parse(name: &str, text: &str) -> Result<Registry, Vec<String>> {
             }
         }
         if !seen.insert((e.file.clone(), e.item.clone())) {
-            errs.push(format!("the same test is listed twice"));
+            errs.push("the same test is listed twice".to_owned());
         }
         if !errs.is_empty() {
             // One line per faulty entry.
