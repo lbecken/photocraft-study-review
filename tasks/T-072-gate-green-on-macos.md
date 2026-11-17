@@ -49,6 +49,11 @@ if `disk.rs` must change. Re-estimate at specification.
   no spec text pins (the probe reading the build's result through `steps.<id>.outcome`, and the literal `120`):
   loosen them when the workflow next changes; (3) `docs/development.md`: the macOS disk cell leaves out the
   record's inode columns although the sentence says "as printed".
+- **From the re-specification of T-043 (D-223, ruling Q-8 B):** `incidents/` becomes a ledger path in this task
+  (`xtask/ledger.toml`, the `paths-ignore` list of `platforms.yml` and the expectation in
+  `xtask/tests/acceptance_t070.rs`, which checks the two against each other).
+- **From v1.5 change 1 (D-219):** the evidence steps run every test binary (`--no-fail-fast`) and print failing
+  tests with their messages; the full output is not cut at 200 lines.
 
 ## Log
 ### director
