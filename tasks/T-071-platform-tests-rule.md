@@ -2,7 +2,7 @@
 id: T-071
 title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; the gate's own tests compile and pass on all three"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (xtask/); the approval row must contain `gate paths`. No dependency change.
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: []     # none claimed; the tests it marks stay tied to their items
 depends_on: [T-070]     # its Windows evidence is T-070's gate-windows core-crates step; and both edit docs/development.md (§5.2)
@@ -334,6 +334,19 @@ fails there, it is ruled as a stated platform difference before this task is que
   every `file`, `doc`, counterpart and `tasks/` name in a fixture resolves inside it.
 - Test author: add a guard for p5 (the two forms stay `cfg-disabled`) and cases for p3 (a `linux` statement
   complemented by `macos` and `windows` statements; one left uncomplemented) and p6; nothing else changes.
+
+### Rulings on the implementer's report (director, D-222)
+- **q1 (r3/r4 scope).** Accepted: in `xtask/tests/acceptance_t005_r3.rs` and `acceptance_t005_r4.rs` the task may
+  edit the `from_mode` helper **and the cfg lines that registering the two tests of Interface (4) needs** (the test
+  fn, `FAKE_GATE`, and in r4 `type Env`, `fn record` and the `PathBuf` import, used by that test only). Nothing near
+  the `refused` helper. The `touches` comment's "the from_mode helper only" is read so.
+- **q2 (AC-5).** "The test list equals main's name for name" means: no test name of main is lost on Linux; unit
+  tests added by this task are allowed.
+- The implementer's choices to be checked by the reviewer, not ruled here: `unix` rather than `linux` for the two
+  tests that only fail to compile on Windows; whitespace runs in a quote match count as one space; a missing
+  registry file is an empty registry; off Linux a failed test build is reported and the step goes on;
+  `acceptance_t002::disk_save_replaces_via_rename_without_leftovers` fails on Windows by design, naming why, until
+  the product does it there.
 
 ## Log
 ### director
