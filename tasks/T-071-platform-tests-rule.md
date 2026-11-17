@@ -309,6 +309,32 @@ gives `guard_t054::ac2_backtrace_names_this_file_and_line` a verdict on Windows 
 with line tables only must name file and line). The director reads it from the artefact and records it; if it
 fails there, it is ruled as a stated platform difference before this task is queued.
 
+### Rulings on the test author's questions (director, D-220; the planner's recommendations of run R-308, with p2 and p4 decided otherwise; told to both builders)
+- **p1 (question 1).** A finding about a registry entry (`platform-mismatch`, `platform-sentence`,
+  `platform-counterpart`, `platform-pending-expired`, `platform-unused`) names exactly
+  `xtask/platform-tests.toml:<line of that entry's [[test]] header>` and the entry's `file::item`.
+  `platform-unlisted`, `inert-helper` and `platform-statement` name the `.rs` file and line.
+- **p2 (question 2).** No new field. A `pending` entry names the task that will write the counterpart (`task`)
+  and its `expires` date; the counterpart's name is not known before it is written. Ruling Q-3 A's sentence "a
+  pending entry names its future counterpart now" is replaced by this. When the counterpart exists, the entry is
+  edited to name it; a `pending` entry is satisfied exactly while `expires` is today or later and the `task` file
+  exists, and is `platform-pending-expired` otherwise.
+- **p3 (question 3).** Each platform cfg form means a set: `unix` = {Linux, macOS}, `windows` = {Windows},
+  `linux` = {Linux}, `macos` = {macOS} (with the `not(...)` forms of Interface (1) as written). A block that holds
+  platform-cfg statements is in order exactly when the union of their sets is all three platforms; `use` items stay
+  exempt.
+- **p4 (question 4).** AC-1 means exactly one FAIL line of that kind for the fixture, as written. That no fixture
+  of the self-test yields a line of a second kind is the reviewer's check, not an acceptance test.
+- **p5 (question 5).** Exactly the six cfg forms of Interface (1) mean a platform. `target_os = "windows"`,
+  `any(...)`, `all(...)` and every other cfg on a test stay `cfg-disabled`, registered or not.
+- **p6 (question 6).** An entry for an existing item that has no platform cfg is `platform-mismatch` (no cfg means
+  all three platforms). `platform-unused` is exactly: no such `file::item` exists.
+- **p7 (question 7).** "main's tree" is the root being scanned: the working tree the step runs in
+  (`<root>/tasks/T-NNN-*.md`), never a branch named `main`. In the self-test the root is `xtask/fixtures/no-skip/`:
+  every `file`, `doc`, counterpart and `tasks/` name in a fixture resolves inside it.
+- Test author: add a guard for p5 (the two forms stay `cfg-disabled`) and cases for p3 (a `linux` statement
+  complemented by `macos` and `windows` statements; one left uncomplemented) and p6; nothing else changes.
+
 ## Log
 ### director
 <!-- end director log -->
