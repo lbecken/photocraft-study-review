@@ -166,16 +166,13 @@ mod support {
         doc.buffer_mut().insert(end, s).unwrap();
     }
 
-    /// Permission bits and inode (Unix); `None` elsewhere.
+    /// Permission bits and inode (Unix only: the test that uses them fails elsewhere, naming
+    /// why, as METHODOLOGY §8.1 asks).
     #[cfg(unix)]
-    pub fn mode_and_inode(p: &Path) -> Option<(u32, u64)> {
+    pub fn mode_and_inode(p: &Path) -> (u32, u64) {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         let m = std::fs::metadata(p).unwrap();
-        Some((m.permissions().mode() & 0o7777, m.ino()))
-    }
-    #[cfg(not(unix))]
-    pub fn mode_and_inode(_p: &Path) -> Option<(u32, u64)> {
-        None
+        (m.permissions().mode() & 0o7777, m.ino())
     }
 
     #[cfg(unix)]
@@ -183,8 +180,6 @@ mod support {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode)).unwrap();
     }
-    #[cfg(not(unix))]
-    pub fn set_mode(_p: &Path, _mode: u32) {}
 
     #[cfg(unix)]
     pub fn make_symlink(target: &str, link: &Path) {
@@ -883,10 +878,12 @@ fn disk_save_replaces_via_rename_without_leftovers() {
     put(&root, "d/f.txt", b"old content\n");
     put(&root, "d/keep.txt", b"k");
     let file = root.join("d/f.txt");
+    #[cfg(unix)]
     set_mode(&file, 0o640);
     let listing_before = listing(&root.join("d"));
     let root_before = listing(&root);
-    let meta_before = mode_and_inode(&file);
+    #[cfg(unix)]
+    let (mode_b, ino_b) = mode_and_inode(&file);
 
     let mut disk = DiskFs::new(&root).unwrap();
     let path = rp("d/f.txt");
@@ -906,8 +903,9 @@ fn disk_save_replaces_via_rename_without_leftovers() {
         std::fs::read(root.join("d/keep.txt")).unwrap(),
         b"k".to_vec()
     );
-    let meta_after = mode_and_inode(&file);
-    if let (Some((mode_b, ino_b)), Some((mode_a, ino_a))) = (meta_before, meta_after) {
+    #[cfg(unix)]
+    {
+        let (mode_a, ino_a) = mode_and_inode(&file);
         assert_eq!(mode_b, 0o640, "fixture self-check");
         assert_eq!(mode_a, mode_b, "permission bits unchanged");
         assert_ne!(
@@ -917,11 +915,14 @@ fn disk_save_replaces_via_rename_without_leftovers() {
     }
 
     // A second save (unedited) behaves the same way.
-    let meta_mid = mode_and_inode(&file);
+    #[cfg(unix)]
+    let (mode_m, ino_m) = mode_and_inode(&file);
     doc.save(&mut disk).unwrap();
     assert_eq!(listing(&root.join("d")), listing_before);
     assert_eq!(std::fs::read(&file).unwrap(), b"new old content\n".to_vec());
-    if let (Some((mode_m, ino_m)), Some((mode_a, ino_a))) = (meta_mid, mode_and_inode(&file)) {
+    #[cfg(unix)]
+    {
+        let (mode_a, ino_a) = mode_and_inode(&file);
         assert_eq!(mode_a, mode_m);
         assert_ne!(ino_a, ino_m);
     }
@@ -932,6 +933,13 @@ fn disk_save_replaces_via_rename_without_leftovers() {
     want.push("created.txt".to_string());
     want.sort();
     assert_eq!(listing(&root.join("d")), want);
+
+    // The permission bits and the inode of the checks above are Unix metadata: on Windows the
+    // test has checked everything else and fails here instead of passing without them.
+    #[cfg(windows)]
+    panic!(
+        "precondition: permission bits and inode numbers are Unix metadata; the Windows checks of atomic replace are not written yet (ADR-0009: T-073 and T-074 write the Windows behaviour and its tests)"
+    );
 }
 
 #[test]

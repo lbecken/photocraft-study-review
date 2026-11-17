@@ -1325,6 +1325,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // the hook needs an executable bit (xtask/platform-tests.toml)
     fn a_failed_content_commit_in_step_four_exits_one() {
         // Ruling D-047 (q): a stop in step 4 exits 1, a failed commit on task/T-NNN included;
         // exit 2 is the ledger commits' pinned line only.

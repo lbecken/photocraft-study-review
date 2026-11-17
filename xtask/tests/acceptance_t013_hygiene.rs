@@ -469,6 +469,16 @@ fn ci_and_charter_list_hygiene_between_ui_commands_and_schema() {
     assert_eq!(line.matches("hygiene").count(), 1, "{line}");
 }
 
+/// A symbolic link at `link` whose target text is `target`, by the platform's own call.
+#[cfg(unix)]
+fn symlink(target: &str, link: &Path) {
+    std::os::unix::fs::symlink(target, link).unwrap();
+}
+#[cfg(windows)]
+fn symlink(target: &str, link: &Path) {
+    std::os::windows::fs::symlink_file(target, link).unwrap();
+}
+
 #[test]
 fn session_paths_checks_a_tracked_symlinks_target() {
     // Ruling o (D-047): `session-paths` checks a tracked symlink's target text as it checks a
@@ -476,12 +486,12 @@ fn session_paths_checks_a_tracked_symlinks_target() {
     let l = Lite::new("o-symlink");
     let (p, uuid) = session_path();
     std::fs::create_dir_all(l.root.join("links")).unwrap();
-    std::os::unix::fs::symlink("/tmp/elsewhere/m.py", l.root.join("links/plain")).unwrap();
+    symlink("/tmp/elsewhere/m.py", &l.root.join("links/plain"));
     commit(&l, "plain link");
     let (ok, out) = hygiene_step(&l.root);
     assert!(ok, "a link to an ordinary path passes:\n{out}");
 
-    std::os::unix::fs::symlink(&p, l.root.join("links/session")).unwrap();
+    symlink(&p, &l.root.join("links/session"));
     commit(&l, "session link");
     assert!(
         git(&l.root, &["ls-files"])

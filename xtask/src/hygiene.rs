@@ -532,13 +532,23 @@ mod tests {
         }
     }
 
+    /// A symbolic link at `link` whose target text is `target`, by the platform's own call.
+    #[cfg(unix)]
+    fn symlink(target: &str, link: &Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+    #[cfg(windows)]
+    fn symlink(target: &str, link: &Path) {
+        std::os::windows::fs::symlink_file(target, link).unwrap();
+    }
+
     #[test]
     fn session_paths_checks_a_tracked_symlinks_target() {
         use crate::git::testrepo;
         let repo = testrepo::init("hyg-link", &[("a.txt", "clean\n")]);
         let root = repo.path();
-        std::os::unix::fs::symlink(session_path(), root.join("link")).unwrap();
-        std::os::unix::fs::symlink("a.txt", root.join("ok-link")).unwrap();
+        symlink(&session_path(), &root.join("link"));
+        symlink("a.txt", &root.join("ok-link"));
         // Untracked: not checked.
         let (problems, _, _) = check_session_paths(root).unwrap();
         assert!(problems.is_empty(), "{problems:?}");

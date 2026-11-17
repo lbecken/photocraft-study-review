@@ -1446,7 +1446,8 @@ mod tests {
         let lock = format!(
             "version = 4\n\n[[package]]\nname = \"serde\"\nversion = \"1.0.1\"\nsource = \"{reg}\"\n"
         );
-        let policy = "[[generated]]\npath = \"Cargo.lock\"\ncommand = [\"true\"]\n\n[[generated]]\npath = \"gen.txt\"\ncommand = [\"sh\", \"-c\", \"ls items | sort > gen.txt; sed -i s/1.0.1/1.0.2/ Cargo.lock\"]\n";
+        // No `sed -i`: its argument differs between GNU and BSD sed (macOS).
+        let policy = "[[generated]]\npath = \"Cargo.lock\"\ncommand = [\"true\"]\n\n[[generated]]\npath = \"gen.txt\"\ncommand = [\"sh\", \"-c\", \"ls items | sort > gen.txt; sed s/1.0.1/1.0.2/ Cargo.lock > Cargo.lock.new && mv Cargo.lock.new Cargo.lock\"]\n";
         let repo = testrepo::init(
             "q-lock-rebased",
             &[
@@ -2102,6 +2103,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")] // lock liveness reads /proc (xtask/platform-tests.toml)
     fn basic_refusals_write_nothing() {
         let repo = setup("q-refuse");
         let root = repo.path();

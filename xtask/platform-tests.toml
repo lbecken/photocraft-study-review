@@ -1,0 +1,67 @@
+# Platform-test registry of `cargo xtask no-skip` (METHODOLOGY §8.1, ADR-0009 Decision 4).
+# Every test fn, module containing tests or file (inner `#![cfg]`) behind a platform cfg —
+# `unix` / `not(windows)`, `windows` / `not(unix)`, `target_os = "linux"`, `target_os = "macos"` —
+# is listed here, with the document sentence it tests and its counterpart on the platforms its
+# cfg leaves out (or "none" and why, or "pending" with the task that writes it and a date).
+# Unlisted, mismatched or unused entries, a missing sentence or counterpart and an expired
+# pending entry fail `no-skip`. `xtask/` is a gate path: only a high-tier task changes this file.
+#
+# [[test]]
+# file = "crates/kiln-x/tests/acceptance_t0nn.rs"   # relative to the repository root, `/`-separated
+# item = "a_fifo_test"         # module path in the file, then the fn or mod name; "<file>" for #![cfg]
+# platforms = "unix"           # unix | windows | linux | macos: the cfg the item is behind
+# doc = "docs/protocol/paths.md"                     # the document whose sentence the item tests
+# quote = "FIFOs, sockets and devices are refused"   # occurs in `doc` (whitespace runs compare equal)
+# counterpart = "pending"      # "<file>::<item>" | "none" | "pending"
+# reason = "…"                 # required for "none" and "pending"
+# task = "T-075"               # "pending" only: the task that writes the counterpart
+# expires = "2026-12-31"       # "pending" only (today = HEAD's commit date)
+#
+# The entries below are T-071's: tests of the director's tools (queue, worktree, publish) that
+# assume Linux or Unix. Those tools run on the director's Linux machine only (ADR-0009 (c),
+# ruling Q-5 A of T-071, D-199), so they have no counterpart elsewhere.
+
+[[test]]
+file = "xtask/src/queue.rs"
+item = "tests::basic_refusals_write_nothing"
+platforms = "linux"
+doc = "docs/development.md"
+quote = "a lock whose process is gone is reclaimed"
+counterpart = "none"
+reason = "the queue reads a lock holder's liveness from /proc/<pid>, which only Linux has; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+[[test]]
+file = "xtask/src/worktree.rs"
+item = "tests::create_seed_list_remove"
+platforms = "linux"
+doc = "docs/development.md"
+quote = "deletes the branch only if merged"
+counterpart = "none"
+reason = "on macOS the temporary directory is reached through the /var -> /private/var link, so `worktree list` names another path (R-285); the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+[[test]]
+file = "xtask/src/publish.rs"
+item = "tests::a_failed_content_commit_in_step_four_exits_one"
+platforms = "unix"
+doc = "docs/development.md"
+quote = "a failed content commit in step 4 included"
+counterpart = "none"
+reason = "the test installs a git hook by setting its executable bit, which Windows does not have; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+[[test]]
+file = "xtask/tests/acceptance_t013_publish.rs"
+item = "publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue"
+platforms = "linux"
+doc = "docs/development.md"
+quote = "a lock held by a live process is refused"
+counterpart = "none"
+reason = "the test and the lock's liveness check read /proc/<pid>, which only Linux has; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+[[test]]
+file = "xtask/tests/guard_t005.rs"
+item = "worktree_build_does_not_touch_main_target"
+platforms = "unix"
+doc = "docs/development.md"
+quote = "never hard links, symlinks or a shared directory"
+counterpart = "none"
+reason = "hard links are found by device and inode numbers, which stable Rust exposes on Unix only; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
