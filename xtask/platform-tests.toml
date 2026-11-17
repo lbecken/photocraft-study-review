@@ -65,3 +65,21 @@ doc = "docs/development.md"
 quote = "never hard links, symlinks or a shared directory"
 counterpart = "none"
 reason = "hard links are found by device and inode numbers, which stable Rust exposes on Unix only; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+[[test]]
+file = "xtask/tests/acceptance_t005_r3.rs"
+item = "tampered_cached_gate_binary_does_not_decide_the_gate"
+platforms = "linux"
+doc = "docs/development.md"
+quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
+counterpart = "none"
+reason = "the test finds the queue's built xtask by its ELF header, which macOS (Mach-O) and Windows (PE) binaries do not have, and replaces it with a shell script; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+[[test]]
+file = "xtask/tests/acceptance_t005_r4.rs"
+item = "planted_future_dated_xtask_does_not_decide_the_gate"
+platforms = "linux"
+doc = "docs/development.md"
+quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
+counterpart = "none"
+reason = "the test finds the queue's built xtask by its ELF header, which macOS (Mach-O) and Windows (PE) binaries do not have, and replaces it with a shell script; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
