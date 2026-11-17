@@ -571,6 +571,24 @@ task cannot both change the rule and use it in the tree: main's tool judges the 
     branch; the stub's rule finds the two inert helpers of `acceptance_t002.rs` at 176 and 186 (Pinned (g)).
     Not run: `cargo xtask ci` (the whole gate); macOS and Windows (CI, `ci/T-071`).
   - next: director (join; QUESTIONS 1–7)
+- 2026-11-17 · R-309 · tests revised · did: rulings p1–p7 (D-220) acknowledged and accepted. p1: every
+  finding about an entry is now asserted to name exactly `xtask/platform-tests.toml:<[[test]] header line>`
+  and `<file>::<item>` (mismatch, both forms tests, unused, sentence, counterpart, pending); unlisted,
+  inert-helper and statement keep the `.rs` place. p3: `ac1_platform_statement_same_block_and_use_exemption`
+  rewritten to the union rule (linux+macos+windows passes; linux+windows, two Unix statements, and a
+  complement in the enclosing block each fail, naming the faulty one-line block's line); one line per block
+  or per statement both accepted. p5: `guard_other_cfgs_stay_cfg_disabled_registered_or_not` (was
+  `…_even_when_registered`) adds `target_os = "windows"` and `any(unix, windows)`, each registered and not.
+  p6: `ac1_platform_mismatch_names_file_line_and_item` adds an entry for `everywhere` (no cfg) → exactly one
+  `platform-mismatch`, no `platform-unused`. p2, p4, p7: no change (the toys commit on `main` for HEAD's date;
+  the task file is in the working tree the step scans). Base: acceptance 16/16 fail by assertion, guards
+  6/6 pass. New mutants on a scratch stub (deleted), each killed: complement searched in enclosing blocks,
+  pairwise unix/windows complement, any two different platforms → statement test; entry finding at the
+  item's place, at the entry's last line, or naming the item without its file → mismatch (both), unused,
+  sentence, counterpart, pending tests; no-cfg entry treated as unused, or accepted → mismatch test;
+  `target_os = "windows"` or `any(..)` read as a platform → guard_other_cfgs. Accepted: one statement
+  finding per block. clippy `-D warnings`, `fmt --check`, `no-skip`, `hygiene`: clean. Not run: `cargo
+  xtask ci`; macOS, Windows. · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
