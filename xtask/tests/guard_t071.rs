@@ -423,23 +423,23 @@ fn guard_skips_toml_still_allowlists_until_expiry_and_refuses_unused_entries() {
         OLD,
         "// toy\n#[test] #[cfg(feature = \"slow\")] fn feature_gated() {}\n",
     );
-    let skip = |expires: &str| {
+    let allow = |expires: &str| {
         format!(
             "[[skip]]\nfile = \"{OLD}\"\nitem = \"feature_gated\"\nkind = \"cfg-disabled\"\nreason = \"toy: the slow feature is built elsewhere\"\nexpires = \"{expires}\"\n"
         )
     };
-    t.write("xtask/skips.toml", &skip("2026-12-31"));
+    t.write("xtask/skips.toml", &allow("2026-12-31"));
     assert_pass(&t.run_no_skip(), "listed, unexpired");
-    t.write("xtask/skips.toml", &skip(TODAY));
+    t.write("xtask/skips.toml", &allow(TODAY));
     assert_pass(&t.run_no_skip(), "listed, expires today");
-    t.write("xtask/skips.toml", &skip("2026-11-19"));
+    t.write("xtask/skips.toml", &allow("2026-11-19"));
     let o = t.run_no_skip();
     assert_eq!(o.code, Some(1), "listed, expired:\n{}", o.text);
     t.write(
         "xtask/skips.toml",
         &format!(
             "{}\n[[skip]]\nfile = \"{OLD}\"\nitem = \"no_such\"\nreason = \"toy\"\nexpires = \"2026-12-31\"\n",
-            skip("2026-12-31")
+            allow("2026-12-31")
         ),
     );
     let o = t.run_no_skip();
