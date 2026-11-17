@@ -1,9 +1,9 @@
 # Kiln methodology
 
-Version **v1.4** · adopted by D-174 and D-175 from the retrospective of iteration 2 to cut 1 of
-stage 2 (`retrospectives/iter-2-stage-2-cut-1.md`, *retro-2c1*) and ADR-0009 (v1.3: D-144, *retro-2s1*;
-v1.2: D-091, *retro-1*; retrospective 0 is *retro-0*) · changes only at a retrospective (§14),
-recorded in `CHANGELOG.md`.
+Version **v1.5** · adopted by D-219 from the retrospective of iteration 2 from cut 1 to cut 2 of
+stage 2 (`retrospectives/iter-2-stage-2-cut-2.md`, *retro-2c2*) (v1.4: D-174, D-175, *retro-2c1*,
+ADR-0009; v1.3: D-144, *retro-2s1*; v1.2: D-091, *retro-1*; retrospective 0 is *retro-0*) · changes
+only at a retrospective (§14), recorded in `CHANGELOG.md`.
 
 Binding inputs: `docs/CHARTER.md` (claims C1–C8, architecture §3, names and tiers §4),
 `docs/adr/`, `docs/decisions.md`; where this file and the charter disagree, the charter wins.
@@ -53,10 +53,11 @@ holds two roles on one task. Checked: director, from the dispatch record (§2.1)
 | Builders' questions are answered to both builders at once, in the task file, before the join; a question the join can answer may be ruled after the join's result, and the ruling cites it. | D-027 avoided a triage cycle; T-001's three gaps were found by three roles separately (D-013). Retro-2c1: T-055 was joined before its rulings, and the join's failure was useful evidence. | director |
 | The approval row for a high-tier merge is the control the owner chose; the director writes it as the owner's delegate, verifies it is on `main`, then queues. | D-032: a failed command skipped the row and the next line queued T-004. D-091 keeps the row. | mechanical (queue `approval`) |
 | Commit ledger files by explicit path; never `git add -A`. One command per line when a later step depends on an earlier one. | D-032 (a chained command queued after a failed step); the director's iteration-0 operating notes in `STATE.md`. | partly mechanical (queue `ledger`, `main-history`) |
+| A pause or stage-close row lists every accepted decision of the last retrospective and ADR not yet done, and where it went (§14). | Retro-2c2: T-043 and T-066 (D-174 (13), ADR-0009 Q-4 A) dropped without a row. | director; analyst recounts |
 | A number in a decision row names the command or the record it comes from. | Retro-2c1 §6: eight figures in rows and a handoff that the records contradict (e.g. D-154, D-162, D-170). | director; analyst recounts |
 | Never set or export `CARGO_TARGET_DIR`; run `cargo xtask …` from the checkout it is about. | D-019: the join measured main's binary; 15 false failures; triage R-015 cost 140,270 tokens. | mechanical (stale-binary guard, same repository only) |
 | Every timestamp comes from the clock at the moment it happens. | 17 whole-minute runs, 2 impossible transition orders, D-032's failed line. | mechanical (`metrics` stamps `now`); any time typed by hand: `date -u +%Y-%m-%dT%H:%M:%SZ`, never memory |
-| The dispatch message names the run id, and the model is the owner's D-006 choice; free disk ≥ 15 GB is checked first. A run is booked when it ends, before any later transition of its task is written (mechanical: `metrics add` refuses an end time earlier than the task's latest record). A resume is scheduled at every usage-limit stop. After a usage-limit stop or a machine restart, each stopped agent is resumed, not relaunched fresh, with a restart notice: trust nothing outside its committed worktree and re-read its own uncommitted work first; after a restart the director first runs `uptime -s`, then `git status` in every worktree. | R-024 ran on another model and has no record (D-024); 6 GB free after 9 GB of scratch builds (D-022). Retro-1: agents were resumed (D-038; R-149, R-151); about 6.8 h of 14.76 h had no agent running; one stop had no check-in. Retro-2s1: 4 of 4 restarts resumed, nothing committed lost (D-112, D-116, D-129, D-143). | director; retro counts runs without a record and idle gaps |
+| The dispatch message names the run id, and the model is the owner's D-006 choice; free disk is checked first: at least the measured tree size of every build that will run at once, the director's own cargo commands included, plus 5 GB. A run is booked when it ends, before any later transition of its task is written (mechanical: `metrics add` refuses an end time earlier than the task's latest record). A resume is scheduled at every usage-limit stop. After a usage-limit stop or a machine restart, each stopped agent is resumed, not relaunched fresh, with a restart notice: trust nothing outside its committed worktree and re-read its own uncommitted work first; after a restart the director first runs `uptime -s`, then `git status` in every worktree. | R-024 ran on another model and has no record (D-024); 6 GB free after 9 GB of scratch builds (D-022); retro-2c2: two disk-full events with three builders and a prototype build running (D-182, D-205). Retro-1: agents were resumed (D-038; R-149, R-151); about 6.8 h of 14.76 h had no agent running; one stop had no check-in. Retro-2s1: 4 of 4 restarts resumed, nothing committed lost (D-112, D-116, D-129, D-143). | director; retro counts runs without a record and idle gaps |
 | A budget overrun is decided in an explicit `Extend T-NNN to <N>` row (or split, re-spec, abandon), at the moment §11 names. | T-004, T-005 overran with no record. | mechanical (queue `budget`); director at dispatch (§11) |
 
 ## 3. Task lifecycle
@@ -124,15 +125,24 @@ a dependency (`gate-path`, `dependencies`) and a high task without its row (`app
    role; the owner adds a line the other role needs on a ruling (D-153). Join check **(T-033)**.
 7. A spec written before all its `depends_on` merged gets one **spec check** (a planner run that
    reads it against `main` as it then is and lists what would stop a builder) before dispatch,
-   whatever its tier, written into the task file; builders do not repeat it. The check also reads
-   the branches of the tasks in flight and lists every trait, type and document the spec shares
-   with them; it pins the Rust signatures of any criterion tested through a Rust API; and each
-   Pinned sentence that states a figure, a limit or a list carries the command and output that
-   show it, or is marked "to be measured by the implementer", which it must be able to measure
-   (not through tests it cannot see); otherwise the reviewer measures it. An option the check calls
-   unmeasured is probed before the director rules on it. Resuming the drafting planner for the check
-   is preferred for cost (D-163: 34,769 against 366,707 tokens); it checks facts against `main` and
-   does not decide alone between its own draft and an alternative.
+   whatever its tier, written into the task file; builders do not repeat it. A spec is checked again
+   when a task whose `touches` overlap its own merges after it was written; in a planned chain the
+   resumed drafter checks each spec after its predecessor merges (retro-2c2: R-295 after T-058). A
+   draft last edited before the methodology version in force is re-specified in full (budget,
+   platform statement per test file, pre-merge CI expected), not only checked (retro-2c2 §11). The
+   check also reads the branches of the tasks in flight and lists every trait, type and document
+   the spec shares with them; it pins the Rust signatures of any criterion tested through a Rust
+   API; a criterion that something is absent, limited or the only form is written as equality to a
+   stated set, and the check names one variant outside the list that the criterion must reject
+   (T-054 AC-4). Every Pinned sentence meant for a document carries the command the check ran on
+   the planner's prototype or the base binary, and its output; or it is marked "to be measured by
+   the implementer" (only if it can, not through tests it cannot see; else the reviewer measures
+   it), "to be measured by the director" (naming the record that will hold it, which the director
+   passes to the implementer before the join; else the reviewer writes the sentence), or
+   "unchecked" (the reviewer's first check). A fact marked KNOWN and not verified is not copied into
+   a document. An option the check calls unmeasured is not chosen without a probe. Resuming the
+   drafting planner for the check is preferred for cost (D-163: 34,769 against 366,707 tokens); it
+   checks facts against `main` and does not decide alone between its own draft and an alternative.
    A high-tier spec bundling independent items is split before dispatch. Checked: director at `ready`.
 
 ## 6. Acceptance-test protocol (medium, high)
@@ -142,7 +152,9 @@ a dependency (`gate-path`, `dependencies`) and a high task without its row (`app
   evaluator `not_evaluated`.
 - **Files.** `acceptance_tNNN*.rs` directly in a crate's, app's or `xtask/`'s `tests/`, on
   `task/T-NNN-tests` from the implementer's base. Tests meant to pass on base are regression guards
-  in `guard_tNNN*.rs` (D-010); the join runs them on base and joined branch (D-021).
+  in `guard_tNNN*.rs` (D-010); the join runs them on base and joined branch (D-021). A test
+  author's own deliverable (a file it adds on its branch) is tested by guards, not acceptance tests
+  (D-189: the join refused such a test as passing on base).
 - **Scorecard.** Only the director edits `scorecard/`: the test author lists each item's tests in
   its log; the director ties them to the items on the task branch at the join, which regenerates
   `docs/scorecard.md` **(T-033)** (*Interim:* the director regenerates it). Checked: at join.
@@ -164,7 +176,8 @@ a dependency (`gate-path`, `dependencies`) and a high task without its row (`app
   with its evidence and copied by the implementer; an implementer who has to write one the spec
   lacks records in its log the command and output that show it. A task that changes the CLI updates
   its synopsis and exit codes in `docs/control-protocol.md`; only kinds a registered command can
-  produce are published (how: T-038). Checked: reviewer (§7).
+  produce are published (how: T-038). A Pinned sentence marked "unchecked" (§5.7) is the reviewer's
+  first check. Checked: reviewer (§7).
 - **Independence.** The implementer does not see independent tests before the first join; neither
   side reads the other's branch. Checked: unchecked (O-12).
 - **Join** (director): `cargo xtask join T-NNN [--acc-defects N]` merges the tests branch, runs
@@ -177,7 +190,8 @@ a dependency (`gate-path`, `dependencies`) and a high task without its row (`app
 - **Experiment arm** (D-035 (16)). High and even-numbered medium tasks get an independent test
   author; on odd-numbered medium tasks the implementer writes the acceptance tests through the
   public interface in the same run, first on `task/T-NNN-tests` (committed, failing on base), then
-  the code, and the reviewer's mutation spot-check is the only independent check. Before
+  the code, and the reviewer's mutation spot-check is the only independent check. The arms are
+  compared on the review's `killed_by_own_tests` and `acc_test_defects` (§7, §13). Before
   reporting, the implementer runs the whole gate (`no-skip` included) on a local merge of its
   tests branch with its task branch, on a scratch branch it does not push (D-108).
 - **Window evidence** is in the gate where it can be: the Linux window procedure runs under Xvfb in
@@ -194,8 +208,13 @@ sentence the task adds or changes in `docs/` and every sentence in `docs/protoco
 `docs/control-protocol.md` or the generated `error_kinds` naming the same command, option or kind.
 Plus a **mutation spot-check**: seed ≥ 10 bugs one at a time, run the tests, discard each edit,
 record `mutants: {introduced, equivalent, killed, killed_by_acceptance, killed_by_procedure,
-survived}` in front matter (gate acceptance tests and manual procedures counted apart, T-065 r1);
-a surviving non-equivalent mutant is a test gap. High adds **adversarial probing** of the boundary
+killed_by_own_tests, survived}` in front matter (gate acceptance tests, manual procedures and the
+implementer's own tests counted apart; T-065 r1, retro-2c2 §2), and `acc_test_defects` with who
+found each (implementer, test author, reviewer); both fields are read by the tools with **(T-043)**.
+A surviving non-equivalent mutant is a test gap. A UI review's differential run states the
+conventions its driver uses (frames after control requests, sizes, which rows are checked) and runs
+at least one variant without each: no frame after a control request, the minimum `--size`, the rows
+of every node (NEW-1, NEW-2 of the cut-2 evaluation). High adds **adversarial probing** of the boundary
 (symlinks, long names, hostile repositories, poisoned caches, symbolic shas).
 
 Findings are **defect** (behaviour wrong), **spec gap**, **test gap** or **nit**; front matter
@@ -223,9 +242,10 @@ those that change only ledger paths **(T-041)**; *Interim:* every push. Checked:
 A ledger input that changes generated output (a scorecard item, an evaluation) reaches `main`
 only as a low-tier publish task through the queue (`cargo xtask publish`; D-034).
 
-After every push the director reads the CI run of the pushed commit before the next dispatch or
-queue run and records its result; "main is green" means the local gate and CI (§8.1), and a red CI
-run on main is an incident at once (INC-001, D-175). If `main` is found red: stop dispatching and
+Before any dispatch or queue run the director has the recorded result of the newest CI run on main
+that changed a non-ledger path; ledger-only pushes are read in a batch at the next handoff addendum,
+until T-041 stops CI for them (retro-2c2: 16 of 73 runs were read under "every push"). "Main is green" means the local
+gate and CI (§8.1), and a red CI run on main is an incident at once (INC-001, D-175). If `main` is found red: stop dispatching and
 queueing, open `incidents/INC-NNN-*.md`, land a fix or revert through the queue, and name a
 permanent fix (a mechanical check or a justified "rule only").
 
@@ -236,15 +256,28 @@ permanent fix (a mechanical check or a justified "rule only").
   The window counts as supported on a platform once CI has run its procedure there; until then it
   is "built, not observed" there and the owner is told. Evidence for platforms no agent can run
   comes from CI jobs on hosted runners running the whole gate.
-- **Reading CI.** The director reads each CI run it relies on and records run id, head commit and,
-  per platform, conclusion and failed step, in the task log or a decision row. The Linux job counts
-  for main's colour; a macOS or Windows job counts from its first green run on main, and until then
-  its result is recorded and a red one filed as a task. A task whose `touches` include a
-  platform-sensitive path (ADR-0009 Decision 5) is queued only when every counted job is green on
-  the rebased head pushed to `ci/T-NNN`. Checked: director (rule only).
-- **Claims from a CI log.** A reviewer of platform-dependent behaviour reads the run's job logs and
-  names the run; the evaluator confirms an item on a platform other than Linux only from a CI run at
-  the evaluated commit. Each claims only what the log shows ran and passed, stating the platform.
+- **CI records.** Every evidence job runs all test binaries (no stop at the first failing one) and
+  prints failing tests with their messages, and uploads the full output **(T-072)**. The record of a
+  CI run (run id, head commit; per job: conclusion, failed step, tests passed and failed, each
+  failing test with its first panic line) is extracted from the uploaded artefacts, not from job
+  logs, by an `xtask` command **(T-043)** (*Interim:* by hand from the artefacts), and stored under
+  `tasks/ci-runs/`; agents read that file (retro-2c2 §5: reading logs cost 952,269 tokens, and a
+  200-line log prefix showed 366/11 where the artefact held 977/22).
+- **Main's colour.** The Linux job counts; a macOS or Windows job counts from its first green run on
+  main, and until then its result is recorded and a red one filed as a task. A task whose `touches`
+  include a platform-sensitive path (ADR-0009 Decision 5) is queued only when every counted job is
+  green on its rebased head pushed to a `ci/` branch. Checked: director (rule only).
+- **`ci/` branches** are reused, not deleted (D-198, D-207): one `ci/candidate` updated by a forced
+  push if the repository allows that there, else one `ci/T-NNN` per task, force-updated each round.
+- **CI tasks** (T-070's protocol). A builder that needs a CI run commits and logs
+  `CI-REQUEST: <40-hex sha>`; only the director pushes it, starts the workflow by hand if no run
+  starts within 5 minutes, and writes the CI record; builders read only that record. A CI round
+  counts as one gate attempt (§10). The join of a task whose main criterion is a CI run records that
+  criterion as pending, and the queue requires its CI record **(T-043)** (*Interim:* the pending
+  criterion and its record are written in the approval or queue decision row).
+- **Claims from CI.** A reviewer of platform-dependent behaviour reads the CI record and names the
+  run; the evaluator confirms an item on a platform other than Linux only from the CI record of a run
+  at the evaluated commit. Each claims only what the record shows ran and passed, stating the platform.
 - **Tests** (replaces D-166 ruling b8). Every test runs on every supported platform and asserts each
   platform's specified behaviour; none passes on one platform without checking what it checks on
   another. A test of a facility one platform lacks exists only where it has it, listed in the
@@ -259,8 +292,11 @@ At the end of each iteration a fresh evaluator run (booked to `iter-N`) receives
 (`cargo xtask scorecard`), the CLI and control-protocol docs, the UI snapshot mechanism and the
 fixture data its brief names (e.g. `crates/kiln-syntax/tests/corpus/`, D-141) — not source, tests,
 logs or reviews — in a clone other identities can reach (NEW-3; until T-051 and T-069 merge)
-that leaves out the ledger records it may not read, as far as `cargo xtask scorecard` still runs
-there (R-253). For each `implemented` item it tries the behaviour through a public interface,
+that leaves out the ledger records it may not read, made by this command and reported in the
+evaluation's Setup (R-302's clone held them all; tried at the next evaluation, D-219):
+`git clone --no-checkout <repo> <dir> && git -C <dir> sparse-checkout set --no-cone '/*'
+'!/docs/decisions.md' '!/tasks/' '!/reviews/' '!/handoffs/' '!/STATE.md' && git -C <dir> checkout
+--detach <sha>`. If `cargo xtask scorecard` needs one of those files there, it is named here. For each `implemented` item it tries the behaviour through a public interface,
 records what it ran and saw, and confirms or rejects; it hunts for features wired but inert.
 Output `evaluations/iter-N.md`; `confirmed_items` is what `scorecard` reads to grant `verified`.
 Each rejection, inert feature or wrong behaviour becomes a `draft` task (`found_by: evaluator`,
@@ -272,7 +308,8 @@ mechanical (`scorecard --check`); director (nothing unfiled).
 
 Loop: read the task file → restate the ACs in the log → plan → edit → build → test → observe
 through `kiln-cli` or the control protocol → fix → repeat; commit at each working step; finish
-with `cargo xtask ci` (one run = one **gate attempt**). `QUESTION:` lines are logged by the end of
+with `cargo xtask ci` (one run = one **gate attempt**; a CI round on a task's `CI-REQUEST` counts as
+one, §8.1). `QUESTION:` lines are logged by the end of
 the first gate attempt; work continues on the rest.
 
 Stop and write a blocked report (a log entry starting `BLOCKED:`; run outcome `blocked`) when:
@@ -288,8 +325,8 @@ short run and exposed a director error. Checked: director (1 agent-reported); 2 
 
 `budget_tokens` covers building and review runs only; planner runs and spec checks go to `iter-N`
 (§13). Ceilings: **high 1,100,000, medium 800,000 (provisional), low 150,000** (retro-2s1: p75 of
-the tier pooled with iteration 1, rounded up to 50k); a draft carrying an older budget is restated
-when it is specified. The queue refuses a task over its ceiling without an `Extend T-NNN to
+the tier pooled with iteration 1, rounded up to 50k; kept by retro-2c1 and retro-2c2); a draft
+carrying an older budget is restated when it is re-specified (§5.7). The queue refuses a task over its ceiling without an `Extend T-NNN to
 <N>` row (mechanical, `budget`). The director writes the row before dispatching the next run of a
 task that has reached its ceiling. Checked: director at dispatch. Latency budgets are gate steps
 (CHARTER §4); an unenforced one is not "held". Recalibrate only at a retrospective.
@@ -314,6 +351,7 @@ gate_attempts, outcome, missing_context}; `kind:"transition"` {task, iteration, 
 `kind:"join"` {task, at, acc_total, acc_fail_base, base_fail_kind, acc_fail_first_join,
 acc_defects, impl_tests_green}. `metrics/queue.jsonl` (queue): {task, attempt, started_at,
 ended_at, base_sha, head_sha, result, failed_step, gate_seconds}. These names are the tool's contract (O-8).
+A CI run's record is a file under `tasks/ci-runs/` (§8.1).
 
 `metrics add/transition` stamp `now`, refuse an `--at` earlier than the task's last record or a
 transition not in §3 or `--tokens 0` without `--tokens-unknown`, and book planner, evaluator and
@@ -332,7 +370,8 @@ cost is not measured. `found_by`: who found a defect (`evaluator`, `reviewer`, `
 | Acceptance-caught defects | Σ `acc_defects` over **every** join with `impl_tests_green`; `acc_defects` is required on every join that is not green; by arm (§6) | tasks.jsonl join |
 | Review findings by class | Σ `findings` by tier and arm; `doc_sentences` among them | `reviews/*.md` front matter |
 | Review rounds per task | highest N of `reviews/T-NNN-rN.md` that is not a confirmation record (§7), by tier | `reviews/` |
-| Acceptance kill rate | `killed_by_acceptance` (gate tests only) ÷ (`introduced` − `equivalent`), by round, tier, arm | review front matter |
+| Acceptance kill rate | `killed_by_acceptance` (gate tests only) ÷ (`introduced` − `equivalent`), by round, tier, arm; `killed_by_own_tests` likewise for the implementer's tests | review front matter |
+| Acceptance-test defects | Σ `acc_test_defects` by `found_by` and arm | review front matter |
 | Escaped defects | tasks with `found_by` ∈ {evaluator, incident, task:T-NNN} and `origin_task`, by origin tier and arm | task front matter |
 | Known defects merged by decision | defect findings or filed defects a task was approved with and sent to follow-up (as T-008, T-009, T-030) | review Follow-ups; decision rows |
 | Rework ratio | tasks with `origin_task` ÷ all tasks, by iteration of discovery (the follow-up file's first commit) | task files; git |
@@ -353,8 +392,9 @@ refuted / insufficient with numbers and the commands that produced them; compare
 lists rules not followed, rules that cost and caught nothing, and missing rules; proposes changes,
 each citing a metric or incident and naming what it removes. The director decides each in
 `docs/decisions.md`, applies them, bumps the version, adds a `CHANGELOG.md` entry. CHARTER §4
-changes only by ADR. A stage closes only with a decision row saying what of its ADR list was not
-done and where it went (D-142 left T-033 and T-041 unrecorded). Checked: director (history; an
+changes only by ADR. A stage closes, and a pause begins, only with a decision row saying what of its
+ADR list and of the decisions accepted at the last retrospective was not done and where it went
+(D-142 left T-033 and T-041 unrecorded; retro-2c2: T-043 and T-066). Checked: director (history; an
 edit outside a retrospective is an incident).
 
 ## 15. Open questions
@@ -373,12 +413,12 @@ O-9 publish tasks (§8). By retro-1: O-10 director cost not measured; O-13 mean 
 | Rule | § | Check |
 |---|---|---|
 | Gate green before `self_verified` and in the queue; only the queue moves `main`; diff inside `touches`; gate paths and dependencies ⇒ high; high has its row; over budget ⇒ `Extend` row | 3–5, 8, 11 | mechanical (queue) |
-| CI read and recorded after every push; counted platforms; `ci/T-NNN` run before queueing a platform-sensitive task; claims from CI logs; red CI on main ⇒ incident | 8, 8.1, 9 | director; reviewer; evaluator |
+| Newest non-ledger CI run on main read before dispatch or queue; CI records from artefacts; counted platforms; `ci/` run before queueing a platform-sensitive task; `CI-REQUEST` rounds; pending CI criterion in a row; claims from CI records; red CI on main ⇒ incident | 8, 8.1, 9, 10 | director; reviewer; evaluator; mechanical (T-043, T-072) |
 | Scorecard derived; layers, determinism, skip ban, command schema, mutants lint, session paths; valid transitions, clock times, `iter-N` booking, `ready` at dispatch | 3, 5, 7, 9, 12, 13, AGENTS.md | mechanical (gate; `metrics`; `worktree new`) |
 | Spec-check role; join counts by path; every join not green classified; one role per `touches` path; rebuilt-branch tree identity; queue refusals recorded; page regenerated at join; `join --revert-check` removed; no CI run for a ledger-only push; cited D-NNN has a row; run with start = end refused; `state` line written by `metrics transition`; tier ≥ items' tiers; platform tests registered | 3–6, 7, 8, 13 | mechanical (T-033, T-041, T-043, T-071); interim director (nobody runs the revert check) |
-| Tier by boundary; Pinned answered; CLI/control AC per item; no overlapping `touches`; contract change own task; spec check (in-flight branches, Rust signatures, evidence for pinned figures); bundled high spec split | 3–6 | director at `specified`, `ready` and dispatch; reviewer |
-| Rulings on `main`, state behaviour and measured bounds, acknowledged by builders, front matter in the same commit; questions answered to both (after the join if it answers them); numbers in rows name their source; unmeasured options probed; dispatch record, disk; resume with a restart notice; `Extend` row before a run past the ceiling; stage closed by a row | 2.1, 3, 5, 11, 14 | director |
+| Tier by boundary; Pinned answered; CLI/control AC per item; no overlapping `touches`; contract change own task; spec check (in-flight branches, Rust signatures, absence as equality, evidence or a mark for every Pinned document sentence; again after an overlapping merge); old drafts re-specified; bundled high spec split | 3–6 | director at `specified`, `ready` and dispatch; reviewer |
+| Rulings on `main`, state behaviour and measured bounds, acknowledged by builders, front matter in the same commit; questions answered to both (after the join if it answers them); numbers in rows name their source; no unmeasured option chosen unprobed; dispatch record, disk by tree size; open decisions listed at a pause or stage close; resume with a restart notice; `Extend` row before a run past the ceiling; stage closed by a row | 2.1, 3, 5, 11, 14 | director |
 | Guarantee sentences from Pinned; no pins of what a drafted task changes; documents checked against the binary; never weaken a test or gate to get green | 6, 7, AGENTS.md | reviewer; evaluator; partly mechanical (`no-skip`) |
 | Test author and implementer do not read each other's branch | 6 | **unchecked** |
-| Fail on base and guards; implementer branch adds no acceptance tests or `scorecard/` edits, the director ties items; self-check kills logged; differential run where a reference tool exists, on generated shaped text for text or colour items; window procedure rerun where it is not in the gate; odd-arm gate on a local merge; stopping rule; builder cap | 5–7 | mechanical (join); reviewer; director (at join) |
+| Fail on base and guards; implementer branch adds no acceptance tests or `scorecard/` edits, the director ties items; self-check kills logged; differential run where a reference tool exists, on generated shaped text for text or colour items, with the driver's conventions stated and varied; own deliverables tested by guards; window procedure rerun where it is not in the gate; odd-arm gate on a local merge; stopping rule; builder cap | 5–7 | mechanical (join); reviewer; director (at join) |
 | Stop conditions; log entry; commit lines; evaluator files every observation; red main ⇒ incident; methodology only at a retrospective | 8–10, 12, 14 | director (stops agent-reported) |
