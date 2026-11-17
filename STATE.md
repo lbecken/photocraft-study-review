@@ -1,21 +1,29 @@
 # State
 
-_Last updated: 2026-11-16 02:51 UTC_
+_Last updated: 2026-11-17 23:08 UTC_
 
 ## Now
-**Owner's instruction of 2026-11-16 (D-207): the `ci/…` branches can stay; finish cut 2 (T-059, evaluation B, report),
-then pause. No new platform task is dispatched; T-054 (in review) is finished or stopped cleanly.**
+The `ci/…` branches can stay (the owner, D-207).
 
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.4** (D-176).
 Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run the retrospective, then go on to cut
 2, and make the editor multi-platform (Linux, macOS, Windows).** Signed installers are out of scope (D-173); `ci/…`
 branches may be pushed and are deleted after their task merges (D-185).
 
-**PAUSED at cut 2 (D-207, D-216).** Nothing is in flight; no worktree exists. The evaluation at cut 2 is published
-(`evaluations/iter-2-cut-2.md`, T-084, D-215): the three cut-2 items confirmed, none rejected. Waiting for the
-owner's choice of what comes next: the platform track (T-071, T-079, T-072 to T-078), the 17 planned items, or
-the follow-ups (T-082, T-083, T-085, T-086, T-066, T-068, T-053), and a retrospective of cut 2 (material: D-180
-to D-216). Next free task number: T-087. Next run id: R-303. Next decision: D-217.
+**Resumed on 2026-11-17 (D-218, the owner: "continue with 1, and then 2"): first the platform track, then the 17
+planned feature items.** The pause of D-207 is over; the earlier paragraph about it above is history.
+
+In flight (machine restarted 2026-11-17T23:02:26Z; dispatched after it):
+- **T-071** (platform-test rule in the tools; high; `in_progress`): implementer R-305 (`.worktrees/T-071`),
+  independent test author R-306 (`.worktrees/T-071-tests`), from main `550e457`. After the join: push the candidate
+  to `ci/T-071`, read jobs and artefacts (AC-6; and the Windows verdict of `guard_t054`'s backtrace test, ruling
+  Q-4 A of T-054), review, a row beginning `Approve T-071` with `gate paths`, queue.
+- **Retrospective of cut 2** (run R-304, a fresh analyst; brief in the scratchpad as `analyst-s2c2-brief.md`):
+  writes `retrospectives/iter-2-stage-2-cut-2.md`. Its changes (v1.5) apply from the task after T-071.
+Then, by D-199: T-079 (`specified`; spec check against main first), T-072, T-073, T-074, T-075, T-076, T-077,
+T-078. After the platform track: the planned feature items (drafts T-060 to T-063, T-022, T-024 to T-031 and
+others; each needs its spec). Next free task number: T-087. Next run id: R-307. Next decision: D-219.
+The evaluation at cut 2 is published (`evaluations/iter-2-cut-2.md`, T-084, D-215).
 
 Merged since cut 1: T-069 (CI fix), T-057 (project panel), T-070 (`platforms.yml`: gate on three systems, the
 Linux window procedure, window probes), T-058 (tabs), T-054 (lighter debug profile; the interim variables of
