@@ -825,17 +825,31 @@ fn ac1_platform_statement_names_file_line_and_item() {
 fn ac1_platform_statement_same_block_and_use_exemption() {
     let file = "crates/toy/tests/stmt.rs";
     let t = Toy::no_skip("statement-block");
-    // The complement in the outer block does not answer a statement in an inner block.
+    // The complement in the outer block does not answer the statement in the inner block
+    // (line 5); the outer statement (line 7) has no complement in its block either.
     t.write(
         file,
-        "// toy\n#[test]\nfn modes() {\n    {\n        #[cfg(unix)]\n        assert_eq!(1, 1);\n    }\n    #[cfg(windows)]\n    assert_eq!(3, 3);\n}\n",
+        "// toy\n#[test]\nfn modes() {\n    {\n        #[cfg(unix)] assert_eq!(1, 1);\n    }\n    #[cfg(windows)] assert_eq!(3, 3);\n}\n",
     );
     let o = t.run_no_skip();
     assert_eq!(o.code, Some(1), "complement in another block:\n{}", o.text);
-    let ls = kind_lines(&o, "platform-statement");
     assert!(
-        !ls.is_empty() && ls.iter().all(|l| has_token(l, "modes")),
-        "complement in another block: a `platform-statement` line naming `modes`:\n{}",
+        kind_lines(&o, "platform-statement")
+            .iter()
+            .any(|l| has_token(l, "modes") && names_at(l, file, &(5..=5))),
+        "complement in another block: a `platform-statement` line naming {file}:5 and `modes`:\n{}",
+        o.text
+    );
+    // Two statements for the same platform do not complement each other.
+    t.write(
+        file,
+        "// toy\n#[test]\nfn modes() {\n    #[cfg(unix)] assert_eq!(1, 1);\n    #[cfg(not(windows))] assert_eq!(2, 2);\n}\n",
+    );
+    let o = t.run_no_skip();
+    assert_eq!(
+        kind_lines(&o, "platform-statement").len(),
+        2,
+        "two Unix statements, nothing in their place on Windows:\n{}",
         o.text
     );
     // Same block, the not(windows)/windows pair, and an exempt `use`: passes.
