@@ -489,6 +489,88 @@ task cannot both change the rule and use it in the tree: main's tool judges the 
   - next: director (QUESTIONs above; join)
 <!-- end implementer log -->
 ### test author
+- 2026-11-17 · R-306 · tests written · did: `xtask/tests/acceptance_t071.rs` (16 tests) and
+  `xtask/tests/guard_t071.rs` (6 guards), from the spec on main (b1b9376) alone; every test drives the built
+  `xtask no-skip` / `xtask scorecard [--check]` on toy repositories under `CARGO_TARGET_TMPDIR` (no-skip toys
+  carry a copy of `xtask/fixtures/no-skip/`, since the self-test runs first, Pinned (c)). Rulings acknowledged
+  and accepted: D-180 Q-1 B, Q-2 A, Q-3 A (but see QUESTION 2), Q-4 B; D-199 Q-5 A, Q-6 A; note D-205 (nothing
+  for the test author). Pinned (f): no acceptance test of T-005/T-013 asserts the `no-skip` detail line
+  (`grep` for `allowlisted`, `files scanned`, `known findings`, `self-test ok` in `xtask/tests/`: 0 hits).
+  - Criterion → tests → result on base (all by assertion; none fails only by compile):
+    AC-1 → `ac1_platform_unlisted_names_file_line_and_item` (fn, module, inner `#![cfg]`, test in a module;
+    no `cfg-disabled` for a platform cfg), `ac1_platform_mismatch_names_file_line_and_item`,
+    `ac1_platform_mismatch_each_cfg_form_means_exactly_its_platform` (6 forms × 4 names),
+    `ac1_platform_unused_names_the_entry`, `ac1_platform_sentence_missing_doc_or_quote`,
+    `ac1_platform_counterpart_must_exist_and_cover_the_left_out_platforms` (missing file/item, a helper, a
+    module without tests, a `unix` counterpart of a `unix` item, a `windows` counterpart of a `linux` item;
+    accepted: `windows`, `not(unix)`, no cfg, module, `<file>::tests::x`),
+    `ac1_platform_pending_expired_date_and_task_file` (day before, today, later; task file missing/added;
+    HEAD's date without `--today`), `ac1_inert_helper_names_file_line_and_item`,
+    `ac1_platform_statement_names_file_line_and_item`, `ac1_platform_statement_same_block_and_use_exemption`
+    — each fails on base: no line of the new kind (base reports `cfg-disabled` or passes).
+    AC-2 → `ac2_correct_registry_passes_and_the_detail_line_counts_it` (4 entries/1 pending, then 6/2),
+    `ac2_malformed_registry_stops_the_step` — base: the correct registry fails (`cfg-disabled`).
+    AC-3 → `ac3_t002_pattern_fails_real_twins_and_a_single_helper_pass`,
+    `ac3_each_trivial_body_form_and_each_platform_pair` — base: no `inert-helper` line.
+    AC-4 → `ac4_scorecard_registered_absent_test_is_not_missing_and_the_page_is_linux_only`,
+    `ac4_scorecard_write_mode_writes_on_linux_and_is_refused_elsewhere` — base (Linux): `lists test
+    toy_a::t::win_only, which does not exist`, exit 1. On macOS/Windows they assert Interface (3)'s behaviour
+    there (decided at run time with `cfg!`): only CI can show it (AC-6).
+    AC-5, AC-6: implementer/reviewer and CI; not tested here.
+  - Guards (pass on base; must pass after): `guard_the_six_existing_kinds_are_still_reported_with_file_line_and_item`,
+    `guard_skips_toml_still_allowlists_until_expiry_and_refuses_unused_entries`,
+    `guard_other_cfgs_stay_cfg_disabled_even_when_registered` (`feature`, `target_os = "freebsd"`,
+    `all(unix, feature)`), `guard_the_self_test_still_runs_before_the_scan`,
+    `guard_runtime_cfg_and_cfg_test_are_not_findings`,
+    `guard_scorecard_listed_test_absent_without_entry_is_a_problem_everywhere`.
+  - Self-check: a stub of Interface (1)–(3) in a scratch copy (deleted) passes all 22. Mutants, each killed by:
+    unlisted not reported → ac1_platform_unlisted; `not(windows)` not read as unix → ac1 forms, ac1 statement
+    block, ac2 correct, ac3 forms; module cfg ignored / inner file cfg ignored → ac1_platform_unlisted, ac2
+    correct; line off by one → ac1_platform_unlisted; mismatch unchecked → both ac1 mismatch tests; unused
+    unchecked → ac1_platform_unused; quote unchecked → ac1_platform_sentence; counterpart checked by file only
+    (a test that does not exist accepted) → ac1_platform_counterpart; counterpart's own cfg unchecked →
+    ac1_platform_counterpart; `expires <= today` expired → ac1_platform_pending; task file unchecked →
+    ac1_platform_pending; empty body not trivial → both ac3; feature twins counted → ac3 forms; trivial Unix
+    side ignored → ac3 forms; single trivial helper reported → ac3 t002; complement searched in enclosing
+    blocks → ac1 statement block; any other platform statement counts as complement → ac1 statement block;
+    `use` not exempt → ac1 statement block; empty reason accepted / `none` without reason accepted → ac2
+    malformed; pending count 0 → ac2 correct; `unix` not covering Linux → ac1 counterpart, ac2 correct, ac4;
+    registered absent test never Missing whatever its platforms → ac4 registered-absent; page not compared on
+    Linux → ac4 registered-absent; any cfg containing `unix` / any `target_os` read as a platform →
+    guard_other_cfgs. Accepted forms (pass): entry findings at the registry entry's line instead of the item's;
+    `inert-helper` at the real twin's line; another line format that names kind, `<file>:<line>` and item.
+  - QUESTION 1: Interface (2) "a FAIL line naming `<file>:<line>` and the item": for findings about an entry
+    (`platform-mismatch`, `-sentence`, `-counterpart`, `-pending-expired`, `-unused`) is `<file>:<line>` the
+    item's place or the entry's place in `xtask/platform-tests.toml`? The tests accept both (for `-unused`, the
+    entry's `file` at any line or the entry's lines). Proposal: "the item's `<file>:<line>`;
+    `platform-unused`: `xtask/platform-tests.toml:<line of the entry>`".
+  - QUESTION 2: ruling Q-3 A says a `pending` entry names its future counterpart, but Interface (1) has
+    `counterpart = "pending"` and no field for that name. Tests use Interface (1)'s form; "a pending entry whose
+    named counterpart exists is satisfied" is untested. Proposal: state the field (e.g. `future = "<file>::<item>"`).
+  - QUESTION 3: `platform-statement`: Interface (1) has no complementary form for a `linux` or `macos`
+    statement (no `not(target_os = …)`). Untested; please state what complements them (or that they always fail).
+  - QUESTION 4: AC-1 says "exactly one FAIL line of that kind"; the tests do not assert that no line of another
+    kind appears (except: no `cfg-disabled` for a platform cfg). Is "exactly one FAIL line" in all meant?
+  - QUESTION 5: "Any other cfg on a test stays `cfg-disabled`": guarded for `feature`, `target_os = "freebsd"`,
+    `all(unix, feature)`; not for `target_os = "windows"` or `any(unix, windows)`, which an implementation could
+    reasonably read as platforms. Confirm they stay `cfg-disabled`, and the tests can add them.
+  - QUESTION 6: an entry for an existing test with no cfg: `platform-unused` or `platform-mismatch`? Untested.
+  - QUESTION 7: "task file … on main's tree of the scan": the working tree or the `main` branch? Toys make
+    both the same; untested which. Same for whether the self-test fixtures may name files outside
+    `xtask/fixtures/no-skip/` (a doc, a task file): toys copy any file a fixture names in `doc = "…"` /
+    `task = "…"` from the repository; proposal: the fixture is self-contained.
+  - Assumptions where the spec left room: the kind name appears in the FAIL line (as `(cfg-disabled)` today);
+    findings exit 1, a malformed registry exits 1 or 2 and names `platform-tests.toml` only for the errors
+    Interface (1) lists (unknown key, empty `reason`, empty quote, malformed date) and for non-TOML; a missing
+    required field or an unknown `platforms` value is checked only to fail; `--today` overrides HEAD's date
+    for `pending` as for skips; on Linux an item whose only absent tests are registered elsewhere is not
+    `planned` (its status is not otherwise pinned); the non-Linux detail line contains `macos` / `windows`
+    (case-insensitive); "struct of these" tested with named fields only.
+  - Run: clippy `-p xtask --tests -D warnings` clean (also with the stub in place), `cargo fmt --check` ok,
+    acceptance 16/16 fail on base, guards 6/6 pass, `cargo xtask no-skip` and `cargo xtask hygiene` PASS on this
+    branch; the stub's rule finds the two inert helpers of `acceptance_t002.rs` at 176 and 186 (Pinned (g)).
+    Not run: `cargo xtask ci` (the whole gate); macOS and Windows (CI, `ci/T-071`).
+  - next: director (join; QUESTIONS 1–7)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
