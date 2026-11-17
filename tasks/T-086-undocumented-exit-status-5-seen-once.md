@@ -27,6 +27,9 @@ it (the evaluator kept `kiln`'s stderr, not `xvfb-run`'s), and documents or remo
 
 ## Evidence in the record
 - `evaluations/iter-2-cut-2.md`, "Questions for the director", Q1; driver `evaluations/iter-2-cut-2-drivers/rc5.sh`.
+- An earlier sighting (found by the retrospective of cut 2, D-219): the test author's run R-264 of T-070 and
+  ruling m2 of D-182 record an exit status 5 of a window run under `xvfb-run`, with `xvfb-run` as the likely
+  cause. This task starts from that record.
 
 ## Open questions for the specification
 - Does the CI job `window-linux` (which runs the window procedure on every code push) ever show it? Its record
