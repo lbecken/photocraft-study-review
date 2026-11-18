@@ -403,6 +403,26 @@ high → independent test author.
 - Gate on the committed state: `cargo clippy -p kiln-workspace --tests -- -D warnings` clean, `cargo fmt --check`
   clean, `cargo xtask no-skip` PASS (20 registered, unchanged), `cargo xtask hygiene` PASS. `cargo xtask ci` not run
   (my branch changes one test file; the steps above are its share). next: director (two QUESTIONs).
+- 2026-11-18 · R-340 · rulings y1, y2 (D-247, read on main) accepted · did: the ten runtime tests moved unchanged
+  (`git mv`, header edited, `acw2_` names kept) to `crates/kiln-workspace/tests/guard_t073.rs` — guards, 10 pass on
+  Linux base; `acceptance_t073.rs` now holds one test, `acq4_same_file_is_declared_only_as_windows_dependency_at_exact_version`:
+  the manifest (`CARGO_MANIFEST_DIR/Cargo.toml`, read as text by a small line reader, no dev-dependency) declares
+  `same-file` exactly once, under `[target.'cfg(windows)'.dependencies]`, version `=1.0.6`. Base: FAIL by assertion on
+  every platform where the crate builds (Linux run: `left: []`); on Windows base the test target does not build (the
+  lib's 6 errors), so `compile` there. y2: nothing changed in the tests (the step adds `-- --show-output`).
+  Manifest variants (scratch copy, `cargo test --offline -p kiln-workspace --test acceptance_t073`): pass —
+  `same-file = "=1.0.6"` in the Windows table; `[ target . "cfg( windows )" . dependencies ]` with a quoted key and
+  comments; `{ version = "=1.0.6" }`; `[target."cfg(windows)".dependencies.same-file]` + `version`; dotted key
+  `same-file.version`. Fail (rejected) — missing (base); in `[dependencies]`; in both places; `cfg(unix)`;
+  `cfg(not(windows))`; `1.0.6`; `1`; `[dev-dependencies]`; Windows `build-dependencies`; renamed with
+  `package = "same-file"` (reported as a form not read). Not reached by the test because cargo refuses the manifest
+  first: `=1.0.7` (not resolvable offline), an inline table with no version (`path` to nothing), the dependency
+  declared twice in the Windows table (duplicate key). Not accepted, by choice: `= 1.0.6` (with a space; the ruling
+  names `=1.0.6`), a triple table such as `[target.x86_64-pc-windows-msvc.dependencies]` (Windows-only too, but not
+  the ruling's `cfg(windows)`), and any multi-line form — each fails with a message naming the line.
+  Gate on the committed state: clippy `--tests -D warnings` clean, `fmt --check` clean, `no-skip` PASS (20
+  registered), `hygiene` PASS, `cargo check --test acceptance_t073 --test guard_t073 --target aarch64-apple-darwin`
+  clean. next: director.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
