@@ -414,6 +414,55 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   joined head.
 <!-- end implementer log -->
 ### test author
+- 2026-11-18T16:40Z · R-367 · in_progress · did: acknowledged D-259 (Q-1 (a), Q-2 `cfg!(unix)` branch
+  with both branches asserting and no registry entry, Q-3, Q-4, Q-5: accepted). Wrote
+  `xtask/tests/acceptance_t096.rs` from the spec alone, one test
+  `rebuild_from_base_unit_test_passes_when_the_default_toolchain_cannot_build` (AC-1). Unix branch:
+  needs `rustup --version` (fails naming why otherwise); finds the pinned toolchain by `rustc --print
+  sysroot` in the checkout (its name must start with `<channel>-`, channel read from
+  `rust-toolchain.toml` with `toml`); scratch dir from `std::env::temp_dir()` (removed on drop) with a
+  `RUSTUP_HOME` holding `toolchains/<name>` (symlink, `ln -s`), `toolchains/fake/bin/{cargo,rustc}`
+  (print `T096-FAKE-DEFAULT-TOOLCHAIN-CANNOT-BUILD`, exit 97) and `settings.toml` (`default_toolchain =
+  "fake"`, self-update disabled); self-check: `cargo --version` with `RUSTUP_TOOLCHAIN` removed in
+  `<scratch>/no-toolchain-file` fails with the marker, in the checkout prints `cargo <channel> `; then
+  `cargo test --offline --locked -p xtask --bin xtask <unit test> -- --exact` in the checkout with that
+  `RUSTUP_HOME`, `RUSTUP_AUTO_INSTALL=0`, `RUST_BACKTRACE=0`, `CARGO_TARGET_DIR=<scratch>/target` (child
+  only; `CARGO*` but `CARGO_HOME`, `__CARGO*` and `RUSTUP_TOOLCHAIN` removed from children); oracle:
+  `(exit, result lines, passed, failed) == (Some(0), 1, 1, 0)`, the message shows the inner panics.
+  Windows branch (`cfg!` else): `cargo test --offline --locked -p xtask --bin xtask -- --list` exits 0,
+  lists at least one `queue::tests::` test and no `<unit test>: test` line, and says so. Timeouts: 120 s
+  short calls, 1200 s nested. No `cfg` attribute, no `#[ignore]`, no early return.
+  **Fail on base (assertion):** `assertion left == right failed: the unit test with a default toolchain
+  that cannot build: exit Some(101), 1 result line(s), 0 passed, 1 failed, 36.0s`, inner panic
+  `xtask/src/queue.rs:2019:48 … list the workspace members of main at <sha> … cargo metadata failed in
+  /tmp/kiln-xtask-test-…/.git/kiln-queue/main-xtask/src: T096-FAKE-DEFAULT-TOOLCHAIN-CANNOT-BUILD`.
+  **Cost:** the test alone 27-36 s (nested build of `xtask`'s unit-test binary from scratch plus the
+  unit test); `cargo test -p xtask --test acceptance_t096` wall 37.8 s with the outer binary built, 54 s
+  on a clean scratch clone (`/usr/bin/time`); nested target size not measured (removed on drop; no
+  `kiln-acc-t096-*` left in the temp dir after runs). Under the gate: no shared state (own scratch, own
+  target, own `RUSTUP_HOME`; the toy repo is the unit test's own `TempDir`), no network (`--offline`,
+  `RUSTUP_AUTO_INSTALL=0`); it may wait on cargo's package-cache lock ("Blocking waiting for file lock
+  on package cache" seen once while another build ran).
+  **Variants** (scratch clone `/home/user/kiln-test-T-096/repo` of this branch, one at a time, nested
+  run each): option (a) as Interface (1) (copy of the checkout's file into `portable_init`'s list) →
+  pass (`1 passed`, 26.4 s); option (b) stand-in "only stop reading `deps`" (`read_dir(&deps)
+  .into_iter().flatten()`) → **fail** (inner panic at `queue.rs:2019:48`: `cargo metadata` runs under the
+  fake default before the `deps` read; any (b) fails this way, since (b) leaves the tiny build on the
+  default); option (c) stand-in (`build_main_xtask` copies the caller's `rust-toolchain.toml` into an
+  export that lacks one) → pass (rejected only by the Equality diff check); typed `channel = "1.97.0"` →
+  pass (forbidden by Interface (1), the reviewer's diff check); typed other channel `1.96.0` → fail;
+  empty `rust-toolchain.toml` → fail; file written in the toy repo's working tree but not committed →
+  **pass** (the export lives at `<repo>/.git/kiln-queue/main-xtask/src`, so rustup finds the
+  uncommitted file in an ancestor directory; AC-1 cannot see that the file is committed: reviewer's
+  diff check); file read from a wrong path (`CARGO_MANIFEST_DIR/rust-toolchain.toml`): fails by the
+  read's panic (by reading, not run). Checks on this branch: `cargo test -p xtask --test guard_t079` →
+  `ok. 6 passed`; `cargo fmt --check` → exit 0; `cargo clippy -p xtask --all-targets -- -D warnings` →
+  exit 0; `cargo xtask no-skip` → `PASS no-skip: self-test ok (17 known findings); 202 files scanned, 0
+  allowlisted skip(s), 35 platform test(s) registered (19 pending)`; Windows: `cargo clippy -p xtask
+  --test acceptance_t096 --target x86_64-pc-windows-msvc -- -D warnings` → exit 0 (no stub needed: the
+  test binary's dependencies have no C code; check only, not linked or run) · gate attempts: 0 · not
+  run: `cargo xtask ci` (disk; the gate fails here only in `acceptance_t096` by design), macOS check, the
+  Windows branch at run time (CI) · missing context: none · next: join. Scratch target deleted.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
