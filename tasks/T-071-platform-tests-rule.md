@@ -508,6 +508,8 @@ task cannot both change the rule and use it in the tree: main's tool judges the 
   - next: director (QUESTION on `join.rs`/`git.rs`; re-join; CI round 2)
 - 2026-11-18 · R-315 · implementer · s13 (D-228) accepted: `join.rs`'s test module gets the same `portable_init` (`core.autocrlf=false`, `core.eol=lf`, `core.safecrlf=false`, `core.longpaths=true`) for its 3 toy repositories; `git.rs` untouched.
   - Reproduction `GIT_CONFIG_SYSTEM=<core.autocrlf=true> cargo test -p xtask --bin xtask`: before 135 passed, 3 failed (the 3 `join::tests`); after 138 passed, 0 failed (no Linux-only test broken by it). Plain run 138 passed; Windows `cargo check`, clippy `-D warnings`, `fmt --check`, `no-skip`, `hygiene` on the committed state: see the next commit's report. No whole gate run (ruling).
+- 2026-11-18 · R-319 · implementer · s14 (D-231) accepted: `acceptance_t005.rs:711` and `guard_t005.rs:137` write `outsidedep = {{ path = '{}' }}` (a TOML literal string: no escapes are read, so `D:\a\…` stays as written; a Windows path cannot hold `'`). Both tests pass on Linux (1 + 1 passed).
+  - Same class searched in every `xtask/tests/*.rs` and every `#[cfg(test)]` module of `xtask/src` (paths through `display()`/`to_string_lossy()`/`to_str()`): nothing else unescaped. The rest are argv or env values, filenames, assertion messages, a `{:?}`-escaped Rust literal (`acceptance_t005_r3.rs:730`), `toml_str(…)` in `acceptance_t071.rs:1751`, and a single-quoted `sh` argument in `acceptance_t013_publish.rs:643` (no escapes in single quotes); that test passed on Windows in round 3.
 <!-- end implementer log -->
 ### test author
 - 2026-11-17 · R-306 · tests written · did: `xtask/tests/acceptance_t071.rs` (16 tests) and
