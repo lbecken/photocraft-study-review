@@ -95,7 +95,7 @@ jobs:
           summary=""
           for p in kiln-text kiln-syntax kiln-search xtask; do
             echo "==== cargo test --locked -p $p" >> core-crates.txt
-            cargo test --locked -p "$p" >> core-crates.txt 2>&1
+            cargo test --locked --no-fail-fast -p "$p" >> core-crates.txt 2>&1
             rc=$?
             echo "==== $p: exit status $rc" >> core-crates.txt
             summary="$summary $p=$rc"
@@ -179,7 +179,7 @@ jobs:
           summary=""
           for p in kiln-text kiln-syntax kiln-search xtask; do
             echo "==== cargo test --locked -p $p" >> core-crates.txt
-            cargo test --locked -p "$p" >> core-crates.txt 2>&1
+            cargo test --locked --no-fail-fast -p "$p" >> core-crates.txt 2>&1
             rc=$?
             echo "==== $p: exit status $rc" >> core-crates.txt
             summary="$summary $p=$rc"
@@ -265,7 +265,7 @@ jobs:
           summary=""
           for p in kiln-text kiln-syntax kiln-search xtask; do
             echo "==== cargo test --locked -p $p" >> core-crates.txt
-            cargo test --locked -p "$p" >> core-crates.txt 2>&1
+            cargo test --locked --no-fail-fast -p "$p" >> core-crates.txt 2>&1
             rc=$?
             echo "==== $p: exit status $rc" >> core-crates.txt
             summary="$summary $p=$rc"

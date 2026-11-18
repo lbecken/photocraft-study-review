@@ -420,15 +420,17 @@ pub fn run_on(root: &Path, check: bool, host: Platform) -> Result<StepResult> {
     let registered_absent = count(|s| *s == TestState::RegisteredAbsent);
     if host != Platform::Linux {
         let ran = count(|s| matches!(s, TestState::Ran(_)));
-        return Ok(StepResult::from_problems(
-            format!(
-                "{}: {} items; {ran} tests ran; {registered_absent} registered absent here; page not compared (computed on Linux)",
-                host.name(),
-                items.len()
-            ),
-            "scorecard problems",
-            &problems,
-        ));
+        let line = format!(
+            "{}: {} items; {ran} tests ran; {registered_absent} registered absent here; page not compared (computed on Linux)",
+            host.name(),
+            items.len()
+        );
+        // The platform line also when the step reports problems, and first (ruling s10, D-226).
+        let r = StepResult::from_problems(line.clone(), "scorecard problems", &problems);
+        return Ok(match r.status {
+            crate::util::Status::Fail => StepResult::fail(format!("{line}\n{}", r.detail)),
+            _ => r,
+        });
     }
     let doc = render(&rows);
     let path = root.join("docs/scorecard.md");
@@ -599,6 +601,23 @@ mod tests {
                 assert!(!d.path().join("docs/scorecard.md").exists());
             }
         }
+        // With a problem off Linux, the platform line comes first, then the problems (s10).
+        std::fs::write(
+            d.path().join("scorecard/items/text.missing.toml"),
+            "id = \"text.missing\"\ntitle = \"x\"\ncrate = \"nope\"\ntier = \"low\"\n",
+        )
+        .unwrap();
+        let r = run_on(d.path(), true, Platform::Windows).unwrap();
+        assert_eq!(r.status, crate::util::Status::Fail);
+        let mut lines = r.detail.lines();
+        assert_eq!(
+            lines.next(),
+            Some(
+                "windows: 2 items; 0 tests ran; 0 registered absent here; page not compared (computed on Linux)"
+            )
+        );
+        assert_eq!(lines.next(), Some("1 scorecard problems:"));
+        std::fs::remove_file(d.path().join("scorecard/items/text.missing.toml")).unwrap();
         // On Linux the same tree has no page yet: stale.
         let r = run_on(d.path(), true, Platform::Linux).unwrap();
         assert_eq!(r.status, crate::util::Status::Fail);
