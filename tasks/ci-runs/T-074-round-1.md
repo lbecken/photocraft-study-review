@@ -712,3 +712,13 @@ Head `32b597d6af3ef4db691ae069ccf1c40ddb474b83` ("state: T-072 and T-074 merged;
 
 ### Not read
 Logs of all jobs except `ci.yml`'s `gate`; the artefacts `window-linux-44373961129` and `window-probe-windows-2025-44373961129`; `core-crates.txt`, `test-list.txt`, `test-output.txt` of `gate-windows` beyond the lines above; why `gate-macos` got no runner (the job data does not say); the `WORKSPACE TESTS: exit status` line; `ci.yml`'s Gate step beyond the log lines quoted.
+
+## Main: re-run of `gate-macos` (INC-002)
+
+Run 44373961129 (`platforms.yml`, branch `main`, head `4eb349da2a34e7c3c0fa9dc06c8a7484f4692b54`), `run_attempt` 2; read with `list_workflow_jobs` and `list_workflow_run_artifacts`.
+
+- `gate-macos` (job 135067764736, label `macos-15`): **no runner was assigned** (the job data carries no `runner_id`, no runner name and no steps). Conclusion `cancelled`; `started_at` 2026-11-18T19:20:59Z, `completed_at` 2026-11-18T19:36:00Z (15 min 1 s).
+- No `gate-macos-44373961129` artefact exists in the run's artefact list, so there is no gate report, no test counts and no `test-list.txt`: whether `guard_t074`'s tests are listed for macOS is not determinable (0 lines read).
+- Other jobs of the re-run (attempt 2): `gate-windows` failure; `window-probe (windows-2025)` failure; `window-probe (macos-15)` success; `window-linux` success; `gate-linux` skipped.
+
+Not read here: logs of any of these jobs, and the artefacts of this re-run beyond the list.
