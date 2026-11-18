@@ -442,4 +442,13 @@ high → independent test author.
   --check` clean; `cargo xtask no-skip` and `hygiene` PASS. next: director.
 <!-- end test author log -->
 ### reviewer
+- 2026-11-18 · R-343 · review round 1 · rulings read on main and accepted: Q-1 A, Q-2, Q-3 A (the hunk table and an
+  LLVM IR comparison with base, Linux and macOS: equal but for `disk.rs` panic-location line numbers), Q-4 A, y1, y2, z1
+  (main's `acceptance_t079` fails on this tree, the adapted one still rejects a missing, doubled or changed T-079 entry),
+  z2, z3 (table in the review: T-092 3, T-074 9, none 3). CI expectation committed (f951f97) before reading
+  `tasks/ci-runs/T-073-round-1.md` (run 44268710587); every line matched. 21 mutants (acceptance 3, own 5, procedure 8,
+  needs Windows CI 4, survived 1). Verdict request-changes: finding 1 (defect: `paths.md` and `control-protocol.md`
+  Windows sentences must follow the measurement: held root renamable, its parent not, os error 5), finding 5 (test gap:
+  `from_path` error taken as inside survives); spec gaps 2 (`docs/development.md:101-105` stale), 3 (identity on ReFS),
+  4 (the save drops the target's ACL on Windows) for the director · not run: anything on Windows · next: director
 <!-- end reviewer log -->
