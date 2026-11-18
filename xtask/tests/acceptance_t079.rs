@@ -1,33 +1,31 @@
-//! T-079 acceptance tests (test author): AC-1, the entries of `xtask/platform-tests.toml` are
-//! exactly the 20 of Interface (2a) (the 8 restored from T-071) and (2) (the 12 product tests).
+//! T-079 acceptance tests (test author), adapted in T-073 by ruling z1 (D-249): AC-1, the
+//! 20 entries of `xtask/platform-tests.toml` from Interface (2a) (the 8 restored from T-071) and
+//! (2) (the 12 product tests) are there, each exactly once and exactly as T-079 wrote it.
+//! Entries for other tests (a later task's) are not these tests' matter: `no-skip` checks every
+//! entry against a cfg'd item, and the base-names guard keeps every Linux test.
 //!
 //! The registry is parsed with `toml`; every `[[test]]` entry (any TOML spelling of the same
 //! array of tables passes: `[[test]]` headers, an inline `test = [{ … }]`, any key order or
-//! quoting) is reduced to the tuple AC-1 names, `(file, item, platforms, counterpart, task)`,
-//! and the list of tuples must match the 20 expected ones one to one: an expected tuple without
-//! an entry, an entry that matches no expected tuple, or two entries for one expected tuple
-//! fail. `task` is part of the tuple, so a `pending` entry without `task` (or with another
-//! task), and a `none` entry carrying a `task`, match nothing. For the 8 `pending` entries the
-//! second test also checks `expires = "2026-12-31"` (ruling Q-6 A, D-233). Values are compared
-//! as TOML strings, the registry's format (T-071); another type is a mismatch.
-//!
-//! The variants AC-1 names are rejected as follows: one of the 12 entered with
-//! `platforms = "unix"` is an entry whose tuple matches none of the 20 (and its expected tuple
-//! is then missing); a 21st entry is an entry left over after the 20 are matched (any entry
-//! beyond 20 is, whatever it says, since each expected tuple takes one entry).
+//! quoting) is reduced to `(file, item, platforms, counterpart, task, expires)`. An entry
+//! *belongs to* one of the 20 when its `(file, item)` is that test's pair. For each of the 20,
+//! exactly one entry belongs to it, and that entry has exactly T-079's `platforms`,
+//! `counterpart` and `task` (an absent `task` must be absent): none belonging is "missing", two
+//! or more is "entered more than once", another field value is "changed". The second test
+//! checks that the `pending` entries among those belonging to the 20 are exactly T-079's 8,
+//! with their task and `expires = "2026-12-31"` (ruling Q-6 A, D-233). Values are compared as
+//! TOML strings, the registry's format (T-071); another type is a mismatch.
 //!
 //! Not pinned (AC-1's tuple leaves them to `no-skip` and the reviewer): `doc`, `quote`, `reason`,
 //! the order of entries, comments, `expires` of a `none` entry (`no-skip` refuses it).
 //!
 //! Ruling w1 (D-241, on question Q-T1): for each of the 4 non-UTF-8 tests the registered item
 //! is exactly one of two names: the test's name as Interface (1) gives it (not split), or that
-//! name followed by `_non_utf8` (the Linux-only part split out). Each of the 4 has exactly one
-//! entry: any other item matches nothing, and an entry under each of the two names leaves one
-//! of them over. The other 16 tuples have one item each.
+//! name followed by `_non_utf8` (the Linux-only part split out). An entry under either name
+//! belongs to that test, so an entry under each of the two names is "entered more than once".
+//! The other 16 have one item each.
 //!
-//! On the base the registry has no entry, so both tests fail by assertion. Only `std::fs` and
-//! `toml` are used (Linux, macOS, Windows alike); `file` values are compared as the
-//! `/`-separated strings the registry holds. No process is spawned.
+//! Only `std::fs` and `toml` are used (Linux, macOS, Windows alike); `file` values are compared
+//! as the `/`-separated strings the registry holds. No process is spawned.
 #![cfg(test)]
 
 use std::path::{Path, PathBuf};
@@ -198,12 +196,17 @@ struct Entry {
 }
 
 impl Entry {
-    fn matches(&self, e: &Expected) -> bool {
+    /// Whether this entry's `(file, item)` is the pair of `e` (either name of ruling w1).
+    fn belongs_to(&self, e: &Expected) -> bool {
         self.file.as_deref() == Some(e.file)
             && self.item.as_deref().is_some_and(|i| {
                 i == e.item || (e.split && i.strip_suffix(SPLIT_SUFFIX) == Some(e.item))
             })
-            && self.platforms.as_deref() == Some(e.platforms)
+    }
+
+    /// Whether this entry has exactly `e`'s `platforms`, `counterpart` and `task`.
+    fn fields_match(&self, e: &Expected) -> bool {
+        self.platforms.as_deref() == Some(e.platforms)
             && self.counterpart.as_deref() == Some(e.counterpart)
             && self.task.as_deref() == e.task
     }
@@ -265,34 +268,29 @@ fn entries() -> Vec<Entry> {
 }
 
 #[test]
-fn ac1_registry_entries_are_exactly_the_twenty_of_interface_2_and_2a() {
-    let mut left = entries();
+fn ac1_each_of_the_twenty_has_exactly_one_entry_with_its_fields() {
+    let all = entries();
     let mut problems = Vec::new();
-
-    // The same test listed twice is never one of the 20 (each names a distinct test).
-    let mut seen = std::collections::BTreeSet::new();
-    for e in &left {
-        let key = (e.file.clone(), e.item.clone());
-        if !seen.insert(key) {
-            problems.push(format!("listed twice: {}", e.show()));
-        }
-    }
-
-    // Each expected tuple takes one entry (no two tuples can match the same entry).
     for want in &EXPECTED {
-        match left.iter().position(|e| e.matches(want)) {
-            Some(i) => {
-                left.remove(i);
-            }
-            None => problems.push(format!("missing: {want:?}")),
+        let mine: Vec<&Entry> = all.iter().filter(|e| e.belongs_to(want)).collect();
+        match mine.as_slice() {
+            [] => problems.push(format!("missing: {want:?}")),
+            [one] if one.fields_match(want) => {}
+            [one] => problems.push(format!("changed: {}; expected {want:?}", one.show())),
+            more => problems.push(format!(
+                "entered more than once ({}): {}",
+                more.len(),
+                more.iter()
+                    .map(|e| e.show())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            )),
         }
-    }
-    for e in &left {
-        problems.push(format!("not one of the 20: {}", e.show()));
     }
     assert!(
         problems.is_empty(),
-        "{REGISTRY} is not exactly the 20 entries of T-079 Interface (2a) and (2) (AC-1):\n{}",
+        "{REGISTRY}: the 20 entries of T-079 Interface (2a) and (2) are not each there exactly \
+         once with their fields (AC-1, ruling z1):\n{}",
         problems.join("\n")
     );
 }
@@ -301,6 +299,7 @@ fn ac1_registry_entries_are_exactly_the_twenty_of_interface_2_and_2a() {
 fn ac1_pending_entries_name_their_task_and_expire_on_2026_12_31() {
     let got: std::collections::BTreeSet<(String, String, String, String)> = entries()
         .into_iter()
+        .filter(|e| EXPECTED.iter().any(|w| e.belongs_to(w)))
         .filter(|e| e.counterpart.as_deref() == Some("pending"))
         .map(|e| {
             let s = |v: Option<String>| v.unwrap_or_else(|| "<absent>".to_owned());
@@ -322,7 +321,7 @@ fn ac1_pending_entries_name_their_task_and_expire_on_2026_12_31() {
     assert_eq!(want.len(), 8, "Interface (2) has 8 pending entries");
     assert_eq!(
         got, want,
-        "the `pending` entries of {REGISTRY} (file, item, task, expires) are not the 8 of \
-         Interface (2) with expires = {EXPIRES} (AC-1, ruling Q-6 A)"
+        "the `pending` entries of {REGISTRY} among T-079's 20 tests (file, item, task, expires) \
+         are not the 8 of Interface (2) with expires = {EXPIRES} (AC-1, ruling Q-6 A, ruling z1)"
     );
 }
