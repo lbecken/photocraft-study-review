@@ -31,6 +31,11 @@ test that only assumes Unix gets a portable fix; no Linux assertion changes.
 - Probe 1 (the branch as it is): the check stops at `kiln-workspace` (lib 6 errors, lib test 34), so nothing of
   this task can be shown before T-073.
 
+## Note from T-079 (director, D-242, ruling x5)
+The four non-UTF-8 entries are `linux` with a reason that claims macOS only. On Windows a file name can hold an
+unpaired surrogate (`reviews/T-079-r1.md`, finding 1): this task decides whether those tests get a Windows
+counterpart with such a name.
+
 ## Log
 ### director
 - 2026-11-18 filed as a draft (D-233).

@@ -40,6 +40,16 @@ Comparable to T-065 (887,544, D-168): **about 1,100,000**; more if a renderer ch
 `xtask/tests/acceptance_t070.rs` pins the `window-probe` job this task changes: the file goes into this task's
 `touches` (test author) and each changed assertion is named.
 
+## Note from T-079 (director, D-242, ruling x6)
+T-079 registers five tests as Linux-only with `counterpart = "pending"`, `task = "T-077"`, expiring 2026-12-31:
+the no-display tests (`apps/kiln/tests/acceptance_t065.rs` `ac1_no_display_exits_2_with_one_line`,
+`ac1_no_display_every_window_form`, `ac1_wayland_only_or_unreachable_display_exits_2`;
+`apps/kiln/tests/window_t065.rs` `without_a_display_the_window_exits_2_with_one_line`;
+`apps/kiln/tests/guard_t055.rs` `kiln_without_subcommand_and_display_exits_nonzero_with_a_message`). **This task
+writes their counterparts** for macOS and Windows (what `kiln` does there when no window can be opened, if such a
+state can be made in a test) or changes the entries to `none` with the reason, and edits the registry:
+`xtask/platform-tests.toml` joins `touches`.
+
 ## Log
 ### director
 <!-- end director log -->

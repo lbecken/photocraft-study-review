@@ -2,7 +2,7 @@
 id: T-079
 title: "Make the gate pass on macOS: register the product tests of facilities macOS lacks, each with its sentence and counterpart, and fix the tests that assume Linux where macOS has the facility"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (xtask/platform-tests.toml, xtask/tests/); the approval row must contain `gate paths`. No dependency change, no product code.
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed; the tests stay tied to their items
 depends_on: [T-071]     # the registry's format and the no-skip rule; and both edit xtask/platform-tests.toml
@@ -339,6 +339,30 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   the platform batch (T-072 to T-078, T-092), where the risk is a test lost behind a cfg; a later task that
   renames or removes a test on purpose lists `xtask/tests/guard_t079.rs` in its `touches` for the test author.
   When the platform batch ends the director decides whether it is retired (noted in T-091).
+
+### Rulings on review round 1 and CI round 1 (director, D-242; `reviews/T-079-r1.md` at `0be64ec9d98d717a73fc0bfc3008c553875a9ffb`; record `tasks/ci-runs/T-079-round-1.md`; told to both builders)
+- **x1 (finding 3, defect; implementer).** `deep_trees_stop_at_the_depth_bound` takes its 2,100-deep chain down
+  without recursion per level before the fixture is dropped, so that no step of the test needs a stack that grows
+  with the depth. Proof on Linux: the test passes with `RUST_MIN_STACK=262144` (the reviewer's reproduction: it
+  aborts there today). Look for the same in every other test that builds a deep chain (`guard_t038_cli`'s
+  `deep_chain` and the `symbols-deep-chain` case) and say what each does at its end.
+- **x2 (finding 6, test gap; implementer).** The case-folding probe of `tree_order_and_counts` cannot lie
+  unnoticed: the test checks the probe's answer against the tree it materialized (both twins present on disk
+  when the probe says "does not fold"; exactly one when it says "folds"), so a probe that answers "folds" on a
+  case-sensitive file system fails the test on Linux.
+- **x3 (finding 4, test gap; test author).** The base-names guard's scan also reads `cfg_attr`: a base test whose
+  attributes hold a `cfg_attr(<predicate>, cfg(...))` (or `cfg_attr(<predicate>, ignore)`, already a `no-skip`
+  finding) counts as conditional on that predicate, so the reviewer's mutant M15 fails the guard.
+- **x4 (finding 5, spec gap of T-071's tool).** `cfg_attr(<predicate>, cfg(...))` on a test passes `no-skip`: to
+  T-091 (noted there).
+- **x5 (finding 1; implementer; the spec's wording corrected here).** The reason of the four non-UTF-8 entries says
+  only what is true: macOS refuses a file name that is not valid UTF-8, so the fixture cannot be made there;
+  Windows is not claimed (its names can hold unpaired surrogates): T-092 decides the Windows side. `platforms`
+  stays `linux`, counterpart `none`.
+- **x6 (finding 2).** The eight `pending` entries need their tasks to carry the counterpart: T-076 and T-077 are
+  noted on main (the counterpart tests named, `xtask/platform-tests.toml` in `touches`, tier high because the
+  registry is a gate path). No change in this task.
+- After the rework: merge the tests branch, a second join, CI round 2 on `ci/candidate`, review round 2.
 
 ## Log
 ### director

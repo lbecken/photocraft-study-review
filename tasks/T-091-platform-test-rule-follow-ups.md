@@ -41,6 +41,8 @@ The rule of T-071 has one hole left by its rulings and two untested cases:
 - **From T-079 (D-241, ruling w2).** `xtask/tests/guard_t079.rs` pins every Linux test name of main `ee9b130`
   as a constant; when the platform batch ends, decide whether it is retired or replaced by a tool that
   regenerates the list.
+- **From T-079's review (D-242, ruling x4; `reviews/T-079-r1.md` finding 5).** `#[cfg_attr(<predicate>,
+  cfg(...))]` on a test takes it out of the test list and passes `no-skip` with no finding.
 
 ## Log
 ### director

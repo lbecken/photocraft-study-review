@@ -36,6 +36,15 @@ Tests of facilities Windows lacks (FIFOs in `acceptance_t008_cli.rs`, `guard_t01
 ## Estimate
 **About 300,000**, over the low ceiling; Extend row or split at specification.
 
+## Note from T-079 (director, D-242, ruling x6)
+T-079 registers three tests as Linux-only with `counterpart = "pending"`, `task = "T-076"`, expiring 2026-12-31:
+the `/dev/full` tests (`apps/kiln/tests/acceptance_t055.rs` `ac8_stdout_write_failure_exits_1`,
+`apps/kiln-cli/tests/acceptance_t004_r2.rs` `run_and_control_exit_1_when_stdout_cannot_be_written`,
+`apps/kiln-cli/tests/run.rs` `run_exits_1_when_stdout_cannot_be_written`). **This task writes their counterparts**
+(a stdout that cannot be written, made in a way every platform has, for example a closed pipe) and edits the
+three registry entries to name them: `xtask/platform-tests.toml` joins `touches`, and the tier is **high**, not
+low, because the registry is a gate path. The specification writes this in.
+
 ## Log
 ### director
 <!-- end director log -->
