@@ -847,6 +847,44 @@ notes (point 2; the latter pending Q-B).
     No information outside the repository was needed. Token use about 215,000 of my share of 320,000.
     Next: director (CI round 1 on the commit below; QUESTION 1).
   CI-REQUEST: 0019cbb8fde3c9da5dd3ce012b6047567b1f8fa4 (the commit after it adds only this line to the log)
+- 2026-11-18 · implementer (R-398, rework) · in_progress · rulings b1 and b2 (D-277) accepted. Read
+  `reviews/T-092-r1.md` and `tasks/ci-runs/T-092-round-1.md`.
+  - b1 (`acceptance_t008.rs::escape_fixture`, W12, W13): on Unix every link is still checked to reach `SECRET`
+    (`assert_reaches`). On Windows (`cfg!(windows)`, no cfg attribute) each of `rel`, `abs`, `dlink/secret.txt`,
+    `chain`, `t`, `px` is read once and printed as `MEASURED: acceptance_t008 <open|save>: windows: root/<link>: reaches
+    the outside content` or `does not reach: <kind or other content>`. If none reaches, the test fails naming the forms
+    tried. Both tests still assert every one of the six refused as `outside_root` at read (and write in W13), with the
+    whole fixture snapshot and the outside files unchanged, so a link that does not reach is still checked to be
+    refused. Why `t` cannot reach: Windows resolves a `..` by its text before following any link: T-074 probe K2
+    (`canonicalize(link/../b)` is the `b` beside `link`, `T-074-probe-1.md:262-265`) and `paths.md` ("a `..` in `--root`
+    is resolved by its text"). So `s/../secret.txt` is `root\secret.txt`, which does not exist: the `NotFound` at `:243`.
+    This is INFERRED for a link target, since the probe measured the root text. No other form is shown not to reach.
+    Simulated on Linux by forcing that arm to `true`: 12 `MEASURED: … reaches` lines, 2 passed. Forcing "no link
+    reaches" fails with the message above. Reverted with `git checkout`; never committed.
+  - b2 (`guard_t008.rs`, W31): `Work` records each link's `read_link` right after the fixture makes it.
+    `assert_links_kept` compares later reads with that record and also checks that all 8 links were recorded. There is
+    no platform cfg. On Linux the record equals the targets it compared with before. The same pattern in the other
+    rewritten files: every other `read_link` compare is with a relative target (`acceptance_t008` `gone`, `a.txt`,
+    `c.txt`; `acceptance_t002` Unix branch) or between two reads (the snapshots of `acceptance_t002_r2`,
+    `acceptance_t008`, `confinement`, `guard_t036_workspace`). `confinement`'s absolute links use the work dir without
+    `canonicalize`, and `canonicalize`-vs-canonicalized compares (`acceptance_t008` `up`/`self`/`dlink`) passed in round 1.
+    Nothing else changed.
+  - Checks: stand-in clippy `-D warnings` for `--lib --test acceptance_t008 --test guard_t008`, Windows and macOS:
+    `Finished`. Linux: 11 and 1 passed.
+    Gate attempt 2 of the task (rework attempt 1): `GATE PASSED`, test 1212 passed and 0 failed, which includes
+    `xtask`'s tests (`acceptance_t092`, `guard_t092`, `guard_t079`, `acceptance_t079`, `acceptance_t074`,
+    `guard_t071`); no-skip: 47 registered, 8 pending. main's `xtask` (`eaa94dd`, built in scratch) on the tree:
+    `no-skip`, `hygiene`, `layers`, `ui-commands`, `schema`, `scorecard --check` (47 verified, 0 failing): all PASS.
+  - **Expectation for CI round 2** (general step, `==== <t>: exit status`, passed): `acceptance_t002` 0/15,
+    `acceptance_t002_r2` 0/8, `acceptance_t008` 0/7, `acceptance_t015_tools` 0/3, `acceptance_t036_workspace` 0/0,
+    `acceptance_t073` 0/1, `confinement` 0/4, `guard_t008` 0/1, `guard_t036_removal_workspace` 0/0,
+    `guard_t036_workspace` 0/2, `guard_t073` 0/10, `guard_t074` 0/15, `tools_contract` 0/5 (71 in all).
+    `acceptance_t019_workspace` and `project` 101, not compiling (5 and 3 errors). Library 45. `MEASURED:` lines: 12 new
+    ones in the `acceptance_t008` block, 6 for each of `open` and `save`: `root/rel`, `root/abs`,
+    `root/dlink/secret.txt`, `root/chain`, `root/px`: "reaches the outside content"; `root/t`: "does not reach:
+    NotFound". With these the file's count is 178 + 12 = 190. If `chain` or `abs` does not reach either, the tests still
+    pass as long as one link reaches, and the lines will say which.
+  CI-REQUEST: see the next line (the commit that holds this entry)
 <!-- end implementer log -->
 ### test author
 - 2026-11-18 · test author (R-392) · in_progress · did: wrote `xtask/tests/acceptance_t092.rs` (AC-1) and
