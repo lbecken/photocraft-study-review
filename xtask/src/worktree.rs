@@ -230,6 +230,23 @@ mod tests {
     use super::*;
     use crate::git::testrepo;
 
+    /// `testrepo::init`, then the toy's own git config fixes what git would otherwise take from
+    /// the machine: the tool under test runs `git` without the tests' isolated environment, so
+    /// on Windows the runner's `core.autocrlf=true` converted the toy's files on checkout
+    /// (ruling s11 (i), D-226).
+    fn portable_init(tag: &str, files: &[(&str, &str)]) -> crate::util::testutil::TempDir {
+        let d = crate::git::testrepo::init(tag, files);
+        for (k, v) in [
+            ("core.autocrlf", "false"),
+            ("core.eol", "lf"),
+            ("core.safecrlf", "false"),
+            ("core.longpaths", "true"),
+        ] {
+            crate::git::testrepo::g(d.path(), &["config", k, v]);
+        }
+        d
+    }
+
     #[test]
     fn parse_specs() {
         assert_eq!(
@@ -250,7 +267,7 @@ mod tests {
 
     #[test]
     fn create_needs_ready_on_main() {
-        let repo = testrepo::init(
+        let repo = portable_init(
             "wt-ready",
             &[(
                 "tasks/T-008-x.md",
@@ -285,7 +302,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")] // xtask/platform-tests.toml
     fn create_seed_list_remove() {
-        let repo = testrepo::init("wt", &[("a.txt", "a")]);
+        let repo = portable_init("wt", &[("a.txt", "a")]);
         let root = repo.path();
         let spec = Spec::parse("T-007", false).unwrap();
         let info = create(root, &spec, false).unwrap();

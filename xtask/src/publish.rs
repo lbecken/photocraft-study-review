@@ -754,6 +754,23 @@ fn hand_over(root: &Path, inputs: &[String], branch: &str) -> Result<()> {
 mod tests {
     use super::*;
 
+    /// `testrepo::init`, then the toy's own git config fixes what git would otherwise take from
+    /// the machine: the tool under test runs `git` without the tests' isolated environment, so
+    /// on Windows the runner's `core.autocrlf=true` converted the toy's files on checkout
+    /// (ruling s11 (i), D-226).
+    fn portable_init(tag: &str, files: &[(&str, &str)]) -> crate::util::testutil::TempDir {
+        let d = crate::git::testrepo::init(tag, files);
+        for (k, v) in [
+            ("core.autocrlf", "false"),
+            ("core.eol", "lf"),
+            ("core.safecrlf", "false"),
+            ("core.longpaths", "true"),
+        ] {
+            crate::git::testrepo::g(d.path(), &["config", k, v]);
+        }
+        d
+    }
+
     #[test]
     fn slugs() {
         assert_eq!(slug("Publish x"), "publish-publish-x");
@@ -797,7 +814,7 @@ mod tests {
         use crate::git::testrepo;
         let led = "[[ledger]]\npath = \"tasks/\"\nmode = \"any\"\n";
         let gen_toml = "[[generated]]\npath = \"docs/scorecard.md\"\ncommand = [\"{xtask}\", \"scorecard\", \"--x\"]\n";
-        let repo = testrepo::init(
+        let repo = portable_init(
             "pub-cmd",
             &[
                 ("xtask/generated.toml", gen_toml),
@@ -857,7 +874,7 @@ mod tests {
             .map(|p| format!("[[ledger]]\npath = \"{p}\"\nmode = \"any\"\n\n"))
             .collect::<String>()
             + "[[ledger]]\npath = \"scorecard/items/\"\nmode = \"add-only\"\n";
-        let repo = testrepo::init(
+        let repo = portable_init(
             "publish-e2e",
             &[
                 (".gitignore", ".worktrees/\ntarget/\n"),
@@ -1135,12 +1152,15 @@ mod tests {
         let clock = Tick(std::cell::Cell::new(1_793_000_000_000));
         let gate = hook_gate(&|_| {});
         let e = run_with(root, &args(), &clock, &gate, &no_queue).unwrap_err();
+        // Printed paths compare with `\` read as `/` (ruling s11 (ii), D-226): on Windows the
+        // tool joins `.git` and the lock name with `\`.
         assert_eq!(
-            refusal(&e),
+            refusal(&e).replace('\\', "/"),
             format!(
                 "publish: refused: another queue or publish run holds {}",
                 lock.display()
             )
+            .replace('\\', "/")
         );
         assert_eq!(snapshot(root), before);
         assert_eq!(gate.builds.get(), 0);

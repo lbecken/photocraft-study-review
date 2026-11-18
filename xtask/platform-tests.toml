@@ -83,3 +83,12 @@ doc = "docs/development.md"
 quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
 counterpart = "none"
 reason = "the test finds the queue's built xtask by its ELF header, which macOS (Mach-O) and Windows (PE) binaries do not have, and replaces it with a shell script; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+[[test]]
+file = "xtask/src/queue.rs"
+item = "tests::main_xtask_is_rebuilt_from_base_on_every_run"
+platforms = "unix"
+doc = "docs/development.md"
+quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
+counterpart = "none"
+reason = "the test writes a `#!/bin/sh` script over the cached xtask and runs it (`out(&bin)` expects `poisoned`); Windows cannot execute a shebang script (os error 216 in CI run 44201932507); the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"

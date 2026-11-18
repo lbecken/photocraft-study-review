@@ -807,6 +807,23 @@ mod tests {
     use crate::worktree;
     use std::cell::{Cell, RefCell};
 
+    /// `testrepo::init`, then the toy's own git config fixes what git would otherwise take from
+    /// the machine: the tool under test runs `git` without the tests' isolated environment, so
+    /// on Windows the runner's `core.autocrlf=true` converted the toy's files on checkout
+    /// (ruling s11 (i), D-226).
+    fn portable_init(tag: &str, files: &[(&str, &str)]) -> crate::util::testutil::TempDir {
+        let d = crate::git::testrepo::init(tag, files);
+        for (k, v) in [
+            ("core.autocrlf", "false"),
+            ("core.eol", "lf"),
+            ("core.safecrlf", "false"),
+            ("core.longpaths", "true"),
+        ] {
+            crate::git::testrepo::g(d.path(), &["config", k, v]);
+        }
+        d
+    }
+
     /// A clock that advances 1.5 s per reading, from a fixed instant.
     struct FakeClock(Cell<i64>);
     impl Clock for FakeClock {
@@ -868,7 +885,7 @@ mod tests {
     }
 
     fn setup_with(tag: &str, task: &str) -> crate::util::testutil::TempDir {
-        let repo = testrepo::init(
+        let repo = portable_init(
             tag,
             &[
                 ("base.txt", "base\n"),
@@ -1208,7 +1225,7 @@ mod tests {
             ),
             ("not toml [", true),
         ] {
-            let repo = testrepo::init(
+            let repo = portable_init(
                 "q-gp-root",
                 &[
                     ("base.txt", "base\n"),
@@ -1252,7 +1269,7 @@ mod tests {
         // D-030 R10.
         let app = "[package]\nname = \"app\"\nversion = \"0.1.0\"\nbuild = \"gen/make.rs\"\n\n[lints]\nworkspace = true\n";
         let mk = || {
-            let repo = testrepo::init(
+            let repo = portable_init(
                 "q-gp-r10",
                 &[
                     ("base.txt", "base\n"),
@@ -1354,7 +1371,7 @@ mod tests {
         let manifest =
             |deps: &str| format!("[package]\nname = \"app\"\nversion = \"0.1.0\"\n{deps}");
         let mk = |tag: &str, tier: &str, state: &str| {
-            let repo = testrepo::init(
+            let repo = portable_init(
                 tag,
                 &[
                     ("base.txt", "base\n"),
@@ -1448,7 +1465,7 @@ mod tests {
         );
         // No `sed -i`: its argument differs between GNU and BSD sed (macOS).
         let policy = "[[generated]]\npath = \"Cargo.lock\"\ncommand = [\"true\"]\n\n[[generated]]\npath = \"gen.txt\"\ncommand = [\"sh\", \"-c\", \"ls items | sort > gen.txt; sed s/1.0.1/1.0.2/ Cargo.lock > Cargo.lock.new && mv Cargo.lock.new Cargo.lock\"]\n";
-        let repo = testrepo::init(
+        let repo = portable_init(
             "q-lock-rebased",
             &[
                 ("base.txt", "base\n"),
@@ -1972,9 +1989,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // runs a planted `#!/bin/sh` file as the built xtask (xtask/platform-tests.toml)
     fn main_xtask_is_rebuilt_from_base_on_every_run() {
         // D-026 R1, with real cargo on a tiny workspace (no dependencies).
-        let repo = testrepo::init(
+        let repo = portable_init(
             "q-rebuild",
             &[
                 (
