@@ -363,6 +363,9 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   noted on main (the counterpart tests named, `xtask/platform-tests.toml` in `touches`, tier high because the
   registry is a gate path). No change in this task.
 - After the rework: merge the tests branch, a second join, CI round 2 on `ci/candidate`, review round 2.
+- **x3 read as built (the test author's run R-333).** A `cfg_attr(<predicate>, ignore)` does not make a base
+  name absent for the guard (an ignored test is still in cargo's list; it is `no-skip`'s finding): the
+  parenthesis of x3 that said otherwise is dropped.
 
 ## Log
 ### director
