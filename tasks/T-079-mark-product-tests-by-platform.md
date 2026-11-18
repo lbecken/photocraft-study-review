@@ -518,6 +518,81 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
 - CI-REQUEST: c71c8e74782397bfa55a3135346d681561e9b31b
 <!-- end implementer log -->
 ### test author
+- 2026-11-18 · R-328 · tests written (one QUESTION) · did: `xtask/tests/acceptance_t079.rs` (2 tests) and
+  `xtask/tests/guard_t079.rs` (6 guards), from the spec on main (`ee9b130`) and the patch alone. Rulings
+  acknowledged and accepted: D-199 Q-1 A, Q-2 A, Q-3 A (R-321 narrowed the scans; AC-1 is the remaining one);
+  D-233 Q-4 B (no Windows test here; (W) not tested), Q-5 A (AC-2 written as guards), Q-6 A (`expires =
+  "2026-12-31"` checked for every `pending` entry), Q-7 A; D-235 (the 8 of (2a) are in AC-1's set); D-239 Q-8 A
+  (nothing for the test author: the tests read the tree, not the commit order).
+  - Criterion → tests → result on this branch (base + tests):
+    AC-1 → `ac1_registry_entries_are_exactly_the_twenty_of_interface_2_and_2a` (the entries, reduced to
+    `(file, item, platforms, counterpart, task)`, match the 20 of (2a)+(2) one to one: a missing tuple, an entry
+    matching none, a second entry for one tuple fail; `task` in the tuple, so `pending` without `task` and `none`
+    with `task` match nothing), `ac1_pending_entries_name_their_task_and_expire_on_2026_12_31` (set of `(file,
+    item, task, expires)` of the `pending` entries = the 8) — both FAIL by assertion (0 entries: 20 `missing:`
+    lines; empty set ≠ 8). Named variants: one of the 12 with `platforms = "unix"` matches no tuple (and its tuple
+    is then missing); a 21st entry is left over after the 20 tuples each take one entry. Not pinned: `doc`,
+    `quote`, `reason`, order, comments (AC-1's tuple; `no-skip` checks them).
+    AC-2 (Q-5 A, guards) → `ac2_disk_refusals_through_control_has_no_platform_cfg`,
+    `ac2_deep_trees_stop_at_the_depth_bound_has_no_platform_cfg`, `ac2_tree_order_and_counts_has_no_platform_cfg`,
+    `ac2_failed_rename_removes_own_temp_and_keeps_target_has_no_platform_cfg` — PASS (set of `cfg`/`cfg_attr`
+    attributes with a platform predicate on the fn, in its body at any depth, on the inline mods around it, the
+    file's `#![cfg]` and its `mod` declaration = ∅; each first asserts the fn exists once as a `#[test]`). A
+    `cfg!(…)` expression is not counted (Interface (1): errno "chosen in the test by platform; no `cfg`").
+    Guard (Linux test names) → `every_linux_test_name_of_the_base_still_exists`, `base_list_is_the_pinned_measurement`
+    — PASS. How the base list is pinned: the 1,121 names of `ee9b130` are a constant in `guard_t079.rs`
+    (`BASE`, `BASE_COUNT = 1121`), each `<file>::<inline mod path>::<fn>` (the registry's `file`/`item` form),
+    computed by the file's own `syn` scan (as `no-skip` walks `crates/`, `apps/`, `xtask/` without `target`,
+    `.git`, `.worktrees`, `xtask/fixtures`; cfgs evaluated for Linux, unknown predicates false). Not `cargo test
+    --workspace -- --list` in the test: it would build the workspace inside a test, can list Linux names only on
+    Linux, and on Windows `kiln-workspace` does not compile, so `xtask` would fail there (against AC-5). No git
+    history read (CI checks out `fetch-depth: 1`). Cross-checks of the scan: `cargo test -p xtask -- --list`
+    (285 names incl. this file's then 7) equals the scan's `xtask/` names one to one (per binary and name);
+    per-file `#[test]` line counts (`git ls-files '*.rs'` minus fixtures, a `^\s*#\[test\]\s*$` count) equal the
+    scan's per-file counts, total 1,121. Doc tests are not in the set (names carry line numbers); no
+    macro-generated test exists on the base.
+    AC-4, Pinned (j): local, implementer and reviewer; AC-3, AC-5: CI — not tests here.
+  - Self-check: scratch `git archive` of this branch + `git apply` of the patch + a stub of the twelve (the 12
+    fns given `#[cfg(target_os = "linux")]`, 12 entries appended, no split; never committed): all 8 tests pass.
+    Mutants on it (the tests read files at run time; each restored after):
+    | Mutant | Killed by |
+    |---|---|
+    | entry missing (one of the 12; one of the 8) | ac1_registry… (+ ac1_pending… for a pending one) |
+    | one of the 12 `platforms = "unix"` (a pending one; a non-UTF-8 one) | ac1_registry… |
+    | a (2a) `unix` entry given `linux` | ac1_registry… |
+    | 21st entry (new item; duplicate of an expected one; a 3rd in `project.rs`) | ac1_registry… |
+    | `pending` without `task`; with the other task | both ac1 tests |
+    | `pending` with `expires = "2027-01-31"`; without `expires` | ac1_pending… |
+    | counterpart `none` where `pending` (task removed or kept); `pending` where `none` | both ac1 tests (`none`+task kept: both) |
+    | a `none` entry with a `task`; `file` with `\` separators | ac1_registry… |
+    | `#[cfg(unix)]` / `#[cfg(target_os = "linux")]` on `tree_order_and_counts` | ac2_tree_order_and_counts… |
+    | `#[cfg(target_os = "macos")] let` in `disk_refusals_through_control` | ac2_disk_refusals… |
+    | `#[cfg(unix)]` on `disk.rs`'s `mod tests`; on `mod disk;` in `lib.rs` | ac2_failed_rename… |
+    | `#[cfg_attr(target_os = "macos", …)]` on `deep_trees_stop_at_the_depth_bound` | ac2_deep_trees… |
+    | base test renamed; base test's `#[test]` removed (`kiln-text` `insert_matches_naive_model`) | every_linux_test_name… |
+    | one of the 12 behind `target_os = "macos"` or `windows` instead of `linux` | every_linux_test_name… |
+    | a fixed test renamed | every_linux_test_name…, ac2_tree_order… |
+    Accepted forms (pass): entries reordered; `test = [{ … }]` inline array with single-quoted strings; comment
+    lines; a `cfg!(target_os = …)` expression in a fixed test; a split of a non-UTF-8 test (original name kept,
+    new `linux` fn registered).
+  - QUESTION Q-T1: the item of the 4 non-UTF-8 entries is not given when a test is split. Interface (1):
+    "the non-UTF-8 case only becomes a `linux` test (split out if the test checks other things)"; Interface
+    (3): "a split keeps the original name for the part that stays"; the split-out fn's name is not in (2).
+    Two of them clearly check other things (`disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names`
+    at `acceptance_t019_workspace.rs:202`: links, FIFO, socket, `\` name, with `skipped` 3 counted over all;
+    `tree_counts_skipped_names_on_disk` :408 also counts a `\` name). Until a ruling AC-1 fixes, for those 4,
+    `file` (2 + 2), `platforms = "linux"`, `counterpart = "none"`, no `task`, and accepts any distinct `item` (the
+    other 16 tuples exact). Proposed wording: A, the item is the Interface (1) name (no split; the whole test is
+    `linux`); or B, the spec names each split-out fn (e.g. `<original>_non_utf8`) — then the 4 open tuples
+    become exact (one constant each in `acceptance_t079.rs`).
+  - Note for the director: `guard_t079.rs` pins the whole workspace's base names, as the criterion says; a later
+    task that renames or removes a test must edit this gate-path file (D-043's concern; the spec chose it).
+  - Checks: `cargo fmt --check` ok; `cargo clippy -p xtask --tests -- -D warnings` ok; `cargo xtask no-skip`
+    PASS (199 files, 0 registered); `cargo xtask hygiene` PASS; `cargo check -p xtask --locked --target
+    x86_64-pc-windows-msvc --test acceptance_t079 --test guard_t079` and the same for `aarch64-apple-darwin`: 0
+    errors (`--tests` for Windows: errors only in `publish.rs` and `acceptance_t005_r4.rs`, the patch's AC-4).
+    Not run: `cargo xtask ci` (it builds the workspace; this run builds only `-p xtask` targets), macOS and
+    Windows runs. Scratch removed. · next: director (Q-T1), join
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
