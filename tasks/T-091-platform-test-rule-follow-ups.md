@@ -36,6 +36,8 @@ The rule of T-071 has one hole left by its rulings and two untested cases:
 - **R2-6 (nit).** `guard_t071`'s assertion that accepts `cfg-disabled` for a conditional `ignore` is wider than
   "s1 clarified" needs.
 - **R2-7 (nit).** Twins inside a `#[cfg(feature = …)]` module are not reported.
+- **R4-1 (test gap; `reviews/T-071-r4.md`, run R-324).** Nothing notices a clean fixture file the self-test stops
+  reading (`platform-clean.rs`; true of `clean.rs` before this task too).
 
 ## Log
 ### director
