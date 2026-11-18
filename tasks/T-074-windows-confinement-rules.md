@@ -755,6 +755,61 @@ listing kind, the root cases, the registry plan and the gate-tool side (D-235) c
   each (exact strings of Interface (5)); seven portable tests with the fixed names, each choosing Unix or Windows
   expectations by `cfg!(windows)` where they differ; documents copy Pinned (i); Unix unchanged (shown by lib IR).
   No questions so far.
+- 2026-11-18 · R-355 · did: Interface (1) a `#[cfg(windows)]` arm before the symlink arm of `locate_steps`
+  (`is_reparse_point`: `MetadataExt::file_attributes() & 0x400`) → `OutsideRoot`; (2) in `list_dir` a `#[cfg(windows)]`
+  re-binding of `kind` to `Symlink` from `DirEntry::metadata()`'s attributes; (3) the Windows `create_temp` with
+  `custom_flags(0x0020_0000)` and the arm `Err(_) if fs::symlink_metadata(&temp).is_ok() => continue` (exhaustion
+  message unchanged); module docs `:94-96` rewritten (walk, temporary file, T-095). Seven tests with the names of
+  Interface (5), no platform cfg on any test fn; helpers `file_link`/`dir_link`/`junction` defined once per platform,
+  each doing its work (Windows: `symlink_file`, `symlink_dir`, `cmd /C mklink /J` waited at most 30 s; Unix:
+  `symlink`, the junction stood in for by a symlink to the same absolute directory), no-cfg `is_link`, `remove_link`,
+  `assert_every_call_outside` (read, write_atomic, is_file false, list_dir, check_location, list_dir of the root).
+  Where Unix and Windows behave alike (#2 temp names, #9 replaced root, #11 removed root, #12 root through a link) the
+  test has one body asserting on every platform; where they differ (#8/#13 save through a link, #14, #15) it branches
+  on `cfg!(windows)`, both branches asserting. Registry: the nine entries rewritten by a script (four lines → one
+  `counterpart` line; `grep -c 'task = "T-074"' xtask/platform-tests.toml` → 0; diff: 9 insertions, 36 deletions).
+  Documents: Pinned (i) copied word for word (paths.md :50-51, "The root" three bullets, Residual limits bullet, "For
+  the platform report"; project.md after :79-80; control-protocol.md the one sentence).
+- Results (Linux): `cargo test -p kiln-workspace --lib --locked` → 58 passed, 0 failed (51 at base + 7);
+  `cargo test -p kiln-cli --test acceptance_t008_cli` → 9 passed; worktree `cargo xtask no-skip` → `PASS … 201 files
+  scanned, 0 allowlisted skip(s), 35 platform test(s) registered (10 pending)` (AC-4).
+- Unix unchanged: every changed product line outside the test module is under `#[cfg(windows)]` (the arm, two consts,
+  `is_reparse_point`, the list-kind re-binding, three lines inside the Windows `create_temp`) or a comment / doc
+  comment (`git diff -U0 main...HEAD -- crates/kiln-workspace/src/disk.rs`; the only removed lines are the three doc
+  lines `:94-96`). Lib LLVM IR as `reviews/T-073-r1.md`: `git archive` of main `3b2ae24` and of HEAD into two scratch
+  trees of equal path length, `cargo rustc -p kiln-workspace --lib --locked --target <t> -- --emit=llvm-ir -C
+  debuginfo=0 -C codegen-units=1`; raw diff 90 changed lines on each target; after replacing the scratch name,
+  `@alloc_<hash>` names and the 16-byte Location payload of `disk.rs` panic sites: **0 differing lines** on
+  `x86_64-unknown-linux-gnu` (42,860 lines) and `aarch64-apple-darwin` (42,849). Test module: only added items.
+- Windows stand-ins (not linked): `cargo clippy -p kiln-workspace --lib --profile test --locked --target
+  x86_64-pc-windows-msvc -- -D warnings` → Finished, 0 warnings (no C stub); the same without `--profile test` → clean;
+  `cargo clippy --workspace --lib --bins --locked --target x86_64-pc-windows-msvc -- -D warnings` with a scratch stub C
+  compiler (empty object for `-o`/`-Fo`, `AR=llvm-lib`) → Finished, 0 warnings. macOS: `cargo clippy -p kiln-workspace
+  --lib --profile test --locked --target aarch64-apple-darwin -- -D warnings` → clean (not run on macOS).
+- Gate: `cargo xtask ci` attempt 1 → `GATE PASSED` (fmt, clippy, layers, ui-commands, hygiene, schema, scorecard
+  `64 items: 47 verified`, test `1154 passed, 0 failed, 0 ignored in 135 suites`, no-skip `35 … (10 pending)`; fuzz,
+  budgets EMPTY). One attempt.
+- D-235, main's tool (`git archive main` (`3b2ae24`) built in scratch, run with the worktree as cwd): `no-skip` PASS
+  `35 platform test(s) registered (10 pending)`; `hygiene` PASS (692 tracked files clean); `scorecard --check` PASS
+  (64 items: 47 verified); `layers` PASS (11 crates, 14 edges); `ui-commands` PASS; `schema` PASS (30 commands).
+- D-249: `cargo test -p xtask --test guard_t079 --test acceptance_t079` → 2 + 6 passed; `cargo test -p kiln-workspace
+  --test acceptance_t073 --test guard_t073` → 1 + 10 passed; `acceptance_t008_cli` 9 passed; the seven `paths.md`
+  quotes of the registry untouched (no-skip PASS checks each quote occurs).
+- **Expectation for the CI round (Windows, T-073's step, `-p kiln-workspace --lib`): `running 43 tests`, `43 passed;
+  0 failed`**, among them `ok` for each of: `disk::tests::link_at_temp_name_is_not_followed_on_every_platform` (cases
+  a-d each save `Ok`; a uses `.kiln-tmp-2`, b-d `.kiln-tmp-1`; links, outside and missing path unchanged — first
+  evidence for Pinned (b2)), `disk::tests::save_through_a_link_on_every_platform` (rel, abs, dir link, junction: read
+  and save `OutsideRoot`), `disk::tests::root_replaced_by_a_link_on_every_platform`,
+  `disk::tests::root_removed_on_every_platform` (incl. the unprobed junction-to-a-new-directory case),
+  `disk::tests::root_given_through_a_link_on_every_platform` (junction, and the unprobed directory symbolic link),
+  `disk::tests::check_location_inside_on_every_platform`, `disk::tests::check_location_outside_on_every_platform`
+  (junction loop made on `C:`, unprobed). Linux and macOS: the same seven `ok` (Unix branches). A failure in
+  `file_link`/`dir_link`/`junction` naming that a link cannot be made means the fixture volume (F-12): I move that
+  test's fixtures under the workspace `target/`. A save that changed an outside path, or a root case not
+  `outside_root`, is a confinement defect: `QUESTION:` and stop (Pinned (b2), Interface (4)).
+- Unchecked until the CI round: every Windows sentence of Pinned (i) that cites `guard_t074.rs` or "every call";
+  the directory symbolic link as `--root`; the temporary-name sentence of `control-protocol.md`; any Windows run of
+  the seven tests.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
