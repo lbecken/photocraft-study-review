@@ -409,6 +409,107 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
 - step (a): `git apply --check` then `git apply tasks/T-079-restore-from-T-071.patch` → commit `c61acc5` (the patch
   alone, 8 files, +98 −4). `cargo xtask no-skip` → `PASS  no-skip: self-test ok (17 known findings); 197 files
   scanned, 0 allowlisted skip(s), 8 platform test(s) registered (0 pending), today = 2026-11-18`.
+- step (b), `/dev/full` (3) → `05ad9da`: `#[cfg(target_os = "linux")]` on `ac8_stdout_write_failure_exits_1`,
+  `run_and_control_exit_1_when_stdout_cannot_be_written`, `run_exits_1_when_stdout_cannot_be_written`; no helper is
+  used only by them (`run_cmd`, `output_with_timeout` have other callers). Entries `pending` T-076, `expires =
+  "2026-12-31"`; `doc`/`quote`: `docs/protocol/ui.md` / "writing stdout failed" (exit-code table, line 45) for `kiln
+  script`, `docs/control-protocol.md` / same (lines 213–214, the `run` and `control` rows) for the two `kiln-cli` tests
+  (`grep -n "writing stdout failed" docs/protocol/ui.md docs/control-protocol.md`). `no-skip`: `… 11 platform test(s)
+  registered (3 pending) …` PASS.
+- step (b), no display (5) → `8ce9cd4`: the cfg on the three `acceptance_t065.rs` tests, `window_t065.rs`'s and
+  `guard_t055.rs`'s test; the same cfg on what only they use: in `acceptance_t065.rs` `use std::net::{…}`,
+  `UNUSED_DISPLAY`, the `Display::WaylandOnly`/`Unreachable` variants and their two match arms in `kiln_in`,
+  `assert_display_unused`, `assert_no_window`; in `window_t065.rs` `assert_no_window`; in `guard_t055.rs` four `use`
+  lines, `TIMEOUT`, `kiln_no_args`. No twin anywhere. Entries `pending` T-077, `docs/protocol/ui.md` / "If the window
+  system cannot be started it exits 2" (line 67). `no-skip`: `… 16 platform test(s) registered (8 pending) …` PASS.
+  Stand-in for macOS: `rustup target add aarch64-apple-darwin` → already installed; `cargo check --target
+  aarch64-apple-darwin` first failed in `tree-sitter`'s C build (`cc: unrecognized option '-arch'`), so a probe-only
+  stub C compiler (ADR-0009 a3: compiles an empty unit with `clang --target=arm64-apple-macos11`; scratch, never
+  committed) as `CC_aarch64_apple_darwin`, `AR_aarch64_apple_darwin=llvm-ar`. Then `cargo check --workspace
+  --all-targets --locked --target aarch64-apple-darwin` and `cargo clippy … -- -D warnings`: exit 0, no warning.
+  Sanity check of the stand-in: with the cfg removed from `window_t065.rs`'s `assert_no_window`, clippy for that
+  target says `error: function \`assert_no_window\` is never used` (cfg restored, not committed).
+- step (c), the four portable fixes (no cfg, no platform branch in the test fns; each test run green on Linux):
+  - `disk::tests::failed_rename_removes_own_temp_and_keeps_target` → `1695c0c`. Old: `assert_eq!(used,
+    Some(dir.join(".kiln-tmp-1")));` New: `assert_eq!(used, Some(dir.canonicalize().unwrap().join(".kiln-tmp-1")));`
+    Same value on Linux (`TMPDIR` unset, `readlink -f /tmp` = `/tmp`, `fresh_dir` is under `std::env::temp_dir()`);
+    `DiskFs::new` resolves the root with `fs::canonicalize` (`disk.rs:179`). Still an exact equality.
+  - `guard_t038_cli::disk_refusals_through_control` → `c63f846`. Old (in `Work::loop_links`): `Some(40), // ELOOP`.
+    New: `Some(ELOOP)` with `#[cfg(target_os = "linux")] const ELOOP: i32 = 40;` and `#[cfg(target_os = "macos")]
+    const ELOOP: i32 = 62;` at file level (62 is the number the macOS run printed: `(os error 62)`, Interface (1)).
+    Linux: the same literal 40. Windows: the file does not compile there before T-092 anyway (`std::os::unix`).
+  - `acceptance_t019_cli::deep_trees_stop_at_the_depth_bound` → `cf23269`. Old: `mkdir -p` of `chain(2100)` in
+    `c2100` and `assert!(out.status.success(), "mkdir -p of the 2,100-deep chain")`. New: the chain built with short
+    paths only (each level made at `c2100-parent`, the chain so far renamed into it, 2,099 times, then renamed to
+    `c2100/d`), each step `.expect("a level of the 2,100-deep chain")`. The assertions on the tree are unchanged:
+    `find d -mindepth 2099 -type d` → exactly 1 line ("the chain is 2,100 deep"), and the listing equals `expected`.
+    The method is the one `guard_t038_cli.rs::deep_chain` uses; the spec's words are "one level at a time relative to
+    the last directory": std has no `mkdirat`/per-thread `chdir`, so I chose renames (doubt D2 below).
+  - `acceptance_t019_cli::tree_order_and_counts` → `0707a2c`. The only case-only twins in its trees are `s/t/Z` and
+    `s/t/z` of the `dot_git` tree (random names are `[a-e0-9._-]` only, `STEM`/`EXT`; no hand tree has an upper-case
+    name: `sed -n 825,965p … | grep '[A-Z]'`). Old: `let dot_git = tree_of(&[…]);` and `assert_eq!(got.entries,
+    entries(&[… ("s/t/Z", "file"), ("s/t/_", "file"), ("s/t/z", "file") …]));` New: `let dot_git =
+    as_held_in(tree_of(&[…]), &w.dir);` and `assert_eq!(got.entries, as_listed_in(entries(&[…same…]), &dot_git,
+    &w.dir));` where both helpers return their input unchanged unless `folds_case(dir)` (a probe file `case-probe-Aa`
+    found as `case-probe-aA`) — so on Linux every value is the old one; where case folds, the later twin (and what is
+    below it) is not written and not expected. `check_against_model` unchanged. Not exercised on a folding file
+    system here (`mount -t tmpfs -o casefold` refused: the kernel has no `/sys/fs/unicode`); the filter's logic
+    checked on a scratch copy (keeps `s/t/Z`, drops `s/t/z`; drops `a/y` after `A`). Doubt D3 below.
+- QUESTION (Q-9, blocking): the four non-UTF-8 tests. The spec says "the non-UTF-8 case only becomes a `linux` test
+  (split out if the test checks other things)" and (3) "a split keeps the original name for the part that stays";
+  AC-1 is an equality on `(file, item, …)` whose items the test author can only take from Interface (1)'s names; the
+  dispatch says "a marked test keeps its body". All four check other things: `disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names`
+  (`acceptance_t019_workspace.rs:202`: kinds, links, FIFO, socket, `OutsideRoot`, loop → `Io`, plus `n\xff`, `d\xfe`,
+  `b\s`, `skipped` 3), `tree_counts_skipped_names_on_disk` (`:408`: `bad\xff` and `back\slash`, `skipped` 2),
+  `disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names` (`project.rs:106`: kinds, links, FIFO, socket,
+  `back\slash`, `n\xff`, `skipped` 2, and **`b.rs` beside `B.rs`**, a case-only twin that macOS folds, so a portable
+  half fails there too; spec silent), `documented_differences_from_git` (`project.rs:357`: braces, trailing tab,
+  nested `.git`, `back\slash`, `n\xff`, `skipped` 2, `ignored` 4). A: mark the four whole (body kept, original names
+  registered; AC-1 holds; on macOS their other checks then do not run). B: split, the `linux` half keeps the
+  original name and the whole body (registered), a new portable test under a new name carries the rest with
+  `skipped` one less, plus a case fix in `project.rs:106`'s half (outside the spec; the new halves' macOS result
+  unknown until CI). C: split, the portable half keeps the name: the 4 registered items get new names, which AC-1 (as
+  the test author writes it from the spec) cannot contain. I have not chosen; the four are unmarked at this head.
+- gate attempt 1 (`cargo xtask ci` at `0707a2c`, 16 entries): `GATE PASSED in 649.8s` (`test` 1122 passed, 0 failed;
+  `no-skip` `… 16 platform test(s) registered (8 pending) …`).
+- Ruling w1/w2 (D-241, main's task file) received mid-run; accepted: Q-9 is answered by it. All four are split,
+  because each also checks things that hold on macOS (kinds, links, FIFO, socket, `OutsideRoot`, loop, `back\slash`;
+  gitignore braces, trailing tab, nested `.git`). → `7600934`: the original name keeps the portable part (the
+  non-UTF-8 lines removed, `skipped` one or two less: 3 → 1, 2 → 1, 2 → 1, 2 → 1); a new `<name>_non_utf8` test,
+  `#[cfg(target_os = "linux")]`, holds the base body **whole** (checked: each copy equals the fn on `ee9b130` but for its
+  name and, in `project.rs`, the fixed fixture tag `kinds`/`s6` → `kinds-nu8`/`s6-nu8`, since `work(name)` is keyed
+  by name and pid only and the two would collide in parallel), so every Linux assertion of the base still runs on
+  Linux. `use std::ffi::OsStr` and `OsStrExt` in both files get the same cfg (only the `_non_utf8` tests use them;
+  the stand-in reports `unused import` without it). In `project.rs`'s portable
+  `disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names` `B.rs` is `C.rs` (and its expected entry): `B.rs` beside
+  `b.rs` cannot exist on a case-folding file system; `C.rs` still sorts before `b.rs` by bytes and after it by a
+  case-blind order; the `B.rs`/`b.rs` pair stays in the `_non_utf8` copy (doubt D4). Entries `none`, reason "no file
+  name on macOS or Windows can be invalid Unicode", `docs/protocol/project.md` / "not valid UTF-8 or contain"
+  (line 26). `no-skip`: `… 20 platform test(s) registered (8 pending) …` PASS; the eight tests pass on Linux.
+- step (d) → `1fa1891`: "The registry has no entry yet: …" replaced by: the registry lists the tests of `xtask`'s
+  queue, worktree and publish tools (Linux or Unix only, no counterpart) and the product tests of a facility macOS
+  lacks (`/dev/full`, non-UTF-8 names, X11 without a display), each Linux only; the Windows marking is T-092's.
+  Evidence: `grep -c '^\[\[test\]\]' xtask/platform-tests.toml` = 20; per `file`: 8 under `xtask/` (`queue.rs` 2,
+  `worktree.rs`, `publish.rs`, `acceptance_t013_publish.rs`, `guard_t005.rs`, `acceptance_t005_r3/r4.rs`), all
+  `counterpart = "none"`; `platforms`: 17 `linux`, 3 `unix` (the 3 are `xtask`'s); the 12 product entries all `linux`;
+  `ls tasks | grep T-092` → `T-092-mark-product-tests-for-windows.md`.
+- Main's gate on this tree (Pinned (j)): main had moved to `b0238ed` (6 ledger/metrics commits after `ee9b130`, only
+  `tasks/`, `metrics/`, `handoffs/`: `git diff --stat ee9b130 main`); `git archive main | tar -x` into a scratch dir,
+  one `cargo build -p xtask --locked` there, that binary run in the worktree: `PASS  no-skip: self-test ok (17 known
+  findings); 197 files scanned, 0 allowlisted skip(s), 20 platform test(s) registered (8 pending), today =
+  2026-11-18`; `PASS  hygiene: reviews: 55 of 67 …, ok; session-paths: 675 tracked file(s) clean …`; `PASS  scorecard:
+  64 items: 47 verified, 0 implemented, 0 failing, 17 planned.`; `PASS  layers: 11 crates, 14 internal edges, layer
+  table holds`; `PASS  ui-commands: self-test ok; 14 kiln-ui file(s) scanned, 5 allowlisted path(s)`; `PASS  schema:
+  30 commands; audit ok; docs/commands.json current`.
+- AC-4: `cargo check -p xtask --all-targets --locked --target x86_64-pc-windows-msvc` → exit 0, 0 `error` lines.
+  macOS stand-in (stub C compiler as above): `cargo clippy --workspace --all-targets --locked --target
+  aarch64-apple-darwin -- -D warnings` → exit 0, no warning, after the split too.
+- Doubts: D2 the deep chain is built by renames, not "relative to the last directory" (same effect: no call names a
+  long path). D3 `tree_order_and_counts`' case filter has not run on a folding file system; the spec named only the
+  model, and the literal list after it (`s/t/Z` and `s/t/z`) also had to pass through the filter or the test could
+  not pass on macOS. D4 `C.rs` for `B.rs` in a portable part (spec silent). D5 the CI record showed only each
+  failing test's first panic: a fixed or split test may fail later on macOS for another reason (e.g. the
+  `symbols-deep-chain` case of `disk_refusals_through_control` on macOS's shorter `PATH_MAX`); only CI shows it.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
