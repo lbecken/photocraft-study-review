@@ -2,14 +2,14 @@
 id: T-095
 title: "On Windows, refuse as invalid_path the characters Windows cannot store in a name (':' with streams and drive prefixes, <>\"|?*, control characters), and state how reserved names, trailing dots and spaces, case and short names behave"
 tier: high              # METHODOLOGY v1.5 §4: the confinement boundary (the lexical check of every request path) and a security property a document states. No gate path, no dependency change; no workflow edit (T-072's general reported Windows step runs the test file, D-254).
-state: specified
+state: ready
 owner_role: planner
 scorecard_items: []     # none claimed (ws.* items verified on Linux; per-platform confirmation is the evaluator's)
 depends_on: [T-074, T-093]   # T-074 merged (25054fe); T-093 (specified, low): shares docs/protocol/paths.md and project.md and states the macOS case sentence this task's Windows one sits beside (Q-5)
 touches:                # one role per path (D-153)
   - crates/kiln-workspace/src/path.rs        # implementer: Interface (1) under #[cfg(windows)] in RelPath::new, and its #[cfg(test)] module (one new portable unit test; the three existing test names unchanged)
   - docs/protocol/paths.md                   # implementer: the sentences of Pinned (i) for paths.md
-  - docs/protocol/project.md                 # implementer: the Windows clause of `skipped` (:26, :99) and the D-270 citation (:82-83)
+  - docs/protocol/project.md                 # implementer: the Windows clause of `skipped` (:26-32, :105) and the D-270 citation (:88-89) (lines at main `efcab77`)
   - docs/control-protocol.md                 # implementer: a Windows sentence after the lexical bullet (bullet verbatim), and the D-270 citation (:144-147)
   - crates/kiln-workspace/tests/guard_t095.rs   # test author: Interface (5); passes on Unix base
   - crates/kiln-workspace/tests/acceptance_t095.rs   # test author: AC-D1 to AC-D3, the document statements (ruling 4, D-272; added at the spec check); every test fails on base
@@ -234,21 +234,31 @@ so T-098's goal (every target compiles) is not touched; T-099's inventory loses 
     ordinary files of the project for Kiln, which reaches every file through `\\?\` paths. Other Windows programs may
     not open them (T-095; CI run 44290286460)." Evidence: PROBE I1-I3, I5, I11, I12 (for `CON`, `NUL`, `nul.rs`,
     `con.txt`, `a.`, `b `); `aux.rs` itself: `guard_t095` in the CI round (not in the probe; corrected (spec check)).
-  - `paths.md` "The rule", after the re-open item, a Windows bullet: "On Windows names differ only by case on the
+  - `paths.md` "The rule", at the end of the re-open item (`:127-140` at `efcab77`), after its last sentence "A refused
+    re-open leaves the document open and unchanged.", with T-093's macOS sentence moved there from after "reads
+    nothing." (`:128-132`), so that "It is refused with `outside_root` …" again follows "reads nothing." and "It" means
+    the path already open (D-278 note 2; re-check after T-093, corrected): "Case: on macOS, on the runner's volume, …
+    unmeasured on macOS." (T-093's sentence word for word, its first word lower-cased), then this task's Windows sentence.
+    Registry quotes kept word for word: "A path that is already open is checked again, for where it leads only." and
+    "is refused with `outside_root` when the root path no longer leads to the root" (shown on the sketch, below). The
+    Windows sentence: "On Windows names differ only by case on the
     default file system: `F.TXT` reads and saves `f.txt` (after the save the file is named <measured>), and an 8.3 short
     name, on a volume that has them, names its long one (<measured or unchecked>). A path already open is recognised
     by its text, so `doc.open` under another spelling opens a second document of the same file, and the later save
     replaces the other's content." Evidence: PROBE I7, I8, I9; the rest to be measured by the director in `tasks/ci-runs/T-095-early-1.md` (D-275 Q-C).
     Beside T-093's macOS row 4 (Q-5).
-  - After T-093 merges (added at the spec check): T-093's "Platforms" bullet in "Residual limits" ends "names and case
-    on Windows are not yet stated (T-095)" (`task/T-093` at `234f98c`, `docs/protocol/paths.md`). That clause becomes
-    false with this task and is replaced by "names and case on Windows: see Lexical refusals, The rule and the Windows
-    paragraphs of The root (T-095)". To be re-checked against T-093's merged wording before dispatch.
-  - `project.md:26` and `:99`, appended: "On Windows also names containing a character refused by
+  - T-093's "Platforms" bullet in "Residual limits" (`paths.md:166-176` at `efcab77`, as merged) ends "On Windows they
+    hold with the differences stated in The root and The rule (T-073, T-074); names and case on Windows are not yet
+    stated (T-095)." That ending becomes "… (T-073, T-074), and with the names and case of Lexical refusals, The rule
+    and The root (T-095)." (re-checked against the merged text, corrected). In the same bullet, D-278 note 1: "the 3
+    being `ui.window`'s" becomes "the 3 being `ui.window`'s by the registry, `xtask/platform-tests.toml`" (the cited
+    record says only "3 registered absent here"; added).
+  - `project.md` `skipped` bullet (`:26-32`, ending with T-093's macOS clause "… is unmeasured on macOS.") and `:105`,
+    appended after each: "On Windows also names containing a character refused by
     `docs/protocol/paths.md` "Lexical refusals" (such names cannot be made through Windows itself; unchecked)."
   - `control-protocol.md`, after the lexical bullet: "On Windows (T-095) also a path containing `:`, `<`, `>`, `"`, `|`,
     `?`, `*` or a control character; see `docs/protocol/paths.md`."
-  - D-270: `control-protocol.md:144-147` and `project.md:82-83` name CI run 44358453526
+  - D-270: `control-protocol.md:143-147` and `project.md:88-89` (at `efcab77`) name CI run 44358453526
     (`tasks/ci-runs/T-074-round-1.md`, all 15 guards) for the `awa3_*` and `awa1_*` tests. `paths.md`'s "its four
     `awa1_*` tests … in CI run 44307677646" stays: four is what that run held. Exact replacements (corrected (spec
     check): the draft gave none, and AC-D3 needs them): in `control-protocol.md` "(shown in CI run 44307677646,
@@ -318,10 +328,14 @@ The record `tasks/ci-runs/T-095-round-N.md`, from the artefacts of the task's he
 - **T-072's general step** (`windows-tests.txt`, each `crates/kiln-workspace/tests/*.rs` run with `-- --show-output`)
   shows `==== guard_t095: exit status 0`, every `guard_t095` test `ok`, and its `MEASURED:` lines; and `====
   acceptance_t095: exit status 0` with its three tests `ok` (added at the spec check: the step runs every file there).
-- After T-092 has merged (it is queued first, D-275 Q-G), re-read at dispatch against T-092's merged record: the general
-  step prints 17 status lines — T-092's 13 at `exit status 0`, `acceptance_t095` and `guard_t095` at 0, and
-  `acceptance_t019_workspace` and `project` at 101 (T-100's) — and T-073's step shows the library at T-092's merged
-  figure plus one (`45` + 1 = `46 passed`, if T-092 lands with 45).
+- Counts in the two Windows steps, both figures given (D-275 Q-G; T-092 is queued before this task):
+  - On main now (`efcab77`, T-092 not merged): the general step prints 15 target lines (`tasks/ci-runs/T-074-round-1.md:178-192`;
+    4 at `exit status 0`) and the library 43 tests (D-270); with this task, 17 lines (`acceptance_t095` and
+    `guard_t095` added, both 0) and the library `44 passed`.
+  - After T-092 (its record `tasks/ci-runs/T-092-round-2.md:127-143`, `:116`: 15 lines, 13 at 0, `acceptance_t019_workspace`
+    and `project` at 101; library `45 passed`): with this task, 17 lines (15 at 0, those two at 101) and the library
+    `46 passed`. The criterion holds the second figure if T-092 has merged when this task's CI round runs, else the
+    first; the record states which main it ran on.
 
 **One CI round expected, two if a measured sentence needs rewording** (the spec check: one only with an early look
 that measures the two placeholders before the join, Q-C A). If T-092 has merged first, `gate-windows`'s
@@ -464,7 +478,9 @@ edits the same documents, names run 44358453526 (all 15 guards; `tasks/ci-runs/T
 - Estimate 580,000; ceiling 1,100,000.
 
 ### Spec check (fresh planner)
-**Re-check at dispatch** (against main then, about ten minutes; T-093 and T-092 merge first):
+**Re-check at dispatch** (against main then, about ten minutes; T-093 and T-092 merge first). **Done after T-093
+merged, at main `efcab77`:** points 1, 2, 3, 5, 6 closed (below, "Re-check after T-093"); point 4 open until T-092
+merges (both figures in the pending criterion).
 1. After T-093: the line numbers this spec cites in `project.md` (`:26`, `:82-83`, `:99`) and `paths.md` (`:71-72`, "The
    rule" re-open item, "Lexical refusals"), and the exact text of AC-D3's `project.md` anchor.
 2. After T-093: its "Platforms" bullet clause "names and case on Windows are not yet stated (T-095)" — the text Pinned
@@ -474,6 +490,28 @@ edits the same documents, names run 44358453526 (all 15 guards; `tasks/ci-runs/T
 5. That none of the four Interface (6) files, nor `path.rs`, `guard_t095.rs`, `acceptance_t095.rs`, entered another
    in-flight task's `touches` (T-098, T-100, T-099 are drafts now).
 6. `git diff <this check's main> main -- crates/kiln-workspace/src/path.rs crates/kiln-workspace/src/disk.rs` empty.
+
+**Re-check after T-093** (main `efcab77` = `7e7e082` + ledger; clone `/home/user/kiln-check-T095` pulled to it, sketch
+re-applied, `target/` deleted):
+1. Line numbers drifted by T-093 and are corrected: `paths.md` T-074's clause `:71-72` → `:77-78`, "Lexical refusals"
+   `:80`, re-open item `:127-140`, "Platforms" `:166-176`; `project.md` `skipped` `:26-32`, D-270 `:82-83` → `:88-89`,
+   git differences `:99` → `:105`; `control-protocol.md` unchanged (`:128-130`, `:143-147`). AC-D3's anchors unchanged
+   in text (`project.md:88-89` still reads "`guard_t074.rs` in CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`;").
+2. T-093's merged text: the Platforms clause is as the spec expected, wording as quoted in Pinned (i) (corrected to
+   the merged words). Its row 4 sentence was merged inside the re-open item, between "reads nothing." and "It is refused
+   …" (D-278 note 2): Pinned (i) now moves it to the end of the item with the Windows sentence. Row 3 is a new paragraph
+   in `project.md` (`:128-132`, case folding in listings, macOS only); this task's (3) adds no listing sentence, and the
+   Windows case for listings is the measured spelling of item 3, so no contradiction. `macos_t093.rs` expects folding on
+   Windows (its line 6), as `guard_t095`'s (3) does.
+3. Registry quotes: 14 of 14 present in the three documents after the sketch (35 entries in all); `no-skip` PASS (`209
+   files scanned … 35 platform test(s) registered (10 pending)`); `acceptance_t008_cli` 9 passed; the sketch
+   `acceptance_t095` `0 passed; 3 failed` on `efcab77`'s documents and 3 passed with the text; `guard_t095` sketch passes;
+   no "not yet stated" left in `paths.md`. No test or registry entry quotes T-093's moved sentence (grep).
+5. No new task took these paths: of the tasks not merged or abandoned, only drafts (T-007, T-024, T-030, T-044, T-047,
+   T-050, T-080, T-094) name any of this task's ten paths; none is in flight. T-092 (queued next) shares none.
+6. `git diff --stat 76ccb9f efcab77 -- crates apps xtask` touches only `apps/kiln-cli/tests/macos_t093.rs`: `path.rs`
+   and `disk.rs` unchanged.
+4. Open: T-092 not merged; both figures are in the pending criterion.
 
 Read against main `76ccb9f` (ledger-only since `4eb349d` and `53be751`: `git diff --stat 53be751 76ccb9f` touches only
 `docs/decisions.md` and five task files; `path.rs`, `disk.rs`, the three documents unchanged), the branches `task/T-093`
@@ -721,10 +759,12 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
 ## Notes from T-093's review (director, D-278)
 - `docs/protocol/paths.md`, the sentence that the three absent tests on macOS are `ui.window`'s: true by the
   registry (`xtask/platform-tests.toml`), but the cited record only says "3 registered absent here": cite the
-  registry there.
+  registry there. → Handled: Pinned (i), the "Platforms" item (implementer, `paths.md:170-171`).
 - `docs/protocol/paths.md`, row 4's macOS case sentence stands before "It is refused with `outside_root` …": that
   "It" now reads across the inserted sentence. When this task writes the Windows case sentence beside it, order the
   paragraph so the pronoun's subject is clear, keeping the phrases the registry quotes word for word.
+  → Handled: Pinned (i), the "The rule" item (implementer): T-093's macOS sentence and the Windows sentence go to the end
+  of the re-open item, so "It is refused …" follows "reads nothing."; both quotes shown present on the sketch.
 
 ## Log
 ### director
@@ -754,6 +794,11 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
   gains the counts after T-092; estimate 580,000; re-check list at the top of the spec check. Ran on the sketch:
   `acceptance_t032.rs` and `main.rs` in the `cfg!(windows)` form, `no-skip` PASS (35, 10 pending), both tests pass on
   Linux, Windows clippy clean with the stand-in; clone's `target/` deleted · next: director; re-check at dispatch
+- 2026-11-18 · spec check, re-check after T-093 merged (main `efcab77`) · specified (state untouched) · did: points 1,
+  2, 3, 5, 6 of the re-check list closed; line numbers corrected; the Platforms ending re-worded to T-093's merged
+  text; D-278 notes 1 and 2 placed in Pinned (i); both count figures (main now / after T-092) in the pending criterion.
+  Ran in the clone pulled to `efcab77`: sketch docs re-applied, quotes 14/14, `no-skip` PASS, `acceptance_t008_cli` 9,
+  sketch acceptance 3 failed on base / 3 passed; `target/` deleted · next: director (point 4 after T-092)
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
