@@ -99,12 +99,15 @@
 //!   location is the root joined with the request's segments. A listing gives such an entry
 //!   kind `Symlink` (from the entry's own attributes), so it is never descended. Not on the
 //!   walk: the root path and the directories above it (resolved as above).
-//! - The temporary file (T-074) is created with `FILE_FLAG_OPEN_REPARSE_POINT` besides
-//!   `create_new`, so a link or junction at a candidate name is never followed; a candidate
-//!   whose create fails while an entry exists at that name (`symlink_metadata`, nothing
-//!   followed or opened) is skipped as `AlreadyExists` is, and the entry is left as it was; a
-//!   failure with nothing at the name is returned. Only when no name was free does the save
-//!   fail (`AlreadyExists`, as above).
+//! - The temporary file (T-074) is created with `create_new` and `FILE_FLAG_OPEN_REPARSE_POINT`
+//!   (the standard library already adds that flag for `create_new`; it is passed explicitly
+//!   so the rule does not depend on that). A candidate whose create fails while an entry exists
+//!   at that name (`symlink_metadata`, nothing followed or opened) is skipped as
+//!   `AlreadyExists` is; a failure with nothing at the name is returned. Only when no name was
+//!   free does the save fail (`AlreadyExists`, as above). Shown on the `windows-2025` runner
+//!   (CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`): with a junction, a file link to an
+//!   outside file or a dangling file link at a temporary name, alone or as a pair, the save
+//!   succeeds through the next name and the link and what it leads to are unchanged.
 //! - Names that Windows gives a meaning (prefixes, reserved names, streams) and case are not
 //!   decided here (T-095).
 
@@ -408,8 +411,8 @@ fn is_held_root<T: PartialEq, E>(now: Result<T, E>, held: &T) -> bool {
 #[cfg(windows)]
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 
-/// Windows (T-074): `FILE_FLAG_OPEN_REPARSE_POINT`: the temporary create acts on the name
-/// itself, so a link or junction there is never followed.
+/// Windows (T-074): `FILE_FLAG_OPEN_REPARSE_POINT`, passed to the temporary create (std adds it
+/// for `create_new` too): the create acts on the name itself.
 #[cfg(windows)]
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
@@ -467,8 +470,8 @@ fn create_temp(dir: &Path, mode: u32) -> io::Result<(PathBuf, fs::File)> {
 /// Windows (T-073): [`create_temp`] without a mode (the `0600`/`0666` modes are Unix's; the
 /// target's permissions are applied afterwards as on Unix), so `_mode` is not used.
 /// T-074: the create opens the name itself (`FILE_FLAG_OPEN_REPARSE_POINT`), and a name whose
-/// create fails while an entry exists there (`symlink_metadata`, nothing followed or opened;
-/// for example a junction, which does not answer `AlreadyExists`) is taken: the next is tried.
+/// create fails, with any error, while an entry exists there (`symlink_metadata`, nothing
+/// followed or opened) is taken: the next is tried.
 #[cfg(windows)]
 fn create_temp(dir: &Path, _mode: u32) -> io::Result<(PathBuf, fs::File)> {
     use std::os::windows::fs::OpenOptionsExt;

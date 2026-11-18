@@ -79,8 +79,9 @@ file below it succeeds, because the walk lists every directory on the prefix to 
 Symbolic links found in the project are listed with kind `symlink` and never followed, whatever
 they point to; FIFOs, sockets and devices are listed with kind `other` and never opened, so they
 cannot make the command wait. On Windows every entry that is a reparse point is listed with kind
-`symlink` and never descended (T-074; for links and junctions shown by `guard_t074.rs`, for other
-reparse points unchecked). A `.gitignore` is read only when it is a regular file; a
+`symlink` and never descended (T-074; for links and junctions shown by the `awa1_*` tests of
+`guard_t074.rs` in CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`; for other reparse
+points unchecked). A `.gitignore` is read only when it is a regular file; a
 `.gitignore` that is a symbolic link, a FIFO or a directory is listed and contributes no
 patterns. A `.gitignore` whose patterns cannot be compiled contributes no patterns.
 

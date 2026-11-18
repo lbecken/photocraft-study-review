@@ -140,7 +140,11 @@ current directory). What is checked today:
   directory gives a new file, not the target's own, and the temporary file is not owner-only
   while it is written. On Windows no link is followed: a save through a symbolic link or a
   junction is refused (`outside_root`), and a link at a temporary name makes the save use the next
-  name; see `docs/protocol/paths.md`.
+  name, leaving the link and what it leads to unchanged (shown in CI run 44307677646,
+  `tasks/ci-runs/T-074-early-1.md`, for a junction, a file link to an outside file and a dangling
+  file link, alone and as a pair: the `awa3_*` tests of `crates/kiln-workspace/tests/guard_t074.rs`
+  and `disk.rs`'s `link_at_temp_name_is_not_followed_on_every_platform`); see
+  `docs/protocol/paths.md`.
 
 ## Determinism
 

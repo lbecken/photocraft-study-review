@@ -41,16 +41,23 @@ volume serial number and the same 64-bit file index as the held one. Measured on
   root. On Linux and macOS that rename succeeds and the session then refuses every path with
   `outside_root` (`crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root`,
   which passed on all three in that run).
-- Measured on the runner (CI run 44290286460, `tasks/ci-runs/T-074-probe-1.md`): the held root
-  can be removed while a session runs, and every call then answers `outside_root`, also after a
-  new directory takes its name, as on Linux and macOS. Not run on Windows: a directory above the
-  root replaced (Windows refused the rename).
+- The held root can be removed while a session runs, empty or with a file in it; then a read, a
+  save, a check whether a file exists, a listing and `check_location` each answer `outside_root`
+  (a file is never reported as existing), also after a new directory takes its name, as on Linux
+  and macOS. Measured on the runner in CI run 44290286460 (`tasks/ci-runs/T-074-probe-1.md`:
+  `check_location`, `list_dir` and `read`) and in CI run 44307677646
+  (`tasks/ci-runs/T-074-early-1.md`: all five calls, and for the root removed with a file the
+  save of a document opened before, `guard_t074.rs::awa4_root_removed_while_held`). Not run on Windows: a directory above the root
+  replaced (Windows refused the rename).
 - **A difference from Linux and macOS:** a `..` in `--root` is resolved by its text before any
   link is followed: with `link` a junction, `--root link\..\b` is the `b` beside `link`, not the
-  one beside the directory `link` leads to.
+  one beside the directory `link` leads to (CI runs 44290286460 and 44307677646,
+  `guard_t074.rs::awa4_dotdot_after_a_junction_in_the_root_text`).
 - A junction or symbolic link given as `--root` leads to the root; if it is pointed elsewhere
   while a session runs, every call answers `outside_root`, and pointed back the session works
-  there again, as on Linux and macOS.
+  there again, as on Linux and macOS (CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`:
+  `guard_t074.rs::awa4_root_given_through_a_junction_and_retargeted` and
+  `::awa4_root_given_through_a_directory_link_and_retargeted`).
 - A limit, read and not measured: on a file system that does not keep the 64-bit file index
   unique (ReFS is documented so), two different directories can compare equal, so a directory
   that replaced the root could be taken for it (a 128-bit identity is T-094's).
@@ -58,8 +65,10 @@ volume serial number and the same 64-bit file index as the held one. Measured on
 On Windows (T-074) the rules below hold with this difference: no link is followed. Every entry
 on the way that is a reparse point — a symbolic link to a file or a directory, a junction, or any
 other reparse point — makes the path `outside_root`, wherever it leads, and nothing beyond it is
-read or written (`crates/kiln-workspace/tests/guard_t074.rs` on the `windows-2025` runner;
-reparse points other than links and junctions: unchecked, the runner cannot make one). Names
+read or written (`crates/kiln-workspace/tests/guard_t074.rs`, its four `awa1_*` tests, on the `windows-2025` runner in
+CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`, for file links relative and absolute,
+directory links and junctions leading inside, outside and nowhere; reparse points other than
+links and junctions: unchecked, the runner cannot make one). Names
 that Windows gives a meaning, and case, are not yet stated for Windows (T-095).
 
 ## Lexical refusals (unchanged)
