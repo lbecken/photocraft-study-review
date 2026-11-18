@@ -12,7 +12,11 @@
 //! child passed and that the marker exists and is owned by U. Both identity branches run the
 //! whole scenario; nothing is skipped. Every child has a 10 s timeout, which only detects hangs.
 //! No message text is asserted: `Display` is only checked to name no part of the work path.
+//!
+//! Unix only (T-092): modes and identities; on Windows unreadability is an access list, out of
+//! scope (ADR-0009 (b)). Listed in `xtask/platform-tests.toml` as `<file>`.
 #![cfg(test)]
+#![cfg(unix)]
 
 use std::collections::BTreeMap;
 use std::fs;
