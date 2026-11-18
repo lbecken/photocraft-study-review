@@ -422,6 +422,9 @@ either a "Test list" step plus its upload line (A1) or `if: always()` on the ful
   on its head rebased on a main that holds this task.
 - D-235 applies: before the join, builder and reviewer run main's `xtask` (built from `git archive main` in a
   scratch directory) on the candidate tree.
+- Added 11:20Z (from T-074's planner, sent to the test author): AC-9 as written does not check that the general
+  Windows step passes `--show-output`; Interface (6) requires it (the `MEASURED:` lines of later tasks depend on it).
+  The test author checks the flag in the step's command; the implementer's step carries it as Interface (6) says.
 
 ## Log
 ### director
