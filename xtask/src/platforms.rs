@@ -210,11 +210,32 @@ fn line_of(span: proc_macro2::Span) -> usize {
     span.start().line
 }
 
-/// Sum the `cfg` attributes of an item.
+/// Whether `a` is `#[cfg_attr(<predicate>, …, <name>, …)]`: it makes the attribute `name`
+/// (e.g. `test`, `ignore`) conditional.
+pub fn cfg_attr_makes(a: &Attribute, name: &str) -> bool {
+    if !a.path().is_ident("cfg_attr") {
+        return false;
+    }
+    a.parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
+        .is_ok_and(|list| {
+            list.iter().skip(1).any(|m| {
+                m.path()
+                    .segments
+                    .last()
+                    .is_some_and(|seg| seg.ident == name)
+            })
+        })
+}
+
+/// Sum the `cfg` attributes of an item. A `cfg_attr` that makes `test` conditional counts as
+/// a cfg that is not a platform form (ruling s1, D-226).
 pub fn item_cfg(attrs: &[Attribute]) -> ItemCfg {
     let mut set = Set::ALL;
     let mut first = None;
     for a in attrs {
+        if cfg_attr_makes(a, "test") {
+            return ItemCfg::Other(line_of(a.pound_token.span));
+        }
         match classify(a) {
             None | Some(Cfg::Test) => {}
             Some(Cfg::Other) => return ItemCfg::Other(line_of(a.pound_token.span)),
@@ -233,12 +254,40 @@ pub fn item_cfg(attrs: &[Attribute]) -> ItemCfg {
     }
 }
 
-/// The platform set and line of the first platform cfg in `attrs`, ignoring other cfgs.
-fn platform_attr(attrs: &[Attribute]) -> Option<(Set, usize)> {
-    attrs.iter().find_map(|a| match classify(a) {
-        Some(Cfg::Platform(s)) => Some((s, line_of(a.pound_token.span))),
+/// For a statement (or match arm) carrying a platform cfg: the platforms it counts for and the
+/// line of its first platform cfg. It counts for its platforms only if its platform cfgs are its
+/// only cfgs (ruling s3, D-226) and it is not empty (`empty`; ruling s7); otherwise for none.
+fn platform_attr(attrs: &[Attribute], empty: bool) -> Option<(Set, usize)> {
+    let line = attrs.iter().find_map(|a| match classify(a) {
+        Some(Cfg::Platform(_)) => Some(line_of(a.pound_token.span)),
         _ => None,
-    })
+    })?;
+    let counts = match item_cfg(attrs) {
+        ItemCfg::Platform(set, _) if !empty => set,
+        _ => Set::NONE,
+    };
+    Some((counts, line))
+}
+
+/// An empty block, an empty statement or `()`: nothing in its place (ruling s7).
+fn is_empty_expr(e: &Expr) -> bool {
+    match e {
+        Expr::Tuple(t) => t.elems.is_empty(),
+        Expr::Paren(p) => is_empty_expr(&p.expr),
+        Expr::Block(b) => b.block.stmts.iter().all(is_empty_stmt),
+        // A stray `;` (syn keeps it as an empty verbatim expression).
+        Expr::Verbatim(ts) => ts.is_empty(),
+        _ => false,
+    }
+}
+
+fn is_empty_stmt(s: &Stmt) -> bool {
+    match s {
+        Stmt::Expr(e, _) => is_empty_expr(e),
+        // A stray `;` (syn keeps it as a verbatim item).
+        Stmt::Item(syn::Item::Verbatim(ts)) => ts.to_string().trim() == ";" || ts.is_empty(),
+        _ => false,
+    }
 }
 
 // ---- inert helpers -------------------------------------------------------------------------
@@ -256,7 +305,7 @@ pub fn is_trivial_body(b: &Block) -> bool {
 fn trivial_expr(e: &Expr) -> bool {
     match e {
         Expr::Lit(_) => true,
-        Expr::Path(p) => p.qself.is_none() && p.path.is_ident("None"),
+        Expr::Path(p) => p.qself.is_none() && qualified(&p.path, &["None"], &["option", "Option"]),
         Expr::Tuple(t) => t.elems.iter().all(trivial_expr),
         Expr::Paren(p) => trivial_expr(&p.expr),
         Expr::Group(g) => trivial_expr(&g.expr),
@@ -267,28 +316,34 @@ fn trivial_expr(e: &Expr) -> bool {
             let Expr::Path(p) = &*c.func else {
                 return false;
             };
-            let segs: Vec<String> = p
-                .path
-                .segments
-                .iter()
-                .map(|s| s.ident.to_string())
-                .collect();
-            match segs
-                .iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>()
-                .as_slice()
-            {
-                ["Ok"] => {
-                    c.args.len() == 1
-                        && matches!(c.args.first(), Some(Expr::Tuple(t)) if t.elems.is_empty())
-                }
-                ["Default", "default"] => c.args.is_empty(),
-                _ => false,
+            if p.qself.is_some() {
+                return false;
+            }
+            if qualified(&p.path, &["Ok"], &["result", "Result"]) {
+                c.args.len() == 1
+                    && matches!(c.args.first(), Some(Expr::Tuple(t)) if t.elems.is_empty())
+            } else {
+                qualified(&p.path, &["Default", "default"], &["default"]) && c.args.is_empty()
             }
         }
         _ => false,
     }
+}
+
+/// Whether `path` is `tail`, optionally prefixed by `std::`/`core::` and the segments
+/// `modules` (`Option::None`, `std::option::Option::None`, …; ruling s6, D-226).
+fn qualified(path: &syn::Path, tail: &[&str], modules: &[&str]) -> bool {
+    let segs: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
+    let n = segs.len();
+    if n < tail.len() || segs[n - tail.len()..].iter().zip(tail).any(|(a, b)| a != b) {
+        return false;
+    }
+    let head = &segs[..n - tail.len()];
+    let rest = match head.first().map(String::as_str) {
+        Some("std" | "core") => &head[1..],
+        _ => head,
+    };
+    rest.iter().all(|s| modules.contains(&s.as_str())) && rest.len() <= 2
 }
 
 /// One definition of a non-test function behind a platform cfg.
@@ -397,9 +452,9 @@ fn expr_attrs(e: &Expr) -> &[Attribute] {
     }
 }
 
-/// Lines of statements (and match arms) in a test body that carry a platform cfg while no
-/// statement (arm) of the same block (match) carries the complementary platforms. Closures are
-/// inspected; nested items are not.
+/// Lines of blocks (and matches) in a test body whose statements (arms) behind platform cfgs do
+/// not together cover the three platforms: one line per block, at its first such statement.
+/// Closures and fns nested in the body are inspected; other nested items are not.
 pub fn unpaired_statements(body: &Block) -> Vec<usize> {
     struct V(Vec<usize>);
     /// A block (or match) is in order exactly when the union of its platform-cfg statements'
@@ -413,12 +468,18 @@ pub fn unpaired_statements(body: &Block) -> Vec<usize> {
         }
     }
     impl<'a> Visit<'a> for V {
-        fn visit_item(&mut self, _: &'a syn::Item) {}
+        // Blocks at any depth, a fn nested in the test included (ruling s4, D-226); other
+        // nested items hold no statements of the test.
+        fn visit_item(&mut self, i: &'a syn::Item) {
+            if let syn::Item::Fn(f) = i {
+                self.visit_block(&f.block);
+            }
+        }
         fn visit_block(&mut self, b: &'a Block) {
             let marked: Vec<(Set, usize)> = b
                 .stmts
                 .iter()
-                .filter_map(|s| platform_attr(stmt_attrs(s)))
+                .filter_map(|s| platform_attr(stmt_attrs(s), is_empty_stmt(s)))
                 .collect();
             group(&mut self.0, &marked);
             visit::visit_block(self, b);
@@ -427,7 +488,7 @@ pub fn unpaired_statements(body: &Block) -> Vec<usize> {
             let marked: Vec<(Set, usize)> = m
                 .arms
                 .iter()
-                .filter_map(|a| platform_attr(&a.attrs))
+                .filter_map(|a| platform_attr(&a.attrs, is_empty_expr(&a.body)))
                 .collect();
             group(&mut self.0, &marked);
             visit::visit_expr_match(self, m);
@@ -778,6 +839,30 @@ fn squash(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Why `doc` is not a document a registry entry may cite, if it is not: it must be a
+/// repository-relative path, with `/`, of a `.md` file under `docs/` that git tracks in `root`
+/// (ruling s9, D-226).
+pub fn doc_problem(root: &Path, doc: &str) -> Option<String> {
+    let shape = doc.starts_with("docs/")
+        && doc.ends_with(".md")
+        && !doc.contains('\\')
+        && doc
+            .split('/')
+            .all(|c| !c.is_empty() && c != "." && c != "..");
+    if !shape {
+        return Some(format!(
+            "doc `{doc}` is not a repository-relative `/` path of a `.md` file under docs/"
+        ));
+    }
+    let tracked = crate::git::git_try(root, &["ls-files", "--error-unmatch", "--", doc])
+        .is_ok_and(|(ok, out, _)| ok && out.lines().any(|l| l.trim() == doc));
+    if tracked {
+        None
+    } else {
+        Some(format!("doc `{doc}` is not a file git tracks"))
+    }
+}
+
 /// Whether `tasks/<task>-*.md` exists under `root`.
 pub fn task_file_exists(root: &Path, task: &str) -> bool {
     let prefix = format!("{task}-");
@@ -885,13 +970,17 @@ pub fn apply(
                 ),
             );
         }
-        match std::fs::read_to_string(root.join(&e.doc)) {
-            Err(_) => entry(Kind::Sentence, format!("doc `{}` does not exist", e.doc)),
-            Ok(text) if !squash(&text).contains(&squash(&e.quote)) => entry(
-                Kind::Sentence,
-                format!("`{}` does not contain the quote \"{}\"", e.doc, e.quote),
-            ),
-            Ok(_) => {}
+        if let Some(why) = doc_problem(root, &e.doc) {
+            entry(Kind::Sentence, why);
+        } else {
+            match std::fs::read_to_string(root.join(&e.doc)) {
+                Err(_) => entry(Kind::Sentence, format!("doc `{}` does not exist", e.doc)),
+                Ok(text) if !squash(&text).contains(&squash(&e.quote)) => entry(
+                    Kind::Sentence,
+                    format!("`{}` does not contain the quote \"{}\"", e.doc, e.quote),
+                ),
+                Ok(_) => {}
+            }
         }
         match &e.counterpart {
             Counterpart::None => {}
@@ -1078,6 +1167,13 @@ mod tests {
             "{ (None, 0) }",
             "{ S { a: None, b: false } }",
             "{ return None; }",
+            // Path-qualified forms (ruling s6, D-226).
+            "{ Option::None }",
+            "{ std::option::Option::None }",
+            "{ core::option::Option::None }",
+            "{ Result::Ok(()) }",
+            "{ std::result::Result::Ok(()) }",
+            "{ std::default::Default::default() }",
         ] {
             assert!(is_trivial_body(&body(t)), "{t}");
         }
@@ -1088,6 +1184,8 @@ mod tests {
             "{ let a = 1; a }",
             "{ panic!(\"no\") }",
             "{ S { a: f() } }",
+            "{ my::None }",
+            "{ Vec::new() }",
         ] {
             assert!(!is_trivial_body(&body(t)), "{t}");
         }
@@ -1142,7 +1240,34 @@ mod tests {
             unpaired_statements(&body("{ let f = || { #[cfg(unix)] a(); }; }")).len(),
             1
         );
-        assert!(unpaired_statements(&body("{ fn h() { #[cfg(unix)] a(); } }")).is_empty());
+        // A fn nested in the test is inspected too (ruling s4, D-226).
+        assert_eq!(
+            unpaired_statements(&body("{ fn h() { #[cfg(unix)] a(); } h(); }")).len(),
+            1
+        );
+        // A complement with a second, non-platform cfg counts for no platform (s3).
+        assert_eq!(
+            unpaired_statements(&body(
+                "{ #[cfg(unix)] a(); #[cfg(windows)] #[cfg(feature = \"never\")] panic!(\"x\"); }"
+            ))
+            .len(),
+            1
+        );
+        // An empty block or `()` is no complement (s7).
+        for empty in ["{}", "{ ; }", "()", "{ {} }"] {
+            assert_eq!(
+                unpaired_statements(&body(&format!(
+                    "{{ #[cfg(unix)] {{ a(); }} #[cfg(windows)] {empty}; }}"
+                )))
+                .len(),
+                1,
+                "{empty}"
+            );
+        }
+        assert!(
+            unpaired_statements(&body("{ #[cfg(unix)] { a(); } #[cfg(windows)] { b(); } }"))
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1273,14 +1398,11 @@ reason = "nothing to compare with"
 
     #[test]
     fn rules() {
-        let d = crate::util::testutil::TempDir::new("platform-rules");
+        let d = crate::git::testrepo::init(
+            "platform-rules",
+            &[("docs/p.md", "Directories and\n  FIFOs are refused.\n")],
+        );
         let root = d.path();
-        std::fs::create_dir_all(root.join("docs")).unwrap();
-        std::fs::write(
-            root.join("docs/p.md"),
-            "Directories and\n  FIFOs are refused.\n",
-        )
-        .unwrap();
         std::fs::create_dir_all(root.join("tasks")).unwrap();
         std::fs::write(root.join("tasks/T-075-later.md"), "x").unwrap();
         let reg = parse("reg", GOOD).unwrap();
@@ -1412,5 +1534,50 @@ reason = "nothing to compare with"
         assert!(is_registered_absent(&absent, "kiln_a::m::tests::y"));
         assert!(is_registered_absent(&absent, "kiln_a::m::tests"));
         assert!(!is_registered_absent(&absent, "kiln_a::m::tests_more::y"));
+    }
+
+    #[test]
+    fn docs_are_tracked_markdown_under_docs() {
+        let d = crate::git::testrepo::init(
+            "platform-docs",
+            &[
+                ("docs/p.md", "x"),
+                ("docs/n.txt", "x"),
+                ("crates/a/t.rs", "x"),
+            ],
+        );
+        let root = d.path();
+        assert_eq!(doc_problem(root, "docs/p.md"), None);
+        std::fs::write(root.join("docs/untracked.md"), "x").unwrap();
+        for bad in [
+            "docs/untracked.md",
+            "docs/n.txt",
+            "crates/a/t.rs",
+            "xtask/platform-tests.toml",
+            "/etc/hostname",
+            "docs/../docs/p.md",
+            "./docs/p.md",
+            "docs\\p.md",
+            "docs//p.md",
+        ] {
+            assert!(doc_problem(root, bad).is_some(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn cfg_attr_test_is_a_cfg_that_is_not_a_platform_form() {
+        assert!(cfg_attr_makes(&attr("#[cfg_attr(unix, test)]"), "test"));
+        assert!(cfg_attr_makes(
+            &attr("#[cfg_attr(feature = \"x\", allow(dead_code), test)]"),
+            "test"
+        ));
+        assert!(!cfg_attr_makes(
+            &attr("#[cfg_attr(unix, allow(dead_code))]"),
+            "test"
+        ));
+        assert!(matches!(
+            item_cfg(&[attr("#[cfg_attr(unix, test)]")]),
+            ItemCfg::Other(1)
+        ));
     }
 }

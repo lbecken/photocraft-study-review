@@ -77,7 +77,8 @@ fn path_last(path: &syn::Path) -> String {
 }
 
 fn is_test_attr(a: &Attribute) -> bool {
-    path_last(a.path()) == "test" && !a.path().is_ident("cfg")
+    (path_last(a.path()) == "test" && !a.path().is_ident("cfg"))
+        || platforms::cfg_attr_makes(a, "test")
 }
 
 fn is_test_fn(attrs: &[Attribute]) -> bool {
@@ -279,28 +280,56 @@ impl FileScan<'_> {
 impl FileScan<'_> {
     /// The item's own cfg: a non-platform cfg is a `cfg-disabled` skip; a platform cfg makes it
     /// a platform item. Returns the platforms it exists on (with the enclosing ones).
+    /// The platforms of an item are its own cfg's intersected with its enclosing items' (ruling
+    /// s5, D-226); a platform cfg whose intersection is empty is a `cfg-disabled` finding.
     fn classify_test_item(&mut self, item: &str, attrs: &[Attribute]) -> Set {
         let cfg = platforms::item_cfg(attrs);
+        let set = self.env.inter(cfg.set());
         match cfg {
             ItemCfg::Other(line) => self.out.push(Finding {
                 item: item.to_owned(),
                 line,
                 kind: Kind::CfgDisabled,
             }),
-            ItemCfg::Platform(set, line) => self.side.platform.push((item.to_owned(), line, set)),
-            ItemCfg::Unconditional => {}
+            ItemCfg::Platform(_, line) if set == Set::NONE && self.env != Set::NONE => {
+                self.out.push(Finding {
+                    item: item.to_owned(),
+                    line,
+                    kind: Kind::CfgDisabled,
+                })
+            }
+            ItemCfg::Platform(_, line) if set != Set::NONE => {
+                self.side.platform.push((item.to_owned(), line, set))
+            }
+            _ => {}
         }
-        self.env.inter(cfg.set())
+        set
     }
 
-    fn helper(&mut self, item: String, attrs: &[Attribute], block: &syn::Block) {
-        if let ItemCfg::Platform(_, line) = platforms::item_cfg(attrs) {
-            self.side.helpers.push(HelperDef {
-                item,
-                line,
-                trivial: platforms::is_trivial_body(block),
-            });
+    /// A non-test fn defined under platform cfgs: its own cfg combined with its enclosing
+    /// `mod` and `impl` items' (ruling s2, D-226). `line`: of its own platform cfg, else of its
+    /// name.
+    fn helper(
+        &mut self,
+        item: String,
+        attrs: &[Attribute],
+        sig: &syn::Signature,
+        block: &syn::Block,
+    ) {
+        let own = platforms::item_cfg(attrs);
+        let set = self.env.inter(own.set());
+        if matches!(own, ItemCfg::Other(_)) || set == Set::NONE || set == Set::ALL {
+            return;
         }
+        let line = match own {
+            ItemCfg::Platform(_, line) => line,
+            _ => line_of(sig.ident.span()),
+        };
+        self.side.helpers.push(HelperDef {
+            item,
+            line,
+            trivial: platforms::is_trivial_body(block),
+        });
     }
 }
 
@@ -325,7 +354,7 @@ impl<'a> Visit<'a> for FileScan<'_> {
                 body.visit_stmt(stmt);
             }
         } else {
-            self.helper(item, &f.attrs, &f.block);
+            self.helper(item, &f.attrs, &f.sig, &f.block);
         }
         // Nested fns inside a fn are rare in tests; not descended.
     }
@@ -372,16 +401,29 @@ impl<'a> Visit<'a> for FileScan<'_> {
             syn::Item::Fn(f) => self.visit_item_fn(f),
             syn::Item::Mod(m) => self.visit_item_mod(m),
             syn::Item::Impl(imp) => {
-                // Twins of a method live in one impl block: the block's line names it.
-                let block = line_of(imp.impl_token.span);
+                // Methods are keyed by the implemented type (and trait), so twins in two
+                // `#[cfg(..)] impl S` blocks are twins (ruling s2); a type that is not a plain
+                // path is keyed by its block's line.
+                let ty = match &*imp.self_ty {
+                    syn::Type::Path(tp) if tp.qself.is_none() => path_last(&tp.path),
+                    _ => format!("@{}", line_of(imp.impl_token.span)),
+                };
+                let tr = imp
+                    .trait_
+                    .as_ref()
+                    .map(|(_, p, _)| format!(" as {}", path_last(p)))
+                    .unwrap_or_default();
+                let env = self.env;
+                self.env = env.inter(platforms::item_cfg(&imp.attrs).set());
                 for ii in &imp.items {
                     if let syn::ImplItem::Fn(f) = ii {
                         let name = self.name(&f.sig.ident.to_string());
                         self.check_attrs(&name, &f.attrs);
-                        let key = self.name(&format!("<impl@{block}>::{}", f.sig.ident));
-                        self.helper(key, &f.attrs, &f.block);
+                        let key = self.name(&format!("<impl {ty}{tr}>::{}", f.sig.ident));
+                        self.helper(key, &f.attrs, &f.sig, &f.block);
                     }
                 }
+                self.env = env;
                 self.check_attrs("<impl>", &imp.attrs);
             }
             other => {
@@ -935,5 +977,83 @@ mod tests {
         );
         assert_eq!(g.items.len(), 1);
         assert_eq!(g.items[0].item, "w");
+    }
+
+    type Kinds = (
+        Vec<(String, Kind)>,
+        Vec<(String, Set)>,
+        Vec<(String, platforms::Kind)>,
+    );
+
+    fn kinds_of(src: &str) -> Kinds {
+        let s = super::scan(Path::new("x.rs"), src).unwrap();
+        (
+            s.findings.into_iter().map(|f| (f.item, f.kind)).collect(),
+            s.platform.into_iter().map(|(i, _, set)| (i, set)).collect(),
+            s.located.into_iter().map(|(i, _, k)| (i, k)).collect(),
+        )
+    }
+
+    #[test]
+    fn cfg_attr_test_is_cfg_disabled() {
+        // Ruling s1, D-226: `cfg_attr(<pred>, test)` makes the test conditional.
+        let (f, p, _) = kinds_of("#[cfg_attr(unix, test)]\nfn t() {}\n");
+        assert_eq!(f, [("t".to_string(), Kind::CfgDisabled)]);
+        assert!(p.is_empty());
+        let (f, _, _) = kinds_of("#[test]\n#[cfg_attr(unix, ignore)]\nfn t() {}\n");
+        assert_eq!(f, [("t".to_string(), Kind::CfgAttrIgnore)]);
+    }
+
+    #[test]
+    fn enclosing_cfgs_narrow_an_item_and_an_empty_one_is_cfg_disabled() {
+        // Ruling s5: `a::b` exists on no platform.
+        let (f, p, _) = kinds_of(
+            "#[cfg(unix)]\nmod a {\n    #[cfg(windows)]\n    mod b {\n        #[test]\n        fn t() {}\n    }\n}\n",
+        );
+        assert_eq!(f, [("a::b".to_string(), Kind::CfgDisabled)]);
+        assert_eq!(p, [("a".to_string(), Set::UNIX)]);
+        // `unix` around `linux`: the inner item is `linux`.
+        let (f, p, _) = kinds_of(
+            "#[cfg(unix)]\nmod a {\n    #[test]\n    #[cfg(target_os = \"linux\")]\n    fn t() {}\n}\n",
+        );
+        assert!(f.is_empty());
+        assert_eq!(
+            p,
+            [
+                ("a".to_string(), Set::UNIX),
+                ("a::t".to_string(), Set::LINUX)
+            ]
+        );
+    }
+
+    #[test]
+    fn twins_by_enclosing_mod_or_impl_cfg() {
+        // Ruling s2: the cfg on the enclosing `mod` or `impl` makes twins.
+        let (_, _, l) = kinds_of(
+            "#[cfg(unix)]\nmod imp {\n    pub fn check() { real(); }\n}\n#[cfg(windows)]\nmod imp {\n    pub fn check() {}\n}\n",
+        );
+        assert_eq!(
+            l,
+            [("imp::check".to_string(), platforms::Kind::InertHelper)]
+        );
+        let (_, _, l) = kinds_of(
+            "struct S;\n#[cfg(unix)]\nimpl S {\n    fn check(&self) { real(); }\n}\n#[cfg(windows)]\nimpl S {\n    fn check(&self) -> Option<u8> { Option::None }\n}\n",
+        );
+        assert_eq!(
+            l,
+            [("<impl S>::check".to_string(), platforms::Kind::InertHelper)]
+        );
+        // Twins inside one impl block, and real twins: one finding, none.
+        let (_, _, l) = kinds_of(
+            "impl S {\n    #[cfg(unix)]\n    fn m(&self) -> u8 { f() }\n    #[cfg(not(unix))]\n    fn m(&self) -> u8 { 0 }\n}\n",
+        );
+        assert_eq!(
+            l,
+            [("<impl S>::m".to_string(), platforms::Kind::InertHelper)]
+        );
+        let (_, _, l) = kinds_of(
+            "#[cfg(unix)]\nmod imp {\n    pub fn check() { a(); }\n}\n#[cfg(windows)]\nmod imp {\n    pub fn check() { b(); }\n}\n",
+        );
+        assert!(l.is_empty());
     }
 }
