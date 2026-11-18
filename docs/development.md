@@ -693,14 +693,16 @@ differing from their blobs without it and 0 of 589 with it, T-070 Pinned (g)).
 **Runners, wall times and disk.** Labels as pinned by T-070: `macos-15` (arm64), `windows-2025`
 (x64), `ubuntu-24.04` (x64); GitHub's documentation gives 3 CPU and 7 GB of memory for
 `macos-15` and 4 CPU and 16 GB for the other two, which no run here shows. Run 44297266071 of
-`platforms` (T-072's candidate `277e258` on `ci/candidate`, the first run with `gate-macos`
-green; the director's record `tasks/ci-runs/T-072-round-1.md`, section "The implementer's head")
-showed, per job (wall time = the job's completion minus its start, so queueing is not counted;
-the disk columns are the job's `DISK` lines as printed, header first):
+`platforms` (T-072's candidate `277e258` on `ci/candidate`, a run with `gate-macos` green; the
+first was run 44253737976, `tasks/ci-runs/T-079-round-2.md`; the director's record
+`tasks/ci-runs/T-072-round-1.md`, section "The implementer's head") showed, per job (wall time =
+the job's completion minus its start, so queueing is not counted; the disk column gives the `df`
+lines the record quotes from the job's `DISK` step, the header where the record has it, with runs
+of spaces collapsed):
 
-| Job | Result | Wall time | `df -h .` as printed | `du -sh target` |
+| Job | Result | Wall time | `df -h .` (the record's lines, spaces collapsed) | `du -sh target` |
 |---|---|---|---|---|
-| `gate-linux` | green | 11 min 49 s, of which the gate step 8 min 24 s and the test list under 1 s | `Filesystem Size Used Avail Use% Mounted on` / `/dev/mapper/cow-root 145G 62G 83G 43% /` | 4.5G |
+| `gate-linux` | green | 11 min 49 s, of which the gate step 8 min 24 s and the test list under 1 s | `/dev/mapper/cow-root 145G 62G 83G 43% /` (the record gives no header) | 4.5G |
 | `gate-macos` | green | 24 min 13 s, of which the gate step 15 min 58 s and the test list 4 s | `Filesystem Size Used Avail Capacity iused ifree %iused Mounted on` / `/dev/disk2s5 320Gi 260Gi 42Gi 87% 2.3M 436M 1% /System/Volumes/Data` | 3.2G |
 | `gate-windows` | red (gate: clippy, scorecard, test) | 18 min 38 s, of which the gate step 6 min 26 s, the test list 2 s and the full test output 1 s | `Filesystem Size Used Avail Use% Mounted on` / `D: 220G 3.7G 217G 2% /d` | 3.5G |
 | `window-linux` | green | 59 s | (no disk line) | |
@@ -711,10 +713,11 @@ Runner images (from the job logs, as the record gives them): `ubuntu-24.04` 2026
 `macos-15-arm64` 20261104.0514.1, `windows-2025-vs2026` 20261103.298.1. The Windows gate is red
 as on `main` since T-073: the workspace's tests do not build there until T-092, so its `target`
 is that of a partial build, and its `test-list.txt` held 0 binaries and 0 test names, only
-compile errors (172 lines; the list step's exit status 101; same record). The macOS probe ran
-the three-line script in the window form; the window on macOS is still built, not observed,
-until CI has run the window procedure there (METHODOLOGY §8.1; ADR-0009 Q-5). The table of
-T-070's run 43752760283 is in `tasks/ci-runs/T-070-round-1.md`.
+compile errors (172 lines; the list step's exit status 101; same record). The record of this
+run does not show the window probe's output. The table of T-070's run 43752760283 is in
+`tasks/ci-runs/T-070-round-1.md`; in that run the macOS probe ran the three-line script in the
+window form and `kiln` exited 0. The window on macOS is still built, not observed, until CI has
+run the window procedure there (METHODOLOGY §8.1; ADR-0009 Q-5).
 
 **What the confinement tests need from the machine.** The tests of `ws.path-confinement` that
 need a root the process under test cannot read (`acceptance_t036_workspace`,

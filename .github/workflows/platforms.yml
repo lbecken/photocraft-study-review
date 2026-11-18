@@ -130,12 +130,19 @@ jobs:
           # T-072: no line cap. Printed (colour codes removed): each failing test's `---- <name> stdout ----`
           # block with the 20 lines after it; a binary that aborted with its `Running` line and the abort
           # lines; every `error: could not compile`, `error[` and `error: test failed` line and the list
-          # of failed targets; the `test result:` line of every binary.
+          # of failed targets; the `test result:` line of every binary. While a block is open (n > 0) every
+          # line is the block's, a heading-shaped one included (it is printed there, so it is not printed
+          # again before the next block); a `Running` / `Doc-tests` line starts a binary only outside a block.
           awk '
             { gsub(/\033\[[0-9;]*[A-Za-z]/, "") }
-            /^ +Running |^   Doc-tests / { run = $0; shown = 0; n = 0; tl = 0; next }
             /^---- .* stdout ----$/ { if (!shown) { print run; shown = 1 } print; n = 20; tl = 0; next }
-            n > 0 { print; n--; next }
+            n > 0 {
+              print; n--
+              if ($0 ~ /^ +Running |^   Doc-tests /) { run = $0; shown = 1; tl = 0 }
+              if ($0 ~ /^error: [0-9]+ targets? failed/) tl = 1
+              next
+            }
+            /^ +Running |^   Doc-tests / { run = $0; shown = 0; tl = 0; next }
             /^test result:/ { print; next }
             /^error(\[|: could not compile|: test failed|: [0-9]+ targets? failed)/ { print; tl = ($0 ~ /targets? failed/); next }
             tl && /^    `/ { print; next }
@@ -284,12 +291,19 @@ jobs:
           # T-072: no line cap. Printed (colour codes removed): each failing test's `---- <name> stdout ----`
           # block with the 20 lines after it; a binary that aborted with its `Running` line and the abort
           # lines; every `error: could not compile`, `error[` and `error: test failed` line and the list
-          # of failed targets; the `test result:` line of every binary.
+          # of failed targets; the `test result:` line of every binary. While a block is open (n > 0) every
+          # line is the block's, a heading-shaped one included (it is printed there, so it is not printed
+          # again before the next block); a `Running` / `Doc-tests` line starts a binary only outside a block.
           awk '
             { gsub(/\033\[[0-9;]*[A-Za-z]/, "") }
-            /^ +Running |^   Doc-tests / { run = $0; shown = 0; n = 0; tl = 0; next }
             /^---- .* stdout ----$/ { if (!shown) { print run; shown = 1 } print; n = 20; tl = 0; next }
-            n > 0 { print; n--; next }
+            n > 0 {
+              print; n--
+              if ($0 ~ /^ +Running |^   Doc-tests /) { run = $0; shown = 1; tl = 0 }
+              if ($0 ~ /^error: [0-9]+ targets? failed/) tl = 1
+              next
+            }
+            /^ +Running |^   Doc-tests / { run = $0; shown = 0; tl = 0; next }
             /^test result:/ { print; next }
             /^error(\[|: could not compile|: test failed|: [0-9]+ targets? failed)/ { print; tl = ($0 ~ /targets? failed/); next }
             tl && /^    `/ { print; next }
@@ -404,12 +418,19 @@ jobs:
           # T-072: no line cap. Printed (colour codes removed): each failing test's `---- <name> stdout ----`
           # block with the 20 lines after it; a binary that aborted with its `Running` line and the abort
           # lines; every `error: could not compile`, `error[` and `error: test failed` line and the list
-          # of failed targets; the `test result:` line of every binary.
+          # of failed targets; the `test result:` line of every binary. While a block is open (n > 0) every
+          # line is the block's, a heading-shaped one included (it is printed there, so it is not printed
+          # again before the next block); a `Running` / `Doc-tests` line starts a binary only outside a block.
           awk '
             { gsub(/\033\[[0-9;]*[A-Za-z]/, "") }
-            /^ +Running |^   Doc-tests / { run = $0; shown = 0; n = 0; tl = 0; next }
             /^---- .* stdout ----$/ { if (!shown) { print run; shown = 1 } print; n = 20; tl = 0; next }
-            n > 0 { print; n--; next }
+            n > 0 {
+              print; n--
+              if ($0 ~ /^ +Running |^   Doc-tests /) { run = $0; shown = 1; tl = 0 }
+              if ($0 ~ /^error: [0-9]+ targets? failed/) tl = 1
+              next
+            }
+            /^ +Running |^   Doc-tests / { run = $0; shown = 0; tl = 0; next }
             /^test result:/ { print; next }
             /^error(\[|: could not compile|: test failed|: [0-9]+ targets? failed)/ { print; tl = ($0 ~ /targets? failed/); next }
             tl && /^    `/ { print; next }
