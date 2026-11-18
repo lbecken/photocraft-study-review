@@ -5,7 +5,7 @@ tier: high              # provisional: gate paths (xtask/platform-tests.toml, xt
 state: draft
 owner_role: planner
 scorecard_items: []
-depends_on: [T-092]     # T-092's rule and registry; one registry at a time (§5.2)
+depends_on: [T-092]     # T-092's rule and registry; one registry at a time (§5.2). T-076 and T-077 follow this task (D-269 ruling 1)
 touches:                # provisional, fixed at specification; one role per path (D-153)
   - apps/kiln-cli/tests/acceptance_t008_cli.rs
   - apps/kiln-cli/tests/acceptance_t019_cli.rs
@@ -35,9 +35,22 @@ origin_task: T-092
 
 # T-098 The kiln-commands, kiln-cli and kiln tests compile on Windows
 
-Draft cut from T-092 at its specification (`tasks/T-092-mark-product-tests-for-windows.md`, "Cut"). Specified in full after
-T-092 merges and after the probe round T-092 requested (commit `b57a74e`, job `probe-t092-windows`), which runs every target
-of these packages that compiles today.
+Draft cut from T-092 at its specification (`tasks/T-092-mark-product-tests-for-windows.md`, "Cut"). Stays whole (ruling 6,
+D-269): no widening of T-072's general step. Specified in full after T-092 merges. T-076 (narrowed to its three `/dev/full`
+counterparts) and T-077 run after this task (ruling 1, D-269).
+
+## Facts from T-092's probe (run 44355322518, `tasks/ci-runs/T-092-probe-1.md`)
+- Exactly these 17 targets do not compile on Windows (record lines 195-259), with the first errors T-092's inventory lists.
+- Every other target of these packages runs and passes on Windows except 4 of `kiln-cli` that are T-099's
+  (`acceptance_t004_r2`, `acceptance_t004_r3`, `guard_t015_cli`, `guard_t032_cli`): `kiln-commands` 16 targets, its doc
+  tests, `kiln-cli`'s bin unit tests and 19 test targets, `kiln`'s bin and 9 test targets all exit 0.
+- `kiln` given an argument with an unpaired surrogate (`OsString::from_wide`), in `--root d <bad>`, `<bad>`, `script s.jsonl
+  --root d <bad>`, `script s.jsonl --root <bad>`: `status Some(2), stdout 0 bytes, stderr 24 lines, first "kiln: argument N
+  is not valid UTF-8", panicked false` (P-E0..E3). So the two non-UTF-8 argument tests take that Windows form, portable.
+- Links can be made on the runner (`symlink_file`, `symlink_dir`, junctions), and every reparse point on the walk answers
+  `OutsideRoot` for read, write, `is_file`, `list_dir`, `check_location` and `Document::open` (176 `guard_t074` lines).
+- A fake tool must be an executable: with only `cargo.cmd`/`rustfmt.bat` in a child's `PATH`, `Command::new` ran the real
+  tools; a `rustc`-built `cargo.exe` ran (P-D1..D4).
 
 ## Goal (draft)
 After T-092, 17 test targets still do not compile for Windows (VERIFIED by T-092's inventory: Windows clippy with the
@@ -62,7 +75,7 @@ this task's CI evidence needs no workflow edit (T-092 Q-6), and its round lists 
   portable, Windows answer by T-074's documents.
 - Arguments that are not UTF-8: `acceptance_t065::ac1_non_utf8_argument_is_a_usage_error`,
   `window_t065::an_argument_that_is_not_utf8_is_a_usage_error`: portable with a Windows form (an unpaired surrogate in
-  UTF-16), if the probe's P-E shows exit 2 with the usage and no panic; else a question.
+  UTF-16): VERIFIED by P-E (above).
 - `guard_t038_cli` (`ELOOP`, a FIFO, link loops): the errno chosen by platform.
 - **Constraint (`xtask/tests/guard_t079.rs` AC-2):** `guard_t038_cli.rs::disk_refusals_through_control`,
   `acceptance_t019_cli.rs::deep_trees_stop_at_the_depth_bound` and `::tree_order_and_counts` may carry no platform cfg
@@ -72,8 +85,6 @@ this task's CI evidence needs no workflow edit (T-092 Q-6), and its round lists 
 ## Overlaps to settle at specification
 - T-076 (draft; ruling x6, the `/dev/full` counterparts) edits `apps/kiln/tests/acceptance_t055.rs`; T-077 (draft) writes
   counterparts of no-display tests in `acceptance_t065.rs`, `window_t065.rs`: sequence them after this task (T-092 Q-1).
-- If the director splits this task (T-092 Q-6), the first part needs the general reported Windows step widened to other
-  packages, with `xtask/tests/acceptance_t072.rs` (its `ac9_*` and `ac1_*` pins) in that part's `touches`.
 
 ## Estimate
 About 1,000,000 (17 files, about 45 tests to sort, the CLI's confinement tests read against T-073/T-074's documents, one or
@@ -84,6 +95,7 @@ two CI rounds).
 <!-- end director log -->
 ### planner
 - 2026-11-18 · planner (T-092's specification run) · draft · did: filed from T-092's cut with the inventory figures · next: director
+- 2026-11-18 · planner (T-092's finalization) · draft · did: added the probe's facts and rulings 1 and 6 (D-269) · next: specification after T-092 merges
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

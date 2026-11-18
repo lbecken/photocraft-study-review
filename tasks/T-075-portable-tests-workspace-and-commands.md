@@ -24,6 +24,10 @@ Draft by the planner of ADR-0009 (run R-255); a stub in the style of T-066 and T
 and acceptance criteria are written at specification, after T-070's first runs have replaced the
 estimates of ADR-0009 with measurements.
 
+> **Absorbed (director, D-269, 2026-11-18):** the work of this draft is done by T-092 (the `kiln-workspace` test
+> targets on Windows) and T-098 (the other crates' targets), as the planner of T-092 found from the inventory. The
+> draft is kept as a record and is not specified.
+
 ## Goal
 On Windows 12 test files or test modules of these crates do not compile (9 integration-test files of `kiln-workspace`, `acceptance_t037_commands.rs`, and the test modules of `disk.rs` and `doc.rs`) (probe a4: FIFOs, modes, `uid`/`gid`,
 `dev`/`ino`, non-UTF-8 names). After this task each compiles everywhere; each test asserts every
