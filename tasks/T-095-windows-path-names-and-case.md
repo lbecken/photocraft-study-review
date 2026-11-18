@@ -2,7 +2,7 @@
 id: T-095
 title: "On Windows, refuse as invalid_path the characters Windows cannot store in a name (':' with streams and drive prefixes, <>\"|?*, control characters), and state how reserved names, trailing dots and spaces, case and short names behave"
 tier: high              # METHODOLOGY v1.5 §4: the confinement boundary (the lexical check of every request path) and a security property a document states. No gate path, no dependency change; no workflow edit (T-072's general reported Windows step runs the test file, D-254).
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed (ws.* items verified on Linux; per-platform confirmation is the evaluator's)
 depends_on: [T-074, T-093]   # T-074 merged (25054fe); T-093 (specified, low): shares docs/protocol/paths.md and project.md and states the macOS case sentence this task's Windows one sits beside (Q-5)
