@@ -450,6 +450,15 @@ either a "Test list" step plus its upload line (A1) or `if: always()` on the ful
   is moved under the run that showed it, 43752760283, or dropped) and the nit (the Linux `df` header is given only
   if the record has it; "as printed" only where the cell is verbatim).
 
+### Ruling u5 (director, D-261; sent to both builders): G-1's time bound
+In run 44327488962 (`tasks/ci-runs/T-074-early-2.md`, a head that holds this task's tests) the guard
+`guard_t072::g1_probe_with_a_kiln_that_never_exits_ends_within_135_s_and_records_the_kill` failed on `gate-macos` in
+the gate step and in the core-crates step ("the probe step took 136.6 s … (bound 120 s + 15 s)") and passed in the
+full test output of the same job: the 15 s of slack is too little on a loaded runner. A guard that fails by the
+runner's load would make a counted job on main red at random. The upper bound becomes 120 s + 60 s; the lower
+bound (the step does not end before its own limit) and the check that the kill is recorded stay. The test may be
+renamed to carry the new bound (it is not on main yet). The test author states in the log what the slack covers.
+
 ## Log
 ### director
 <!-- end director log -->

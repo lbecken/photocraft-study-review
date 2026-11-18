@@ -260,3 +260,30 @@ The other macOS job of this run, `window-probe (macos-15)`, was cancelled after 
 - Job logs of the two window jobs and of the ubuntu/macOS Core-crates steps beyond the lines quoted; the full text of clippy's, scorecard's and test's failing output on Windows beyond what the gate report keeps (60/62/27 lines).
 - `xtask/platform-tests.toml` at d87f2e8 and the source of `main_xtask_is_rebuilt_from_base_on_every_run` were not read, so why the test is absent on Windows is not determinable from this run's files.
 - Why the Linux gate counts 1,171 passed while `test-list.txt` has 1,170 names, and why macOS counts 1,154 against 1,153 names: not explained by any file read.
+
+## Re-run of the failed and cancelled jobs (attempt 2)
+Added after the record above. The director queued a re-run at about 14:17Z because `window-probe (macos-15)` had been cancelled with no runner assigned. Every value comes from the run and job listings (read 15:15Z), `get_workflow_job` and the artefact `window-probe-windows-2025-44315616697` (attempt 2's copy). The sections above describe attempt 1 and are unchanged.
+
+Run 44315616697 now: `run_attempt` 2, `run_started_at` 2026-11-18T14:16:07Z, `updated_at` 14:36:19Z, `status` completed, `conclusion` **failure**. Cause by job: `gate-windows` failure and `window-probe (windows-2025)` failure, as in attempt 1; `window-probe (macos-15)` cancelled again.
+
+Jobs of attempt 2 (wall = `completed_at` − `started_at`):
+| job | id | conclusion | wall | note |
+|---|---|---|---|---|
+| gate-windows | 134864491321 | **failure** | 20m06s (14:16:12Z–14:36:18Z) | Gate failure 14:16:43Z–14:23:01Z (6m18s); Gate report, Core crates (14:23:01Z–14:35:58Z, 12m57s), Workspace lib and T-073 tests, Test list, kiln-workspace test targets, Full test output (ran, 1s), Disk, Upload reports all success; Post Cache skipped |
+| window-probe (windows-2025) | 134864491773 | **failure** | 2m28s (14:16:12Z–14:18:40Z) | Build kiln success 14:16:45Z–14:18:34Z; Window probe failure 14:18:34Z–14:18:35Z; Upload the probe's record success |
+| window-probe (macos-15) | 134864492248 | **cancelled** | 15m01s (14:16:10Z–14:31:11Z) | no `steps` in the job data; `runner_id` 0, `runner_name` empty, labels `macos-15`: no runner was assigned; cancelled again |
+The other three jobs (gate-linux, gate-macos, window-linux) were not re-run: the listing shows them under `run_attempt` 2 but with their attempt-1 times and conclusions (success, success, success; job ids 134864603888, 134864495407, 134864493987).
+
+`window-probe (macos-15)` in attempt 2: steps none; the probe did not run; **no `window-probe-macos-15-…` artefact exists** (artefact listing of the run at 15:15Z: 7 artefacts, none of that name); its exit status line therefore does not exist (the probe's `PROBE:` line is in no file or log read). The job log was not read.
+
+Attempt 2's `window-probe (windows-2025)` artefact (`window-probe-windows-2025-44315616697`, id 14435961107, 344 B, created 14:18:36Z; attempt 1's copy is id 14431189662, created 13:39:52Z, not read), `window-probe.txt` verbatim:
+```
+PROBE OS: windows-2025 MINGW64_NT-10.0-26100 runnervmm7ud1 3.6.10-5a1665c8.x86_64 2026-09-28 10:40 UTC x86_64 Msys
+PROBE: exit status 2
+PROBE: stdout 0 bytes, 0 lines
+--- stdout
+--- stderr
+kiln: no window: egui_glow: OpenGL: egui_glow requires opengl 2.0+.
+--- end
+```
+Attempt 2 also uploaded a second `gate-windows-44315616697` artefact (id 14436771907, 24,736 B, created 14:36:15Z; attempt 1's: id 14433158381, 24,603 B). Its contents were **not read**; the gate result of attempt 2 beyond the job's steps above (failed step Gate) is not read.
