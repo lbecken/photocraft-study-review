@@ -54,6 +54,8 @@ if `disk.rs` must change. Re-estimate at specification.
   `xtask/tests/acceptance_t070.rs`, which checks the two against each other).
 - **From v1.5 change 1 (D-219):** the evidence steps run every test binary (`--no-fail-fast`) and print failing
   tests with their messages; the full output is not cut at 200 lines.
+- **From T-071's review round 2 (D-232, finding R2-4):** the `echo "==== cargo test --locked -p $p"` label of
+  the core-crates step no longer matches the command, which has `--no-fail-fast` since T-071.
 
 ## Log
 ### director

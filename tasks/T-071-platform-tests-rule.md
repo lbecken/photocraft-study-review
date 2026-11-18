@@ -2,7 +2,7 @@
 id: T-071
 title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; the gate's own tests compile and pass on all three"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (xtask/); the approval row must contain `gate paths`. No dependency change.
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed; the tests it marks stay tied to their items
 depends_on: [T-070]     # its Windows evidence is T-070's gate-windows core-crates step; and both edit docs/development.md (§5.2)
@@ -406,6 +406,12 @@ way of writing a test falls into is closed; a contrived one is stated as a limit
   `seed_reuses_non_member_artifacts_only`; the same line in `xtask/tests/guard_t005.rs`,
   `seeded_worktree_builds_its_own_source`). The path is written so that TOML reads it on every platform (with `/`,
   or as a literal string). `xtask/tests/acceptance_t005.rs` joins `touches` for that one line.
+
+### Rulings on review round 2 (director, D-232; `reviews/T-071-r2.md` at `418b96f011ed22f343a776098848a54419f5881d`)
+- **R2-1** is ruling s14 (the implementer's run R-319). After it: a join, a CI round on the new head, and the
+  reviewer's confirmation of the delta (the two lines) as round 3; nothing else is reworked.
+- **R2-2, R2-3, R2-5, R2-6, R2-7** (a spec gap, a test gap, three nits) go to T-091 (draft); **R2-4** (the echo
+  label in `platforms.yml`) to T-072.
 
 ## Log
 ### director
