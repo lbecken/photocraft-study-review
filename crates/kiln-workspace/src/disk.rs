@@ -796,6 +796,32 @@ mod tests {
         assert_eq!(listing(&dir), [".kiln-tmp-0", "a"]);
     }
 
+    /// T-092: the Windows counterpart of `leftover_at_temp_name_is_never_touched`, on every
+    /// platform: the leftover is made read-only with the read-only attribute, which std has
+    /// everywhere, and checked by it (probe P-B of T-092 on Windows).
+    #[test]
+    fn leftover_at_temp_name_is_never_touched_on_every_platform() {
+        let dir = fresh_dir("stale-every-platform");
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        fs::write(dir.join("a"), b"old").unwrap();
+        // Longer than the new content, and read-only: neither may matter or be changed.
+        let leftover = dir.join(".kiln-tmp-0");
+        fs::write(&leftover, b"leftover from a crash, long").unwrap();
+        let mut perm = fs::metadata(&leftover).unwrap().permissions();
+        perm.set_readonly(true);
+        fs::set_permissions(&leftover, perm).unwrap();
+        assert!(fs::metadata(&leftover).unwrap().permissions().readonly());
+        fs_.write_atomic(&p("a"), b"new").unwrap();
+        fs_.write_atomic(&p("a"), b"newer").unwrap();
+        assert_eq!(fs::read(dir.join("a")).unwrap(), b"newer");
+        assert_eq!(fs::read(&leftover).unwrap(), b"leftover from a crash, long");
+        assert!(
+            fs::metadata(&leftover).unwrap().permissions().readonly(),
+            "the leftover's read-only attribute changed"
+        );
+        assert_eq!(listing(&dir), [".kiln-tmp-0", "a"]);
+    }
+
     #[cfg(unix)]
     #[test]
     fn symlink_at_temp_name_is_not_followed() {
@@ -1059,6 +1085,82 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, VfsError::Io { .. }));
         assert_eq!(snapshot(&dir), before);
+    }
+
+    /// Everything a failed save must leave as it was, on every platform: the listing, and the
+    /// target's bytes and read-only attribute.
+    fn snapshot_on_every_platform(dir: &Path) -> (Vec<String>, Vec<u8>, bool) {
+        (
+            listing(dir),
+            fs::read(dir.join("f")).unwrap(),
+            fs::metadata(dir.join("f")).unwrap().permissions().readonly(),
+        )
+    }
+
+    /// T-092: the Windows counterpart of
+    /// `failed_save_after_writability_check_leaves_target_and_listing_unchanged`, on every
+    /// platform, with the same three failures after the writability check: all temporary names
+    /// taken (public API; probe P-C of T-092 on Windows), a failure right after the temp file
+    /// was created, and a failed rename (both injected). The snapshot holds the read-only
+    /// attribute in place of the mode.
+    #[test]
+    fn failed_save_after_writability_check_leaves_target_and_listing_unchanged_on_every_platform() {
+        let setup = |name: &str| {
+            let dir = fresh_dir(name);
+            fs::write(dir.join("f"), b"original content").unwrap();
+            dir
+        };
+
+        // 1. All temporary names taken (public API).
+        let dir = setup("fail-exhausted-every-platform");
+        for n in 0..TEMP_ATTEMPTS {
+            fs::write(dir.join(format!("{TEMP_PREFIX}{n}")), b"").unwrap();
+        }
+        let before = snapshot_on_every_platform(&dir);
+        assert!(!before.2, "fixture: the target is writable");
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let err = fs_.write_atomic(&p("f"), b"x").unwrap_err();
+        assert!(
+            matches!(
+                err,
+                VfsError::Io {
+                    kind: io::ErrorKind::AlreadyExists,
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
+        assert_eq!(snapshot_on_every_platform(&dir), before);
+
+        // 2. Failure right after the temp file was created.
+        let dir = setup("fail-after-create-every-platform");
+        let before = snapshot_on_every_platform(&dir);
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let err = fs_
+            .write_atomic_with(
+                &p("f"),
+                b"x",
+                |_| Err(io::Error::other("injected")),
+                |from, to| fs::rename(from, to),
+            )
+            .unwrap_err();
+        assert!(matches!(err, VfsError::Io { .. }), "{err:?}");
+        assert_eq!(snapshot_on_every_platform(&dir), before);
+
+        // 3. Failure of the rename, after the temp file was filled.
+        let dir = setup("fail-at-rename-every-platform");
+        let before = snapshot_on_every_platform(&dir);
+        let mut fs_ = DiskFs::new(&dir).unwrap();
+        let err = fs_
+            .write_atomic_with(
+                &p("f"),
+                b"x",
+                |_| Ok(()),
+                |_, _| Err(io::Error::other("injected")),
+            )
+            .unwrap_err();
+        assert!(matches!(err, VfsError::Io { .. }), "{err:?}");
+        assert_eq!(snapshot_on_every_platform(&dir), before);
     }
 
     #[cfg(unix)]
