@@ -815,6 +815,94 @@ listing kind, the root cases, the registry plan and the gate-tool side (D-235) c
   T-072). CI-REQUEST: 2d96a2e7db5353e9b731435c9b5d70c5ba36da49
 <!-- end implementer log -->
 ### test author
+- 2026-11-18 · R-356 · tests from the spec alone (main's task file read in full, incl. the fresh spec check and D-256; the
+  probe record; T-073's guard and acceptance files as the model); `task/T-074` and its worktree not read · rulings
+  acknowledged and accepted: D-254 1-8; D-256 Q-1 (Pinned (b2): fixtures (c), (d) check the outside file unchanged and
+  the missing path still missing), Q-2 (four fixtures (a)-(d)), Q-3 (no exhaustion test), Q-4 (directory symbolic link as
+  `--root` tested), Q-5 (the `acceptance_t002` form, `if cfg!(windows) { refusal } else { today's body }`); T-073 Q-2
+  (no platform cfg in my files).
+  - Files and tests (scorecard items: none, `scorecard_items: []`):
+    `crates/kiln-workspace/tests/guard_t074.rs`, 13 tests, no platform cfg (only `#![cfg(test)]`):
+    AC-W1 + AC-W2 (Interface (1), (2), and `project::tree`): `awa1_file_link_relative_on_the_walk`,
+    `awa1_file_link_absolute_on_the_walk`, `awa1_directory_link_on_the_walk`, `awa1_junction_on_the_walk` — each runs 6
+    cases (inside, outside, nowhere × middle, last component; 24 in all) through `read`, `is_file`, `check_location`,
+    `list_dir` of the path, `list_dir(None)` (the link listed `Symlink`), `project::tree` (never descended), a `Document`
+    open (+ edit + save where it opens) and `write_atomic`, then the whole fixture against its snapshot (links by their
+    targets) and no `.kiln-tmp-*` left. Windows: every call `OutsideRoot` naming the path, `is_file` false, nothing changed.
+    Unix: today's behaviour (followed; a dangling link as the last component makes a save create its target).
+    AC-W3 (Interface (3)): `awa3_temp_names_held_by_a_junction_and_a_dangling_file_link` (a),
+    `awa3_temp_name_held_by_a_junction` (b), `awa3_temp_name_held_by_a_file_link_to_an_outside_file` (c),
+    `awa3_temp_name_held_by_a_dangling_file_link_to_outside` (d): `write_atomic` and a `Document` save `Ok`, target bytes,
+    whole fixture equal to its snapshot but `f.txt` (links, `out/`), missing targets still missing, root entries exactly
+    the planted names + `f.txt`; same expectation on every platform.
+    AC-W4 (Interface (4)), each with `MEASURED:` lines: `awa4_root_given_through_a_junction_and_retargeted`,
+    `awa4_root_given_through_a_directory_link_and_retargeted`, `awa4_root_replaced_by_a_junction`,
+    `awa4_root_removed_while_held` (empty + new directory at the name; with a file; removed + junction to a new directory),
+    `awa4_dotdot_after_a_junction_in_the_root_text` (Windows `lexical`, Unix `physical`); after each removal or
+    replacement `read`, `write_atomic`, `is_file` (false), `list_dir`, `check_location` and a save of a document opened
+    before all `OutsideRoot`, fixture unchanged.
+    `xtask/tests/acceptance_t074.rs`, 2 tests (AC-3): `ac3_each_of_the_nine_entries_names_exactly_its_counterpart`,
+    `ac3_no_entry_waits_on_t074`. CI count for the core-crates step: n = 2 (279 + 2).
+    `crates/kiln-workspace/tests/acceptance_t002.rs`: only `save_through_symlink_updates_target` (AC-W6), the form of
+    Interface (7); name kept (`guard_t079` passes).
+  - How links are made without a platform cfg (Interface (6)): file symbolic links by `std::fs::soft_link` (deprecated,
+    `#[allow(deprecated)]`; on Windows the same std call as `symlink_file`, PROBE A1, A5, A6 — INFERRED from memory of std,
+    no std source here); directory symbolic links on Windows by `cmd /C mklink /D` (unprobed), junctions by `cmd /C
+    mklink /J` (PROBE A3, A4; a dangling junction, the `nowhere` case, unprobed); on Unix every kind is a symbolic link
+    (a junction case uses the absolute target). Spawns have a 60 s timeout; a link that cannot be made fails the test
+    naming the command and its output. File links at a middle component point at a directory (on Windows a file-flag
+    link to a directory).
+  - Base evidence (this machine, Linux): `cargo test -p kiln-workspace --test guard_t074` → 13 passed, 0 failed;
+    `cargo test -p xtask --test acceptance_t074` → 0 passed, 2 failed, by assertion: `ac3_each_…`: "the nine entries of
+    T-074 Interface (5) do not each name exactly their counterpart (AC-3)", one line per entry, e.g.
+    "`…disk.rs::tests::symlink_at_temp_name_is_not_followed: counterpart = Some("pending"), expected
+    "crates/kiln-workspace/src/disk.rs::tests::link_at_temp_name_is_not_followed_on_every_platform"; has reason, expected
+    no reason; has task, expected no task; has expires, expected no expires`" (all nine); `ac3_no_entry_waits_on_t074`:
+    "entries with task = "T-074" remain (AC-3: none may)", left = the nine, right = `[]`. `cargo test -p kiln-workspace
+    --test acceptance_t002` → 15 passed; `cargo test -p xtask --test guard_t079` → 6 passed; `cargo fmt --check` clean;
+    `cargo clippy -p kiln-workspace -p xtask --all-targets -- -D warnings` clean; `cargo xtask no-skip` → PASS, 203 files,
+    0 allowlisted, `35 platform test(s) registered (19 pending)`; Windows stand-in (AC-2's form, no C compiler stub needed):
+    `cargo clippy -p kiln-workspace --test guard_t074 --test acceptance_t002 --locked --target x86_64-pc-windows-msvc -- -D
+    warnings` → Finished, 0 warnings; `cargo clippy -p xtask --test acceptance_t074 --locked --target x86_64-pc-windows-msvc
+    -- -D warnings` → Finished, 0 warnings. Type-checked only: nothing linked or run for Windows.
+  - Windows fail-on-base (only CI can show it; my expectation rests on): AC-W1 relative file link inside followed at base
+    (PROBE C1 `read sr: Ok([102])`, C2 `check_location sr: Ok(())`) → `awa1_file_link_relative_on_the_walk` (inside cases)
+    and a relative directory link (unprobed, same walk) fail at base; absolute links and junctions already `OutsideRoot`
+    (C1, C3-C6, C8). AC-W2 holds at base (C7). AC-W3 (a) fails at base (H2 `PermissionDenied` os error 5, H3); (b)-(d)
+    unmeasured at base. AC-W4 junction cases hold at base (E2-E7, F1-F8, G1-G5, K2-K4); directory link as `--root` and
+    removed-then-junction unmeasured. AC-W6: at base the open through the link succeeds (T-073-round-2 :52), so the
+    Windows branch's first assertion fails.
+  - Absence/limit criteria as equalities, each with a variant outside the spec's list that it rejects: AC-3 nine → whole
+    field comparison; outside variants run on a scratch registry (`registry_variants.py`): #2 with `expires` kept beside
+    its counterpart → `ac3_each_…` FAIL; #12's counterpart without the file prefix → FAIL; #11 entered twice → FAIL; the
+    spec's own variants (#9 pending with `task = "T-095"`, #14 naming #15's test) → FAIL; the Interface (5) registry text
+    itself → both PASS (positive control). AC-3 "no entry has task T-074" → equality with `[]`; outside variant: T-092's
+    `leftover_at_temp_name_is_never_touched` moved to `task = "T-074"` → `ac3_no_entry_waits_on_t074` FAIL. Interface (1)
+    "follows no link" → every result and the whole fixture compared for equality; outside variant: a dangling link refused
+    with `NotFound` (or the target created through it) instead of `OutsideRoot`. Interface (2) → listing and tree compared
+    whole; outside variant: a link listed `Other` (or descended: seeded M12, killed). Interface (3) "nothing else changed,
+    no temporary file left" → whole-fixture and root-entry equality; outside variant: a `.kiln-tmp-N` created inside the
+    junction's target `out/` (killed by the snapshot; seeded M2 creates through the link, killed). Interface (4) "every
+    call `outside_root`" → each call compared, fixture equal; outside variant: `is_file` true or `new.txt` written into the
+    new directory.
+  - Self-check (scratch copy `/home/user/kiln-test-T-074`, `git archive` of my head; seeded into `disk.rs`/`project.rs`,
+    run `guard_t074` + `acceptance_t002`): M1 Unix `create_temp` returns `AlreadyExists` instead of the next name → the 4
+    `awa3_*`; M2 temporary create not exclusive (create+truncate, follows a link) → the 4 `awa3_*`; M3 the Windows rule on
+    Unix (every symlink `OutsideRoot`) → the 4 `awa1_*` + `save_through_symlink_updates_target`; M4 listing kind from
+    followed metadata → the 4 `awa1_*`; M5 root identity not checked → the 4 root-identity `awa4_*`; M6 final inside check
+    removed → the 4 `awa1_*`; M7 a save of a missing location reached through a link answers `NotFound` → the 4 `awa1_*`
+    (+ 2 others); M8 the given root kept canonical → both `awa4_root_given_*`; M9 copy instead of rename (temporary left)
+    → 15 tests; M10 the root re-resolved by `absolute` → 3 `awa4_*`; M11 `..` in the root text removed by its text (the
+    Windows rule on Unix) → `awa4_dotdot_…`; M12 `project::tree` descends a symlink → the 4 `awa1_*`. 12/12 killed.
+    Windows branch checked on Linux by simulation (scratch only): with `cfg!(windows)` replaced by `true` in the
+    expectation of `link_case` and in `save_through_symlink_updates_target`, base product → the 4 `awa1_*` and
+    `save_through_symlink_updates_target` FAIL; with M3 (the Windows rule) → all PASS. So the Windows expectations are
+    neither vacuous nor contradictory; whether the real Windows build meets them only CI shows.
+  - Only CI can show: everything Windows (AC-W1-W4, W6), including whether `mklink /D`, a dangling `mklink /J` and
+    `soft_link` work on the runner, and Pinned (b2). Not run: `cargo xtask ci` (not asked; on this branch it should fail
+    only at `acceptance_t074`); macOS (Unix expectations assumed, `..` `physical` per the spec's INFERRED realpath note).
+  - Notes for the implementer/director (no question): a platform-only test was not needed (no registry entry from me).
+    Scratch `target/` removed at the end · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
