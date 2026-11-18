@@ -12,6 +12,8 @@ touches:                # one role per path (D-153)
   - docs/protocol/project.md                 # implementer: the Windows clause of `skipped` (:26, :99) and the D-270 citation (:82-83)
   - docs/control-protocol.md                 # implementer: a Windows sentence after the lexical bullet (bullet verbatim), and the D-270 citation (:144-147)
   - crates/kiln-workspace/tests/guard_t095.rs   # test author: Interface (5); passes on Unix base
+  - crates/kiln-workspace/tests/acceptance_t095.rs   # test author: AC-D1 to AC-D3, the document statements (ruling 4, D-272; added at the spec check); every test fails on base
+  # pending Q-A (spec check): the four Windows-green targets of Pinned (f), last item, if ruled into this task
 budget_tokens: 1100000  # high (v1.5); estimate about 450,000
 iteration: 2
 found_by: planner       # cut from T-074 at its re-specification (ADR-0009 (b), R-255; D-254 ruling 1)
@@ -143,6 +145,11 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
     follows it.
   - The registry quotes four `project.md` passages ("not valid UTF-8 or contain") and three `control-protocol.md`
     passages: kept (S-4, measured).
+  - Not kept on Windows (added at the spec check; Q-A): four test targets that exit 0 on Windows at base
+    (`tasks/ci-runs/T-092-probe-1.md:49,50,57,124`) hold fixtures or requests with `:` or `"` and fail once the rule is
+    on: `apps/kiln-cli/src/main.rs` test module (`manifest_refusals_name_the_problem`, path `b,{"`),
+    `crates/kiln-commands/tests/acceptance_t032.rs` (two tests), `acceptance_t032_json.rs` (one), `guard_t032.rs` (one).
+    Shown on Linux with the rule switched on for every platform (Spec check, point 1).
 - (g) Worked examples (base: PROBE lines; after: the model "Windows: refused iff a character of (1)"):
   - `read "f.txt::$DATA"`: base `Ok([102])` (I2), after `PathError` (`invalid_path`).
   - `read "C:x"`: base `OutsideRoot` (I2), after `PathError`.
@@ -159,7 +166,13 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
     `:`, `<`, `>`, `"`, `|`, `?`, `*` or a control character (U+0001 to U+001F), the characters Windows does not allow
     in a file name: so no request names an alternate data stream (`f.txt::$DATA` is a second name of `f.txt` there)
     or another drive (`C:x`). On Linux and macOS these characters are ordinary." Evidence: PROBE I1-I3, I10 (base); the
-    refusal itself is shown by `guard_t095.rs` on the runner.
+    refusal itself is shown by `guard_t095.rs` on the runner; "On Linux and macOS these characters are ordinary" by
+    `guard_t095.rs` on `gate-linux` and `gate-macos` (its non-Windows branch); "the characters Windows does not allow in
+    a file name" measured for `<`, `?`, `*`, `|`, `"`, U+0001 and `:` (I1), read from Microsoft's naming rules and not
+    run for `>` and U+0002 to U+001F (corrected (spec check): the evidence line did not say so; Q-E). The heading
+    "## Lexical refusals (unchanged)" loses "(unchanged)", which this paragraph makes false (corrected (spec check);
+    no test or registry entry quotes the heading: `grep -rn "Lexical refusals" --include=*.rs --include=*.toml`
+    gives none).
   - `paths.md`, replacing "Names that Windows gives a meaning, and case, are not yet stated for Windows (T-095).":
     "Names that Windows reserves for devices (`CON`, `NUL`, `aux.rs`, …) and names ending in a dot or a space are
     ordinary files of the project for Kiln, which reaches every file through `\\?\` paths. Other Windows programs may
@@ -171,6 +184,10 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
     by its text, so `doc.open` under another spelling opens a second document of the same file, and the later save
     replaces the other's content." Evidence: PROBE I7, I8, I9; the rest to be measured by `guard_t095.rs`.
     Beside T-093's macOS row 4 (Q-5).
+  - After T-093 merges (added at the spec check): T-093's "Platforms" bullet in "Residual limits" ends "names and case
+    on Windows are not yet stated (T-095)" (`task/T-093` at `234f98c`, `docs/protocol/paths.md`). That clause becomes
+    false with this task and is replaced by "names and case on Windows: see Lexical refusals, The rule and the Windows
+    paragraphs of The root (T-095)". To be re-checked against T-093's merged wording before dispatch.
   - `project.md:26` and `:99`, appended: "On Windows also names containing a character refused by
     `docs/protocol/paths.md` "Lexical refusals" (such names cannot be made through Windows itself; unchecked)."
   - `control-protocol.md`, after the lexical bullet: "On Windows (T-095) also a path containing `:`, `<`, `>`, `"`, `|`,
@@ -199,7 +216,7 @@ Local (implementer, re-run by the reviewer):
 Through the join (test author, `crates/kiln-workspace/tests/acceptance_t095.rs`; ruling 4, D-272; added at the spec
 check). The documents read from the repository (`CARGO_MANIFEST_DIR/../../docs/…`), whitespace squashed (so CRLF on a
 Windows checkout reads the same); no platform cfg; each test fails on base on every platform, and **every test in the
-file must fail on base** (the join refuses the whole join if any acceptance test passes on base: `xtask/src/join.rs:306-318`
+file must fail on base** (the join refuses the whole join if any acceptance test passes on base: `xtask/src/join.rs:307-319`
 `refused_base_passes`), so a "stays unchanged" check (for example `paths.md`'s four `awa1_*` in run 44307677646) belongs
 in `guard_t095.rs` or the reviewer's diff check, not here:
 - AC-D1: `docs/protocol/paths.md` contains Pinned (i) item 1 (the Windows paragraph of "Lexical refusals") as worded.
@@ -237,14 +254,17 @@ The record `tasks/ci-runs/T-095-round-N.md`, from the artefacts of the task's he
 - `gate-linux`, `gate-macos`, `window-linux` and `window-probe (macos-15)` green, the test lists naming `guard_t095`'s
   tests.
 - In `gate-windows`: fmt, layers, ui-commands, hygiene, schema and no-skip PASS. clippy, scorecard and test FAIL only
-  at test targets T-092 or T-098 own, named in the record.
+  at test targets T-092, T-100 or T-098 own, named in the record (corrected (spec check): T-100 holds two of T-092's
+  former targets since D-273).
 - T-073's step (`workspace-tests.txt`) names the new `path.rs` unit test `ok`.
 - **T-072's general step** (`windows-tests.txt`, each `crates/kiln-workspace/tests/*.rs` run with `-- --show-output`)
-  shows `==== guard_t095: exit status 0`, every `guard_t095` test `ok`, and its `MEASURED:` lines.
+  shows `==== guard_t095: exit status 0`, every `guard_t095` test `ok`, and its `MEASURED:` lines; and `====
+  acceptance_t095: exit status 0` with its three tests `ok` (added at the spec check: the step runs every file there).
 
 **One CI round expected, two if a measured sentence needs rewording.** If T-092 has merged first, `gate-windows`'s
 `test` step may build `kiln-workspace`'s targets, and the criterion's "FAIL only at …" is re-read against T-092's end
-state (T-092 makes its 15 targets exit 0).
+state (T-092 makes 13 of its 15 targets exit 0; `acceptance_t019_workspace` and `project` are T-100's: D-273;
+corrected (spec check)).
 
 ## Out of scope and implementer notes
 - Refusing a second spelling of an open file (case, short name), which would be a change to `kiln-commands`' table of
@@ -468,7 +488,7 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
   (S-3), `CON` refused, U+007F or U+0080-U+009F refused (an implementer using `char::is_control`), and now a look-alike
   refused (added, point 1). The sketch of this equality passes on Linux and is clippy-clean for Windows.
 - *Guards in `guard_t095.rs`:* no platform cfg (D-245); expectations by `cfg!`; must pass on Unix base (the join runs
-  guards on base on Linux: `join.rs:252-253`). On Windows they assert (1) the refusals (fail at base by design: a guard
+  guards on base on Linux: `join.rs:251-253`). On Windows they assert (1) the refusals (fail at base by design: a guard
   is required to pass on base only where the join runs it), (2) Kiln's answers for reserved and trailing names, (3) the
   case answers. The (3) expectations were chosen by `cfg!(windows)`, which sends macOS down the Linux branch although
   its default volume folds case (T-093 row 3, `macos_t093.rs` header) — corrected to `cfg!(target_os = "linux")`.
@@ -479,6 +499,57 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
   (`std::env::temp_dir()` is `/tmp` there, outside `CARGO_TARGET_TMPDIR`): Q-D.
 - *Marking:* "to be measured by the test author on CI" is not one of §5.7's marks (implementer, director, reviewer,
   "unchecked"); the implementer, who writes the sentence, cannot see the guard before the join. Q-C.
+
+**4. Type-check and run** (clone at `53be751`; one build at a time; stand-in C compiler as `reviews/T-073-r1.md:50-57`,
+`CC_x86_64_pc_windows_msvc=<stub-cc>`, `AR_x86_64_pc_windows_msvc=llvm-lib`):
+- `cargo test -q --locked -p kiln-workspace --lib` → `59 passed; 0 failed` (the three old `path.rs` tests and the new
+  one among them; on Linux the new one asserts acceptance).
+- `cargo clippy -p kiln-workspace --lib --profile test --locked --target x86_64-pc-windows-msvc -- -D warnings` → exit 0,
+  no stub needed (AC-2's claim holds); `cargo clippy -p kiln-workspace --lib --locked --target x86_64-pc-windows-msvc --
+  -D warnings` → exit 0; with the stub, `cargo clippy --workspace --lib --bins --locked --target x86_64-pc-windows-msvc
+  -- -D warnings` → exit 0, no warning; `cargo clippy -p kiln-workspace --test guard_t095 --test acceptance_t095 --locked
+  [--target x86_64-pc-windows-msvc] -- -D warnings` on the sketch files → exit 0 on both targets.
+- Main's tool on the sketched tree (D-235), all `PASS`: `no-skip: … 206 files scanned, 0 allowlisted skip(s), 35
+  platform test(s) registered (10 pending)` (with the two sketch test files: `208 files scanned`, same count);
+  `hygiene: reviews: 64 of 76 … ok; session-paths: 716 tracked file(s) clean`; `scorecard: 64 items: 47 verified, 0
+  implemented, 0 failing, 17 planned.`; `layers: 11 crates, 14 internal edges`; `ui-commands: self-test ok; 14 kiln-ui
+  file(s) scanned, 5 allowlisted path(s)`; `schema: 30 commands; audit ok; docs/commands.json current`.
+- Main's tests naming the touched paths (D-249): `cargo test -q --locked -p xtask --test guard_t079 --test
+  acceptance_t079 --test acceptance_t074 -p kiln-cli --test acceptance_t008_cli -p kiln-workspace --lib` → 6, 2, 2, 9,
+  59 passed, 0 failed. The registry's quotes in the three documents (a script over `xtask/platform-tests.toml`,
+  whitespace squashed): 14 of 14 present after the sketch's edits (7 `paths.md`, 4 `project.md`, 3 `control-protocol.md`).
+- The D-249 search the spec's S-4 did by grep, done by run instead: the rule under `#[cfg(all())]`, `cargo test
+  --workspace --locked --no-fail-fast` → the four targets of point 1 (Q-A). Afterwards the statement was put back under
+  `#[cfg(windows)]` for every other run here.
+- Not run: anything on Windows; the LLVM-IR comparison of AC-1 (the reviewer's); `cargo xtask ci` as a whole; the join.
+
+**5. Documents** (each sentence of Pinned (i), placed in the sketch; quotes and pins re-run above).
+- Item 1 (`paths.md` "Lexical refusals"): measured for `:` and five characters (I1-I3, I10), the refusal by
+  `guard_t095` on Windows; `>` and U+0002-U+001F as Windows' rule read, not run — its evidence line now says so; heading
+  "(unchanged)" dropped (corrected). Placed after the existing paragraph, it does not touch the bullet
+  `acceptance_t008_cli.rs:562-565` pins (that bullet is in `control-protocol.md`).
+- Item 2 (reserved names): measured except `aux.rs` itself (guard, CI) — corrected. "Other Windows programs may not open
+  them": I11/I12 show one such program behaviour (`a.` written as `a`); "may" keeps it within that.
+- Item 3 (case and short names, "The rule"): two placeholders; their marking is invalid (Q-C) and what the tests
+  assert is open (Q-D). Nothing in it contradicts T-093: T-093's `macos_t093.rs` expects folding on Windows too ("as
+  macOS", its header line 6, an inference there), and its row 3 test writes with `std::fs::write`, so the listing keeps
+  the first spelling; this item's spelling is after a Kiln save (a rename over the file), a different operation — the
+  sentence must say "after a save by Kiln", which it does ("after the save").
+- Item 4 (`project.md` `skipped`): "unchecked" as written. After T-093 the bullet at `:26` is six lines longer and ends
+  with T-093's macOS clause; appending the Windows sentence after it keeps the quoted words (shown on the sketch at
+  `53be751`; to be re-run on T-093's merged text). `:99` unchanged by T-093.
+- Item 5 (`control-protocol.md`): placed as a continuation of the lexical bullet in the sketch; `acceptance_t008_cli`
+  (squashed `contains`) passes either way (9 passed). Whether a continuation or its own bullet is left to the
+  implementer; no test pins it.
+- D-270: exact replacement text added (it was missing; AC-D3 needs it); evidence `T-074-round-1.md:78,216-233`.
+- T-093's "Platforms" bullet ("names and case on Windows are not yet stated (T-095)"): not in the spec; a stale clause
+  after this task — added as an item of Pinned (i) (corrected).
+- Not in `touches`, stale after this task: `docs/adr/0009-platforms.md:111` ("not refused today and meaningful to
+  Windows: … `<>:"|?*`"). An ADR records its decision date, so no change is proposed; noted for the director.
+- Not stated anywhere, and outside (3) as written: on Windows git treats `.gitignore` patterns and `target` without case
+  (`core.ignorecase`, set by `git init` on a case-insensitive volume: known, not verified here), while Kiln matches by
+  bytes, so `project.md`'s equality with `git ls-files` (`:88-91`) may not hold for a pattern and a name differing in
+  case. Q-F.
 
 ## Log
 ### director
