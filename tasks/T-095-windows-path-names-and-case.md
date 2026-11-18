@@ -121,7 +121,10 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
     the short-name read on `C:`, and two `Document`s for one file, the second save winning.
 
   On Linux and macOS each case asserts today's behaviour (`:` and the other characters are accepted and stored as
-  given).
+  given). The expectations of (3) are chosen by `cfg!(target_os = "linux")`, not by `cfg!(windows)`: on Linux `F.TXT`
+  and `f.txt` are two files; on macOS (the runner's default case-insensitive volume) and Windows they are one, as
+  T-093's `apps/kiln-cli/tests/macos_t093.rs` chooses (corrected (spec check): with `cfg!(windows)` the macOS job would
+  run the Linux branch of (3) and fail).
 
 ## Pinned
 - (a) Errors: no new kind. Interface (1) is `PathError` → `invalid_path`, first in precedence.
@@ -174,7 +177,14 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
     `?`, `*` or a control character; see `docs/protocol/paths.md`."
   - D-270: `control-protocol.md:144-147` and `project.md:82-83` name CI run 44358453526
     (`tasks/ci-runs/T-074-round-1.md`, all 15 guards) for the `awa3_*` and `awa1_*` tests. `paths.md`'s "its four
-    `awa1_*` tests … in CI run 44307677646" stays: four is what that run held.
+    `awa1_*` tests … in CI run 44307677646" stays: four is what that run held. Exact replacements (corrected (spec
+    check): the draft gave none, and AC-D3 needs them): in `control-protocol.md` "(shown in CI run 44307677646,
+    `tasks/ci-runs/T-074-early-1.md`, for a junction" becomes "(shown in CI run 44358453526,
+    `tasks/ci-runs/T-074-round-1.md`, for a junction"; in `project.md` "`guard_t074.rs` in CI run 44307677646,
+    `tasks/ci-runs/T-074-early-1.md`;" becomes "`guard_t074.rs` in CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`;".
+    Evidence: `tasks/ci-runs/T-074-round-1.md:216-233` (Windows `guard_t074`: five `awa1_*`, five `awa3_*`, all `ok`) and
+    `:78` (`disk::tests::link_at_temp_name_is_not_followed_on_every_platform ... ok`), which the control-protocol sentence
+    also cites. The rest of each sentence is unchanged (its claims are a subset of what that run shows).
 
 ## Acceptance criteria
 Local (implementer, re-run by the reviewer):
@@ -185,6 +195,27 @@ Local (implementer, re-run by the reviewer):
   No C stub is needed (measured, Pinned (g)).
 - AC-3: `cargo xtask no-skip` prints `35 platform test(s) registered (10 pending)`, unchanged. The variant to reject is a
   `#[cfg(windows)]` on the new test fn (an unlisted platform test).
+
+Through the join (test author, `crates/kiln-workspace/tests/acceptance_t095.rs`; ruling 4, D-272; added at the spec
+check). The documents read from the repository (`CARGO_MANIFEST_DIR/../../docs/…`), whitespace squashed (so CRLF on a
+Windows checkout reads the same); no platform cfg; each test fails on base on every platform, and **every test in the
+file must fail on base** (the join refuses the whole join if any acceptance test passes on base: `xtask/src/join.rs:306-318`
+`refused_base_passes`), so a "stays unchanged" check (for example `paths.md`'s four `awa1_*` in run 44307677646) belongs
+in `guard_t095.rs` or the reviewer's diff check, not here:
+- AC-D1: `docs/protocol/paths.md` contains Pinned (i) item 1 (the Windows paragraph of "Lexical refusals") as worded.
+  Base: absent.
+- AC-D2: `docs/protocol/paths.md` contains Pinned (i) item 2 (reserved names, trailing dot or space) as worded, and no
+  longer contains "are not yet stated for Windows (T-095)". Base: absent / present. (Q-B: which paragraphs ruling 4 means.)
+- AC-D3: the D-270 citations: `docs/control-protocol.md` contains "(shown in CI run 44358453526,
+  `tasks/ci-runs/T-074-round-1.md`, for a junction" and `docs/protocol/project.md` contains "the `awa1_*` tests of
+  `guard_t074.rs` in CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`" (Pinned (i), last item). Base: both cite
+  44307677646 / `T-074-early-1.md`.
+- The variant each must reject: AC-D1 a paragraph without `>` (or saying "U+0000"); AC-D3 the run id changed but the
+  record left at `T-074-early-1.md`.
+Measured on the sketch (spec check): three sketch tests, `0 passed; 3 failed` with the documents at base, `3 passed` with
+the Pinned (i) text in place; clippy `-D warnings` clean for the host and `x86_64-pc-windows-msvc` with `#![cfg(test)]` at
+the top (without it the workspace's `unwrap_used`/`expect_used` deny fires in a helper fn, as for every integration
+test file here).
 
 Through CI (pending criterion, §8.1). Fail-on-base evidence on Windows is the probe record (as D-254 ruling 8 for
 T-074).
@@ -255,7 +286,8 @@ CI rounds: **about 450,000** (ceiling 1,100,000). Arm: high → independent test
   y1, T-074) and no `acceptance_t095.rs` exists. Fail-on-base is the probe record (AC-W1). Whether `cargo xtask join`
   accepts a join with zero acceptance targets is not checked here (T-073 and T-074 each had one). A: as written; the
   director confirms the join tool. B: an `acceptance_t095.rs` reading `path.rs` as text for the `#[cfg(windows)]` rule
-  (brittle, golden rule 9). **Rec. A.**
+  (brittle, golden rule 9). **Rec. A.** (Superseded by ruling 4, D-272: `acceptance_t095.rs` with the document
+  statements; applied at the spec check in `touches` and AC-D1 to AC-D3.)
 - **Q-5 (order with T-093).** A: T-093 first, then this task, beside T-092. B: this task first and T-093 re-checked.
   **Rec. A.**
 
@@ -389,6 +421,64 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
   them because the names reach `RelPath::new` through helpers (`files_ctx`, `p(…)`, JSON params). They stay hidden in
   CI until T-098 (cargo stops at build errors), then T-099 would meet them as failures no task caused.
   `kiln-control`'s `"x: not found"` (`acceptance_t032_control.rs:42`) is formatting only and passed.
+
+**2. Sentences resting on probe lines** (`tasks/ci-runs/T-074-probe-1.md`, lines 150-245; the probe source read at
+`de8106f:crates/kiln-workspace/tests/probe_t074.rs:418-552`).
+- Header: "`PROBE I0` only for a name it refuses, and the record has no `I0` line" — VERIFIED (source `p("I0", …)` in the
+  `let Ok(rel) = r else` arm; record lines 153-230 hold I1-I3 for all 26 names). B4 (line 68): canonical root
+  `\\?\D:\…` — VERIFIED.
+- Goal bullets: I2 `read "f.txt::$DATA": Ok([102])` (199), I3 `Ok` (200), `C:x`/`C:`/`D:x` `OutsideRoot` (201-209), I10
+  `"C:x"` (241), `<?*|"` and U+0001 os error 123 on all three calls (210-227) — VERIFIED as cited.
+- Interface (1) "every `:` form … reached a stream or another drive": wider than the lines (`x/C:y` is `NotFound`,
+  line 228-230, because `x` does not exist; the walk never joined `C:y`) — corrected in the text.
+- Interface (2) "PROBE I1-I3 `Ok` for each": true for the 13 names sampled (153-191); `aux.rs`, `COM2`-`COM9`, a
+  `Document` save were not sampled — corrected in Interface (2), AC-W2 and Pinned (i) item 2. "a non-`\\?\` write to `a.`
+  made a file `a`" — VERIFIED (I11 line 244, I12 line 245 lists `"a"` where I5, line 232, had none). The non-verbatim
+  `CON` write answered `Ok` (243) and made no file (I12 has one `CON`): it went to the console device (INFERRED).
+- Interface (3): I7 (234-235) `F.TXT` read `Ok([102])` and check `Ok` — VERIFIED; I8 `AVERYL~1/g.txt` `NotFound` (236);
+  I9 `C:` "8dot3 name creation is ENABLED" (237, line cut by `…` in the artefact itself), work volume `D:` DISABLED (239)
+  — VERIFIED. That `std::env::temp_dir()` is on `C:` is in no record (INFERRED from the runner's usual `TEMP`): the
+  short-name test must print the drive it used (Q-D).
+- Pinned (g) examples: `nul.rs` `Ok` (162), `read "C:x"` `OutsideRoot` (202), `x<y` os error 123 (210), `F.TXT` (234) —
+  VERIFIED. Prototype claims re-run: `path::` unit tests pass (59 in `--lib`), Windows clippy clean (point 4).
+- AC-W1 names the ten forms with no `I0` line — VERIFIED (each in the probe's list).
+- *Not sampled at base: `>` and U+0002-U+001F.* At the file system only. For the criterion that matters — `RelPath::new`
+  refuses them on Windows after, accepts them at base — base needs no probe: `path.rs` has no platform code at base, so
+  Windows base behaviour equals the Linux run (the sketch's unit test passes on Linux asserting acceptance). So AC-W1's
+  fail-on-base holds for them by that run; what stays unchecked is only the document clause "the characters Windows does
+  not allow in a file name" for `>` and U+0002-U+001F (read from Microsoft's naming rules, not run). Acceptable if the
+  sentence's evidence line says so (it does not yet: Q-E offers a measurement for about 10,000 tokens).
+
+**3. Acceptance criteria.**
+- *Ruling 4 not yet applied* (blocker for the join, fixed): the spec had no acceptance test, and `cargo xtask join`
+  stops with `no_acceptance_tests` (`xtask/src/join.rs:255-262`) — corrected (spec check): AC-D1 to AC-D3 added under
+  "Through the join", the file in `touches` for the test author (point 6). Each fails on base on every platform (a file
+  read; measured on Linux with the sketch: 3 failed at base, 3 passed with the text). Their oracle is the Pinned (i)
+  wording, so the implementer must copy items 1 and 2 and the D-270 replacements exactly (they already say "worded to be
+  copied"). Pinning these sentences makes the next task that rewords them change `acceptance_t095.rs` (the D-249 kind):
+  acceptable, as `acceptance_t008_cli.rs:549-575` does the same for the lexical bullet.
+- *Testable, fail on base:* AC-1 (reviewer's IR comparison; not re-run here: every changed product line is
+  `#[cfg(windows)]`, the test fn is `#[cfg(test)]`), AC-2 (run, point 4), AC-3 (run, point 4: the count stays `35 (10
+  pending)` also with the two new test files present) are local procedures, not fail-on-base tests. Windows-only AC-W1
+  fails on base by the argument of point 2 (no platform code in `path.rs` at base) plus the probe lines for the file
+  system's answers. AC-W2 and the reading half of AC-W3 hold at base (guards). AC-W4 fails on base by construction
+  (the test does not exist).
+- *Absence as equality:* (1) is exact: the set, plus "U+0000-U+00FF except `/`, one at a time in `a<c>b`", refused
+  exactly for (1) ∪ {`\`, NUL} on Windows and {`\`, NUL} elsewhere. Variants outside the list it rejects: `>` accepted
+  (S-3), `CON` refused, U+007F or U+0080-U+009F refused (an implementer using `char::is_control`), and now a look-alike
+  refused (added, point 1). The sketch of this equality passes on Linux and is clippy-clean for Windows.
+- *Guards in `guard_t095.rs`:* no platform cfg (D-245); expectations by `cfg!`; must pass on Unix base (the join runs
+  guards on base on Linux: `join.rs:252-253`). On Windows they assert (1) the refusals (fail at base by design: a guard
+  is required to pass on base only where the join runs it), (2) Kiln's answers for reserved and trailing names, (3) the
+  case answers. The (3) expectations were chosen by `cfg!(windows)`, which sends macOS down the Linux branch although
+  its default volume folds case (T-093 row 3, `macos_t093.rs` header) — corrected to `cfg!(target_os = "linux")`.
+- *The two measurements:* the spec says what is printed, not what is asserted when the value cannot be predicted or
+  the measurement cannot be made (no 8.3 name on the volume of `temp_dir()`, `temp_dir()` not on `C:`, `fsutil`
+  failing). Two test authors would differ (one asserts the short name reaches the file and goes red on `D:`). Q-D
+  gives a rule. Also on Linux and macOS the spec does not say where the short-name fixture lives
+  (`std::env::temp_dir()` is `/tmp` there, outside `CARGO_TARGET_TMPDIR`): Q-D.
+- *Marking:* "to be measured by the test author on CI" is not one of §5.7's marks (implementer, director, reviewer,
+  "unchecked"); the implementer, who writes the sentence, cannot see the guard before the join. Q-C.
 
 ## Log
 ### director

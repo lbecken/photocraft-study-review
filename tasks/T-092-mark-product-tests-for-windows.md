@@ -681,6 +681,13 @@ sentence on helpers of U parts (M4), W41's wording (M5), AC-3's base figure and 
 `WORKSPACE TESTS` line and expected counts (point 4), AC-4's macOS stand-in, the W22 and directory-link implementer
 notes (point 2; the latter pending Q-B).
 
+### Rulings on the test author's questions (director, D-275; sent to both builders)
+- **a1.** The guard "each of the 33 other base entries is unchanged" is removed before the join: it is a
+  left-alone pin (D-043), and T-076, T-077 and T-098 would each have to edit it to change their own entries (the
+  D-249 kind of block). That no entry of another task changed is the reviewer's diff check, as ruling t1 of T-072.
+- **a2.** The two source-side tests (`ac1_unix_only_tests_of_the_nine_files_are_exactly_the_listed_ones`,
+  `ac1_w40_and_w41_exist_once_in_disk_tests_without_platform_cfg`) count under AC-1.
+
 ## Log
 ### director
 - 2026-11-18 filed as a draft (D-233).
