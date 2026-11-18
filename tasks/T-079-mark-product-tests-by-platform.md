@@ -696,4 +696,15 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   check and clippy exit 0. CI record round 1 read after my written expectation. Mutants 19 (2 equivalent; 6 acceptance,
   7 procedure, 2 own tests; 2 survived). Not run: macOS/Windows myself, a case-folding file system, the whole suite per
   mutant. Scratch deleted. · next: implementer (findings 3, 6), test author (finding 4), director (1, 2, 5)
+- 2026-11-18 · R-334 · review round 2 (final) · `reviews/T-079-r2.md` at `6dd4cd0` · verdict **approve**. Rulings
+  D-242 x1–x6 and "x3 read as built" read on main and accepted. Round-1 findings: 1 fixed (x5, the four reasons true), 3
+  fixed (x1: `RUST_MIN_STACK=262144` aborts at `885f4f1`, passes at the head, whole `acceptance_t019_cli` binary 7 passed
+  under it), 4 fixed (x3: M15, two forms of my own, an unknown predicate and a file `#![cfg_attr]` fail the guard), 6 fixed
+  (x2: M9 fails at `:1120`); 2 and 5 ruled (x6, x4). Delta inside `touches`, each by role; `c61acc5` (the patch) unchanged;
+  `docs/` unchanged since `885f4f1`; no assertion changed. Mutants 18 (2 equivalent; 6 acceptance, 5 own tests, 1
+  procedure; 4 survived → round-2 findings 1, 2 as follow-ups, nit 3). `cargo xtask no-skip` 20 registered (8 pending);
+  main's tool (`d597d2f`) on the tree: no-skip, hygiene, scorecard, layers, ui-commands, schema PASS. CI expectation
+  committed (`b601b83`) before reading `tasks/ci-runs/T-079-round-2.md`; the record shows `gate-macos` green, scorecard
+  216 / 3 with no problem, 1117 / 0; the 12 names on macOS not determinable (no full output). Gate on the committed state:
+  `GATE PASSED` (test 1134 passed, 0 failed). Scratch deleted. · next: director
 <!-- end reviewer log -->
