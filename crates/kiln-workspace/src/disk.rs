@@ -777,7 +777,9 @@ mod tests {
                 message: "injected rename failure".to_owned()
             }
         );
-        assert_eq!(used, Some(dir.join(".kiln-tmp-1")));
+        // The root is resolved at construction (`fs::canonicalize`), so the temporary file is
+        // named below the canonical directory: on macOS the temp dir is reached through a link.
+        assert_eq!(used, Some(dir.canonicalize().unwrap().join(".kiln-tmp-1")));
         assert_eq!(listing(&dir), [".kiln-tmp-0", "f"]);
         assert_eq!(fs::read(dir.join("f")).unwrap(), b"old");
         assert_eq!(fs::read(dir.join(".kiln-tmp-0")).unwrap(), b"not mine");
