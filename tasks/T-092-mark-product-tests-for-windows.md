@@ -37,10 +37,12 @@ unpaired surrogate (`reviews/T-079-r1.md`, finding 1): this task decides whether
 counterpart with such a name.
 
 ## Note from T-073 (director, D-249, ruling z3)
-T-073 registers 15 tests of `crates/kiln-workspace/src/disk.rs`'s own test module as `unix` with
-`counterpart = "pending"`, `task = "T-092"`, expiring 2026-12-31 (modes, inodes, uid, Unix symlinks, FIFOs). This
-task writes their Windows counterparts or changes an entry to `none` with the reason; those about the walk and
-a replaced root may move to T-074 by a ruling after T-073's review. `xtask/platform-tests.toml` is in `touches`.
+T-073 registers 15 tests of `crates/kiln-workspace/src/disk.rs`'s own test module as `unix`. After ruling c8 of
+T-073 (D-250) **two of them wait on this task** (`counterpart = "pending"`, `task = "T-092"`, expiring 2026-12-31):
+`leftover_at_temp_name_is_never_touched` and
+`failed_save_after_writability_check_leaves_target_and_listing_unchanged`; nine wait on T-074, three are `none`,
+one names its counterpart. This task writes the two Windows counterparts or changes an entry to `none` with the
+reason. `xtask/platform-tests.toml` is in `touches`.
 Also: `xtask/tests/acceptance_t079.rs` checks T-079's 20 entries one by one; a task that changes one of those 20
 lists that file for its test author.
 
@@ -51,6 +53,8 @@ design, naming why, in place of two twins that did nothing. This task gives it i
 platform has stay unconditional, the mode and inode checks become a registered Unix part with a counterpart or a
 reason. The other targets the Windows gate still names: `kiln-cli` `acceptance_t008_cli` and `acceptance_t019_cli`,
 `kiln` `acceptance_t055`, `script_t055`, `acceptance_t065`, `window_t065`.
+- The panic text of `acceptance_t002::disk_save_replaces_via_rename_without_leftovers` on Windows still names
+  "T-073 and T-074" (`reviews/T-073-r2.md`): this task rewrites that test, so the text goes with it.
 
 ## Log
 ### director

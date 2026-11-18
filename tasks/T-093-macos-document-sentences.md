@@ -59,6 +59,12 @@ Low tasks with a reviewer's read: T-069 346,304 (D-179) with two extensions; pla
 - **Q-1: A** (a reviewer's read). **Q-2: A** (one CI round before the queue).
 - Dispatched when `docs/protocol/paths.md` is free: after T-073 and T-074, beside T-092.
 
+## Note from T-073's review round 2 (director, D-251)
+`docs/protocol/paths.md`, the Windows paragraph of "The root" (T-073): the clause that says what Linux and macOS
+do when a directory above the root is renamed rests, for macOS, on the gate's count and not on the test by name
+(`reviews/T-073-r2.md`, nit 1). This task names the evidence for the macOS half (T-072 makes a green run list its
+tests) or words it as "by the gate's count".
+
 ## Log
 ### director
 <!-- end director log -->
