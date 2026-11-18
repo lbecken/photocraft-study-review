@@ -48,10 +48,7 @@ impl Scratch {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let p = std::env::temp_dir().join(format!(
-            "kiln-acc-t096-{}-{nanos}",
-            std::process::id()
-        ));
+        let p = std::env::temp_dir().join(format!("kiln-acc-t096-{}-{nanos}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         Scratch(p)
@@ -148,10 +145,17 @@ fn pinned_channel() -> String {
 fn nested_cargo_test(target: &Path, args: &[&str], rustup_home: Option<&Path>) -> Out {
     let mut c = clean("cargo", &checkout());
     c.args([
-        "test", "--offline", "--locked", "-p", "xtask", "--bin", "xtask",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "xtask",
+        "--bin",
+        "xtask",
     ])
     .args(args)
-    .env("CARGO_TARGET_DIR", target);
+    .env("CARGO_TARGET_DIR", target)
+    .env("RUST_BACKTRACE", "0");
     if let Some(h) = rustup_home {
         c.env("RUSTUP_HOME", h).env("RUSTUP_AUTO_INSTALL", "0");
     }
@@ -179,6 +183,18 @@ fn result_counts(text: &str) -> (usize, u64, u64) {
     (lines.len(), passed, failed)
 }
 
+/// Each `panicked at` line of `text` with the five lines after it.
+fn panics(text: &str) -> String {
+    let v: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    for (i, l) in v.iter().enumerate() {
+        if l.contains("panicked at") {
+            out.extend_from_slice(&v[i..(i + 6).min(v.len())]);
+        }
+    }
+    out.join("\n")
+}
+
 fn tail(s: &str, n: usize) -> String {
     let v: Vec<&str> = s.lines().collect();
     v[v.len().saturating_sub(n)..].join("\n")
@@ -199,7 +215,10 @@ fn unix_branch() {
     let channel = pinned_channel();
 
     // rustup is needed: the toolchain file is honoured by its proxies (Pinned (d)).
-    let v = run_to(&mut clean("rustup", &checkout()).arg("--version"), SHORT_SECS);
+    let v = run_to(
+        &mut clean("rustup", &checkout()).arg("--version"),
+        SHORT_SECS,
+    );
     assert_eq!(
         v.code,
         Some(0),
@@ -301,9 +320,10 @@ fn unix_branch() {
     let (lines, passed, failed) = result_counts(&o.stdout);
     let shown = format!(
         "exit {:?}, {lines} result line(s), {passed} passed, {failed} failed, {:.1}s\n\
-         --- stdout (tail) ---\n{}\n--- stderr (tail) ---\n{}",
+         --- inner panics ---\n{}\n--- stdout (tail) ---\n{}\n--- stderr (tail) ---\n{}",
         o.code,
         started.elapsed().as_secs_f64(),
+        panics(&o.text()),
         tail(&o.stdout, 40),
         tail(&o.stderr, 40)
     );
@@ -325,11 +345,7 @@ fn windows_branch() {
         "cargo test --bin xtask -- --list:\n{}",
         o.text()
     );
-    let listed: Vec<&str> = o
-        .stdout
-        .lines()
-        .filter(|l| l.ends_with(": test"))
-        .collect();
+    let listed: Vec<&str> = o.stdout.lines().filter(|l| l.ends_with(": test")).collect();
     assert!(
         listed.iter().any(|l| l.starts_with("queue::tests::")),
         "the list holds no queue unit test at all, so absence would prove nothing:\n{}",
