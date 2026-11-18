@@ -204,7 +204,16 @@ high ceiling 1,100,000. Arm: high → independent test author.
   spec then (v1.5 §5.7).
 
 ### Spec check (after T-073)
-(in progress: planner spec check against main `72522f2`; sections follow)
+Planner run, v1.5 §5.7 re-check after T-073 merged (`8bf4c3a`, base `7c44427`), against main `72522f2` (drift from the
+asked `90bb7f4`: `git diff --stat 90bb7f4 72522f2` = `STATE.md`, `handoffs/2026-11-18.md` only, ledger). What T-073
+changed in this spec's paths (`git diff 7c44427 8bf4c3a -- .github/workflows/platforms.yml xtask/tests/acceptance_t070.rs`):
+one new `gate-windows` step "Workspace lib and T-073 tests (reported, not required)" (`platforms.yml:191-203`, `if:
+always()`, writes `workspace-tests.txt`), that file added to the Windows upload (`:234`), and one new test fn
+`t073_gate_windows_reports_the_workspace_lib_and_t073_tests` (`acceptance_t070.rs:1205-1277`) pinning that step's exact
+command, its place between gate and upload, `set +e` … `exit 0`, and its file in the upload, in `gate-windows` and in no
+other gate job. Every line number below is VERIFIED with `cat -n` / `grep -n` at `72522f2`.
+
+(work in progress: S-1 … follow)
 
 ## Log
 ### director
