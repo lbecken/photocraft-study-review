@@ -88,7 +88,7 @@ the gate-macos row's result is not green: | `gate-macos` | red (gate: scorecard,
 - Disk (job log): `DISK: df -h of the workspace's volume`, `Filesystem      Size  Used Avail Use% Mounted on`, `/dev/root       145G   65G   80G  45% /`; `DISK: du -sh target` → `4.5G	target`.
 - `core-crates.txt`: labels `==== cargo test --locked --no-fail-fast -p kiln-text|kiln-syntax|kiln-search|xtask`; `kiln-text`, `kiln-syntax`, `kiln-search` exit status 0; `==== xtask: exit status 101`.
 
-## gate-windows (windows-2025; image version not read: the log was read as a tail only)
+## gate-windows (windows-2025; image `windows-2025-vs2026` version 20261103.298.1 per the job log header)
 Step timings:
 | step | conclusion | duration |
 |---|---|---|
@@ -169,7 +169,7 @@ Windows and Git Bash: the job's shell is `C:\Program Files\Git\bin\bash.EXE --no
 |---|---|---|---|---|---|---|---|
 | gate-linux | ubuntu-24.04, image ubuntu-24.04 20261111.370.1 | 32m50s | 13m59s (report 834.8 s) | 1s | 11m28s (ran, gate red) | `/dev/root       145G   65G   80G  45% /` | 4.5G |
 | gate-macos | macos-15, image not read | not finished | 17m40s (failed) | 4s | 9m01s, `cancelled` | not read (Disk step never completed) | not read |
-| gate-windows | windows-2025, image not read | 16m30s | 4m42s (report 266.3 s) | 1s | 1s (ran, nothing compiled) | `D:              220G  3.7G  217G   2% /d` | 3.5G |
+| gate-windows | windows-2025, image windows-2025-vs2026 20261103.298.1 | 16m30s | 4m42s (report 266.3 s) | 1s | 1s (ran, nothing compiled) | `D:              220G  3.7G  217G   2% /d` | 3.5G |
 macOS inode columns: not read.
 
 ## Against the expectation (implementer's "CI expectation", `tasks/T-072-gate-green-on-macos.md` at d6f7805; the head also holds the test author's files, which the expectation excluded)
@@ -222,5 +222,5 @@ Other lines of this run: gate-windows ran the 14-target step with the same 14 st
 
 ## Not read
 - `gate-macos` of run 44297420849: everything beyond the step list (unfinished at 12:49Z: Full test output cancelled for a reason not shown, Disk without end, no artefact, `get_job_logs` HTTP 404 each time): conclusion, wall time, gate report, `TEST LIST: exit status` line, `test-list.txt` size/counts, core-crates/xtask totals and the two T-072 test binaries, `df` line with inode columns, `target/` size, image version, total wall.
-- Windows image version (log read as a tail of 900 lines); the three window artefacts' contents (including the Windows probe's exit status).
+- The three window artefacts' contents (including the Windows probe's exit status).
 - The first lines of clippy's, scorecard's and test's failing output on Windows (the report keeps the last 60/27 lines).
