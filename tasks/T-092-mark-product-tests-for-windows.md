@@ -720,6 +720,19 @@ notes (point 2; the latter pending Q-B).
   re-ran `no-skip` on a mock-up and the D-249 greps; T-098 and T-099 order notes. Verdict: ready to dispatch · next: director
 <!-- end planner log -->
 ### implementer
+- 2026-11-18 · implementer (R-391) · in_progress · criteria in my words: (1) on Windows the 13 targets of AC-3
+  compile, are clippy-clean under `-D warnings` and pass with the counts AC-3 gives (lib 45 with W40, W41); the two
+  listing targets stay as they are; (2) each test of the 9 files is P (no platform cfg on fn, module, file; Windows
+  expectation by `cfg!(windows)` where a document states it), or U behind `#[cfg(unix)]` with exactly the 12 registry
+  entries of Interface (2), or split keeping the name on the portable part and `_unix` on the Unix part; (3) the two
+  pending `disk.rs` entries name W40, W41, which are new portable tests; (4) no Linux name lost or assertion weakened;
+  main's tool and main's registry tests pass; the gate is green. Log as I go, file by file in table order.
+  - W1 (`acceptance_t002.rs`): the `#[cfg(windows)] panic!` removed; a hard link `hold/first` (outside `d`, made before
+    the listings are taken) keeps the old bytes after the first save, on every platform; before the unedited second save
+    a hard link `hold/second` is taken and written through afterwards, `d/f.txt` unchanged (a different file); Unix
+    statements keep mode and inode as before; paired `#[cfg(windows)]` blocks check the read-only attribute unchanged
+    (new helper `readonly`, Windows only, one definition). Linux: 15 passed (as base); Windows stand-in clippy
+    `--lib --test acceptance_t002 -D warnings` → `Finished`.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

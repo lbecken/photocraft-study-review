@@ -166,13 +166,19 @@ mod support {
         doc.buffer_mut().insert(end, s).unwrap();
     }
 
-    /// Permission bits and inode (Unix only: the test that uses them fails elsewhere, naming
-    /// why, as METHODOLOGY §8.1 asks).
+    /// Permission bits and inode (Unix metadata; the Windows statements beside their uses check
+    /// the read-only attribute, and a hard link shows the rename on every platform).
     #[cfg(unix)]
     pub fn mode_and_inode(p: &Path) -> (u32, u64) {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         let m = std::fs::metadata(p).unwrap();
         (m.permissions().mode() & 0o7777, m.ino())
+    }
+
+    /// The read-only attribute (Windows' form of "the permissions are unchanged").
+    #[cfg(windows)]
+    pub fn readonly(p: &Path) -> bool {
+        std::fs::metadata(p).unwrap().permissions().readonly()
     }
 
     #[cfg(unix)]
@@ -878,12 +884,19 @@ fn disk_save_replaces_via_rename_without_leftovers() {
     put(&root, "d/f.txt", b"old content\n");
     put(&root, "d/keep.txt", b"k");
     let file = root.join("d/f.txt");
+    // Every platform: a hard link to the old file, outside `d`, shows that the save swapped new
+    // content in by a rename (the link keeps the old file) instead of writing in place.
+    let hold = root.join("hold");
+    std::fs::create_dir_all(&hold).unwrap();
+    std::fs::hard_link(&file, hold.join("first")).unwrap();
     #[cfg(unix)]
     set_mode(&file, 0o640);
     let listing_before = listing(&root.join("d"));
     let root_before = listing(&root);
     #[cfg(unix)]
     let (mode_b, ino_b) = mode_and_inode(&file);
+    #[cfg(windows)]
+    let ro_b = readonly(&file);
 
     let mut disk = DiskFs::new(&root).unwrap();
     let path = rp("d/f.txt");
@@ -903,6 +916,11 @@ fn disk_save_replaces_via_rename_without_leftovers() {
         std::fs::read(root.join("d/keep.txt")).unwrap(),
         b"k".to_vec()
     );
+    assert_eq!(
+        std::fs::read(hold.join("first")).unwrap(),
+        b"old content\n".to_vec(),
+        "a hard link to the old file changed: content written in place, not swapped in by rename"
+    );
     #[cfg(unix)]
     {
         let (mode_a, ino_a) = mode_and_inode(&file);
@@ -913,18 +931,37 @@ fn disk_save_replaces_via_rename_without_leftovers() {
             "content swapped in by rename, not rewritten in place"
         );
     }
+    #[cfg(windows)]
+    {
+        assert!(!ro_b, "fixture self-check: the target is writable");
+        assert_eq!(readonly(&file), ro_b, "read-only attribute unchanged");
+    }
 
-    // A second save (unedited) behaves the same way.
+    // A second save (unedited) behaves the same way. The bytes do not change, so the hard link
+    // taken now is shown to be a different file afterwards by writing through it.
+    std::fs::hard_link(&file, hold.join("second")).unwrap();
     #[cfg(unix)]
     let (mode_m, ino_m) = mode_and_inode(&file);
+    #[cfg(windows)]
+    let ro_m = readonly(&file);
     doc.save(&mut disk).unwrap();
     assert_eq!(listing(&root.join("d")), listing_before);
     assert_eq!(std::fs::read(&file).unwrap(), b"new old content\n".to_vec());
+    std::fs::write(hold.join("second"), b"through the old link\n").unwrap();
+    assert_eq!(
+        std::fs::read(&file).unwrap(),
+        b"new old content\n".to_vec(),
+        "the second save left the file a hard link of the old one: written in place, not renamed"
+    );
     #[cfg(unix)]
     {
         let (mode_a, ino_a) = mode_and_inode(&file);
         assert_eq!(mode_a, mode_m);
         assert_ne!(ino_a, ino_m);
+    }
+    #[cfg(windows)]
+    {
+        assert_eq!(readonly(&file), ro_m, "read-only attribute unchanged");
     }
 
     // write_atomic of a new file in an existing directory also leaves only that file.
@@ -933,13 +970,6 @@ fn disk_save_replaces_via_rename_without_leftovers() {
     want.push("created.txt".to_string());
     want.sort();
     assert_eq!(listing(&root.join("d")), want);
-
-    // The permission bits and the inode of the checks above are Unix metadata: on Windows the
-    // test has checked everything else and fails here instead of passing without them.
-    #[cfg(windows)]
-    panic!(
-        "precondition: permission bits and inode numbers are Unix metadata; the Windows checks of atomic replace are not written yet (ADR-0009: T-073 and T-074 write the Windows behaviour and its tests)"
-    );
 }
 
 #[test]
