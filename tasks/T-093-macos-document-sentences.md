@@ -234,6 +234,7 @@ Questions for the director:
   - `gate-linux`: both listed and passing (the Linux branch: `A.rs`, `a.rs` listed; `A.rs` `not_found`).
   - Windows jobs: `macos_t093` not built by the gate (kiln-cli's test targets do not build there until T-098), so neither name appears; its Windows branch expects the macOS result (INFERRED, ruling Q-5 A), compiled only by the stand-in above.
   - After the record: rows 3 and 4 written from it, as the only change of a later commit (`paths.md`, `project.md`), and row 1's "as written" reworded to point to them.
+- 2026-11-18 · R-389 · ci-request · did: gate attempt 1 `cargo xtask ci`: GATE PASSED (11 steps; test `1202 passed, 0 failed, 0 ignored in 141 suites`; no-skip PASS); `cargo test -p xtask` 318 passed, 0 failed. Commits `ab26766` (tests), `25604b1` (documents), `234f98c` (log, expectation), this entry. · gate attempts: 1, green · not run: macOS/Windows branches of `macos_t093` · next: director, CI round 1 on this entry's commit (CI-REQUEST in the report)
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
