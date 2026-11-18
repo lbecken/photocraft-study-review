@@ -391,6 +391,10 @@ way of writing a test falls into is closed; a contrived one is stated as a limit
   s7, s9 and s10. The nit (a `skips.toml` entry of a platform kind) is not changed.
 - The pending CI criterion stays open: AC-6 and the Windows verdict of `guard_t054`'s backtrace test are read on
   CI round 2 after the re-join.
+- **s1 clarified (the test author's question 8; told to the implementer in flight).** The existing kind
+  `cfg-attr-ignore` keeps reporting `#[cfg_attr(<predicate>, ignore)]`; s1 adds only that
+  `#[cfg_attr(<any predicate>, test)]` is `cfg-disabled`. The empty statement of s7 is `#[cfg(windows)] ();`
+  (`#[cfg(windows)] ;` is not valid Rust).
 
 ## Log
 ### director
