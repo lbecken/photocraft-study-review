@@ -20,6 +20,7 @@ touches:                # one role per path (D-153). All but the last two: imple
   - xtask/tests/acceptance_t005_r4.rs       # GATE PATH: as above
   - xtask/tests/acceptance_t013_hygiene.rs  # GATE PATH
   - xtask/tests/guard_t005.rs               # GATE PATH
+  - xtask/tests/acceptance_t005.rs          # GATE PATH: implementer: the one line that writes the outside dependency's path into a toy Cargo.toml (ruling s14, D-231)
   - xtask/src/queue.rs                     # GATE PATH: its #[cfg(test)] module only (from line 803): two tests fail on macOS (R-285)
   - xtask/src/worktree.rs                  # GATE PATH: its #[cfg(test)] module only (from line 228): one test fails on macOS (R-285)
   - xtask/src/join.rs                      # GATE PATH: its #[cfg(test)] module only: the toy repositories' git settings (ruling s13, D-228)
@@ -400,6 +401,11 @@ way of writing a test falls into is closed; a contrived one is stated as a limit
   `#[cfg(test)]` module only: its toy repositories get the same four settings as those of `queue.rs`, `publish.rs`
   and `worktree.rs` (`core.autocrlf=false`, `core.eol=lf`, `core.safecrlf=false`, `core.longpaths=true`), so the
   three `join::tests` that still fail under `core.autocrlf=true` pass. `xtask/src/git.rs` stays untouched.
+- **s14 (CI round 3; D-231; implementer).** The two remaining Windows failures have one cause: a path is written
+  unescaped into a TOML string of a toy `Cargo.toml` (`xtask/tests/acceptance_t005.rs:711`,
+  `seed_reuses_non_member_artifacts_only`; the same line in `xtask/tests/guard_t005.rs`,
+  `seeded_worktree_builds_its_own_source`). The path is written so that TOML reads it on every platform (with `/`,
+  or as a literal string). `xtask/tests/acceptance_t005.rs` joins `touches` for that one line.
 
 ## Log
 ### director
@@ -416,6 +422,16 @@ way of writing a test falls into is closed; a contrived one is stated as a limit
   `gate-windows`" not met; clause "the scorecard step on macOS prints the platform detail line" not met as printed
   (the step printed `6 scorecard problems: …`; the page was not compared). The Windows verdict of `guard_t054`'s
   backtrace test stays pending (its binary did not run). Rework is ruled with the review's findings.
+
+- 2026-11-18 **CI round 3** (round 2, at `88f38ca`, is superseded and not read; record `tasks/ci-runs/T-071-round-3.md`,
+  from the six artefacts, run R-318): run 44215218474 on `ci/candidate` at the joined head
+  `d00e21d5901ce6c35124f985ed3bd3638044c96d`. `gate-linux` success; the counted jobs `window-linux` and
+  `window-probe (macos-15)` success. **All 21 `xtask` test binaries ran on each platform**: Linux 278 passed, macOS
+  273 passed, Windows 268 passed and 2 failed (ruling s14). None of round 1's 22 Windows failures recurs. The 8
+  registered tests are present or absent exactly as their entries say. Off Linux the scorecard step prints the
+  platform line first (s10). `acceptance_t071` 28 of 28, `guard_t071` 6 of 6, `acceptance_t070` 13 of 13 and
+  `guard_t070` 7 of 7 on all three. macOS workspace: 1,101 passed, 16 failed, exactly the 16 product tests of
+  D-199 (T-079's). AC-6: every clause met except "`xtask` exit status 0 on `gate-windows`" (the 2 failures).
 
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director

@@ -390,6 +390,11 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   run 43765532298); `window-linux` and `window-probe (macos-15)` success (the two counted jobs); the macOS and
   Windows gates red as on main; macOS totals 1,003 passed and 22 failed, the same 22 names as before the change.
 
+- 2026-11-18 **The Windows verdict of ruling Q-4 A** (read on T-071's CI round 3, run 44215218474, record
+  `tasks/ci-runs/T-071-round-3.md`): `guard_t054::ac2_backtrace_names_this_file_and_line ... ok` and
+  `ac2_panic_location_is_this_file_and_line ... ok` on `gate-windows`; `acceptance_t054` 7 of 7. With Linux and
+  macOS (D-205) the backtrace guard passes on all three platforms: no platform difference to rule.
+
 ### planner
 - 2026-11-14 · R-225 · (new) · did: filed as a draft for ADR-0007 (D-144 change 14). · gate attempts: 0 · missing context: the exact setting D-097 measured · next: director.
 - 2026-11-15 · R-270 · draft · did: measured six settings in a scratch copy, one at a time under the 14 GB rule; specified option C (line tables, no dependency debug info, no incremental: 7.6 → 2.6 GB for the test build); tier high (gate path `[profile.*]`), approval row `Approve T-054 … gate paths`, no `dependency versions`; 4 criteria, two of them tests in `xtask/tests/` (one fails on base, one guard); ordered after T-070 (shared `docs/development.md`). · gate attempts: 0 (scratch builds only) · not run: a whole gate run, macOS, Windows · missing context: none · next: director (Q-1 to Q-3).
