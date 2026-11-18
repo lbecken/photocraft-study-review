@@ -602,7 +602,10 @@ dispatch), Linux (`ubuntu-24.04`). It is the Linux gate on `main`.
 
 `.github/workflows/platforms.yml` (T-070, ADR-0009) runs on every push to `main` or to a
 branch `ci/<anything>` that changes a path outside the ledger, nightly at 03:17 UTC on the
-default branch (`schedule`), and on manual dispatch. The ledger filter is a `paths-ignore`
+default branch (`schedule`), and on manual dispatch. Scheduled runs start late by GitHub's own
+queueing: runs 44078955834 and 43858930525 (`event: schedule`, at `c45a17f`) started at
+11:59:32Z and 11:34:25Z, about 8 h 42 min and 8 h 17 min after 03:17Z (T-072 Interface (3)). The
+ledger filter is a `paths-ignore`
 list built from `xtask/ledger.toml` as T-041 builds it: for each entry with `mode = "any"`, in
 file order, `e` and `e/**`; `add-only` entries contribute nothing. A push whose changed paths
 are all ledger paths starts no job of this workflow (GitHub's documented `paths-ignore` rule,
@@ -618,7 +621,8 @@ as T-041 Interface (2) reads it; not observed here). Its jobs:
 
 A job's colour is its gate step's exit status (for `window-linux` the build's and the
 procedure's, for `window-probe` the build's and the probe's): the steps that only record
-something (reports, the core-crates step, the full test output, disk and package lines) end with
+something (reports, the core-crates step, the test list, the full test output, the Windows
+reported test steps, disk and package lines) end with
 exit status 0 whatever they record, so they can neither hide a failure nor cause one; a setup step
 (checkout, toolchain, cache, the package-list refresh) or an upload that fails makes the job
 red. Steps run with `bash` (Git Bash on Windows), `CARGO_TERM_COLOR=always`, `CARGO_INCREMENTAL=0`, the toolchain
@@ -627,17 +631,38 @@ the gate jobs stop after 120 minutes, the window jobs after 60 (`timeout-minutes
 After the gate, whatever its result, each gate job prints the report and runs:
 - the **core-crates step**, one `cargo test --locked --no-fail-fast -p <package>` for each of
   `kiln-text`, `kiln-syntax`, `kiln-search` and `xtask`, in that order, each appended to
-  `core-crates.txt` with its exit status (one run per package, because a package whose tests do
-  not compile would stop the others' tests in a single run naming several; `--no-fail-fast`, so
+  `core-crates.txt` after a line `==== cargo test --locked --no-fail-fast -p <package>` and
+  followed by its exit status (one run per package, because a package whose tests do not
+  compile would stop the others' tests in a single run naming several; `--no-fail-fast`, so
   a failing test binary does not stop the package's later ones). It is reported, not required: its exit
-  status never changes the job's colour. These four packages do not depend on `kiln-workspace`,
-  so on Windows, where the workspace does not build until T-073, it is the only test evidence;
+  status never changes the job's colour. These four packages do not depend on `kiln-workspace`;
+- on `gate-windows` only, T-073's step "Workspace lib and T-073 tests (reported, not required)":
+  `cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073 --test
+  guard_t073 -- --show-output` into `workspace-tests.txt` (reported, not required), because the
+  gate's own `test` step does not build on Windows yet (T-092);
+- the **test list**, `cargo test --workspace --locked --no-fail-fast -- --list` into
+  `test-list.txt`: every test name per test binary (each binary's `Running` or `Doc-tests` line
+  followed by its `<name>: test` lines). It reuses the binaries the gate's `test` step built and
+  runs no test, so on a green job the names are this list and the verdicts are the gate's `test`
+  totals (`0 failed`); the log prints the `Running` / `Doc-tests` and `error` lines and `TEST
+  LIST: exit status N` (recorded, not used). On Windows the list holds the compile errors and no
+  names while the workspace's tests do not build there (T-092);
+- on `gate-windows` only, after the list, the step "kiln-workspace test targets (reported, not
+  required)": for each file `crates/kiln-workspace/tests/<t>.rs`, in name order, `cargo test
+  --locked --no-fail-fast -p kiln-workspace --test <t> -- --show-output`, appended to
+  `windows-tests.txt` after a line `==== cargo test … --test <t> -- --show-output` and followed by
+  `==== <t>: exit status N`, so a test target added later is reported with no workflow edit;
 - only when the gate step failed, `cargo test --workspace --locked --no-fail-fast` into
-  `test-output.txt` (its exit status is recorded, not used);
+  `test-output.txt` (its exit status is recorded, not used); with no line cap, the log prints each
+  failing test's `---- <name> stdout ----` block with the 20 lines after it (its panic message), a
+  binary that aborted with its `Running` line and the abort lines, every `error: could not
+  compile`, `error[` and `error: test failed` line, the list of failed targets, and every
+  binary's `test result:` line;
 - a disk line: `df -h .` and `du -sh target`.
 
 Artefacts (on GitHub only, kept 30 days): `gate-<os>-<run id>` with whichever of
-`gate-report.json`, `core-crates.txt`, `test-output.txt` exist; `window-linux-<run id>` with
+`gate-report.json`, `core-crates.txt`, `test-list.txt` (every run) and `test-output.txt` (a
+failed gate) exist, on `gate-windows` also `workspace-tests.txt` and `windows-tests.txt`; `window-linux-<run id>` with
 `window-procedure.txt`; `window-probe-<label>-<run id>` with `window-probe.txt`.
 
 **Tracking and counted** (METHODOLOGY §8.1). The Linux gate counts for main's colour. A macOS
@@ -674,7 +699,7 @@ columns are the job's `DISK` lines as printed):
 | Job | Result | Wall time | `df -h .` (size, used, avail, use) | `du -sh target` |
 |---|---|---|---|---|
 | `gate-linux` | green | 15 min 34 s | `/dev/root 145G 69G 76G 48% /` | 8.6G |
-| `gate-macos` | red (gate: scorecard, test) | 21 min 20 s, of which 11 min 26 s the full-test-output step | `/dev/disk2s5 320Gi 262Gi 40Gi 87%` (`/System/Volumes/Data`) | 4.4G |
+| `gate-macos` | red (gate: scorecard, test) | 21 min 20 s, of which 11 min 26 s the full-test-output step | `/dev/disk2s5 320Gi 262Gi 40Gi 87% 2.3M 419M 1% /System/Volumes/Data` (size, used, avail, capacity, iused, ifree, %iused, mounted on) | 4.4G |
 | `gate-windows` | red (gate: clippy, schema, scorecard, test) | 9 min 15 s | `D: 150G 5.5G 145G 4% /d` | 2.5G |
 | `window-linux` | green | 2 min 13 s | (no disk line) | |
 | `window-probe` (`macos-15`) | green | 2 min 26 s | (no disk line) | |
