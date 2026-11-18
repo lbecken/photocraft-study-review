@@ -1565,12 +1565,18 @@ fn deep_trees_stop_at_the_depth_bound() {
         assert!(!l.truncated, "{source:?}");
     }
 
-    // 2,100 nested directories: longer than PATH_MAX on the host, built by `mkdir -p`.
+    // 2,100 nested directories: longer than PATH_MAX on the host, built one level at a time
+    // with short paths only (each new level is made at the top, then the chain so far is moved
+    // into it), so no call names a path near the host's limit.
     fs::create_dir(w.at("c2100")).unwrap();
-    let mut mkdir = Command::new("mkdir");
-    mkdir.arg("-p").arg(chain(2100)).current_dir(w.at("c2100"));
-    let out = spawn_with_timeout(mkdir, None, TIMEOUT);
-    assert!(out.status.success(), "mkdir -p of the 2,100-deep chain");
+    let (top, parent) = (w.at("c2100-chain"), w.at("c2100-parent"));
+    fs::create_dir(&top).expect("the bottom level of the 2,100-deep chain");
+    for _ in 1..2100 {
+        fs::create_dir(&parent).expect("a level of the 2,100-deep chain");
+        fs::rename(&top, parent.join("d")).expect("a level of the 2,100-deep chain");
+        fs::rename(&parent, &top).expect("a level of the 2,100-deep chain");
+    }
+    fs::rename(&top, w.at("c2100/d")).expect("the 2,100-deep chain into c2100");
     let mut find = Command::new("find");
     // `find`'s start point `d` is depth 0: exactly one directory at depth 2,099 or more.
     find.args(["d", "-mindepth", "2099", "-type", "d"])
