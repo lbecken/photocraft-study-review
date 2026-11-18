@@ -311,6 +311,34 @@ high → independent test author.
   author uses no platform cfg; I add an entry only for a platform-only test it names), Q-3 A, Q-4 A. C compiler
   stub for cross checks in scratch (`clang --target=<t> -c` of an empty unit, `AR_<t>` = `llvm-lib`/`llvm-ar`),
   as ADR-0009 probe a3 · next: product code
+- 2026-11-18 · R-338 · blocked · did: product code (`disk.rs`: the `std::os::unix` import, `root_id` and
+  `_root_handle` and their initialisers and the `(dev, ino)` comparison each gain `#[cfg(unix)]` on unchanged lines;
+  `#[cfg(windows)] root_handle: same_file::Handle` from `Handle::from_path(&resolved)` and compared in
+  `current_root`; `create_temp` unchanged under `#[cfg(unix)]` plus a `#[cfg(windows)]` twin without `.mode`;
+  module docs gain an "On Windows" paragraph and line 1 no longer says "Unix only"); `same-file = "=1.0.6"` under
+  `[target.'cfg(windows)'.dependencies]`; 15 tests and 10 helpers of the test module under `#[cfg(unix)]` (names
+  unchanged) with 15 registry entries (`unix`, `pending` T-092, 2026-12-31); `paths.md` "The root" Windows
+  paragraph (held-root behaviour marked unchecked) and the T-074 scope sentence; the Windows save sentence in
+  `control-protocol.md`; the reported Windows step and `t073_gate_windows_reports_the_workspace_lib_and_t073_tests`
+  in `acceptance_t070.rs`, changed after ruling y2 (D-247, accepted) to `--test acceptance_t073 --test guard_t073 --
+  --show-output` (fails on the D-245 form and on base). Local criteria (C compiler stub in scratch): AC-1 0 errors;
+  AC-2 clean; AC-3 0 errors (28 before the test-module step); AC-4 `+ "same-file",` only; macOS
+  `check --workspace --all-targets` and `clippy --all-targets -D warnings` for aarch64-apple-darwin exit 0. Main's
+  tool (`ffaace9`, export, one build) on this tree: no-skip PASS `35 platform test(s) registered (23 pending)`,
+  hygiene, scorecard --check, layers, ui-commands, schema PASS. Gate attempts: 1, FAILED at `test`: 1108 passed, 2
+  failed, both in `xtask/tests/acceptance_t079.rs` (`ac1_registry_entries_are_exactly_the_twenty_of_interface_2_and_2a`,
+  `ac1_pending_entries_name_their_task_and_expire_on_2026_12_31`): they pin the registry to exactly T-079's 20 entries
+  and 8 pending ones, so the 15 entries Interface (5) requires fail them by construction. no-skip, fuzz, budgets not
+  run by the gate after the failure (no-skip PASS when run alone).
+  BLOCKED: QUESTION: Interface (5) needs registry entries, and main's `acceptance_t079.rs` (not in `touches`, an
+  `acceptance_t*` file I may not edit) asserts the registry holds exactly its 20. Who changes those two tests, and
+  how (for example to "the 20 of T-079 are present", as the implementer brief asks for things that grow)?
+  QUESTION: `control-protocol.md`: `apps/kiln-cli/tests/acceptance_t008_cli.rs:566` pins the save bullet with
+  "(on Unix)" verbatim, so I kept it and appended the Windows sentence rather than replacing "(on Unix)"; confirm.
+  Note: the 15 counterparts are `pending` T-092 as Interface (5) allows; the symlink-walk ones may belong to T-074,
+  and the read-only and replaced-root ones could name tests of `guard_t073.rs` after the join.
+  Not run: anything on Windows; no CI-REQUEST, because the gate is not green · next: director ruling on the two
+  questions, then gate attempt 2 and CI-REQUEST
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
