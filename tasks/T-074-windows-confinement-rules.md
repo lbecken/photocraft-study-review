@@ -38,6 +38,22 @@ The most uncertain task: confinement tasks of iteration 2 cost 750,000–930,000
 (T-036, T-037; stage-1 high p75 866,379), and this one is verified only through CI: **about 1,300,000**
 (an Extend row is likely). Spec check: fresh, about 330,000, recommended for a security boundary.
 
+## Notes from T-073 (director, D-250)
+- **Nine registry entries wait on this task** (ruling c8): tests of `crates/kiln-workspace/src/disk.rs`'s own test
+  module registered `unix` with `counterpart = "pending"`, `task = "T-074"`, expiring 2026-12-31 — the walk, links
+  and a replaced root (`symlink_at_temp_name_is_not_followed`,
+  `replace_swaps_inode_keeps_permissions_and_follows_symlinks`, the four root-replaced/removed/retargeted tests,
+  `link_target_with_trailing_slash_requires_a_directory`, both `check_location` tests). This task writes their
+  Windows counterparts or changes an entry to `none` with the reason; `xtask/platform-tests.toml` is in `touches`.
+- **Measured in T-073's CI round 1** (`tasks/ci-runs/T-073-round-1.md`): the held root can be renamed on Windows
+  (calls then answer `OutsideRoot`); renaming its parent is refused (OS error 5). Not tested: removing a held
+  root; the identity check after a replaced parent (Windows refuses the rename that would set it up).
+- **Read, not run** (`reviews/T-073-r1.md`): the shared code reachable on Windows since T-073 — `..` removed by
+  text against `canonicalize` on disk; junctions counted as links; `:` reaching alternate data streams; a
+  drive-relative `C:x`; case and reserved names untreated; the save's new file takes the directory's access list
+  and the temporary file is not owner-only (ruling c4); an error reading the root's identity answers "outside"
+  on Windows where Unix goes on (finding 5).
+
 ## Log
 ### director
 <!-- end director log -->

@@ -2,7 +2,7 @@
 id: T-073
 title: "Make the workspace crate build and its root work on Windows: the root's identity and holding it open, the save's temporary file, every library and binary built and lint-clean for Windows"
 tier: high              # METHODOLOGY v1.5 §4: the persistence path and the confinement boundary (disk.rs); a dependency edge (Cargo.toml target table, Cargo.lock); gate paths if Q-1 A (platforms.yml, xtask/tests) and the registry (xtask/platform-tests.toml)
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed: ws.* items are verified on Linux; per-platform confirmation is the evaluator's
 depends_on: [T-072, T-093]   # T-072: shares platforms.yml and acceptance_t070.rs under Q-1 A; T-093: shares docs/protocol/paths.md
@@ -13,6 +13,7 @@ touches:                # one role per path (D-153)
   - xtask/platform-tests.toml                # GATE PATH: implementer: entries for the Unix-only tests of disk.rs's test module, and (by ruling) the test author's Windows tests
   - docs/protocol/paths.md                   # implementer: "The root" for Windows, and one sentence that the rest of the page is not yet stated for Windows (T-074)
   - docs/control-protocol.md                 # implementer: the save sentence (line 133 "(on Unix)")
+  - docs/development.md                      # implementer: exactly the sentence of "Platform tests" that says what the registry lists (lines 101-105 on main), ruling c2 (D-250)
   - .github/workflows/platforms.yml          # GATE PATH: implementer, only with Q-1 A: one reported Windows step
   - xtask/tests/acceptance_t070.rs           # GATE PATH: implementer, only with Q-1 A: the expectation of that step
   - crates/kiln-workspace/tests/acceptance_t073.rs   # test author: Windows behaviour (Interface (4))
@@ -228,6 +229,42 @@ high → independent test author.
   for each whether its counterpart is T-092's (a Windows form of the same check), T-074's (the walk and
   replaced-root cases) or `none` (a facility Windows lacks, such as mode bits); the director moves the task
   names by a ruling after the review, and T-092 and T-074 are noted to carry them.
+
+### Rulings on review round 1 and CI round 1 (director, D-250; `reviews/T-073-r1.md` at `8bbe10aa7c7fc3c6c32abda3d0ff6169ec3fb679`; record `tasks/ci-runs/T-073-round-1.md`; all for the implementer)
+- **c1 (finding 1, defect).** `docs/protocol/paths.md` and `docs/control-protocol.md` state what run 44268710587
+  measured, naming the record, in place of "to be measured" and "unchecked": on Windows the held root itself can
+  be renamed, and every call then answers `OutsideRoot`; renaming a directory above the root is refused by
+  Windows while the root is held (`PermissionDenied`, OS error 5) — a difference from Linux and macOS, stated as
+  one. The three parts of the save sentence (no mode; a read-only target refused; replaced by rename) are stated
+  as shown by the guards passing on Windows in that run. What was only read, not run, is marked so.
+- **c2 (finding 2).** `docs/development.md` joins `touches` for the one sentence of "Platform tests" that says
+  what the registry lists: it is reworded so that it stays true as entries are added (it names the file and the
+  kinds of reason, not a count or a list of crates), and it is true of this tree's 35 entries.
+- **c3 (finding 3, read not run).** `paths.md` states the limit: on Windows the root's identity is the volume
+  serial number and the 64-bit file index; on a file system that does not keep that index unique (ReFS is
+  documented so) two directories can compare equal. Marked as read, not measured. The 128-bit identity is T-094
+  (draft).
+- **c4 (finding 4, read not run).** The save sentence for Windows also says: the new file gets the access list
+  its directory gives it, not the target's own, and the temporary file is not owner-only while it is written.
+  Marked as read, not measured; what follows for confinement is noted in T-074.
+- **c5 (finding 5, test gap).** The decision "is this still the root" for Windows goes through one small function
+  that takes the result of reading the identity and the held identity and answers inside only when the read
+  succeeded and the two are equal; it is written without a platform cfg (generic over the identity type) and has
+  a unit test that runs on every platform, in which a failed read answers "outside": the reviewer's mutant W3
+  then fails on Linux. The Windows code calls it; the Unix lines stay as they are.
+- **c6, c7 (nits).** The doc comments that say "(device, inode)" name the platform; the module doc says the whole
+  attribute word is copied on Windows and a read-only target is refused before that.
+- **c8 (ruling z3 completed, from the reviewer's table).** Of the 15 entries: 9 get `task = "T-074"`
+  (`symlink_at_temp_name_is_not_followed`, `replace_swaps_inode_keeps_permissions_and_follows_symlinks`, the four
+  root-replaced/removed/retargeted tests, `link_target_with_trailing_slash_requires_a_directory`, both
+  `check_location` tests); 3 become `counterpart = "none"` with the reason that Windows has no mode bits
+  (`temp_file_is_created_owner_only_and_gets_target_mode_before_rename`,
+  `save_creates_temp_owner_only_for_an_existing_target`, `new_file_gets_default_mode`); of the 3 that are a Windows
+  form of the same check, `read_only_target_is_refused_unless_root` names its counterpart now
+  (`crates/kiln-workspace/tests/guard_t073.rs::acw2_save_of_read_only_target_is_refused_and_changes_nothing`, if the
+  tool accepts it as covering Windows: say what `no-skip` answers) and the other two stay `pending` on T-092.
+- After the rework: a second join, CI round 2 on `ci/candidate` (the new unit test and the registry on three
+  platforms), review round 2.
 
 ## Log
 ### director
