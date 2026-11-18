@@ -599,9 +599,9 @@ const SCANNED: &[&str] = &["crates", "apps", "xtask"];
 /// Excluded: the self-test fixtures.
 const EXCLUDED: &[&str] = &["xtask/fixtures"];
 
-/// Known findings of `xtask/fixtures/no-skip/violations.rs` with the fixture registry
-/// `platform-tests.toml` beside it: 9 skips and exactly one finding of each of the 8 platform
-/// kinds.
+/// Known findings of the self-test fixtures in `xtask/fixtures/no-skip/`: 9 skips in
+/// `violations.rs`, and in `platform-violations.rs` with the fixture registry
+/// `platform-tests.toml` exactly one finding of each of the 8 platform kinds.
 const FIXTURE_FINDINGS: usize = 17;
 
 /// The scan of a set of files, gathered for the platform rules.
@@ -707,7 +707,17 @@ fn self_test(root: &Path, today: &str) -> Result<usize> {
         std::fs::read_to_string(root.join(reg_name)).with_context(|| format!("read {reg_name}"))?;
     let reg = platforms::parse(reg_name, &reg_text)
         .map_err(|e| anyhow::anyhow!("self-test failed: {}", e.join("; ")))?;
-    let found = bad.platform_problems(&reg, &fx, reg_name, today);
+    // The platform kinds' cases live in their own fixture files: main's older no-skip reads
+    // `violations.rs` and `clean.rs` with its own fixed expectations (D-235 u1).
+    let plat_path = fx.join("platform-violations.rs");
+    let plat = gather(&fx, std::slice::from_ref(&plat_path))?;
+    if !plat.skips.is_empty() {
+        bail!(
+            "self-test failed: platform-violations fixture gave skips {:?}",
+            plat.skips
+        );
+    }
+    let found = plat.platform_problems(&reg, &fx, reg_name, today);
     let want = [
         platforms::Kind::Unlisted,
         platforms::Kind::Mismatch,
@@ -731,12 +741,11 @@ fn self_test(root: &Path, today: &str) -> Result<usize> {
         .collect();
     if !missing.is_empty() || bad.skips.len() + found.len() != FIXTURE_FINDINGS {
         bail!(
-            "self-test failed: violations fixture gave {} skip(s) and platform findings {found:?} (kinds not found exactly once: {missing:?})",
+            "self-test failed: violations fixtures gave {} skip(s) and platform findings {found:?} (kinds not found exactly once: {missing:?})",
             bad.skips.len()
         );
     }
-    let clean_path = fx.join("clean.rs");
-    let clean = gather(&fx, std::slice::from_ref(&clean_path))?;
+    let clean = gather(&fx, &[fx.join("clean.rs"), fx.join("platform-clean.rs")])?;
     let clean_platform =
         clean.platform_problems(&platforms::Registry::default(), &fx, reg_name, today);
     if !clean.skips.is_empty() || !clean_platform.is_empty() {
@@ -892,7 +901,7 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         assert_eq!(self_test(root, "2026-11-17").unwrap(), FIXTURE_FINDINGS);
         let fx = root.join("xtask/fixtures/no-skip");
-        let g = gather(&fx, &[fx.join("violations.rs")]).unwrap();
+        let g = gather(&fx, &[fx.join("platform-violations.rs")]).unwrap();
         let reg = platforms::parse(
             "reg",
             &std::fs::read_to_string(fx.join("platform-tests.toml")).unwrap(),
@@ -917,10 +926,10 @@ mod tests {
             ],
             "{got:#?}"
         );
-        assert!(got[0].starts_with("violations.rs:"), "{got:?}");
+        assert!(got[0].starts_with("platform-violations.rs:"), "{got:?}");
         assert!(
             got[3].starts_with(
-                "reg:6: `violations.rs::platform::listed_as_linux`: platform-mismatch"
+                "reg:6: `platform-violations.rs::platform::listed_as_linux`: platform-mismatch"
             ),
             "{got:?}"
         );

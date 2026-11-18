@@ -1,10 +1,10 @@
-# Self-test registry of `cargo xtask no-skip`, applied to `violations.rs` beside it. Paths are
-# relative to this directory, the root of the self-test (ruling p7, D-220). Each entry below
+# Self-test registry of `cargo xtask no-skip`, applied to `platform-violations.rs` beside it. Paths
+# are relative to this directory, the root of the self-test (ruling p7, D-220). Each entry below
 # yields exactly one finding of its own kind (the pending one is past its date and there is no
 # tasks/T-901-*.md here: one line); `platform::unlisted` has no entry.
 
 [[test]]
-file = "violations.rs"
+file = "platform-violations.rs"
 item = "platform::listed_as_linux"
 platforms = "linux"
 doc = "docs/platform-doc.md"
@@ -13,7 +13,7 @@ counterpart = "none"
 reason = "mismatch case: the item is behind cfg(windows)"
 
 [[test]]
-file = "violations.rs"
+file = "platform-violations.rs"
 item = "platform::removed_long_ago"
 platforms = "unix"
 doc = "docs/platform-doc.md"
@@ -22,7 +22,7 @@ counterpart = "none"
 reason = "unused case: no such item"
 
 [[test]]
-file = "violations.rs"
+file = "platform-violations.rs"
 item = "platform::quote_not_in_doc"
 platforms = "unix"
 doc = "docs/platform-doc.md"
@@ -31,15 +31,15 @@ counterpart = "none"
 reason = "sentence case"
 
 [[test]]
-file = "violations.rs"
+file = "platform-violations.rs"
 item = "platform::counterpart_missing"
 platforms = "unix"
 doc = "docs/platform-doc.md"
 quote = "Mode bits are kept"
-counterpart = "violations.rs::platform::no_such_test"
+counterpart = "platform-violations.rs::platform::no_such_test"
 
 [[test]]
-file = "violations.rs"
+file = "platform-violations.rs"
 item = "platform::pending_past_date"
 platforms = "macos"
 doc = "docs/platform-doc.md"
