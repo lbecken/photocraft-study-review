@@ -604,6 +604,8 @@ renamed to carry the new bound (it is not on main yet). The test author states i
   `default debug info`, `Runners, wall times` in `xtask/tests`, `crates`, `apps`: no hit (only `acceptance_t072.rs`
   on this branch reads the table, by its heading). The commit called `<edit sha>` in the R-359 report is `6a17b85`.
   Gate and `cargo test -p xtask` re-run after this edit (results in the next line). CI expectation for round 2 unchanged.
+- 2026-11-18 · R-359 · after D-258's edit: `cargo test --locked --no-fail-fast -p xtask` 25 binaries, 311 passed, 0
+  failed; `cargo xtask ci` attempt 3 PASS (835.8 s; test 1171 passed, 0 failed, 0 ignored in 137 suites).
 <!-- end implementer log -->
 ### test-author
 - 2026-11-18 · R-352 · tests from the spec alone (worktree base `b96ee55`; spec read on main, with the rulings Q-3 A1, Q-4 A, Q-5 A, Q-6 A of D-254 and the note added 11:20Z: accepted, AC-9 checks `-- --show-output`) · files `xtask/tests/acceptance_t072.rs` (17 tests), `xtask/tests/guard_t072.rs` (7 tests); YAML reader and `if:` evaluator copied from `acceptance_t070.rs`; step scripts run in `bash --noprofile --norc -eo pipefail` (GitHub's form) with fakes first on `PATH`, Git Bash on Windows or a failure naming why; no platform cfg, no `#[ignore]`.
