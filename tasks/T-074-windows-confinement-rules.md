@@ -2,7 +2,7 @@
 id: T-074
 title: "On Windows, refuse every reparse point on the walk as outside the root, keep saves working past links at temporary names, state the Windows walk and root in the documents, and give the nine pending disk.rs tests their Windows counterparts"
 tier: high              # METHODOLOGY v1.5 §4: the confinement boundary (the disk.rs walk) and the persistence path (the temporary file); gate paths (xtask/platform-tests.toml, xtask/tests/); the approval row must say `gate paths`. No dependency change.
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed: the ws.* items are verified on Linux; per-platform confirmation is the evaluator's (ADR-0009 Decision 3)
 depends_on: [T-073]     # merged (8bf4c3a). T-072 runs beside this task (D-254); its merge is needed before this task's CI round, not before dispatch (pending CI criterion)
