@@ -2,7 +2,7 @@
 id: T-092
 title: "Make every test target of kiln-workspace except the two listing targets (T-100, D-273) compile, lint clean and pass on Windows: each test either asserts every platform's specified behaviour or is registered as a Unix test with its counterpart or reason; the two pending disk.rs entries get their Windows counterparts"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (xtask/platform-tests.toml, xtask/tests/); it changes what confinement and persistence tests assert (the save and the walk of disk.rs); the approval row must say `gate paths`. No product code, no dependency change, no document change.
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: []     # none claimed: the ws.*/io.* items are verified on Linux; per-platform confirmation is the evaluator's (ADR-0009 Decision 3)
 depends_on: [T-073, T-074, T-072]   # ruling 7 (D-269). T-073 merged (8bf4c3a); T-072 merged (D-268; its general reported Windows step, this task's evidence, is on main); T-074 approved by review, not merged when this was finalized (shares disk.rs's test module, xtask/platform-tests.toml, acceptance_t002.rs): a fresh spec check by another planner follows once T-074 is on main (§5.7).
@@ -687,6 +687,9 @@ notes (point 2; the latter pending Q-B).
   D-249 kind of block). That no entry of another task changed is the reviewer's diff check, as ruling t1 of T-072.
 - **a2.** The two source-side tests (`ac1_unix_only_tests_of_the_nine_files_are_exactly_the_listed_ones`,
   `ac1_w40_and_w41_exist_once_in_disk_tests_without_platform_cfg`) count under AC-1.
+- **a3 (implementer's question, D-276).** W14 (`link_swapped_in_after_open_is_refused_at_save`) is P/w: its part (c)
+  saves through a link that stays inside the root, which is `outside_root` on Windows since T-074; the expected
+  answer of that part is chosen with `cfg!(windows)`, with no cfg attribute on the test. Accepted.
 
 ## Log
 ### director
