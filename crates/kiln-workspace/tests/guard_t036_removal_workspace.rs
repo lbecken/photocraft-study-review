@@ -18,7 +18,12 @@
 //!   replacement got the removed root's number ends the loop with `break`.
 //!
 //! Errors are asserted by variant and `path()`; `Display` only names no part of the work path.
+//!
+//! Unix only (T-092): inode reuse is the point of every trial, and stable Rust exposes no file
+//! identity on Windows. Listed in `xtask/platform-tests.toml` as `<file>`; the Windows test of
+//! the same sentence is `disk.rs::tests::root_removed_on_every_platform`.
 #![cfg(test)]
+#![cfg(unix)]
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;

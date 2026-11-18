@@ -9,12 +9,15 @@
 //! Errors are asserted by variant and `path()`; `Display` is only checked to name no part of
 //! the host work path. Each fixture is a fresh `work/` under `std::env::temp_dir()`, removed on
 //! drop.
+//!
+//! Platforms (T-092): the root's parent renamed while the root is held is a Unix test
+//! (`vanished_root_is_refused_unix`): Windows refuses that rename (T-072 round 3); every other
+//! test runs on every platform, with twin helpers for the directory link.
 #![cfg(test)]
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
 use kiln_workspace::{DiskFs, Document, OpenError, RelPath, Vfs, VfsError};
@@ -62,16 +65,49 @@ impl Drop for Work {
     }
 }
 
+/// A link at `link` to the directory `target` (a single name beside it).
+#[cfg(unix)]
+fn symlink(target: &str, link: PathBuf) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+/// Windows: a directory symbolic link; the target is built with `PathBuf::push` (ruling Q-B of
+/// T-092).
+#[cfg(windows)]
+fn symlink(target: &str, link: PathBuf) -> std::io::Result<()> {
+    let mut t = PathBuf::new();
+    t.push(target);
+    std::os::windows::fs::symlink_dir(t, link)
+}
+
+/// Remove the directory link at `link`.
+#[cfg(unix)]
+fn remove_dir_link(link: PathBuf) -> std::io::Result<()> {
+    fs::remove_file(link)
+}
+/// Windows: a directory link is removed as a directory (ruling Q-B of T-092, `T-074-probe-1.md`
+/// E4).
+#[cfg(windows)]
+fn remove_dir_link(link: PathBuf) -> std::io::Result<()> {
+    fs::remove_dir(link)
+}
+
 fn rp(s: &str) -> RelPath {
     RelPath::new(s).unwrap_or_else(|e| panic!("RelPath::new({s:?}) rejected: {e:?}"))
 }
 
-/// Every entry under `dir`, recursively, links not followed: type, link target and bytes.
+/// Every entry under `dir`, recursively, links not followed: type, link target and bytes. Keys
+/// are `/`-joined relative paths on every platform.
 fn snapshot(dir: &Path) -> BTreeMap<String, String> {
     fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
         for e in fs::read_dir(dir).unwrap() {
             let p = e.unwrap().path();
-            let rel = p.strip_prefix(base).unwrap().to_string_lossy().into_owned();
+            let rel = p
+                .strip_prefix(base)
+                .unwrap()
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
             let ft = fs::symlink_metadata(&p).unwrap().file_type();
             let desc = if ft.is_symlink() {
                 format!("link -> {}", fs::read_link(&p).unwrap().display())
@@ -161,7 +197,7 @@ fn retargeted_root_link_is_refused() {
     doc.buffer_mut().insert(0, EDIT).unwrap();
 
     // Retarget the link between two calls, and show the other directory is really reached.
-    fs::remove_file(w.at("rootlink")).unwrap();
+    remove_dir_link(w.at("rootlink")).unwrap();
     symlink("other", w.at("rootlink")).unwrap();
     assert_eq!(fs::read(w.at("rootlink/secret.txt")).unwrap(), SECRET);
     assert_eq!(fs::read(w.at("rootlink/f.txt")).unwrap(), OTHER_F);
@@ -195,7 +231,7 @@ fn retargeted_root_link_is_refused() {
     assert_nothing_created(&w.dir, "rootlink -> other");
 
     // Point the link back: the save of the earlier document works there again.
-    fs::remove_file(w.at("rootlink")).unwrap();
+    remove_dir_link(w.at("rootlink")).unwrap();
     symlink("root", w.at("rootlink")).unwrap();
     doc.save(&mut fs_)
         .unwrap_or_else(|e| panic!("rootlink -> root again: save failed: {e:?}"));
@@ -214,7 +250,9 @@ fn retargeted_root_link_is_refused() {
 enum Vanish {
     /// (i) `root` renamed to `root.away`.
     RenameRoot,
-    /// (ii) the root at `work/p/root`, `p` renamed to `p.away`.
+    /// (ii) the root at `work/p/root`, `p` renamed to `p.away` (Unix: Windows refuses to rename
+    /// a directory above the held root).
+    #[cfg(unix)]
     RenameParent,
     /// (iii) `root` removed with `remove_dir_all`.
     Remove,
@@ -225,6 +263,7 @@ fn vanished_root_case(case: Vanish) {
     let w = Work::new(&format!("vanish-{note}"));
     let (root_rel, away, back) = match case {
         Vanish::RenameRoot => ("root", Some(("root", "root.away")), "root.away/f.txt"),
+        #[cfg(unix)]
         Vanish::RenameParent => ("p/root", Some(("p", "p.away")), "p.away/root/f.txt"),
         Vanish::Remove => ("root", None, ""),
     };
@@ -269,7 +308,16 @@ fn vanished_root_case(case: Vanish) {
 
 #[test]
 fn vanished_root_is_refused() {
-    for case in [Vanish::RenameRoot, Vanish::RenameParent, Vanish::Remove] {
+    for case in [Vanish::RenameRoot, Vanish::Remove] {
         vanished_root_case(case);
     }
+}
+
+/// The Unix part of `vanished_root_is_refused`: the root's parent renamed while the root is
+/// held, a rename Windows refuses (`T-072-round-3.md`: "rename of p while the root is held:
+/// refused").
+#[test]
+#[cfg(unix)]
+fn vanished_root_is_refused_unix() {
+    vanished_root_case(Vanish::RenameParent);
 }

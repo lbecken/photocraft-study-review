@@ -441,3 +441,19 @@ doc = "docs/protocol/paths.md"
 quote = "A root that Kiln cannot open for reading is refused too"
 counterpart = "none"
 reason = "the test makes the root unreadable with modes and runs its child as another uid/gid (`chown`, `Command::uid`): modes and identities are Unix's; on Windows unreadability is an access list, out of scope (ADR-0009 (b), docs/control-protocol.md: \"Read and not measured\")"
+
+[[test]]
+file = "crates/kiln-workspace/tests/guard_t036_removal_workspace.rs"
+item = "<file>"
+platforms = "unix"
+doc = "docs/protocol/paths.md"
+quote = "only so that no other directory can take its identity"
+counterpart = "crates/kiln-workspace/src/disk.rs::tests::root_removed_on_every_platform"
+
+[[test]]
+file = "crates/kiln-workspace/tests/guard_t036_workspace.rs"
+item = "vanished_root_is_refused_unix"
+platforms = "unix"
+doc = "docs/protocol/paths.md"
+quote = "The same refusal is given while the root path leads nowhere"
+counterpart = "crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root"
