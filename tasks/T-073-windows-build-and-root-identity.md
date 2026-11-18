@@ -341,6 +341,21 @@ high → independent test author.
   questions, then gate attempt 2 and CI-REQUEST
 <!-- end implementer log -->
 ### test author
+- 2026-11-18 · R-339 · started · base `7de171b` · rulings acknowledged: Q-1 A accepted (this file is what the
+  reported Windows step runs: the Windows runtime evidence of AC-W2); Q-2 accepted — it overrides Interface (4)'s
+  "`#[cfg(windows)]`, registered `windows`": the file has no platform cfg, every test runs on Linux, macOS and Windows,
+  the expectation is chosen at run time with `cfg!(windows)` (never an early return), so no registry entry is needed;
+  Q-3 A, Q-4 A accepted (no test of mine depends on them).
+- QUESTION (fail on base): the only criterion this file serves is AC-W2 (CI, pending). Interface (4) asks for tests
+  of Windows behaviour whose Unix counterparts already hold on Linux and macOS ("Unix unchanged"), so on Linux base
+  (branch `task/T-073-tests` = `7de171b` + this file) every test passes by design; on Windows base the file does not
+  build (the crate's lib has 6 errors, `disk.rs:86,189,213,361`), so there "fails on base" is `compile` only. The
+  spec assigns no criterion to this file that fails on base on Linux (AC-1–AC-4 are the implementer's local commands;
+  `guard_t073.rs` is ruled unnecessary). Proposed: the join records AC-W2's base evidence as `compile` on
+  `x86_64-pc-windows-msvc` (AC-1's 6 errors) and accepts that `acceptance_t073.rs` passes on Linux base, as the
+  pending CI criterion of §8.1; or the file is renamed `guard_t073_windows.rs` (a path outside `touches`, so a
+  ruling). I added no test that fails on base by construction (for example by reading the manifest), since the spec
+  does not assign one.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
