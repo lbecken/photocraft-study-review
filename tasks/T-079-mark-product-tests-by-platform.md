@@ -382,6 +382,18 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   the aborted binary. The pending CI criterion: clauses 3 and 4 not met (the macOS gate and its scorecard list),
   the others met. Rework is ruled with the review's findings.
 
+- 2026-11-18 **CI round 2: `gate-macos` is green** (record `tasks/ci-runs/T-079-round-2.md`, from the six artefacts, run
+  R-335): run 44253737976 on `ci/candidate` at the joined head `6dd4cd09364703454881766b06c9d539ba43bab9`.
+  `gate-macos` success: every gate step passes (`no-skip` with `20 platform test(s) registered (8 pending)`; the
+  scorecard line `macos: 64 items; 216 tests ran; 3 registered absent here; page not compared (computed on Linux)`
+  with nothing after it; the test step `1117 passed, 0 failed, 0 ignored in 133 suites`). `gate-linux` success;
+  the counted jobs success; `xtask` exit status 0 on all three platforms (Linux 286 passed, macOS 281, Windows
+  278). The two Windows jobs are red at `kiln-workspace`, as expected until T-073. The pending CI criterion:
+  seven of eight clauses met; of clause 5 the "0 failed" half is met, and that the 12 registered product tests
+  are absent by name on macOS cannot be read from this run (no full test output is uploaded when the gate
+  passes) — it was read by name in round 1's record, on the same registry and cfg lines. The stack overflow of
+  round 1 is gone, which fits the reviewer's reproduction of its cause.
+
 ### planner
 - 2026-11-15 · R-285 · draft · did: full spec from the split of T-071 (D-180 Q-1 B) · not run: builds · next: director
 - 2026-11-18 · R-321 · specified · did: re-specified in full under v1.5 against task/T-071 @ b7dd7d6; Windows check probed twice (scratch, deleted) · not run: CI · next: director (Q-4 to Q-8)

@@ -56,6 +56,11 @@ if `disk.rs` must change. Re-estimate at specification.
   tests with their messages; the full output is not cut at 200 lines.
 - **From T-071's review round 2 (D-232, finding R2-4):** the `echo "==== cargo test --locked -p $p"` label of
   the core-crates step no longer matches the command, which has `--no-fail-fast` since T-071.
+- **From T-079's CI round 2 (2026-11-18):** when a gate job passes, no full test output is uploaded, so a record
+  cannot show by name which tests ran (the absence of registered tests on a green macOS run could not be read).
+  The evidence steps upload the test list or the full output on success too.
+- **From D-240:** two runs of `platforms.yml` on main that no push started (runs 12 and 13 at `c45a17f`,
+  2026-11-16 and 2026-11-17 around midday UTC): find their trigger and say whether it is wanted.
 
 ## Log
 ### director
