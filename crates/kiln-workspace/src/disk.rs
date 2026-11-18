@@ -91,9 +91,22 @@
 //!   Then it is renamed over the target. The directory sync stays best effort as above: any
 //!   failure to open or sync the directory is ignored (unchecked on Windows, where opening a
 //!   directory this way is expected to fail).
-//! - The walk below the root runs the code above unchanged; how links, junctions and other
-//!   reparse points, prefixes, reserved names, streams and case are treated is not decided here
-//!   (T-074).
+//! - The walk below the root (T-074) follows no link: every entry it reaches below the root,
+//!   the last component included, is examined without being followed (`symlink_metadata`), and
+//!   one whose attributes carry `FILE_ATTRIBUTE_REPARSE_POINT` (a file or directory symbolic
+//!   link, a junction, or any other reparse point) makes the call `OutsideRoot` before anything
+//!   there or beyond it is opened, created, replaced or removed, wherever it leads. So the
+//!   location is the root joined with the request's segments. A listing gives such an entry
+//!   kind `Symlink` (from the entry's own attributes), so it is never descended. Not on the
+//!   walk: the root path and the directories above it (resolved as above).
+//! - The temporary file (T-074) is created with `FILE_FLAG_OPEN_REPARSE_POINT` besides
+//!   `create_new`, so a link or junction at a candidate name is never followed; a candidate
+//!   whose create fails while an entry exists at that name (`symlink_metadata`, nothing
+//!   followed or opened) is skipped as `AlreadyExists` is, and the entry is left as it was; a
+//!   failure with nothing at the name is returned. Only when no name was free does the save
+//!   fail (`AlreadyExists`, as above).
+//! - Names that Windows gives a meaning (prefixes, reserved names, streams) and case are not
+//!   decided here (T-095).
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
@@ -315,6 +328,13 @@ impl DiskFs {
             let must_be_dir = matches!(pending.front(), Some(Step::DirMark));
             let candidate = dir.join(&name);
             match fs::symlink_metadata(&candidate) {
+                // Windows (T-074): no link is followed; an entry that is a reparse point (a
+                // symbolic link, a junction or any other) is refused before anything there or
+                // beyond it is opened, wherever it leads.
+                #[cfg(windows)]
+                Ok(meta) if is_reparse_point(&meta) => {
+                    return Err(VfsError::OutsideRoot { path: rel.clone() });
+                }
                 Ok(meta) if meta.file_type().is_symlink() => {
                     hops += 1;
                     if hops > MAX_SYMLINK_HOPS {
@@ -384,6 +404,24 @@ fn is_held_root<T: PartialEq, E>(now: Result<T, E>, held: &T) -> bool {
     now.is_ok_and(|now| now == *held)
 }
 
+/// Windows (T-074): `FILE_ATTRIBUTE_REPARSE_POINT`.
+#[cfg(windows)]
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+/// Windows (T-074): `FILE_FLAG_OPEN_REPARSE_POINT`: the temporary create acts on the name
+/// itself, so a link or junction there is never followed.
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
+/// Windows (T-074): whether `meta` (of the entry itself, not followed) carries the
+/// reparse-point attribute: a file or directory symbolic link, a junction, or any other
+/// reparse point.
+#[cfg(windows)]
+fn is_reparse_point(meta: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
 fn io_error(path: &RelPath, e: &io::Error) -> VfsError {
     VfsError::Io {
         path: path.clone(),
@@ -428,17 +466,23 @@ fn create_temp(dir: &Path, mode: u32) -> io::Result<(PathBuf, fs::File)> {
 
 /// Windows (T-073): [`create_temp`] without a mode (the `0600`/`0666` modes are Unix's; the
 /// target's permissions are applied afterwards as on Unix), so `_mode` is not used.
+/// T-074: the create opens the name itself (`FILE_FLAG_OPEN_REPARSE_POINT`), and a name whose
+/// create fails while an entry exists there (`symlink_metadata`, nothing followed or opened;
+/// for example a junction, which does not answer `AlreadyExists`) is taken: the next is tried.
 #[cfg(windows)]
 fn create_temp(dir: &Path, _mode: u32) -> io::Result<(PathBuf, fs::File)> {
+    use std::os::windows::fs::OpenOptionsExt;
     for n in 0..TEMP_ATTEMPTS {
         let temp = dir.join(format!("{TEMP_PREFIX}{n}"));
         match fs::OpenOptions::new()
             .write(true)
             .create_new(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(&temp)
         {
             Ok(file) => return Ok((temp, file)),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(_) if fs::symlink_metadata(&temp).is_ok() => continue,
             Err(e) => return Err(e),
         }
     }
@@ -591,6 +635,14 @@ impl Vfs for DiskFs {
                 EntryKind::File
             } else {
                 EntryKind::Other
+            };
+            // Windows (T-074): any reparse point is `Symlink`, so it is never descended; the
+            // attributes are the entry's own, from the directory read (nothing followed).
+            #[cfg(windows)]
+            let kind = if is_reparse_point(&entry.metadata().map_err(|e| io_error(label, &e))?) {
+                EntryKind::Symlink
+            } else {
+                kind
             };
             listing.entries.push(DirEntry { name, kind });
         }
