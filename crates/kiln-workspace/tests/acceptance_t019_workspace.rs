@@ -11,8 +11,10 @@
 //! temporary directory removed on drop.
 #![cfg(test)]
 
+#[cfg(target_os = "linux")] // used by the Linux-only `_non_utf8` tests only
 use std::ffi::OsStr;
 use std::fs;
+#[cfg(target_os = "linux")] // used by the Linux-only `_non_utf8` tests only
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{FileTypeExt, symlink};
 use std::os::unix::net::UnixListener;
@@ -200,6 +202,106 @@ fn memory_list_dir_sorts_by_bytes_and_reports_kinds() {
 
 #[test]
 fn disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names() {
+    let w = Work::new("disk");
+    fs::create_dir_all(w.at("root")).unwrap();
+    w.file("outside/secret.txt", b"s3cr3t\n");
+    w.file("root/B.rs", b"B");
+    w.file("root/a.rs", b"a");
+    w.file("root/sub/x", b"x");
+    w.file("root/\u{e9}", b"e");
+    symlink("sub", w.at("root/l")).unwrap();
+    symlink("nowhere", w.at("root/dang")).unwrap();
+    symlink("../outside", w.at("root/out")).unwrap();
+    symlink("loop2", w.at("root/loop1")).unwrap();
+    symlink("loop1", w.at("root/loop2")).unwrap();
+    symlink("a.rs", w.at("root/la")).unwrap();
+    mkfifo(&w.at("root/p"));
+    let _listener = socket_at(&w.at("root/s"));
+    // A name no RelPath segment can carry (the names that are not UTF-8: the `_non_utf8` test).
+    fs::write(w.at("root/b\\s"), b"bs").unwrap();
+    assert_eq!(fs::read(w.at("root/out/secret.txt")).unwrap(), b"s3cr3t\n");
+
+    let root = w.at("root");
+    assert_eq!(
+        list_within(&root, None),
+        Ok(listing(
+            &[
+                ("B.rs", EntryKind::File),
+                ("a.rs", EntryKind::File),
+                ("dang", EntryKind::Symlink),
+                ("l", EntryKind::Symlink),
+                ("la", EntryKind::Symlink),
+                ("loop1", EntryKind::Symlink),
+                ("loop2", EntryKind::Symlink),
+                ("out", EntryKind::Symlink),
+                ("p", EntryKind::Other),
+                ("s", EntryKind::Other),
+                ("sub", EntryKind::Dir),
+                ("\u{e9}", EntryKind::File),
+            ],
+            1
+        ))
+    );
+    assert_eq!(
+        list_within(&root, Some("sub")),
+        Ok(listing(&[("x", EntryKind::File)], 0))
+    );
+    // An in-root link to a directory is followed to locate `dir` (T-008's rules).
+    assert_eq!(
+        list_within(&root, Some("l")),
+        Ok(listing(&[("x", EntryKind::File)], 0))
+    );
+    assert_eq!(
+        list_within(&root, Some("a.rs")),
+        Err(VfsError::NotAFile { path: p("a.rs") })
+    );
+    assert_eq!(
+        list_within(&root, Some("la")),
+        Err(VfsError::NotAFile { path: p("la") })
+    );
+    assert_eq!(
+        list_within(&root, Some("p")),
+        Err(VfsError::NotAFile { path: p("p") })
+    );
+    assert_eq!(
+        list_within(&root, Some("s")),
+        Err(VfsError::NotAFile { path: p("s") })
+    );
+    assert_eq!(
+        list_within(&root, Some("nope")),
+        Err(VfsError::NotFound { path: p("nope") })
+    );
+    assert_eq!(
+        list_within(&root, Some("dang")),
+        Err(VfsError::NotFound { path: p("dang") })
+    );
+    assert_eq!(
+        list_within(&root, Some("out")),
+        Err(VfsError::OutsideRoot { path: p("out") })
+    );
+    assert_eq!(
+        list_within(&root, Some("out/x")),
+        Err(VfsError::OutsideRoot { path: p("out/x") })
+    );
+    match list_within(&root, Some("loop1")) {
+        Err(VfsError::Io { path, .. }) => assert_eq!(path, p("loop1")),
+        other => panic!("list_dir(loop1): expected Io, got {other:?}"),
+    }
+    // Nothing was followed into or changed.
+    assert_eq!(fs::read(w.at("outside/secret.txt")).unwrap(), b"s3cr3t\n");
+    assert!(
+        fs::symlink_metadata(w.at("root/p"))
+            .unwrap()
+            .file_type()
+            .is_fifo()
+    );
+}
+
+/// As above, with the names that are not UTF-8 (`n\xff`, `d\xfe`) beside `b\s`: the test as it
+/// was before T-079 split it, whole.
+#[test]
+#[cfg(target_os = "linux")] // names that are not UTF-8, which only Linux can hold (xtask/platform-tests.toml)
+fn disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names_non_utf8() {
     let w = Work::new("disk");
     fs::create_dir_all(w.at("root")).unwrap();
     w.file("outside/secret.txt", b"s3cr3t\n");
@@ -406,6 +508,32 @@ fn tree_gives_the_worked_example() {
 
 #[test]
 fn tree_counts_skipped_names_on_disk() {
+    let w = Work::new("skip");
+    w.file("root/ok.rs", b"ok");
+    w.file("root/sub/fine", b"f");
+    fs::write(w.at("root/sub/back\\slash"), b"b").unwrap();
+    let disk = DiskFs::new(&w.at("root")).unwrap();
+    assert_eq!(
+        project::tree(&disk, None, 50_000),
+        Ok(ProjectTree {
+            entries: tree_entries(&[
+                ("ok.rs", EntryKind::File),
+                ("sub", EntryKind::Dir),
+                ("sub/fine", EntryKind::File),
+            ]),
+            ignored: 0,
+            skipped: 1,
+            too_deep: 0,
+            truncated: false,
+        })
+    );
+}
+
+/// As above, with a name that is not UTF-8 (`bad\xff`) beside `back\slash`: the test as it was
+/// before T-079 split it, whole.
+#[test]
+#[cfg(target_os = "linux")] // names that are not UTF-8, which only Linux can hold (xtask/platform-tests.toml)
+fn tree_counts_skipped_names_on_disk_non_utf8() {
     let w = Work::new("skip");
     w.file("root/ok.rs", b"ok");
     w.file("root/sub/fine", b"f");

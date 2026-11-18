@@ -129,6 +129,42 @@ task = "T-076"
 expires = "2026-12-31"
 
 [[test]]
+file = "crates/kiln-workspace/tests/acceptance_t019_workspace.rs"
+item = "disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names_non_utf8"
+platforms = "linux"
+doc = "docs/protocol/project.md"
+quote = "not valid UTF-8 or contain"
+counterpart = "none"
+reason = "no file name on macOS or Windows can be invalid Unicode"
+
+[[test]]
+file = "crates/kiln-workspace/tests/acceptance_t019_workspace.rs"
+item = "tree_counts_skipped_names_on_disk_non_utf8"
+platforms = "linux"
+doc = "docs/protocol/project.md"
+quote = "not valid UTF-8 or contain"
+counterpart = "none"
+reason = "no file name on macOS or Windows can be invalid Unicode"
+
+[[test]]
+file = "crates/kiln-workspace/tests/project.rs"
+item = "disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names_non_utf8"
+platforms = "linux"
+doc = "docs/protocol/project.md"
+quote = "not valid UTF-8 or contain"
+counterpart = "none"
+reason = "no file name on macOS or Windows can be invalid Unicode"
+
+[[test]]
+file = "crates/kiln-workspace/tests/project.rs"
+item = "documented_differences_from_git_non_utf8"
+platforms = "linux"
+doc = "docs/protocol/project.md"
+quote = "not valid UTF-8 or contain"
+counterpart = "none"
+reason = "no file name on macOS or Windows can be invalid Unicode"
+
+[[test]]
 file = "apps/kiln/tests/acceptance_t065.rs"
 item = "ac1_no_display_exits_2_with_one_line"
 platforms = "linux"

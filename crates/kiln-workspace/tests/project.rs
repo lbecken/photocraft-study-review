@@ -2,8 +2,10 @@
 //! project walk `kiln_workspace::project::tree`, on disk fixtures with symlinks, FIFOs,
 //! sockets and odd names. Every call that could block on a FIFO runs under a hard timeout.
 
+#[cfg(target_os = "linux")] // used by the Linux-only `_non_utf8` tests only
 use std::ffi::OsStr;
 use std::fs;
+#[cfg(target_os = "linux")] // used by the Linux-only `_non_utf8` tests only
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{FileTypeExt, symlink};
 use std::os::unix::net::UnixListener;
@@ -105,6 +107,56 @@ use support::*;
 #[test]
 fn disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names() {
     let work = work("kinds");
+    let root = work.join("root");
+    write(&root, "b.rs", "");
+    write(&root, "C.rs", "");
+    write(&root, "d/x", "");
+    symlink("d", root.join("to_dir")).unwrap();
+    symlink("../outside", root.join("out")).unwrap();
+    symlink("nowhere", root.join("dangling")).unwrap();
+    symlink("loop2", root.join("loop1")).unwrap();
+    symlink("loop1", root.join("loop2")).unwrap();
+    mkfifo(&root.join("fifo"));
+    let _socket = UnixListener::bind(root.join("sock")).unwrap();
+    fs::write(root.join("back\\slash"), b"").unwrap();
+
+    let r = root.clone();
+    let listing = bounded("list_dir", move || {
+        DiskFs::new(&r).unwrap().list_dir(None).unwrap()
+    });
+    use EntryKind::*;
+    assert_eq!(
+        listing.entries,
+        vec![
+            entry("C.rs", File),
+            entry("b.rs", File),
+            entry("d", Dir),
+            entry("dangling", Symlink),
+            entry("fifo", Other),
+            entry("loop1", Symlink),
+            entry("loop2", Symlink),
+            entry("out", Symlink),
+            entry("sock", Other),
+            entry("to_dir", Symlink),
+        ]
+    );
+    assert_eq!(listing.skipped, 1);
+    // A symlink on the way that stays inside is followed (T-008's location rule).
+    let fs_ = DiskFs::new(&root).unwrap();
+    assert_eq!(
+        fs_.list_dir(Some(&p("to_dir"))).unwrap().entries,
+        vec![entry("x", File)]
+    );
+    fs::remove_dir_all(&work).unwrap();
+}
+
+/// As above, with a name that is not UTF-8 (`n\xff`) and with `B.rs` beside `b.rs` (two names
+/// only a file system that does not fold case can hold): the test as it was before T-079 split
+/// it, whole.
+#[test]
+#[cfg(target_os = "linux")] // names that are not UTF-8, which only Linux can hold (xtask/platform-tests.toml)
+fn disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names_non_utf8() {
+    let work = work("kinds-nu8");
     let root = work.join("root");
     write(&root, "b.rs", "");
     write(&root, "B.rs", "");
@@ -356,6 +408,49 @@ fn an_ignored_gitignore_is_still_read() {
 #[test]
 fn documented_differences_from_git() {
     let work = work("s6");
+    let root = work.join("root");
+    // Braces are alternatives.
+    write(&root, "br/.gitignore", "{a,b}\n");
+    write(&root, "br/a", "");
+    write(&root, "br/b", "");
+    write(&root, "br/{a,b}", "");
+    // A trailing tab is removed from a pattern.
+    write(&root, "tab/.gitignore", "*.log\t\n");
+    write(&root, "tab/x.log", "");
+    // A directory holding its own `.git` is listed with its contents.
+    write(&root, "nested/.git/HEAD", "");
+    write(&root, "nested/f", "");
+    // Odd names are skipped.
+    write(&root, "odd/ok", "");
+    fs::write(root.join("odd/back\\slash"), b"").unwrap();
+
+    let t = disk_tree(&root, None).unwrap();
+    assert_eq!(
+        paths(&t),
+        [
+            "br",
+            "br/.gitignore",
+            "br/{a,b}",
+            "nested",
+            "nested/f",
+            "odd",
+            "odd/ok",
+            "tab",
+            "tab/.gitignore"
+        ]
+    );
+    assert_eq!(t.skipped, 1);
+    // br/a, br/b, nested/.git, tab/x.log
+    assert_eq!(t.ignored, 4);
+    fs::remove_dir_all(&work).unwrap();
+}
+
+/// As above, with a name that is not UTF-8 (`n\xff`) among the odd names: the test as it was
+/// before T-079 split it, whole.
+#[test]
+#[cfg(target_os = "linux")] // names that are not UTF-8, which only Linux can hold (xtask/platform-tests.toml)
+fn documented_differences_from_git_non_utf8() {
+    let work = work("s6-nu8");
     let root = work.join("root");
     // Braces are alternatives.
     write(&root, "br/.gitignore", "{a,b}\n");
