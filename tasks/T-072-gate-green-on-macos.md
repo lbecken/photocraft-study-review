@@ -542,6 +542,62 @@ renamed to carry the new bound (it is not on main yet). The test author states i
     `windows-tests.txt`.
   - Window jobs unchanged; `window-probe (windows-2025)` exits 2 as on main. The list step's time per gate job is in
     each job's step timings (Pinned (g)); expected seconds, not minutes, where the gate built the tests.
+- 2026-11-18 · R-359 · rework after join 1 and CI round 1 (`tasks/ci-runs/T-072-round-1.md`). Rulings of the rework
+  message accepted: (1) the status line is exactly `TEST LIST: exit status N`: the list step now prints that line
+  and the remark on a separate line (`TEST LIST: the status is recorded, not used; the gate step decides the colour`);
+  the full-output step the same way (`TEST OUTPUT: exit status N`, then its remark), for one form; the spec pins no
+  text for the Windows summary line (Interface (6) pins only the per-target `==== <t>: exit status N` lines, which
+  are unchanged), so it stays in the core-crates step's form. (2) The table "Runners, wall times and disk" is
+  replaced from the record's section "The implementer's head" (run 44297266071, head `277e258`): wall times, gate
+  step, list step and full-output step times, `df -h .` header and line as printed (macOS with the inode columns),
+  `du -sh target`, images; every figure from that section, nothing estimated; the window-probe (windows-2025) row
+  says "red" without a step, because the record names none for that run. The list paragraph now says that on Windows
+  `test-list.txt` holds 0 binaries and 0 names, only compile errors (exit status 101), until T-092, citing the record.
+  No sentence of mine names which `kiln-workspace` targets pass on Windows (the 2026-11-18 R-351 expectation's
+  "probably `acceptance_t015_tools`" was wrong: it exits 101, `no_tools_never_runs` "need Unix"; no change, T-092's).
+  **macOS cancellation (run 44297420849):** found nothing in this task's steps that can cause it, and changed
+  nothing for it. Evidence: the step was cancelled 9 min 01 s after it started, while `cargo test --workspace
+  --locked --no-fail-fast > test-output.txt 2>&1` was still running (that command is main's, unchanged; on macOS it
+  took 10 min 32 s in T-079 round 1); the printer is a separate `awk` that reads the finished file, so it had not
+  started; there is no pipe in the step (output goes to a file, `awk` reads a file), so `pipefail` and a waiting
+  reader do not apply; the next step, "Disk" (`df -h .`, `du -sh target`, unchanged from main), then never
+  finished, which no command of this task runs. The tests that run inside the full output (`acceptance_t072`,
+  `guard_t072` with its 120 s probe test, its fake `kiln` bounded at 300 s by itself) had already finished on that
+  runner twice (in the gate step and in the core-crates step, 9 min 44 s). INFERRED, not shown: a runner-side stop.
+  Not checked: the printer under macOS's BSD `awk`. Here `awk` is mawk 1.3.4 (all local runs used it) and the CI
+  Linux/Windows runs used their own `awk`; fetching BSD awk (`original-awk`) into the scratch directory was refused
+  by this machine's permission system, so I did not run it; the printer uses POSIX ERE and `gsub` only (octal
+  `\033` in a regex, `+`, `?`, bracket lists), none of which I know to differ there.
+  Also seen, outside my paths: `docs/development.md:139-140` (section "The gate", not "CI") still calls the CI table
+  under "Runners, wall times and disk" a pre-T-054 record of run 43752760283; with the table replaced that sentence is
+  stale (QUESTION below).
+  Gate: `cargo xtask ci` attempt 2 PASS (927.9 s; test 1171 passed, 0 failed, 0 ignored in 137 suites); attempts in
+  all: 2 local + CI round 1. `cargo test --locked --no-fail-fast -p xtask`: 25 binaries, 311 passed, 0 failed;
+  `acceptance_t072` 17/0, `guard_t072` 7/0 (125.4 s), `acceptance_t070` 14/0, `guard_t070` 7/0, `guard_t079` 6/0,
+  `acceptance_t005` 16/0, `_r2` 4/0, `_r3` 11/0, `_r4` 6/0. D-235: main's tool from `git archive main` (`845c84d`)
+  plus `git diff b96ee55 task/T-072`, scratch directory: `no-skip` PASS (203 files, 35 registered, 19 pending),
+  `hygiene` PASS (695 tracked files), `scorecard --check` PASS (64 items: 47 verified, 17 planned), `layers`,
+  `ui-commands`, `schema` PASS; that tree differs from this worktree only in ledger files (`docs/decisions.md`,
+  `metrics/tasks.jsonl`, task files, `tasks/ci-runs/T-072-round-1.md`).
+  QUESTION (R-359-1): `docs/development.md:139-140` is outside the "CI" section I may edit and is now stale (it names
+  run 43752760283 as the CI table's run). Recommendation: allow me to change it to "the CI table of run 43752760283
+  (now in `tasks/ci-runs/T-070-round-1.md`)", or leave it to T-093/T-089, which edit this file next.
+- **CI expectation for round 2** (this head, the test author's files included):
+  - `gate-linux`: green; gate `test` about 1171 passed, 0 failed (local count; the runner's suites count as in the
+    record). "Test list": 136 binary lines (128 `Running`, 8 `Doc-tests`), then `TEST LIST: exit status 0` and the
+    remark line; `test-list.txt` about 1,170 `<name>: test` lines (round 1); "Full test output" skipped; artefact
+    `gate-report.json`, `core-crates.txt`, `test-list.txt`; `core-crates.txt` `==== xtask: exit status 0` with
+    `acceptance_t072` 17 passed, `guard_t072` 7 passed.
+  - `gate-macos`: green, as on run 44297266071 (the only red tests on the red head were the two fixed now; INFERRED,
+    the macOS core-crates output of that head was not read). "Test list" `TEST LIST: exit status 0` and the remark,
+    136 binary lines; full output skipped; artefact as Linux. If the gate is red, the full-output step runs; what
+    ended it on round 1 is not known (see above).
+  - `gate-windows`: red as on main (clippy, scorecard, test). "Test list" `TEST LIST: exit status 101`, then the
+    remark; 0 binaries, 0 names. "kiln-workspace test targets": the 14 status lines as in round 1 (`acceptance_t073`,
+    `guard_t073`, `tools_contract` 0; the other 11 101). Full output: `error[` / `could not compile` lines, `TEST
+    OUTPUT: exit status 101`, the remark. `core-crates.txt`: `acceptance_t072` 17 passed, `guard_t072` 7 passed.
+    Artefact: the six files of round 1.
+  - Window jobs as in round 1.
 <!-- end implementer log -->
 ### test-author
 - 2026-11-18 · R-352 · tests from the spec alone (worktree base `b96ee55`; spec read on main, with the rulings Q-3 A1, Q-4 A, Q-5 A, Q-6 A of D-254 and the note added 11:20Z: accepted, AC-9 checks `-- --show-output`) · files `xtask/tests/acceptance_t072.rs` (17 tests), `xtask/tests/guard_t072.rs` (7 tests); YAML reader and `if:` evaluator copied from `acceptance_t070.rs`; step scripts run in `bash --noprofile --norc -eo pipefail` (GitHub's form) with fakes first on `PATH`, Git Bash on Windows or a failure naming why; no platform cfg, no `#[ignore]`.
