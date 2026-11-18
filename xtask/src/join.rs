@@ -510,6 +510,23 @@ mod tests {
     use crate::util::read_jsonl;
     use crate::worktree;
 
+    /// `testrepo::init`, then the toy's own git config fixes what git would otherwise take from
+    /// the machine: the tool under test runs `git` without the tests' isolated environment, so
+    /// on Windows the runner's `core.autocrlf=true` converted the toy's files on checkout
+    /// (rulings s11 (i), s13; D-226, D-228).
+    fn portable_init(tag: &str, files: &[(&str, &str)]) -> crate::util::testutil::TempDir {
+        let d = testrepo::init(tag, files);
+        for (k, v) in [
+            ("core.autocrlf", "false"),
+            ("core.eol", "lf"),
+            ("core.safecrlf", "false"),
+            ("core.longpaths", "true"),
+        ] {
+            g(d.path(), &["config", k, v]);
+        }
+        d
+    }
+
     struct FixedClock;
     impl Clock for FixedClock {
         fn now_millis(&self) -> i64 {
@@ -573,7 +590,7 @@ mod tests {
         if let Some(l) = base_lib {
             files.push(("crates/k/src/lib.rs", l));
         }
-        let repo = testrepo::init(tag, &files);
+        let repo = portable_init(tag, &files);
         let root = repo.path();
         for tests in [false, true] {
             worktree::create_unchecked_for_tests(
@@ -690,7 +707,7 @@ mod tests {
 
     #[test]
     fn revert_check_refuses_without_tests_branch_commits() {
-        let repo = testrepo::init(
+        let repo = portable_init(
             "revert-empty",
             &[
                 (".gitignore", ".worktrees/\n"),
@@ -806,7 +823,7 @@ mod tests {
 
     #[test]
     fn acceptance_targets_include_xtask_tests() {
-        let repo = testrepo::init(
+        let repo = portable_init(
             "acc-dirs",
             &[
                 ("crates/k/tests/acceptance_t005_a.rs", ""),
