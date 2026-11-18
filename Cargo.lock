@@ -1265,6 +1265,7 @@ dependencies = [
  "ignore",
  "kiln-search",
  "kiln-text",
+ "same-file",
  "serde",
  "serde_json",
 ]

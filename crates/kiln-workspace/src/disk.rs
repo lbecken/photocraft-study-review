@@ -1,4 +1,4 @@
-//! On-disk VFS with atomic replace (supported platforms: Unix only, decision D-014).
+//! On-disk VFS with atomic replace (decision D-014; Windows: T-073, "On Windows" below).
 //!
 //! `write_atomic` writes the new content to a temporary file next to the destination and
 //! renames it over the destination, so readers see either the old or the new content.
@@ -78,11 +78,26 @@
 //! - On any failure after the temporary file was created, that file is removed.
 //! - Error messages are built from the `RelPath` and the OS error description only; the host
 //!   root never appears in them.
+//!
+//! On Windows (T-073; everything above is Unix's where it names Unix facilities):
+//! - The root is held open as a `same_file::Handle` for the life of the `DiskFs`, and its
+//!   identity is that handle's (volume serial number and file index); every call that re-checks
+//!   the root opens the directory the given path reaches now and goes on only if it is the same
+//!   file as the held one, otherwise `OutsideRoot`.
+//! - The save's temporary file is created exclusively (`create_new`) with no mode; the target's
+//!   `Permissions` (the read-only attribute) are copied as above, then it is renamed over the
+//!   target. The directory sync stays best effort as above: any failure to open or sync the
+//!   directory is ignored (unchecked on Windows, where opening a directory this way is expected
+//!   to fail).
+//! - The walk below the root runs the code above unchanged; how links, junctions and other
+//!   reparse points, prefixes, reserved names, streams and case are treated is not decided here
+//!   (T-074).
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Write};
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 
@@ -106,6 +121,7 @@ pub struct DiskFs {
     given: PathBuf,
     /// Device and inode of the root directory at construction: the root *is* this directory,
     /// whatever later happens to the path that led to it.
+    #[cfg(unix)]
     root_id: (u64, u64),
     /// The root directory, held open (read-only, never read through) for as long as this
     /// `DiskFs` lives, so that its inode cannot be freed and given to another directory: a
@@ -114,7 +130,13 @@ pub struct DiskFs {
     /// ever looked up through it, every walk starts from `given` resolved again. Every
     /// `DiskFs` holds one: a root that cannot be opened for reading is refused by
     /// [`DiskFs::new`] (T-036).
+    #[cfg(unix)]
     _root_handle: fs::File,
+    /// Windows (T-073): the root directory held open for as long as this `DiskFs` lives, and
+    /// its identity: a directory reached later is the root iff its handle equals this one (same
+    /// volume serial number and file index). Nothing is looked up through it.
+    #[cfg(windows)]
+    root_handle: same_file::Handle,
 }
 
 /// One step of the walk to a location.
@@ -181,13 +203,23 @@ impl DiskFs {
                 // directory the process may not open for reading (whatever its search
                 // permission), the open's own kind for any other failure.
                 let open_error = |e: io::Error| io_error(&placeholder(), &e);
+                #[cfg(unix)]
                 let handle = fs::File::open(&resolved).map_err(open_error)?;
                 // The identity is that of the directory actually held.
+                #[cfg(unix)]
                 let held = handle.metadata().map_err(open_error)?;
+                // Windows (T-073): held and identified by a `same_file::Handle` (it opens the
+                // directory with the flag Windows requires for directories).
+                #[cfg(windows)]
+                let root_handle = same_file::Handle::from_path(&resolved).map_err(open_error)?;
                 Ok(DiskFs {
                     given: std::path::absolute(root).map_err(root_error)?,
+                    #[cfg(unix)]
                     root_id: (held.dev(), held.ino()),
+                    #[cfg(unix)]
                     _root_handle: handle,
+                    #[cfg(windows)]
+                    root_handle,
                 })
             }
             Ok(_) => Err(VfsError::Io {
@@ -210,7 +242,17 @@ impl DiskFs {
         let outside = || VfsError::OutsideRoot { path: rel.clone() };
         let root = fs::canonicalize(&self.given).map_err(|_| outside())?;
         let meta = fs::symlink_metadata(&root).map_err(|_| outside())?;
+        #[cfg(unix)]
         if meta.is_dir() && (meta.dev(), meta.ino()) == self.root_id {
+            Ok(root)
+        } else {
+            Err(outside())
+        }
+        // Windows (T-073): the directory reached now must be the same file as the held root.
+        #[cfg(windows)]
+        if meta.is_dir()
+            && same_file::Handle::from_path(&root).is_ok_and(|now| now == self.root_handle)
+        {
             Ok(root)
         } else {
             Err(outside())
@@ -352,6 +394,7 @@ fn lookup_error(path: &RelPath, e: &io::Error) -> VfsError {
 
 /// Create a new temporary file in `dir` exclusively, under the first free candidate name.
 /// Nothing that already exists (file, directory or symlink) is opened or changed.
+#[cfg(unix)]
 fn create_temp(dir: &Path, mode: u32) -> io::Result<(PathBuf, fs::File)> {
     for n in 0..TEMP_ATTEMPTS {
         let temp = dir.join(format!("{TEMP_PREFIX}{n}"));
@@ -359,6 +402,28 @@ fn create_temp(dir: &Path, mode: u32) -> io::Result<(PathBuf, fs::File)> {
             .write(true)
             .create_new(true)
             .mode(mode)
+            .open(&temp)
+        {
+            Ok(file) => return Ok((temp, file)),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        format!("all {TEMP_ATTEMPTS} temporary file names are taken"),
+    ))
+}
+
+/// Windows (T-073): [`create_temp`] without a mode (the `0600`/`0666` modes are Unix's; the
+/// target's permissions are applied afterwards as on Unix), so `_mode` is not used.
+#[cfg(windows)]
+fn create_temp(dir: &Path, _mode: u32) -> io::Result<(PathBuf, fs::File)> {
+    for n in 0..TEMP_ATTEMPTS {
+        let temp = dir.join(format!("{TEMP_PREFIX}{n}"));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
             .open(&temp)
         {
             Ok(file) => return Ok((temp, file)),

@@ -300,6 +300,17 @@ high → independent test author.
 - 2026-11-18 · R-336 · draft · did: re-specified in full under v1.5; prototype probed (scratch, deleted) · not run: CI, Windows runtime · next: director
 <!-- end planner log -->
 ### implementer
+- 2026-11-18 · R-338 · in_progress · criteria restated: AC-1 the lib of `kiln-workspace` checks for
+  `x86_64-pc-windows-msvc` with 0 errors (base 6, measured again here); AC-2 every library and binary of the
+  workspace is clippy-clean with `-D warnings` for that target; AC-3 the lib test target of `kiln-workspace`
+  (`--lib --profile test`) checks there with 0 errors (base 34); AC-4 `Cargo.lock` changes by exactly the line
+  `+ "same-file",` in `kiln-workspace`'s list, no version; guards: every existing `kiln-workspace` test passes on
+  Linux, every product change is under `#[cfg(windows)]` or is an added `#[cfg(unix)]` on an unchanged line;
+  AC-W1–W3 come from the CI record (pending). Rulings D-245 acknowledged and accepted: Q-1 A (one reported
+  Windows step in `platforms.yml` and its expectation in `acceptance_t070.rs`, now), Q-2 (registry mine; the test
+  author uses no platform cfg; I add an entry only for a platform-only test it names), Q-3 A, Q-4 A. C compiler
+  stub for cross checks in scratch (`clang --target=<t> -c` of an empty unit, `AR_<t>` = `llvm-lib`/`llvm-ar`),
+  as ADR-0009 probe a3 · next: product code
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
