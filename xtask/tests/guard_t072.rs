@@ -939,12 +939,13 @@ fn g1_probe_with_a_kiln_that_never_exits_ends_within_135_s_and_records_the_kill(
         },
     );
     let b = bench("probe");
-    // A kiln that never exits and ignores SIGTERM: only a SIGKILL ends it.
+    // A kiln that does not exit within the bound and ignores SIGTERM: only a SIGKILL ends it
+    // (it gives up after 300 s, so a failing run leaves no process behind for long).
     let k = b.tree.join("target/debug");
     std::fs::create_dir_all(&k).unwrap();
     std::fs::write(
         k.join("kiln"),
-        "#!/usr/bin/env bash\ntrap '' TERM\nwhile :; do sleep 1; done\n",
+        "#!/usr/bin/env bash\ntrap '' TERM\nend=$((SECONDS + 300))\nwhile [ \"$SECONDS\" -lt \"$end\" ]; do sleep 1; done\n",
     )
     .unwrap();
     let rt = b.dir.join("runner-temp");
@@ -988,7 +989,7 @@ fn g1_probe_with_a_kiln_that_never_exits_ends_within_135_s_and_records_the_kill(
         chmod.stderr
     );
     let t0 = Instant::now();
-    let o = b.run(run_of(&st[p]), &env, 240);
+    let o = b.run(run_of(&st[p]), &env, 200);
     let secs = t0.elapsed().as_secs_f64();
     assert!(
         secs <= 135.0,
