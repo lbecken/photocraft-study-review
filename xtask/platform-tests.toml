@@ -92,3 +92,38 @@ doc = "docs/development.md"
 quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
 counterpart = "none"
 reason = "the test writes a `#!/bin/sh` script over the cached xtask and runs it (`out(&bin)` expects `poisoned`); Windows cannot execute a shebang script (os error 216 in CI run 44201932507); the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+
+# T-079: product tests of a facility macOS lacks (the Windows marking is T-092's).
+
+[[test]]
+file = "apps/kiln/tests/acceptance_t055.rs"
+item = "ac8_stdout_write_failure_exits_1"
+platforms = "linux"
+doc = "docs/protocol/ui.md"
+quote = "writing stdout failed"
+counterpart = "pending"
+reason = "the test makes stdout unwritable with /dev/full, which only Linux has; T-076 writes the same sentence's test through a stdout whose reader has closed"
+task = "T-076"
+expires = "2026-12-31"
+
+[[test]]
+file = "apps/kiln-cli/tests/acceptance_t004_r2.rs"
+item = "run_and_control_exit_1_when_stdout_cannot_be_written"
+platforms = "linux"
+doc = "docs/control-protocol.md"
+quote = "writing stdout failed"
+counterpart = "pending"
+reason = "the test makes stdout unwritable with /dev/full, which only Linux has; T-076 writes the same sentence's test through a stdout whose reader has closed"
+task = "T-076"
+expires = "2026-12-31"
+
+[[test]]
+file = "apps/kiln-cli/tests/run.rs"
+item = "run_exits_1_when_stdout_cannot_be_written"
+platforms = "linux"
+doc = "docs/control-protocol.md"
+quote = "writing stdout failed"
+counterpart = "pending"
+reason = "the test makes stdout unwritable with /dev/full, which only Linux has; T-076 writes the same sentence's test through a stdout whose reader has closed"
+task = "T-076"
+expires = "2026-12-31"

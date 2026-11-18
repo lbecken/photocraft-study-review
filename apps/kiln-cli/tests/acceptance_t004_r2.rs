@@ -120,6 +120,7 @@ fn help_flags_print_usage_and_exit_0() {
 // ---------------------------------------------------------------- ruling 3: stdout errors
 
 #[test]
+#[cfg(target_os = "linux")] // stdout on /dev/full, which only Linux has (xtask/platform-tests.toml)
 fn run_and_control_exit_1_when_stdout_cannot_be_written() {
     assert!(Path::new("/dev/full").exists(), "this test needs /dev/full");
     let work = fresh_dir("devfull");

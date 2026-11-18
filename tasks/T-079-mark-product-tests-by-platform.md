@@ -400,6 +400,15 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
 - 2026-11-18 · R-325 · specified · did: re-check after T-071's merge (D-235): the eight written in; main's no-skip on main + patch run (scratch, deleted) · not run: CI · next: director (Q-8)
 <!-- end planner log -->
 ### implementer
+- 2026-11-18 · R-327 · start (`uptime -s` 2026-11-18 04:43:09; worktree clean at `ee9b130`). Criteria in my words:
+  the registry holds exactly 20 entries (the patch's 8, then 12 `linux` ones: 3 `/dev/full` pending T-076, 4
+  non-UTF-8 `none`, 5 no-display pending T-077, all `expires = "2026-12-31"`); those 12 tests sit behind exactly
+  `cfg(target_os = "linux")` with their only-used helpers; the 4 Linux-assuming tests get portable fixes with no
+  cfg and no platform branch, every Linux assertion kept; one sentence of `docs/development.md` made true;
+  `xtask` checks for Windows with 0 errors; main's tool on this tree prints `20 platform test(s) registered`.
+- step (a): `git apply --check` then `git apply tasks/T-079-restore-from-T-071.patch` → commit `c61acc5` (the patch
+  alone, 8 files, +98 −4). `cargo xtask no-skip` → `PASS  no-skip: self-test ok (17 known findings); 197 files
+  scanned, 0 allowlisted skip(s), 8 platform test(s) registered (0 pending), today = 2026-11-18`.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

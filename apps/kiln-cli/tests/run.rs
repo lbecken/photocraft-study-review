@@ -388,6 +388,7 @@ fn bad_root_error_names_the_path() {
 }
 
 #[test]
+#[cfg(target_os = "linux")] // stdout on /dev/full, which only Linux has (xtask/platform-tests.toml)
 fn run_exits_1_when_stdout_cannot_be_written() {
     // Linux only, like the rest of the disk layer (D-014: Unix).
     let full = Path::new("/dev/full");

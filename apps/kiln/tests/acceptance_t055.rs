@@ -2095,6 +2095,7 @@ fn ac8_accepted_command_lines() {
 }
 
 #[test]
+#[cfg(target_os = "linux")] // stdout on /dev/full, which only Linux has (xtask/platform-tests.toml)
 fn ac8_stdout_write_failure_exits_1() {
     let dir = case_dir("ac8-full");
     fixture(&dir);
