@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::Read;
+#[cfg(target_os = "linux")] // used by the Linux-only no-display tests only
 use std::net::{SocketAddr, TcpStream};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -34,6 +35,7 @@ const TIMEOUT: Duration = Duration::from_secs(120);
 const A_RS: &str = "fn main() {\n    let x = 1;\n}\n";
 
 /// An X display number nothing listens on (checked by [`assert_display_unused`]).
+#[cfg(target_os = "linux")] // used by the Linux-only no-display tests only
 const UNUSED_DISPLAY: u16 = 4093;
 
 // ---------------------------------------------------------------------------------------------
@@ -74,8 +76,10 @@ enum Display {
     /// `DISPLAY`, `WAYLAND_DISPLAY` and `WAYLAND_SOCKET` removed.
     None,
     /// As `None`, then `WAYLAND_DISPLAY` set to a socket name that does not exist.
+    #[cfg(target_os = "linux")] // used by the Linux-only no-display tests only
     WaylandOnly,
     /// As `None`, then `DISPLAY` set to [`UNUSED_DISPLAY`].
+    #[cfg(target_os = "linux")] // used by the Linux-only no-display tests only
     Unreachable,
 }
 
@@ -93,9 +97,11 @@ fn kiln_in<A: AsRef<OsStr>>(cwd: &Path, home: &Path, display: Display, args: &[A
         .stderr(Stdio::piped());
     match display {
         Display::None => {}
+        #[cfg(target_os = "linux")]
         Display::WaylandOnly => {
             cmd.env("WAYLAND_DISPLAY", "kiln-t065-no-such-wayland-socket");
         }
+        #[cfg(target_os = "linux")]
         Display::Unreachable => {
             cmd.env("DISPLAY", format!(":{UNUSED_DISPLAY}"));
         }
@@ -184,6 +190,7 @@ fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
 
 /// Panics unless nothing can be listening on X display [`UNUSED_DISPLAY`]: no socket file, no
 /// abstract socket of that name, no TCP listener on its port. A precondition, not a skip.
+#[cfg(target_os = "linux")] // used by the Linux-only no-display tests only
 fn assert_display_unused() {
     let name = format!("/tmp/.X11-unix/X{UNUSED_DISPLAY}");
     assert!(
@@ -239,6 +246,7 @@ fn assert_refused_start(out: &Out, what: &str) {
 
 /// "No window": exit 2, nothing on stdout, exactly one stderr line (one non-empty line, with or
 /// without its final line break), which does not contain `panicked`.
+#[cfg(target_os = "linux")] // used by the Linux-only no-display tests only
 fn assert_no_window(out: &Out, what: &str) {
     assert_refused_start(out, what);
     let text = out.stderr_text();
@@ -271,6 +279,7 @@ fn assert_usage_error(out: &Out, usage: &str, what: &str) {
 /// without `panicked`; and (Pinned (b)) the start writes no file: the root, the current
 /// directory and `HOME` are as before.
 #[test]
+#[cfg(target_os = "linux")] // X11's no-window behaviour; on macOS a window opens (xtask/platform-tests.toml)
 fn ac1_no_display_exits_2_with_one_line() {
     let dir = case_dir("no-display");
     let home = dir.join("home");
@@ -296,6 +305,7 @@ fn ac1_no_display_exits_2_with_one_line() {
 /// after the window system, Pinned (c): no exit 3), several paths, and `--script` with a
 /// readable script (its file unchanged).
 #[test]
+#[cfg(target_os = "linux")] // X11's no-window behaviour; on macOS a window opens (xtask/platform-tests.toml)
 fn ac1_no_display_every_window_form() {
     let dir = case_dir("forms");
     let home = dir.join("home");
@@ -332,6 +342,7 @@ fn ac1_no_display_every_window_form() {
 /// AC-1 / Interface "No window": X11 only, so `WAYLAND_DISPLAY` without `DISPLAY` gives no
 /// window; and `DISPLAY` naming a display nothing serves ("a display that cannot be reached").
 #[test]
+#[cfg(target_os = "linux")] // X11's no-window behaviour; on macOS a window opens (xtask/platform-tests.toml)
 fn ac1_wayland_only_or_unreachable_display_exits_2() {
     let dir = case_dir("unreachable");
     let home = dir.join("home");

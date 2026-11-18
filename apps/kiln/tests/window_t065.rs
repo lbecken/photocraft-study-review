@@ -89,6 +89,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 /// No window: exit 2, nothing on stdout, exactly one stderr line without `panicked`.
+#[cfg(target_os = "linux")] // used by the Linux-only no-display test only
 fn assert_no_window(run: &Run, what: &str) {
     assert_eq!(run.code, 2, "{what}: stderr {:?}", run.stderr);
     assert!(run.stdout.is_empty(), "{what}: stdout {:?}", run.stdout);
@@ -106,6 +107,7 @@ fn help(dir: &Path) -> String {
 }
 
 #[test]
+#[cfg(target_os = "linux")] // X11's no-window behaviour; on macOS a window opens (xtask/platform-tests.toml)
 fn without_a_display_the_window_exits_2_with_one_line() {
     let dir = fixture("no-display");
     for args in [

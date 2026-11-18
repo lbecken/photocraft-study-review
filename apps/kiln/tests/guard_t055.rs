@@ -12,17 +12,23 @@
 #![cfg(test)]
 
 use std::fs;
+#[cfg(target_os = "linux")] // used by the Linux-only no-display guard only
 use std::io::Read;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")] // used by the Linux-only no-display guard only
 use std::process::{Command, Stdio};
+#[cfg(target_os = "linux")] // used by the Linux-only no-display guard only
 use std::thread;
+#[cfg(target_os = "linux")] // used by the Linux-only no-display guard only
 use std::time::{Duration, Instant};
 
 use kiln_control::Host;
 
+#[cfg(target_os = "linux")] // used by the Linux-only no-display guard only
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 /// (exit code, stdout, stderr) of `kiln` with no arguments, display variables removed.
+#[cfg(target_os = "linux")] // used by the Linux-only no-display guard only
 fn kiln_no_args() -> (i32, Vec<u8>, Vec<u8>) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_kiln"))
         .env_remove("DISPLAY")
@@ -67,6 +73,7 @@ fn kiln_no_args() -> (i32, Vec<u8>, Vec<u8>) {
 }
 
 #[test]
+#[cfg(target_os = "linux")] // X11's no-window behaviour; on macOS a window opens (xtask/platform-tests.toml)
 fn kiln_without_subcommand_and_display_exits_nonzero_with_a_message() {
     let (code, stdout, stderr) = kiln_no_args();
     assert_ne!(
