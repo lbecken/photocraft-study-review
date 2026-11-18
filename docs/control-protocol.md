@@ -132,10 +132,13 @@ current directory). What is checked today:
   `docs/protocol/paths.md`.
 - A save replaces the file by writing a temporary file `.kiln-tmp-<n>` next to it and renaming
   it over the target (on Unix); through a symlink, the link's target is replaced and the link is
-  kept. On Windows (T-073), each part unchecked until T-073's CI record: the temporary file is
-  created with no Unix mode, a target Kiln cannot open for writing (a read-only file) is refused
-  and left unchanged, and the target is replaced by renaming the temporary file over it; how
-  symlinks are followed there is not yet stated (T-074).
+  kept. On Windows (T-073), shown by the tests of `crates/kiln-workspace/tests/guard_t073.rs`
+  passing on the `windows-2025` runner in CI run 44268710587 (`tasks/ci-runs/T-073-round-1.md`):
+  the temporary file is created exclusively and with no Unix mode, a target Kiln cannot open for
+  writing (a read-only file) is refused and left unchanged, and the target is replaced by renaming
+  the temporary file over it. Read and not measured: the saved file gets the access list its
+  directory gives a new file, not the target's own, and the temporary file is not owner-only
+  while it is written. How symlinks are followed there is not yet stated (T-074).
 
 ## Determinism
 

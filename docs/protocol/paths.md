@@ -30,11 +30,22 @@ renamed or removed with nothing in its place). If the path leads to the root dir
 (moved back, or a link at that path pointed at it), the session works there again.
 
 On Windows (T-073) Kiln holds the root open in the same way, and the identity it compares is
-that of the held directory: the directory `--root` leads to is the root when it is the same file
-on the same volume (the same volume serial number and file index). What holding the root open
-allows there, whether another process can rename, remove or replace the root while a session
-runs, is unchecked: it is to be measured on the Windows CI runner (T-073), and until then the
-sentences above about a replaced root are unchecked on Windows.
+that of the held directory: the directory `--root` leads to is the root when it has the same
+volume serial number and the same 64-bit file index as the held one. Measured on the
+`windows-2025` runner in CI run 44268710587 (`tasks/ci-runs/T-073-round-1.md`):
+- The held root itself can be renamed while a session runs; every call then answers
+  `outside_root`, and once the root is moved back the session works there again, as on Linux and
+  macOS (`crates/kiln-workspace/tests/guard_t073.rs::acw2_root_replaced_at_same_path_is_outside_root`).
+- **A difference from Linux and macOS:** while a session holds the root, Windows refuses to rename
+  a directory above it (`PermissionDenied`, OS error 5), and the session goes on working on its
+  root. On Linux and macOS that rename succeeds and the session then refuses every path with
+  `outside_root` (`crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root`,
+  which passed on all three in that run).
+- Not run on Windows: removing a held root, and a directory above the root replaced (Windows
+  refused the rename, so there the identity check is shown only for the root itself).
+- A limit, read and not measured: on a file system that does not keep the 64-bit file index
+  unique (ReFS is documented so), two different directories can compare equal, so a directory
+  that replaced the root could be taken for it (a 128-bit identity is T-094's).
 
 The rules below this section are stated for Linux and macOS; for Windows they are not yet stated
 (T-074).
