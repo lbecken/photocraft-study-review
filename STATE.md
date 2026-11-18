@@ -1,6 +1,23 @@
 # State
 
-_Last updated: 2026-11-18 22:05 UTC_
+_Last updated: 2026-11-18 22:10 UTC (paused)_
+
+## Paused (D-283)
+**The owner paused the work at 2026-11-18 22:09Z until the weekly usage limit resets (Saturday 2026-11-21, 5 PM
+in the owner's time zone). Nothing runs and nothing is scheduled; resume when the owner says so.** To resume:
+1. `uptime -s`, `git status` in the primary checkout, `git worktree list`. If `.worktrees/T-095` and
+   `.worktrees/T-095-tests` are gone (the machine was replaced), re-create them from main `607fed20b7dd`
+   (`git worktree add -q .worktrees/T-095 -b task/T-095 607fed20b7dd`, the same for `-tests`) and restore the
+   commits with `git am < tasks/T-095-wip-implementer.patch` and `git am < tasks/T-095-wip-tests.patch` (heads
+   must come out as trees equal to `88753e3` and `2720fcd`; compare with `git diff --stat` against the patch).
+2. T-095 is `in_progress`, both builders were stopped mid-work (runs R-405, R-406 booked with what they had done;
+   their agent ids may no longer be resumable): dispatch fresh builders (Opus 5.5) that continue from the branch
+   as it is, each told what its predecessor had committed and that nothing was verified (no gate, no checks).
+3. Read main's `ci.yml` and `platforms.yml` runs for the pushes of 21:32Z and 21:59Z on 2026-11-18 (T-093's and
+   T-092's merges) and the newest nightly run: the counted jobs; a macOS job without a runner is re-run.
+4. Have T-098 specified in full (a planner; the brief is in the transcript and in the handoff's last addendum),
+   then its fresh spec check; go on with the platform track as listed below.
+The patch files `tasks/T-095-wip-*.patch` are removed by the director when T-095 has merged.
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.5** (D-221). Cut 2 is built and
@@ -48,7 +65,7 @@ D-229 (a ruling changed after a test was written to it goes to both builders wit
 (stored as `tasks/ci-runs/T-NNN-round-N.md`); small lookups by a light helper through the GitHub tools. The
 nightly `platforms.yml` run on main (cron `17 3 * * *`) is read at each session start and handoff.
 
-Ids: next task number T-101 (the T-098 planner may take it), next run R-408, next decision D-283.
+Ids: next task number T-101, next run R-408, next decision D-284.
 
 Drafts: T-074 to T-078, T-091, T-092, T-094 (platform); T-043, T-087 to T-090 (tooling, deferred); T-082, T-083,
 T-085, T-086, T-066, T-068, T-053, T-064, T-080, T-081, T-051, T-033, T-041 (last; the owner is told first),

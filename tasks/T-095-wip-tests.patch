@@ -1,0 +1,1351 @@
+From e5c043ae7f3d6a2f01f37c227c418bd1ab51cd6f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 22:03:36 +0000
+Subject: [PATCH 1/3] T-095 tests: acceptance_t095.rs, AC-D1 to AC-D3 (document
+ statements; 3 fail on base)
+
+Task: T-095
+Role: test-author
+---
+ .../kiln-workspace/tests/acceptance_t095.rs   | 141 ++++++++++++++++++
+ 1 file changed, 141 insertions(+)
+ create mode 100644 crates/kiln-workspace/tests/acceptance_t095.rs
+
+diff --git a/crates/kiln-workspace/tests/acceptance_t095.rs b/crates/kiln-workspace/tests/acceptance_t095.rs
+new file mode 100644
+index 0000000..ac7d575
+--- /dev/null
++++ b/crates/kiln-workspace/tests/acceptance_t095.rs
+@@ -0,0 +1,141 @@
++//! T-095 AC-D1 to AC-D3 (ruling 4, D-272; Q-B, D-275): the document statements this task adds,
++//! read from the repository's files. Written by the test author from
++//! `tasks/T-095-windows-path-names-and-case.md` alone (Pinned (i)).
++//!
++//! Each document is read from `CARGO_MANIFEST_DIR/../../docs/…` and its whitespace squashed (every
++//! run of whitespace becomes one space), so line wrapping and CRLF on a Windows checkout read the
++//! same. No platform cfg: these run, and fail on base, on every platform. Every test in this file
++//! fails on base (the join refuses a file of acceptance tests in which one passes on base); what
++//! the task keeps unchanged is the reviewer's diff check or a guard, not tested here.
++//!
++//! The sentences are pinned as Pinned (i) words them ("worded to be copied"); each test collects
++//! every mismatch before it fails, so one run names all of them.
++#![cfg(test)]
++
++use std::fs;
++use std::path::Path;
++
++/// The document at `rel` below `docs/`, whitespace squashed.
++fn doc(rel: &str) -> String {
++    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
++        .join("../../docs")
++        .join(rel);
++    let text = fs::read_to_string(&path)
++        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
++    squash(&text)
++}
++
++fn squash(s: &str) -> String {
++    s.split_whitespace().collect::<Vec<_>>().join(" ")
++}
++
++fn require(problems: &mut Vec<String>, file: &str, text: &str, wanted: &str) {
++    let wanted = squash(wanted);
++    if !text.contains(&wanted) {
++        problems.push(format!("{file} lacks: {wanted:?}"));
++    }
++}
++
++fn forbid(problems: &mut Vec<String>, file: &str, text: &str, unwanted: &str) {
++    let unwanted = squash(unwanted);
++    if text.contains(&unwanted) {
++        problems.push(format!("{file} still has: {unwanted:?}"));
++    }
++}
++
++fn finish(test: &str, problems: Vec<String>) {
++    assert!(
++        problems.is_empty(),
++        "{test}: {} problem(s):\n{}",
++        problems.len(),
++        problems.join("\n")
++    );
++}
++
++const PATHS: &str = "protocol/paths.md";
++const PROJECT: &str = "protocol/project.md";
++const CONTROL: &str = "control-protocol.md";
++
++/// Pinned (i) item 1: the Windows paragraph of "Lexical refusals".
++const LEXICAL_WINDOWS: &str = "On Windows (T-095) a path is also refused this way if it \
++contains `:`, `<`, `>`, `\"`, `|`, `?`, `*` or a control character (U+0001 to U+001F), the \
++characters Windows does not allow in a file name: so no request names an alternate data stream \
++(`f.txt::$DATA` is a second name of `f.txt` there) or another drive (`C:x`). On Linux and macOS \
++these characters are ordinary.";
++
++/// Pinned (i) item 2: reserved device names and trailing dots or spaces.
++const RESERVED_NAMES: &str = "Names that Windows reserves for devices (`CON`, `NUL`, `aux.rs`, …) \
++and names ending in a dot or a space are ordinary files of the project for Kiln, which reaches \
++every file through `\\\\?\\` paths. Other Windows programs may not open them (T-095; CI run \
++44290286460).";
++
++/// AC-D1: `paths.md` holds Pinned (i) item 1 as worded, under a heading that no longer says
++/// "(unchanged)" (the paragraph makes it false). Base: the paragraph is absent.
++#[test]
++fn acd1_paths_md_states_the_windows_lexical_refusals() {
++    let paths = doc(PATHS);
++    let mut problems = Vec::new();
++    require(&mut problems, PATHS, &paths, LEXICAL_WINDOWS);
++    forbid(&mut problems, PATHS, &paths, "## Lexical refusals (unchanged)");
++    require(&mut problems, PATHS, &paths, "## Lexical refusals");
++    finish("acd1", problems);
++}
++
++/// AC-D2: `paths.md` holds Pinned (i) item 2 as worded and no longer says that names or case on
++/// Windows are "not yet stated" (T-074's sentence nor T-093's "Platforms" clause). Base: item 2
++/// absent, both "not yet stated" sentences present.
++#[test]
++fn acd2_paths_md_states_reserved_and_trailing_names_and_drops_not_yet_stated() {
++    let paths = doc(PATHS);
++    let mut problems = Vec::new();
++    require(&mut problems, PATHS, &paths, RESERVED_NAMES);
++    forbid(
++        &mut problems,
++        PATHS,
++        &paths,
++        "Names that Windows gives a meaning, and case, are not yet stated for Windows (T-095).",
++    );
++    forbid(
++        &mut problems,
++        PATHS,
++        &paths,
++        "names and case on Windows are not yet stated (T-095)",
++    );
++    finish("acd2", problems);
++}
++
++/// AC-D3: the two D-270 citations name CI run 44358453526 and its record
++/// `tasks/ci-runs/T-074-round-1.md` (Pinned (i), last item), and the replaced citations are gone.
++/// Base: both cite 44307677646 / `T-074-early-1.md`. The variant to reject (run id changed, record
++/// left at `T-074-early-1.md`) fails the `require` lines, which hold run and record together.
++#[test]
++fn acd3_d270_citations_name_run_44358453526() {
++    let control = doc(CONTROL);
++    let project = doc(PROJECT);
++    let mut problems = Vec::new();
++    require(
++        &mut problems,
++        CONTROL,
++        &control,
++        "(shown in CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`, for a junction",
++    );
++    forbid(
++        &mut problems,
++        CONTROL,
++        &control,
++        "(shown in CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`, for a junction",
++    );
++    require(
++        &mut problems,
++        PROJECT,
++        &project,
++        "the `awa1_*` tests of `guard_t074.rs` in CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`",
++    );
++    forbid(
++        &mut problems,
++        PROJECT,
++        &project,
++        "`guard_t074.rs` in CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`;",
++    );
++    finish("acd3", problems);
++}
+-- 
+2.43.0
+
+
+From c59874182fea853b36a261fbc7b74416baab7fe6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 22:05:15 +0000
+Subject: [PATCH 2/3] T-095 tests: Interface (6) Windows branches in the three
+ kiln-commands T-032 targets
+
+Task: T-095
+Role: test-author
+---
+ crates/kiln-commands/tests/acceptance_t032.rs | 44 ++++++++++++++++++-
+ .../tests/acceptance_t032_json.rs             | 27 +++++++++++-
+ crates/kiln-commands/tests/guard_t032.rs      | 38 ++++++++++++++++
+ 3 files changed, 106 insertions(+), 3 deletions(-)
+
+diff --git a/crates/kiln-commands/tests/acceptance_t032.rs b/crates/kiln-commands/tests/acceptance_t032.rs
+index 918e4a0..382eef1 100644
+--- a/crates/kiln-commands/tests/acceptance_t032.rs
++++ b/crates/kiln-commands/tests/acceptance_t032.rs
+@@ -358,7 +358,36 @@ fn refusals_carry_reasons_at_their_sources() {
+     let r = reg();
+     let mut seen = BTreeSet::new();
+     for case in cases() {
+-        let (what, .., kind, message) = case;
++        let (what, files, .., params, kind, message) = case.clone();
++        let colon = params["path"].as_str().is_some_and(|p| p.contains(':'))
++            || files.iter().any(|(p, _)| p.contains(':'));
++        if cfg!(windows) && colon {
++            // T-095 Interface (6): on Windows a name with `:` is refused before the file system
++            // is touched, so the fixture cannot be made (asserted refused instead of inserted)
++            // and `doc.open` answers `rejected` / `invalid_path` (message unpinned).
++            for (p, _) in files {
++                assert!(RelPath::new(p).is_err(), "{what}: fixture {p:?} accepted");
++            }
++            let valid: Vec<(&str, &[u8])> = files
++                .iter()
++                .copied()
++                .filter(|(p, _)| !p.contains(':'))
++                .collect();
++            let mut ctx = files_ctx(&valid, case.2);
++            let err = r
++                .execute(&mut ctx, "doc.open", params.clone())
++                .expect_err(what);
++            match &err {
++                CommandError::Rejected { reason, .. } => {
++                    assert_eq!(*reason, RejectReason::InvalidPath, "{what}")
++                }
++                other => panic!("{what}: expected a refusal, got {other:?}"),
++            }
++            assert_eq!(err.to_json()["code"], "rejected", "{what}");
++            assert_eq!(err.to_json()["reason"], "invalid_path", "{what}");
++            seen.insert("invalid_path");
++            continue;
++        }
+         let err = run_case(&r, &case);
+         let want = expected(kind);
+         match &err {
+@@ -640,6 +669,17 @@ fn lower_layer_errors_map_to_pinned_reasons() {
+         let open = OpenError::Vfs(e.clone());
+         assert_eq!(RejectReason::from(&open), *want, "{open:?}");
+     }
++    // T-095 Interface (6): on Windows `missing: not found` is not a valid path, so the cases are
++    // built with a path without `:`; elsewhere as before.
++    let decode_path = if cfg!(windows) {
++        assert!(
++            RelPath::new("missing: not found").is_err(),
++            "`missing: not found` accepted on Windows"
++        );
++        "missing - not found"
++    } else {
++        "missing: not found"
++    };
+     for encoding in [
+         Encoding::Utf8,
+         Encoding::Utf8Bom,
+@@ -647,7 +687,7 @@ fn lower_layer_errors_map_to_pinned_reasons() {
+         Encoding::Utf16Be,
+     ] {
+         let open = OpenError::Decode {
+-            path: p("missing: not found"),
++            path: p(decode_path),
+             error: DecodeError {
+                 encoding,
+                 byte_offset: 3,
+diff --git a/crates/kiln-commands/tests/acceptance_t032_json.rs b/crates/kiln-commands/tests/acceptance_t032_json.rs
+index ca5fa43..2e6262e 100644
+--- a/crates/kiln-commands/tests/acceptance_t032_json.rs
++++ b/crates/kiln-commands/tests/acceptance_t032_json.rs
+@@ -332,7 +332,32 @@ fn run_case(r: &Registry, case: &Case) -> CommandError {
+ fn refusals_serialize_their_reason() {
+     let r = reg();
+     for case in cases() {
+-        let (what, .., reason, message) = case;
++        let (what, files, fail, .., params, reason, message) = case.clone();
++        let colon = params["path"].as_str().is_some_and(|p| p.contains(':'))
++            || files.iter().any(|(p, _)| p.contains(':'));
++        if cfg!(windows) && colon {
++            // T-095 Interface (6): on Windows these names are refused before the file system is
++            // touched; the fixture that cannot be made is asserted refused instead of inserted.
++            for (p, _) in files {
++                assert!(RelPath::new(p).is_err(), "{what}: fixture {p:?} accepted");
++            }
++            let valid: Vec<(&str, &[u8])> = files
++                .iter()
++                .copied()
++                .filter(|(p, _)| !p.contains(':'))
++                .collect();
++            let mut ctx = files_ctx(&valid, fail);
++            let v = r
++                .execute(&mut ctx, "doc.open", params.clone())
++                .expect_err(what)
++                .to_json();
++            let keys: Vec<&String> = v.as_object().expect("object").keys().collect();
++            assert_eq!(keys.len(), 3, "{what}: {v}");
++            assert_eq!(v["code"], "rejected", "{what}: {v}");
++            assert_eq!(v["reason"], "invalid_path", "{what}: {v}");
++            assert!(v["message"].is_string(), "{what}: {v}");
++            continue;
++        }
+         let err = run_case(&r, &case);
+         let v = err.to_json();
+         assert_eq!(v["code"], "rejected", "{what}");
+diff --git a/crates/kiln-commands/tests/guard_t032.rs b/crates/kiln-commands/tests/guard_t032.rs
+index a6ab644..ea49ef5 100644
+--- a/crates/kiln-commands/tests/guard_t032.rs
++++ b/crates/kiln-commands/tests/guard_t032.rs
+@@ -287,6 +287,44 @@ fn cases() -> Vec<Case> {
+ fn refusal_messages_and_codes_are_unchanged() {
+     let r = reg();
+     for (what, files, fail, text, setup, name, params, message) in cases() {
++        let colon = params["path"].as_str().is_some_and(|p| p.contains(':'))
++            || files.iter().any(|(p, _)| p.contains(':'));
++        if cfg!(windows) && colon {
++            // T-095 Interface (6): on Windows these names are refused as `invalid_path` before
++            // the file system is touched; the fixture that cannot be made is asserted refused,
++            // and no file the context holds changes.
++            for (p, _) in files {
++                assert!(RelPath::new(p).is_err(), "{what}: fixture {p:?} accepted");
++            }
++            let valid: Vec<(&str, &[u8])> = files
++                .iter()
++                .copied()
++                .filter(|(p, _)| !p.contains(':'))
++                .collect();
++            let mut ctx = files_ctx(&valid, fail);
++            let read_all = |ctx: &Context| -> Vec<Option<Vec<u8>>> {
++                valid
++                    .iter()
++                    .map(|(p, _)| ctx.vfs().read(&RelPath::new(p).expect("path")).ok())
++                    .collect()
++            };
++            let bytes = read_all(&ctx);
++            let listing = ctx.vfs().list_dir(None).map(|l| l.entries.len()).ok();
++            let err = r.execute(&mut ctx, name, params.clone()).expect_err(what);
++            assert!(
++                matches!(err, CommandError::Rejected { .. }),
++                "{what}: expected a refusal, got {err:?}"
++            );
++            assert_eq!(err.to_json()["code"], "rejected", "{what}");
++            assert_eq!(err.to_json()["reason"], "invalid_path", "{what}");
++            assert_eq!(read_all(&ctx), bytes, "{what}: files changed");
++            assert_eq!(
++                ctx.vfs().list_dir(None).map(|l| l.entries.len()).ok(),
++                listing,
++                "{what}: a file was added"
++            );
++            continue;
++        }
+         let mut ctx = files_ctx(files, fail);
+         if !text.is_empty() {
+             ok(
+-- 
+2.43.0
+
+
+From 2720fcd1b6e85d14234adeb8fae7c78ad46a8343 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 22:08:47 +0000
+Subject: [PATCH 3/3] T-095 tests: guard_t095.rs, Interface (5) runtime tests
+ (7; pass on Linux base)
+
+Task: T-095
+Role: test-author
+---
+ .../kiln-workspace/tests/acceptance_t095.rs   |  10 +-
+ crates/kiln-workspace/tests/guard_t095.rs     | 962 ++++++++++++++++++
+ 2 files changed, 969 insertions(+), 3 deletions(-)
+ create mode 100644 crates/kiln-workspace/tests/guard_t095.rs
+
+diff --git a/crates/kiln-workspace/tests/acceptance_t095.rs b/crates/kiln-workspace/tests/acceptance_t095.rs
+index ac7d575..7753e66 100644
+--- a/crates/kiln-workspace/tests/acceptance_t095.rs
++++ b/crates/kiln-workspace/tests/acceptance_t095.rs
+@@ -20,8 +20,7 @@ fn doc(rel: &str) -> String {
+     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+         .join("../../docs")
+         .join(rel);
+-    let text = fs::read_to_string(&path)
+-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
++    let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+     squash(&text)
+ }
+ 
+@@ -76,7 +75,12 @@ fn acd1_paths_md_states_the_windows_lexical_refusals() {
+     let paths = doc(PATHS);
+     let mut problems = Vec::new();
+     require(&mut problems, PATHS, &paths, LEXICAL_WINDOWS);
+-    forbid(&mut problems, PATHS, &paths, "## Lexical refusals (unchanged)");
++    forbid(
++        &mut problems,
++        PATHS,
++        &paths,
++        "## Lexical refusals (unchanged)",
++    );
+     require(&mut problems, PATHS, &paths, "## Lexical refusals");
+     finish("acd1", problems);
+ }
+diff --git a/crates/kiln-workspace/tests/guard_t095.rs b/crates/kiln-workspace/tests/guard_t095.rs
+new file mode 100644
+index 0000000..4ad8b2c
+--- /dev/null
++++ b/crates/kiln-workspace/tests/guard_t095.rs
+@@ -0,0 +1,962 @@
++//! T-095 Interface (5), test author: the Windows lexical refusals of Interface (1), the names of
++//! Interface (2) that stay ordinary files, the case and short-name limits of Interface (3), and
++//! Windows' own answer for each refused character (Q-E, D-275), through the Rust API of
++//! `kiln-workspace` (`RelPath`, `DiskFs`, `MemoryFs`, `Vfs`, `Document`). Written by the test
++//! author from `tasks/T-095-windows-path-names-and-case.md` alone.
++//!
++//! Guards: on Linux and macOS every test asserts behaviour the task keeps unchanged, so they pass
++//! on base there. On Windows the refusal tests are the runtime evidence of AC-W1 (they fail on
++//! Windows at base by design; fail-on-base there is the probe record
++//! `tasks/ci-runs/T-074-probe-1.md`, letter I), the reserved-name test of AC-W2 and the case and
++//! short-name tests of AC-W3; T-072's general reported step runs this file with
++//! `-- --show-output`.
++//!
++//! No platform cfg in this file (D-245). Every test runs on every platform; expectations are
++//! chosen at run time: the refusal rule of (1) by [`RULE_ON`] (`cfg!(windows)`), the case
++//! behaviour of (3) by `cfg!(target_os = "linux")` (macOS's default volume and Windows fold
++//! case; Interface (6), last paragraph). Measurements (ruling Q-D, D-275) print
++//! `MEASURED: <case>: <platform>: <value>` on the test's stdout and assert only the bounded
++//! outcomes the spec gives. No message text and no OS error number is asserted. Every spawned
++//! process has a timeout (60 s; D-028 (8)). Fixtures are fresh directories below
++//! `CARGO_TARGET_TMPDIR`, removed on drop, except the Windows short-name fixture, which is in
++//! `std::env::temp_dir()` (Interface (3)) and also removed on drop.
++#![cfg(test)]
++
++use std::collections::BTreeMap;
++use std::fs;
++use std::io;
++use std::path::{Component, Path, PathBuf};
++use std::process::{Command, Stdio};
++use std::time::{Duration, Instant};
++
++use kiln_workspace::{DiskFs, Document, MemoryFs, OpenError, RelPath, Vfs, VfsError};
++
++const OS: &str = std::env::consts::OS;
++const SPAWN_TIMEOUT: Duration = Duration::from_secs(60);
++
++/// Interface (1) holds on this platform: Windows only (ruling 1, D-272).
++const RULE_ON: bool = cfg!(windows);
++
++/// Interface (3): the platform keeps `F.TXT` and `f.txt` apart (Linux); macOS and Windows fold.
++const CASE_SENSITIVE: bool = cfg!(target_os = "linux");
++
++/// The characters Interface (1) adds, besides U+0001 to U+001F.
++const WINDOWS_PUNCTUATION: [char; 7] = [':', '<', '>', '"', '|', '?', '*'];
++
++/// Unicode look-alikes of refused characters, accepted on every platform (Interface (5)).
++const LOOK_ALIKES: [char; 6] = [
++    '\u{ff1a}', '\u{2236}', '\u{ff1f}', '\u{ff0a}', '\u{ff1c}', '\u{ff02}',
++];
++
++// ---------------------------------------------------------------------------------------------
++// Fixtures and helpers.
++
++/// A fresh directory for one test; removed on drop.
++struct Work {
++    dir: PathBuf,
++}
++
++impl Work {
++    fn new(name: &str) -> Work {
++        let base = Path::new(env!("CARGO_TARGET_TMPDIR")).join("guard_t095");
++        Work::at_base(&base, name)
++    }
++
++    fn at_base(base: &Path, name: &str) -> Work {
++        let dir = base.join(format!("{name}-{}", std::process::id()));
++        if fs::symlink_metadata(&dir).is_ok() {
++            fs::remove_dir_all(&dir).unwrap_or_else(|e| {
++                panic!("[{OS}] fixture: remove old {}: {}", dir.display(), os(&e))
++            });
++        }
++        fs::create_dir_all(&dir)
++            .unwrap_or_else(|e| panic!("[{OS}] fixture: create {}: {}", dir.display(), os(&e)));
++        Work { dir }
++    }
++
++    /// `rel` (`/`-separated) below the fixture.
++    fn at(&self, rel: &str) -> PathBuf {
++        rel.split('/').fold(self.dir.clone(), |p, s| p.join(s))
++    }
++
++    /// A file planted with `std::fs` (not through Kiln); only for names the host can store.
++    fn file(&self, rel: &str, bytes: &[u8]) {
++        let p = self.at(rel);
++        if let Some(parent) = p.parent() {
++            fs::create_dir_all(parent)
++                .unwrap_or_else(|e| panic!("[{OS}] fixture: create dir for {rel}: {}", os(&e)));
++        }
++        fs::write(&p, bytes).unwrap_or_else(|e| panic!("[{OS}] fixture: write {rel}: {}", os(&e)));
++    }
++
++    fn disk(&self) -> DiskFs {
++        DiskFs::new(&self.dir)
++            .unwrap_or_else(|e| panic!("[{OS}] DiskFs::new({}) failed: {e:?}", self.dir.display()))
++    }
++}
++
++impl Drop for Work {
++    fn drop(&mut self) {
++        let _ = fs::remove_dir_all(&self.dir);
++    }
++}
++
++fn os(e: &io::Error) -> String {
++    format!(
++        "kind {:?}, raw OS error {:?} ({e})",
++        e.kind(),
++        e.raw_os_error()
++    )
++}
++
++fn measured(case: &str, value: &str) {
++    println!("MEASURED: {case}: {OS}: {value}");
++}
++
++fn rp(s: &str) -> RelPath {
++    RelPath::new(s).unwrap_or_else(|e| panic!("[{OS}] RelPath::new({s:?}) rejected: {e:?}"))
++}
++
++/// Every entry below `dir` (`/`-joined relative names) with a description: `dir`, or the file's
++/// bytes. Read with `std::fs` from `read_dir` paths; used only for fixtures whose names the host
++/// stores without a special meaning.
++fn snapshot(dir: &Path) -> BTreeMap<String, String> {
++    fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
++        let entries = fs::read_dir(dir)
++            .unwrap_or_else(|e| panic!("[{OS}] snapshot: read_dir {}: {}", dir.display(), os(&e)));
++        for e in entries {
++            let p = e
++                .unwrap_or_else(|e| panic!("[{OS}] snapshot: entry: {}", os(&e)))
++                .path();
++            let rel = p
++                .strip_prefix(base)
++                .unwrap_or(&p)
++                .components()
++                .map(|c| c.as_os_str().to_string_lossy().into_owned())
++                .collect::<Vec<_>>()
++                .join("/");
++            let desc = match fs::symlink_metadata(&p) {
++                Ok(m) if m.is_dir() => {
++                    walk(base, &p, out);
++                    "dir".to_owned()
++                }
++                Ok(m) if m.is_file() => match fs::read(&p) {
++                    Ok(b) => format!("file {}", b.escape_ascii()),
++                    Err(e) => format!("unreadable file ({:?})", e.kind()),
++                },
++                Ok(_) => "other".to_owned(),
++                Err(e) => format!("no metadata ({:?})", e.kind()),
++            };
++            out.insert(rel, desc);
++        }
++    }
++    let mut out = BTreeMap::new();
++    walk(dir, dir, &mut out);
++    out
++}
++
++/// The names directly in `dir`, sorted.
++fn names(dir: &Path) -> Vec<String> {
++    let mut v: Vec<String> = fs::read_dir(dir)
++        .unwrap_or_else(|e| panic!("[{OS}] read_dir {}: {}", dir.display(), os(&e)))
++        .map(|e| {
++            e.unwrap_or_else(|e| panic!("[{OS}] read_dir entry: {}", os(&e)))
++                .file_name()
++                .to_string_lossy()
++                .into_owned()
++        })
++        .collect();
++    v.sort();
++    v
++}
++
++/// Record a mismatch instead of stopping, so one run shows every case.
++fn same<T: PartialEq + std::fmt::Debug>(problems: &mut Vec<String>, ctx: &str, got: T, want: T) {
++    if got != want {
++        problems.push(format!("[{OS}] {ctx}: expected {want:?}, got {got:?}"));
++    }
++}
++
++fn finish(test: &str, problems: Vec<String>) {
++    assert!(
++        problems.is_empty(),
++        "[{OS}] {test}: {} mismatch(es):\n{}",
++        problems.len(),
++        problems.join("\n")
++    );
++}
++
++/// A short label of a `Vfs` result, for messages and `MEASURED:` lines.
++fn label<T: std::fmt::Debug>(r: &Result<T, VfsError>) -> String {
++    match r {
++        Ok(v) => format!("Ok({v:?})"),
++        Err(VfsError::OutsideRoot { .. }) => "OutsideRoot".to_owned(),
++        Err(VfsError::NotFound { .. }) => "NotFound".to_owned(),
++        Err(VfsError::NotAFile { .. }) => "NotAFile".to_owned(),
++        Err(VfsError::Io { kind, .. }) => format!("Io({kind:?})"),
++    }
++}
++
++/// `true` when Interface (1) refuses `c` on this platform, besides the refusals every platform
++/// has (`\`, NUL).
++fn windows_refuses(c: char) -> bool {
++    WINDOWS_PUNCTUATION.contains(&c) || ('\u{1}'..='\u{1f}').contains(&c)
++}
++
++/// The naive model of Interface (1) for the name `a<c>b`: refused for `\` and NUL everywhere,
++/// and on Windows also for the set of (1).
++fn model_refuses(c: char) -> bool {
++    c == '\\' || c == '\0' || (RULE_ON && windows_refuses(c))
++}
++
++/// Run `cmd` with a timeout; `Ok(stdout)` on success, `Err` naming what failed and its output.
++fn run_output(mut cmd: Command, what: &str) -> Result<String, String> {
++    let mut child = cmd
++        .stdin(Stdio::null())
++        .stdout(Stdio::piped())
++        .stderr(Stdio::piped())
++        .spawn()
++        .map_err(|e| format!("{what}: spawn failed: {}", os(&e)))?;
++    let deadline = Instant::now() + SPAWN_TIMEOUT;
++    loop {
++        match child.try_wait() {
++            Ok(Some(_)) => break,
++            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
++            Ok(None) => {
++                let _ = child.kill();
++                let _ = child.wait();
++                return Err(format!("{what}: no exit within {SPAWN_TIMEOUT:?}; killed"));
++            }
++            Err(e) => return Err(format!("{what}: wait failed: {}", os(&e))),
++        }
++    }
++    let out = child
++        .wait_with_output()
++        .map_err(|e| format!("{what}: output: {}", os(&e)))?;
++    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
++    if out.status.success() {
++        Ok(stdout)
++    } else {
++        Err(format!(
++            "{what}: {} stdout {:?} stderr {:?}",
++            out.status,
++            stdout,
++            String::from_utf8_lossy(&out.stderr)
++        ))
++    }
++}
++
++// ---------------------------------------------------------------------------------------------
++// Interface (1): the refused set, as an equality.
++
++/// AC-W1, Interface (5) first item: over U+0000 to U+00FF except `/`, one character at a time in
++/// a name `a<c>b`, `RelPath::new` refuses exactly the set of (1) plus `\` and NUL on Windows,
++/// and `\` and NUL alone on Linux and macOS; the six look-alikes are accepted everywhere. Every
++/// name the model accepts is stored as given: written, read and listed through `DiskFs` and
++/// `MemoryFs` under exactly that name, so on Linux and macOS the characters of (1) are ordinary.
++/// Each name is stored in its own directory `cXXXX/` (`aAb` and `aab` are one name on a volume
++/// that folds case).
++#[test]
++fn refused_set_is_exactly_interface_1_over_u0000_to_u00ff() {
++    let w = Work::new("equality");
++    let mut disk = w.disk();
++    let mut mem = MemoryFs::new();
++    let mut problems = Vec::new();
++    let mut refused = Vec::new();
++    let chars = (0u32..=0xff)
++        .filter_map(char::from_u32)
++        .filter(|&c| c != '/')
++        .chain(LOOK_ALIKES);
++    for c in chars {
++        let name = format!("a{c}b");
++        let want_refused = !LOOK_ALIKES.contains(&c) && model_refuses(c);
++        match RelPath::new(&name) {
++            Err(e) => {
++                refused.push(c);
++                if !want_refused {
++                    problems.push(format!(
++                        "[{OS}] RelPath::new({name:?}) (U+{:04X}) refused ({}), expected accepted",
++                        c as u32, e.reason
++                    ));
++                }
++                same(
++                    &mut problems,
++                    &format!("PathError.path of {name:?}"),
++                    e.path,
++                    name.clone(),
++                );
++            }
++            Ok(p) => {
++                same(
++                    &mut problems,
++                    &format!("as_str of {name:?}"),
++                    p.as_str(),
++                    name.as_str(),
++                );
++                if want_refused {
++                    problems.push(format!(
++                        "[{OS}] RelPath::new({name:?}) (U+{:04X}) accepted, expected refused",
++                        c as u32
++                    ));
++                }
++            }
++        }
++        // Only names the model accepts are stored: a name it refuses would, at base on Windows,
++        // only ask the file system for an error the mismatch above already reports.
++        if !want_refused {
++            let sub = format!("c{:04X}", c as u32);
++            fs::create_dir_all(w.at(&sub))
++                .unwrap_or_else(|e| panic!("[{OS}] fixture: create {sub}: {}", os(&e)));
++            let bytes = format!("bytes of U+{:04X}\n", c as u32).into_bytes();
++            let ok_bytes = label::<Vec<u8>>(&Ok(bytes.clone()));
++            let want_list: Result<Vec<String>, String> = Ok(vec![name.clone()]);
++            match RelPath::new(&format!("{sub}/{name}")) {
++                Ok(p) => {
++                    let wrote = disk.write_atomic(&p, &bytes);
++                    same(
++                        &mut problems,
++                        &format!("DiskFs write_atomic {p}"),
++                        label(&wrote),
++                        "Ok(())".to_owned(),
++                    );
++                    same(
++                        &mut problems,
++                        &format!("DiskFs read {p}"),
++                        label(&disk.read(&p)),
++                        ok_bytes.clone(),
++                    );
++                    let listed = disk
++                        .list_dir(Some(&rp(&sub)))
++                        .map(|l| l.entries.into_iter().map(|e| e.name).collect::<Vec<_>>())
++                        .map_err(|e| label::<()>(&Err(e)));
++                    same(
++                        &mut problems,
++                        &format!("DiskFs list_dir {sub}"),
++                        listed,
++                        want_list.clone(),
++                    );
++                    mem.insert(&p, &bytes);
++                    same(
++                        &mut problems,
++                        &format!("MemoryFs read {p}"),
++                        label(&mem.read(&p)),
++                        ok_bytes,
++                    );
++                    let listed = mem
++                        .list_dir(Some(&rp(&sub)))
++                        .map(|l| l.entries.into_iter().map(|e| e.name).collect::<Vec<_>>())
++                        .map_err(|e| label::<()>(&Err(e)));
++                    same(
++                        &mut problems,
++                        &format!("MemoryFs list_dir {sub}"),
++                        listed,
++                        want_list,
++                    );
++                }
++                Err(e) => problems.push(format!(
++                    "[{OS}] RelPath::new({sub}/{name:?}) refused: {e:?}"
++                )),
++            }
++        }
++    }
++    let mut want_refused: Vec<char> = (0u32..=0xff)
++        .filter_map(char::from_u32)
++        .filter(|&c| c != '/' && model_refuses(c))
++        .collect();
++    want_refused.sort_unstable();
++    refused.sort_unstable();
++    same(
++        &mut problems,
++        "count of refused characters",
++        refused.len(),
++        if RULE_ON { 2 + 7 + 31 } else { 2 },
++    );
++    same(&mut problems, "the refused set", refused, want_refused);
++    finish(
++        "refused_set_is_exactly_interface_1_over_u0000_to_u00ff",
++        problems,
++    );
++}
++
++/// The stream, drive and character forms of Interface (1) and AC-W1, as request paths.
++const FORMS: [&str; 15] = [
++    "f.txt:s",
++    "f.txt::$DATA",
++    "f.txt:s:$DATA",
++    "C:x",
++    "C:",
++    "D:x",
++    "x/C:y",
++    "x<y",
++    "gt>",
++    "q?",
++    "s*",
++    "p|q",
++    "dq\"",
++    "ctl\u{1}",
++    "ctl\u{1f}",
++];
++
++/// AC-W1, Interface (5) second item: every stream and drive form (and the characters AC-W1
++/// names) through `Document` open and save. On Windows each is refused by `RelPath::new`, the
++/// gate every request path passes (so `Document::open` and its save are never reached), and the
++/// fixture (`f.txt`, `x/y`) is unchanged: no file changed, no stream or drive was consulted. On
++/// Linux and macOS each is an ordinary name: a file planted under it opens, saves the edit under
++/// that name, and `f.txt` and `x/y` keep their bytes.
++#[test]
++fn stream_and_drive_forms_through_document_open_and_save() {
++    let w = Work::new("forms");
++    w.file("f.txt", b"f");
++    w.file("x/y", b"y");
++    let mut problems = Vec::new();
++    if RULE_ON {
++        let before = snapshot(&w.dir);
++        let mut disk = w.disk();
++        for form in FORMS {
++            match RelPath::new(form) {
++                Err(e) => same(
++                    &mut problems,
++                    &format!("PathError.path {form:?}"),
++                    e.path,
++                    form.to_owned(),
++                ),
++                Ok(p) => {
++                    let opened = Document::open(&disk, &p);
++                    let saved = match opened {
++                        Ok(mut doc) => format!(
++                            "{:?}",
++                            doc.save(&mut disk).map_err(|e| label::<()>(&Err(e)))
++                        ),
++                        Err(e) => format!("open {e:?}"),
++                    };
++                    problems.push(format!(
++                        "[{OS}] RelPath::new({form:?}) accepted, expected invalid_path; then {saved}"
++                    ));
++                }
++            }
++        }
++        same(
++            &mut problems,
++            "fixture after every form",
++            snapshot(&w.dir),
++            before,
++        );
++        same(
++            &mut problems,
++            "read f.txt",
++            label(&disk.read(&rp("f.txt"))),
++            label::<Vec<u8>>(&Ok(b"f".to_vec())),
++        );
++    } else {
++        for form in FORMS {
++            let planted = format!("planted {form:?}\n");
++            w.file(form, planted.as_bytes());
++            let p = rp(form);
++            let mut disk = w.disk();
++            match Document::open(&disk, &p) {
++                Ok(mut doc) => {
++                    same(
++                        &mut problems,
++                        &format!("Document::open({form:?}) text"),
++                        doc.buffer().text(),
++                        planted.clone(),
++                    );
++                    doc.buffer_mut()
++                        .insert(0, "EDIT ")
++                        .unwrap_or_else(|e| panic!("[{OS}] insert: {e:?}"));
++                    same(
++                        &mut problems,
++                        &format!("save {form:?}"),
++                        label(&doc.save(&mut disk).map(|_| ())),
++                        "Ok(())".to_owned(),
++                    );
++                    same(
++                        &mut problems,
++                        &format!("bytes of {form:?} after the save"),
++                        fs::read(w.at(form)).map_err(|e| e.kind()),
++                        Ok(format!("EDIT {planted}").into_bytes()),
++                    );
++                }
++                Err(e) => problems.push(format!("[{OS}] Document::open({form:?}): {e:?}")),
++            }
++            same(
++                &mut problems,
++                &format!("f.txt after {form:?}"),
++                fs::read(w.at("f.txt")).map_err(|e| e.kind()),
++                Ok(b"f".to_vec()),
++            );
++            same(
++                &mut problems,
++                &format!("x/y after {form:?}"),
++                fs::read(w.at("x/y")).map_err(|e| e.kind()),
++                Ok(b"y".to_vec()),
++            );
++        }
++    }
++    finish(
++        "stream_and_drive_forms_through_document_open_and_save",
++        problems,
++    );
++}
++
++// ---------------------------------------------------------------------------------------------
++// Interface (2): names Windows treats specially stay ordinary files.
++
++/// AC-W2, Interface (5) third item: `aux.rs`, `CON`, `a.` and `b ` are accepted by
++/// `RelPath::new` on every platform and, through `DiskFs`, written, read, listed (as given, none
++/// skipped) and saved by a `Document`, each holding its own bytes. Everything is read back through
++/// Kiln (`\\?\` paths on Windows), never through a plain host path, which on Windows names a
++/// device for `CON`.
++#[test]
++fn reserved_and_trailing_names_are_ordinary_files() {
++    const NAMES: [&str; 4] = ["aux.rs", "CON", "a.", "b "];
++    let w = Work::new("reserved");
++    let mut disk = w.disk();
++    let mut problems = Vec::new();
++    for name in NAMES {
++        match RelPath::new(name) {
++            Err(e) => problems.push(format!("[{OS}] RelPath::new({name:?}) refused: {e:?}")),
++            Ok(p) => {
++                let bytes = format!("first {name}\n").into_bytes();
++                same(
++                    &mut problems,
++                    &format!("write_atomic {name:?}"),
++                    label(&disk.write_atomic(&p, &bytes)),
++                    "Ok(())".to_owned(),
++                );
++                same(
++                    &mut problems,
++                    &format!("read {name:?}"),
++                    label(&disk.read(&p)),
++                    label::<Vec<u8>>(&Ok(bytes)),
++                );
++            }
++        }
++    }
++    match disk.list_dir(None) {
++        Ok(l) => {
++            let mut got: Vec<String> = l.entries.into_iter().map(|e| e.name).collect();
++            got.sort();
++            let mut want: Vec<String> = NAMES.iter().map(|s| (*s).to_owned()).collect();
++            want.sort();
++            same(&mut problems, "list_dir names", got, want);
++            same(&mut problems, "list_dir skipped", l.skipped, 0);
++        }
++        Err(e) => problems.push(format!("[{OS}] list_dir: {e:?}")),
++    }
++    same(
++        &mut problems,
++        "host names",
++        names(&w.dir).len(),
++        NAMES.len(),
++    );
++    for p in NAMES.iter().filter_map(|n| RelPath::new(n).ok()) {
++        let name = p.as_str();
++        match Document::open(&disk, &p) {
++            Ok(mut doc) => {
++                doc.buffer_mut()
++                    .insert(0, "saved ")
++                    .unwrap_or_else(|e| panic!("[{OS}] insert: {e:?}"));
++                same(
++                    &mut problems,
++                    &format!("Document save {name:?}"),
++                    label(&doc.save(&mut disk).map(|_| ())),
++                    "Ok(())".to_owned(),
++                );
++                same(
++                    &mut problems,
++                    &format!("read {name:?} after the save"),
++                    label(&disk.read(&p)),
++                    label::<Vec<u8>>(&Ok(format!("saved first {name}\n").into_bytes())),
++                );
++            }
++            Err(e) => problems.push(format!("[{OS}] Document::open({name:?}): {e:?}")),
++        }
++    }
++    same(
++        &mut problems,
++        "host names after the saves",
++        names(&w.dir).len(),
++        NAMES.len(),
++    );
++    finish("reserved_and_trailing_names_are_ordinary_files", problems);
++}
++
++// ---------------------------------------------------------------------------------------------
++// Interface (3): case and short names (measurement rule, Q-D).
++
++const LOWER: &[u8] = b"lower f\n";
++
++/// AC-W3, Interface (5) fourth item, first half: `F.TXT` against a file `f.txt`. Read: on macOS
++/// and Windows `Ok(<f.txt's bytes>)`, on Linux `NotFound`. Save: on macOS and Windows a
++/// `Document` opened as `F.TXT` saves over `f.txt`, leaving exactly one entry equal to `f.txt`
++/// ignoring ASCII case, holding the saved bytes, its spelling printed (`MEASURED: case spelling
++/// after save`), not asserted. On Linux `F.TXT` does not open (`NotFound`) and a save of it
++/// (`write_atomic`, what a save of a new file does) makes a second file: two entries, `F.TXT`
++/// new, `f.txt` unchanged.
++#[test]
++fn case_read_and_save_of_upper_name_against_lower_file() {
++    let w = Work::new("case");
++    w.file("f.txt", LOWER);
++    let mut disk = w.disk();
++    let upper = rp("F.TXT");
++    let mut problems = Vec::new();
++    let read = disk.read(&upper);
++    measured("case read F.TXT over f.txt", &label(&read));
++    let saved: Vec<u8> = if CASE_SENSITIVE {
++        same(
++            &mut problems,
++            "read F.TXT",
++            label(&read),
++            "NotFound".to_owned(),
++        );
++        match Document::open(&disk, &upper) {
++            Err(OpenError::Vfs(VfsError::NotFound { .. })) => {}
++            other => problems.push(format!(
++                "[{OS}] Document::open(F.TXT): expected NotFound, got {other:?}"
++            )),
++        }
++        let bytes = b"saved upper\n".to_vec();
++        same(
++            &mut problems,
++            "write_atomic F.TXT",
++            label(&disk.write_atomic(&upper, &bytes)),
++            "Ok(())".to_owned(),
++        );
++        bytes
++    } else {
++        same(
++            &mut problems,
++            "read F.TXT",
++            label(&read),
++            label::<Vec<u8>>(&Ok(LOWER.to_vec())),
++        );
++        match Document::open(&disk, &upper) {
++            Ok(mut doc) => {
++                same(
++                    &mut problems,
++                    "Document F.TXT text",
++                    doc.buffer().text(),
++                    String::from_utf8_lossy(LOWER).into_owned(),
++                );
++                doc.buffer_mut()
++                    .insert(0, "upper ")
++                    .unwrap_or_else(|e| panic!("[{OS}] insert: {e:?}"));
++                same(
++                    &mut problems,
++                    "save F.TXT",
++                    label(&doc.save(&mut disk).map(|_| ())),
++                    "Ok(())".to_owned(),
++                );
++            }
++            Err(e) => problems.push(format!("[{OS}] Document::open(F.TXT): {e:?}")),
++        }
++        format!("upper {}", String::from_utf8_lossy(LOWER)).into_bytes()
++    };
++    let entries = names(&w.dir);
++    measured("case spelling after save", &format!("{entries:?}"));
++    if CASE_SENSITIVE {
++        same(
++            &mut problems,
++            "entries",
++            entries,
++            vec!["F.TXT".to_owned(), "f.txt".to_owned()],
++        );
++        same(
++            &mut problems,
++            "f.txt bytes",
++            fs::read(w.at("f.txt")).map_err(|e| e.kind()),
++            Ok(LOWER.to_vec()),
++        );
++        same(
++            &mut problems,
++            "F.TXT bytes",
++            fs::read(w.at("F.TXT")).map_err(|e| e.kind()),
++            Ok(saved),
++        );
++    } else {
++        same(&mut problems, "entry count", entries.len(), 1);
++        match entries.first() {
++            Some(name) if name.eq_ignore_ascii_case("f.txt") => same(
++                &mut problems,
++                &format!("bytes of {name:?}"),
++                fs::read(w.dir.join(name)).map_err(|e| e.kind()),
++                Ok(saved),
++            ),
++            other => problems.push(format!(
++                "[{OS}] entry: expected f.txt in some case, got {other:?}"
++            )),
++        }
++    }
++    finish(
++        "case_read_and_save_of_upper_name_against_lower_file",
++        problems,
++    );
++}
++
++/// AC-W3, Interface (3) third bullet: two `Document`s, `f.txt` and `F.TXT`. On macOS and Windows
++/// they are two documents of one file and the second save wins (the file holds its bytes, one
++/// entry). On Linux they are two files, each holding its own document's save.
++#[test]
++fn two_documents_under_two_spellings_the_later_save_wins() {
++    let w = Work::new("two-docs");
++    w.file("f.txt", LOWER);
++    if CASE_SENSITIVE {
++        w.file("F.TXT", b"upper file\n");
++    }
++    let mut disk = w.disk();
++    let mut problems = Vec::new();
++    let lower = rp("f.txt");
++    let upper = rp("F.TXT");
++    match (Document::open(&disk, &lower), Document::open(&disk, &upper)) {
++        (Ok(mut first), Ok(mut second)) => {
++            first
++                .buffer_mut()
++                .insert(0, "one ")
++                .unwrap_or_else(|e| panic!("[{OS}] insert: {e:?}"));
++            second
++                .buffer_mut()
++                .insert(0, "two ")
++                .unwrap_or_else(|e| panic!("[{OS}] insert: {e:?}"));
++            same(
++                &mut problems,
++                "save f.txt",
++                label(&first.save(&mut disk).map(|_| ())),
++                "Ok(())".to_owned(),
++            );
++            same(
++                &mut problems,
++                "save F.TXT",
++                label(&second.save(&mut disk).map(|_| ())),
++                "Ok(())".to_owned(),
++            );
++            let entries = names(&w.dir);
++            measured(
++                "case two documents, entries after both saves",
++                &format!("{entries:?}"),
++            );
++            let one = format!("one {}", String::from_utf8_lossy(LOWER)).into_bytes();
++            if CASE_SENSITIVE {
++                same(
++                    &mut problems,
++                    "entries",
++                    entries,
++                    vec!["F.TXT".to_owned(), "f.txt".to_owned()],
++                );
++                same(
++                    &mut problems,
++                    "read f.txt",
++                    label(&disk.read(&lower)),
++                    label::<Vec<u8>>(&Ok(one)),
++                );
++                same(
++                    &mut problems,
++                    "read F.TXT",
++                    label(&disk.read(&upper)),
++                    label::<Vec<u8>>(&Ok(b"two upper file\n".to_vec())),
++                );
++            } else {
++                let two = format!("two {}", String::from_utf8_lossy(LOWER)).into_bytes();
++                same(&mut problems, "entry count", entries.len(), 1);
++                same(
++                    &mut problems,
++                    "read f.txt",
++                    label(&disk.read(&lower)),
++                    label::<Vec<u8>>(&Ok(two.clone())),
++                );
++                same(
++                    &mut problems,
++                    "read F.TXT",
++                    label(&disk.read(&upper)),
++                    label::<Vec<u8>>(&Ok(two)),
++                );
++            }
++        }
++        (a, b) => problems.push(format!("[{OS}] Document::open: f.txt {a:?}, F.TXT {b:?}")),
++    }
++    finish(
++        "two_documents_under_two_spellings_the_later_save_wins",
++        problems,
++    );
++}
++
++const LONG_DIR: &str = "averylongname";
++const LONG_BYTES: &[u8] = b"long g\n";
++const OTHER_BYTES: &[u8] = b"other file\n";
++
++/// The short name `cmd /c dir /x` shows for the entry `long` of `dir`, or `None`.
++fn short_name_of(dir: &Path, long: &str) -> Result<Option<String>, String> {
++    let mut cmd = Command::new("cmd");
++    cmd.arg("/C").arg("dir").arg("/X").arg(dir);
++    let out = run_output(cmd, "cmd /C dir /X")?;
++    for line in out.lines() {
++        let tokens: Vec<&str> = line.split_whitespace().collect();
++        if tokens.last() == Some(&long) && tokens.len() >= 2 {
++            let before = tokens[tokens.len() - 2];
++            return Ok((before != "<DIR>").then(|| before.to_owned()));
++        }
++    }
++    Err(format!("cmd /C dir /X: no line for {long:?} in {out:?}"))
++}
++
++/// The drive of `p` (`C:`), or `none`.
++fn drive_of(p: &Path) -> String {
++    match p.components().next() {
++        Some(Component::Prefix(prefix)) => prefix.as_os_str().to_string_lossy().into_owned(),
++        _ => "none".to_owned(),
++    }
++}
++
++/// AC-W3, Interface (5) fourth item, second half (measurement rule, Q-D): a read under an 8.3
++/// short name. On Windows the fixture (`averylongname/g.txt` and `other.txt`) is in
++/// `std::env::temp_dir()`; printed: that drive, its `fsutil 8dot3name query` output, the short
++/// name `cmd /c dir /x` shows (or `none`), and the read under the short name. Asserted: the read
++/// is `Ok(<g.txt's bytes>)` or `NotFound`, never another file's bytes or another kind, and the
++/// fixture is unchanged; it is removed on drop. On Linux and macOS the fixture is below
++/// `CARGO_TARGET_TMPDIR` and a read of `averyl~1/g.txt` is `NotFound`.
++#[test]
++fn short_name_read_reaches_the_long_file_or_nothing() {
++    let w = if cfg!(windows) {
++        Work::at_base(&std::env::temp_dir(), "kiln-guard-t095-short")
++    } else {
++        Work::new("short")
++    };
++    w.file(&format!("{LONG_DIR}/g.txt"), LONG_BYTES);
++    w.file("other.txt", OTHER_BYTES);
++    let before = snapshot(&w.dir);
++    let disk = w.disk();
++    let mut problems = Vec::new();
++    let bounded = |problems: &mut Vec<String>, what: &str, r: &Result<Vec<u8>, VfsError>| {
++        let fine = matches!(r, Err(VfsError::NotFound { .. }))
++            || matches!(r, Ok(b) if b.as_slice() == LONG_BYTES);
++        if !fine {
++            problems.push(format!(
++                "[{OS}] {what}: expected Ok(<g.txt's bytes>) or NotFound, got {}",
++                label(r)
++            ));
++        }
++    };
++    if cfg!(windows) {
++        let drive = drive_of(&std::env::temp_dir());
++        measured("short name temp_dir drive", &drive);
++        let mut fsutil = Command::new("fsutil");
++        fsutil.arg("8dot3name").arg("query").arg(&drive);
++        let state = match run_output(fsutil, "fsutil 8dot3name query") {
++            Ok(s) => s.split_whitespace().collect::<Vec<_>>().join(" "),
++            Err(e) => format!("query failed: {e}"),
++        };
++        measured("short name 8dot3name query", &state);
++        let short = short_name_of(&w.dir, LONG_DIR);
++        measured(
++            "short name of averylongname",
++            &match &short {
++                Ok(Some(s)) => s.clone(),
++                Ok(None) => "none".to_owned(),
++                Err(e) => format!("not read: {e}"),
++            },
++        );
++        match short {
++            Ok(Some(s)) => match RelPath::new(&format!("{s}/g.txt")) {
++                Ok(p) => {
++                    let r = disk.read(&p);
++                    measured("short name read", &format!("{s}/g.txt: {}", label(&r)));
++                    bounded(&mut problems, &format!("read {s}/g.txt"), &r);
++                }
++                Err(e) => problems.push(format!(
++                    "[{OS}] short name {s:?}: RelPath::new refused: {e:?}"
++                )),
++            },
++            Ok(None) => measured("short name read", "none"),
++            Err(e) => problems.push(format!("[{OS}] short name not read from the system: {e}")),
++        }
++        let guess = disk.read(&rp("averyl~1/g.txt"));
++        bounded(&mut problems, "read averyl~1/g.txt", &guess);
++    } else {
++        measured("short name temp_dir drive", "none");
++        measured("short name 8dot3name query", "none");
++        measured("short name of averylongname", "none");
++        let r = disk.read(&rp("averyl~1/g.txt"));
++        measured("short name read", &format!("averyl~1/g.txt: {}", label(&r)));
++        same(
++            &mut problems,
++            "read averyl~1/g.txt",
++            label(&r),
++            "NotFound".to_owned(),
++        );
++    }
++    same(
++        &mut problems,
++        "fixture after the reads",
++        snapshot(&w.dir),
++        before,
++    );
++    finish("short_name_read_reaches_the_long_file_or_nothing", problems);
++}
++
++// ---------------------------------------------------------------------------------------------
++// Q-E (D-275): Windows' own answer for each refused character.
++
++/// Q-E: `std::fs::write` (not through Kiln) of a name `a<c>b` into its own directory of the
++/// fixture for each `c` of `<>:"|?*` and U+0001 to U+001F, one `MEASURED: qe U+XXXX: <platform>:
++/// fs::write "a<c>b": <result>; stored <names>` line each. On Windows only the bounded outcome is
++/// asserted: the call returns (`Ok` or `Err`) and nothing is written outside the character's
++/// directory. On Linux and macOS each write is `Ok` and stores the name as given with its bytes.
++#[test]
++fn windows_own_answer_for_each_refused_character() {
++    let w = Work::new("qe");
++    let mut problems = Vec::new();
++    let chars: Vec<char> = WINDOWS_PUNCTUATION
++        .into_iter()
++        .chain('\u{1}'..='\u{1f}')
++        .collect();
++    let mut dirs = Vec::new();
++    for c in chars {
++        let sub = format!("c{:04X}", c as u32);
++        w.file(&format!("{sub}/keep"), b"k");
++        dirs.push(sub.clone());
++        let name = format!("a{c}b");
++        let target = w.at(&sub).join(&name);
++        let result = fs::write(&target, b"q");
++        let mut stored = names(&w.at(&sub));
++        stored.retain(|n| n != "keep");
++        measured(
++            &format!("qe U+{:04X}", c as u32),
++            &format!(
++                "fs::write {name:?}: {}; stored {stored:?}",
++                match &result {
++                    Ok(()) => "Ok".to_owned(),
++                    Err(e) => format!("Err({})", os(e)),
++                }
++            ),
++        );
++        same(
++            &mut problems,
++            &format!("{sub}/keep"),
++            fs::read(w.at(&format!("{sub}/keep"))).map_err(|e| e.kind()),
++            Ok(b"k".to_vec()),
++        );
++        if !cfg!(windows) {
++            same(
++                &mut problems,
++                &format!("fs::write {name:?}"),
++                result.map_err(|e| e.kind()),
++                Ok(()),
++            );
++            same(
++                &mut problems,
++                &format!("stored for {name:?}"),
++                stored,
++                vec![name.clone()],
++            );
++            same(
++                &mut problems,
++                &format!("bytes of {name:?}"),
++                fs::read(&target).map_err(|e| e.kind()),
++                Ok(b"q".to_vec()),
++            );
++        }
++    }
++    dirs.sort();
++    same(&mut problems, "fixture top level", names(&w.dir), dirs);
++    finish("windows_own_answer_for_each_refused_character", problems);
++}
+-- 
+2.43.0
+

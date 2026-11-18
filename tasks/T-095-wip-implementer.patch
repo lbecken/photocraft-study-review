@@ -1,0 +1,327 @@
+From a86a91df0de283db2b0f7678d04a69881137f29f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 22:01:59 +0000
+Subject: [PATCH 1/3] kiln-workspace: on Windows RelPath::new refuses : < > " |
+ ? * and U+0001-U+001F
+
+The one #[cfg(windows)] statement of Interface (1) and the unit test
+windows_name_characters of Interface (5).
+
+Task: T-095
+Role: implementer
+---
+ crates/kiln-workspace/src/path.rs | 72 ++++++++++++++++++++++++++++++-
+ 1 file changed, 71 insertions(+), 1 deletion(-)
+
+diff --git a/crates/kiln-workspace/src/path.rs b/crates/kiln-workspace/src/path.rs
+index 4b908f9..2343807 100644
+--- a/crates/kiln-workspace/src/path.rs
++++ b/crates/kiln-workspace/src/path.rs
+@@ -3,7 +3,9 @@
+ use std::fmt;
+ 
+ /// A validated path relative to a file-system root: non-empty, `/`-separated, no leading `/`,
+-/// no empty, `.` or `..` segment, no `\` and no NUL. Display/as_str give it exactly as given.
++/// no empty, `.` or `..` segment, no `\` and no NUL; on Windows also none of `:`, `<`, `>`,
++/// `"`, `|`, `?`, `*` and no control character U+0001 to U+001F. Display/as_str give it exactly
++/// as given.
+ #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+ pub struct RelPath(String);
+ 
+@@ -42,6 +44,15 @@ impl RelPath {
+         if path.contains('\\') {
+             return reject("path contains a backslash");
+         }
++        #[cfg(windows)]
++        if path.contains(|c| {
++            matches!(
++                c,
++                ':' | '<' | '>' | '"' | '|' | '?' | '*' | '\u{1}'..='\u{1f}'
++            )
++        }) {
++            return reject("path contains a character Windows does not allow in a file name");
++        }
+         if path.starts_with('/') {
+             return reject("path starts with '/'");
+         }
+@@ -125,4 +136,63 @@ mod tests {
+         assert_eq!(RelPath::new("x").unwrap().parent(), None);
+         assert_eq!(RelPath::new("(root)").unwrap(), RelPath::root_placeholder());
+     }
++
++    #[test]
++    fn windows_name_characters() {
++        let mut refused_on_windows: Vec<String> = [
++            "f.txt:s",
++            "f.txt::$DATA",
++            "f.txt:s:$DATA",
++            "C:x",
++            "C:",
++            "x/C:y",
++            "x<y",
++            "x>y",
++            "dq\"",
++            "p|q",
++            "q?",
++            "s*",
++        ]
++        .iter()
++        .map(|s| (*s).to_owned())
++        .collect();
++        refused_on_windows.extend(('\u{1}'..='\u{1f}').map(|c| format!("ctl{c}")));
++        for p in &refused_on_windows {
++            let r = RelPath::new(p);
++            if cfg!(windows) {
++                let err = r.unwrap_err();
++                assert_eq!(&err.path, p);
++                assert!(!err.reason.is_empty());
++            } else {
++                assert_eq!(r.unwrap().as_str(), p);
++            }
++        }
++        for p in [
++            "CON",
++            "PRN",
++            "AUX",
++            "NUL",
++            "COM1",
++            "COM9",
++            "COM\u{b9}",
++            "LPT1",
++            "LPT1.txt",
++            "CONIN$",
++            "aux.rs",
++            "con.txt",
++            "nul.rs",
++            "a.",
++            "b ",
++            "c. .",
++            "c~1.rs",
++            "x\u{7f}",
++            "\u{e9}",
++        ] {
++            assert_eq!(
++                RelPath::new(p).unwrap().as_str(),
++                p,
++                "{p:?} is accepted everywhere"
++            );
++        }
++    }
+ }
+-- 
+2.43.0
+
+
+From b32bf595bae2f10a751544c8e93c62907e2705fb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 22:02:47 +0000
+Subject: [PATCH 2/3] kiln-cli: manifest_refusals_name_the_problem asserts the
+ Windows refusal of a path with " (Interface (6))
+
+Task: T-095
+Role: implementer
+---
+ apps/kiln-cli/src/main.rs | 17 +++++++++--------
+ 1 file changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/apps/kiln-cli/src/main.rs b/apps/kiln-cli/src/main.rs
+index 844892f..54dc250 100644
+--- a/apps/kiln-cli/src/main.rs
++++ b/apps/kiln-cli/src/main.rs
+@@ -1209,14 +1209,15 @@ mod tests {
+             assert!(got.contains("repeated in one object"), "{json}: {got}");
+         }
+         // The same key in different objects, and key-like strings in values, are fine.
+-        assert_eq!(
+-            parse_manifest(
+-                br#"{"files":[{"path":"a","text":"\"path\":"},{"path":"b,{\"","hex":""}]}"#
+-            )
+-            .unwrap()
+-            .len(),
+-            2
+-        );
++        let key_like = br#"{"files":[{"path":"a","text":"\"path\":"},{"path":"b,{\"","hex":""}]}"#;
++        if cfg!(windows) {
++            // On Windows `"` is refused in a path (T-095), so the second entry's path is invalid.
++            let got = parse_manifest(key_like).unwrap_err();
++            assert!(got.starts_with("files[1]: invalid relative path"), "{got}");
++            assert!(got.contains(&format!("{:?}", "b,{\"")), "{got}");
++        } else {
++            assert_eq!(parse_manifest(key_like).unwrap().len(), 2);
++        }
+         // Keys are checked for every entry before any entry's path (Pinned (a)).
+         let got = manifest_err(r#"{"files":[{"path":"/x","text":""},{"path":"a","oops":1}]}"#);
+         assert!(got.starts_with("files[1]: unknown key"), "{got}");
+-- 
+2.43.0
+
+
+From 88753e316bf357a6d7f4a6ff201b650476e4d98c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 22:04:48 +0000
+Subject: [PATCH 3/3] docs: Windows name refusals, reserved names, case and
+ short names; D-270 citations (Pinned (i))
+
+The two measured values of The rule's Windows sentence stay <measured> and
+<measured or unchecked> until the director's early look.
+
+Task: T-095
+Role: implementer
+---
+ docs/control-protocol.md |  6 +++--
+ docs/protocol/paths.md   | 51 ++++++++++++++++++++++++++++++++--------
+ docs/protocol/project.md |  6 ++++-
+ 3 files changed, 50 insertions(+), 13 deletions(-)
+
+diff --git a/docs/control-protocol.md b/docs/control-protocol.md
+index aeb9017..a129348 100644
+--- a/docs/control-protocol.md
++++ b/docs/control-protocol.md
+@@ -128,6 +128,8 @@ current directory). What is checked today:
+ - Refused (`rejected` / `invalid_path`) by a purely lexical check: an empty path, an absolute
+   path (leading `/`), a `..` or `.` segment, an empty segment (`a//b`, a trailing `/`), a
+   backslash, a NUL character.
++  On Windows (T-095) also a path containing `:`, `<`, `>`, `"`, `|`,
++  `?`, `*` or a control character; see `docs/protocol/paths.md`.
+ - A path whose location is outside the root is refused (`outside_root`); see
+   `docs/protocol/paths.md`.
+ - A save replaces the file by writing a temporary file `.kiln-tmp-<n>` next to it and renaming
+@@ -140,8 +142,8 @@ current directory). What is checked today:
+   directory gives a new file, not the target's own, and the temporary file is not owner-only
+   while it is written. On Windows no link is followed: a save through a symbolic link or a
+   junction is refused (`outside_root`), and a link at a temporary name makes the save use the next
+-  name, leaving the link and what it leads to unchanged (shown in CI run 44307677646,
+-  `tasks/ci-runs/T-074-early-1.md`, for a junction, a file link to an outside file and a dangling
++  name, leaving the link and what it leads to unchanged (shown in CI run 44358453526,
++  `tasks/ci-runs/T-074-round-1.md`, for a junction, a file link to an outside file and a dangling
+   file link, alone and as a pair: the `awa3_*` tests of `crates/kiln-workspace/tests/guard_t074.rs`
+   and `disk.rs`'s `link_at_temp_name_is_not_followed_on_every_platform`); see
+   `docs/protocol/paths.md`.
+diff --git a/docs/protocol/paths.md b/docs/protocol/paths.md
+index 54360e2..337731b 100644
+--- a/docs/protocol/paths.md
++++ b/docs/protocol/paths.md
+@@ -74,16 +74,34 @@ other reparse point — makes the path `outside_root`, wherever it leads, and no
+ read or written (`crates/kiln-workspace/tests/guard_t074.rs`, its four `awa1_*` tests, on the `windows-2025` runner in
+ CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`, for file links relative and absolute,
+ directory links and junctions leading inside, outside and nowhere; reparse points other than
+-links and junctions: unchecked, the runner cannot make one). Names
+-that Windows gives a meaning, and case, are not yet stated for Windows (T-095).
++links and junctions: unchecked, the runner cannot make one). Names that Windows reserves for
++devices (`CON`, `NUL`, `aux.rs`, …) and names ending in a dot or a space are ordinary files of the
++project for Kiln, which reaches every file through `\\?\` paths. Other Windows programs may not
++open them (T-095; CI run 44290286460). (`CON`, `con.txt`, `NUL`, `nul.rs`, `a.` and `b ` were
++written, read and listed by Kiln's file system in that run, and a plain Windows path to `a.` made a
++file `a`: `tasks/ci-runs/T-074-probe-1.md`, letter I, lines I1 to I3, I5, I6, I11, I12; `aux.rs`,
++and a save of `aux.rs`, `CON`, `a.` and `b `: `crates/kiln-workspace/tests/guard_t095.rs`, shown in T-095's CI
++round.) Case and 8.3 short names on Windows are stated in The rule.
+ 
+-## Lexical refusals (unchanged)
++## Lexical refusals
+ 
+ Before the file system is consulted, a path is refused as `rejected` / `invalid_path` if it is
+ empty, absolute (leading `/`), has a `..` or `.` segment or an empty segment (`a//b`, a
+ trailing `/`), or contains a backslash or a NUL character. This check comes first:
+ `doc.open {"path":"../x"}` is `invalid_path`, never anything below.
+ 
++On Windows (T-095) a path is also refused this way if it contains `:`, `<`, `>`, `"`, `|`, `?`,
++`*` or a control character (U+0001 to U+001F), the characters Windows does not allow in a file
++name: so no request names an alternate data stream (`f.txt::$DATA` is a second name of `f.txt`
++there) or another drive (`C:x`). On Linux and macOS these characters are ordinary. A file of a
++project made on Linux or macOS whose name holds one of them cannot be opened or saved by Kiln on
++Windows. (Before T-095, in CI run 44290286460, `tasks/ci-runs/T-074-probe-1.md`, letter I: a read
++of `f.txt::$DATA` returned `f.txt`'s bytes, `C:x` was joined to a path outside the root, and every write of
++a name with `:`, `<`, `?`, `*`, `|`, `"` or U+0001 failed; that Windows does not allow `>` and
++U+0002 to U+001F in a file name: read from Microsoft's naming rules, not run. The refusal on
++Windows and these characters accepted on Linux and macOS: `crates/kiln-workspace/tests/guard_t095.rs`,
++shown in T-095's CI round.)
++
+ ## Location
+ 
+ The *location* of a path is the entry reached by walking it from the root one component at a
+@@ -125,11 +143,7 @@ below says for a path that is already open:
+   was replaced in between by a link that leads outside, or the file by a FIFO, the save is
+   refused, and the document stays modified.
+ - **A path that is already open is checked again, for where it leads only.** A `doc.open` of a
+-  path that is open in the session (the same path text) reads nothing. On macOS, on the runner's
+-  volume, which folds case, `doc.open` of `A.rs` while `a.rs` is open opens a second document of
+-  the same file (`already_open: false`), and a save through it changes what `a.rs` holds
+-  (`apps/kiln-cli/tests/macos_t093.rs::reopen_with_other_case_is_a_new_document_where_case_folds`,
+-  listed on the green `gate-macos` job of CI run 44381094009, `tasks/ci-runs/T-093-round-1.md`; the job keeps no per-test output on a green run, so nothing beyond what the test asserts is shown); on a case-sensitive macOS volume: unmeasured on macOS. It is refused with
++  path that is open in the session (the same path text) reads nothing. It is refused with
+   `outside_root` when the root path no longer leads to the root (also when it can no longer be
+   followed, for example because a directory above the root cannot be searched, which refuses a
+   first open, a save and `project.tree` the same way) or the path's location is now outside the
+@@ -138,6 +152,23 @@ below says for a path that is already open:
+   returns the open document unchanged with `already_open: true`, even if the file has since
+   been deleted, replaced by a directory, a FIFO or a link that stays inside the root, made
+   unreadable, or no longer decodes. A refused re-open leaves the document open and unchanged.
++  Case: on macOS, on the runner's volume, which folds case, `doc.open` of `A.rs` while `a.rs` is
++  open opens a second document of the same file (`already_open: false`), and a save through it
++  changes what `a.rs` holds
++  (`apps/kiln-cli/tests/macos_t093.rs::reopen_with_other_case_is_a_new_document_where_case_folds`,
++  listed on the green `gate-macos` job of CI run 44381094009, `tasks/ci-runs/T-093-round-1.md`;
++  the job keeps no per-test output on a green run, so nothing beyond what the test asserts is
++  shown); on a case-sensitive macOS volume: unmeasured on macOS. On Windows names differ only by
++  case on the default file system: `F.TXT` reads and saves `f.txt` (after the save the file is
++  named <measured>), and an 8.3 short name, on a volume that has them, names its long one
++  (<measured or unchecked>). A path already open is recognised by its text, so `doc.open` under
++  another spelling opens a second document of the same file, and the later save replaces the
++  other's content. (A read of `F.TXT` returned `f.txt`'s bytes, and `AVERYL~1/g.txt` was not found
++  on the runner's work volume, which makes no short names: CI run 44290286460,
++  `tasks/ci-runs/T-074-probe-1.md`, lines I7 to I9; the spelling after the save and the short name
++  on `C:`: to be measured by the director, `tasks/ci-runs/T-095-early-1.md`; the save of `F.TXT`
++  and two documents of one file: `crates/kiln-workspace/tests/guard_t095.rs`, shown in T-095's CI
++  round.)
+ 
+ When several of these apply, the first in this order is reported: `invalid_path`,
+ `outside_root`, `not_found`, `not_a_file`, any other failure (`io_error`). For a path that is
+@@ -168,12 +199,12 @@ error object on stderr.
+   of the scorecard item `ws.path-confinement` (`scorecard/items/ws.path-confinement.toml`) ran and
+   passed on the green `gate-macos` job of CI run 44358453526 (`tasks/ci-runs/T-074-round-1.md`,
+   scorecard step `macos: 64 items; 216 tests ran; 3 registered absent here`, the 3 being
+-  `ui.window`'s); the bound of 40 symlinks and its message
++  `ui.window`'s by the registry, `xtask/platform-tests.toml`); the bound of 40 symlinks and its message
+   (`crates/kiln-workspace/tests/confinement.rs::walk_corner_cases`) and a root given through a
+   symlink (`crates/kiln-workspace/src/disk.rs`, `disk::tests::failed_rename_removes_own_temp_and_keeps_target`
+   and `disk::tests::root_given_through_a_link_that_is_retargeted`) by name, listed on that job
+   (`tasks/ci-runs/T-074-round-1.md`, "Addendum for T-093"). On Windows they hold with the differences stated in The root and The rule (T-073,
+-  T-074); names and case on Windows are not yet stated (T-095).
++  T-074), and with the names and case of Lexical refusals, The rule and The root (T-095).
+ - On Windows every reparse point on the way is refused, so files that are reparse points without
+   being links — for example cloud placeholder files of a synced folder or deduplicated files —
+   cannot be opened or saved; they answer `outside_root` (unchecked: the runner cannot make them).
+diff --git a/docs/protocol/project.md b/docs/protocol/project.md
+index 6a703e7..7dd223e 100644
+--- a/docs/protocol/project.md
++++ b/docs/protocol/project.md
+@@ -30,6 +30,8 @@ Result:
+   `\` (`crates/kiln-workspace/tests/acceptance_t019_workspace.rs::tree_counts_skipped_names_on_disk`,
+   listed on the green `gate-macos` job of CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`,
+   "Addendum for T-093"); whether other macOS file systems refuse such names is unmeasured on macOS.
++  On Windows also names containing a character refused by
++  `docs/protocol/paths.md` "Lexical refusals" (such names cannot be made through Windows itself; unchecked).
+ - `too_deep`: directories listed but not descended because of the depth bound (rule 5).
+ - `truncated`: true only if an entry beyond `limit` exists.
+ 
+@@ -86,7 +88,7 @@ Symbolic links found in the project are listed with kind `symlink` and never fol
+ they point to; FIFOs, sockets and devices are listed with kind `other` and never opened, so they
+ cannot make the command wait. On Windows every entry that is a reparse point is listed with kind
+ `symlink` and never descended (T-074; for links and junctions shown by the `awa1_*` tests of
+-`guard_t074.rs` in CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`; for other reparse
++`guard_t074.rs` in CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`; for other reparse
+ points unchecked). A `.gitignore` is read only when it is a regular file; a
+ `.gitignore` that is a symbolic link, a FIFO or a directory is listed and contributes no
+ patterns. A `.gitignore` whose patterns cannot be compiled contributes no patterns.
+@@ -103,6 +105,8 @@ them); POSIX character classes such as `[[:digit:]]` are not supported (git supp
+ the pattern `***/z`, git ignores both `z` and `p/z`, and Kiln does not ignore `z`; a directory
+ that holds its own `.git` is listed with its contents (git lists it as one entry `dir/`); names
+ that are not UTF-8 or contain `\` are not listed and are counted in `skipped` (git lists them).
++On Windows also names containing a character refused by
++`docs/protocol/paths.md` "Lexical refusals" (such names cannot be made through Windows itself; unchecked).
+ 
+ `limit` bounds the number of entries listed, not the work: each directory visited is read whole
+ and sorted before any rule applies, and ignored entries do not count toward `limit`.
+-- 
+2.43.0
+
