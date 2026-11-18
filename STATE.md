@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-18 02:43 UTC_
+_Last updated: 2026-11-18 04:55 UTC_
 
 ## Now
 The `ci/…` branches can stay (the owner, D-207).
@@ -14,20 +14,22 @@ branches may be pushed and are deleted after their task merges (D-185).
 planned feature items.** The pause of D-207 is over; the earlier paragraph about it above is history.
 
 In flight (restarts at 2026-11-17T23:02Z, 23:53Z and 2026-11-18T00:19Z; D-224, D-225):
-- **T-071** (platform-test rule in the tools; high; `in_progress`; ceiling 1,500,000 by D-227; booked 1,223,906):
-  reviewed (3 rounds), CI green for `xtask` on three platforms (round 4), approved (D-234) and then **refused by
-  the queue at main's gate** (D-235): main's old tool rejects a tree that uses the new rule. Cut in two: the
-  implementer (run R-323) moves the new fixture cases to new files and takes the eight registry entries and
-  their cfg lines out; the reviewed state is kept on local branch `park/T-071-reviewed` (`8cb8464`). Then: join,
-  review round 4 (confirm the delta; resume the reviewer), a NEW row beginning `Approve T-071` with `gate paths`,
-  queue. T-079 then adds the eight entries with its twelve (ruling in T-079; planner re-check after the merge),
-  and carries T-071's AC-5 and AC-6.
+- **T-071 merged** at `0f8ea64` (D-238; queue attempt 2): main's tools follow the platform-test rule; the
+  registry has no entry yet.
+- **T-079** (the macOS gate green, plus the eight registry entries of `xtask`'s own tests; high; `in_progress`;
+  the first task under v1.5; D-233, D-235, D-239): implementer R-327 (`.worktrees/T-079`), independent test
+  author R-328 (`.worktrees/T-079-tests`), from main `ee9b130`. The implementer's first commit is the patch
+  `tasks/T-079-restore-from-T-071.patch`; before the join it runs main's tool on its tree (Pinned (j)). Then:
+  merge the tests branch, join, push the joined head to `ci/candidate`, CI record from the artefacts (resume the
+  planner of ADR-0009): the pending criterion is `gate-macos` green and `xtask` exit status 0 on `gate-windows`;
+  review (a fresh reviewer; round 1 full); a row beginning `Approve T-079` with `gate paths` and the CI
+  criterion; queue. The local branch `park/T-071-reviewed` can be deleted after T-079 merges.
 - **Methodology v1.5** is written (D-221) and in force from the task after T-071.
 - **Tooling batch** (T-043 re-specified, drafts T-087 to T-090): waits behind the platform track, to be put to
   the owner with the platform report (D-223). Accepted work not done, listed here by v1.5 change 13.
 Then, by D-199: T-079 (`specified`; spec check against main first), T-072, T-073, T-074, T-075, T-076, T-077,
 T-078. After the platform track: the planned feature items (drafts T-060 to T-063, T-022, T-024 to T-031 and
-others; each needs its spec). Next free task number: T-093. Next run id: R-324. Next decision: D-236.
+others; each needs its spec). Next free task number: T-093. Next run id: R-329. Next decision: D-241.
 The evaluation at cut 2 is published (`evaluations/iter-2-cut-2.md`, T-084, D-215).
 
 Merged since cut 1: T-069 (CI fix), T-057 (project panel), T-070 (`platforms.yml`: gate on three systems, the
