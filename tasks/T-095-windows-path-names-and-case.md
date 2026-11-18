@@ -134,7 +134,7 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
   - `read "f.txt::$DATA"`: base `Ok([102])` (I2), after `PathError` (`invalid_path`).
   - `read "C:x"`: base `OutsideRoot` (I2), after `PathError`.
   - `write_atomic "x<y"`: base `Io InvalidFilename` (I1), after `PathError`.
-  - `write_atomic "aux.rs"`-like `"nul.rs"`: base `Ok` (I1), after `Ok`.
+  - `write_atomic "nul.rs"` (a reserved name with an extension, as `aux.rs`): base `Ok` (I1), after `Ok`.
   - `read "F.TXT"`: base `Ok([102])` (I7), after the same.
   - Prototype (scratch clone, branch `t095`, not committed): the rule of (1) and the unit test of (5). Measured there:
     `cargo test -p kiln-workspace --lib --locked path::` gives `4 passed`, and `cargo clippy -p kiln-workspace --lib
@@ -250,13 +250,38 @@ CI rounds: **about 450,000** (ceiling 1,100,000). Arm: high → independent test
 ### Spec check (planner, R-386, by runs in the scratch clone `/home/user/kiln-plan-T074`, branch `t095` = main `4eb349d` + the prototype of Pinned (g) and draft sentences of (i) in the three documents; not committed)
 - **S-1 Shared with tasks in flight:** none by path (Collisions). No trait, type or public signature changes
   (`RelPath::new` keeps its signature; `PathError` unchanged).
-- **S-2 Main's tool on the candidate (D-235):** no file under `xtask/` changes, so main's tool is the candidate's; run on
-  the prototype tree: see the planner log entry of R-386 (the six steps' lines).
+- **S-2 Main's tool on the candidate (D-235):** no file under `xtask/` changes, so main's tool is the candidate's. No
+  gate rule changes, so the tree uses none. Run on the prototype tree (`cargo xtask <step>` in the clone):
+  - `PASS  no-skip: … 206 files scanned, 0 allowlisted skip(s), 35 platform test(s) registered (10 pending)` (the new
+    unit test carries no platform cfg; the `#[cfg(windows)]` statement is in product code, not a test);
+  - `PASS  hygiene: reviews: 64 of 76 … ok; session-paths: 716 tracked file(s) clean`;
+  - `PASS  scorecard: 64 items: 47 verified, 0 implemented, 0 failing, 17 planned.`;
+  - `PASS  layers: 11 crates, 14 internal edges, layer table holds`;
+  - `PASS  ui-commands: self-test ok; 14 kiln-ui file(s) scanned, 5 allowlisted path(s)`;
+  - `PASS  schema: 30 commands; audit ok; docs/commands.json current`.
+
+  The real candidate adds `guard_t095.rs` (no platform cfg): `no-skip` must stay at the same count. The builders
+  repeat the six steps with main's tool before the join.
 - **S-3 Criteria of absence or limit:** (1) is an equality over the stated set. The variant to reject is `>` accepted
   (unsampled at base), and also `CON` refused (a set wider than (1)).
-- **S-4 Main's tests naming each path (D-249), run on the prototype:** see the planner log entry of R-386.
-  - `path.rs`: `guard_t079` (names), `acceptance_t079`, `acceptance_t074` (registry only, unaffected by this task).
-  - `paths.md`, `project.md`, `control-protocol.md`: `acceptance_t008_cli` and the registry's quotes.
+- **S-4 Main's tests naming each path (D-249), run on the prototype** (`grep -rlE '<path>' --include=*.rs crates apps
+  xtask` on `4eb349d`, then the hits run):
+  - `path.rs` → `xtask/tests/guard_t079.rs` (pins the three `path.rs` test names): **6 passed**.
+  - `xtask/tests/acceptance_t079.rs` (registry; T-079's 20, untouched): **2 passed**.
+  - `xtask/tests/acceptance_t074.rs` (registry; T-074's nine, untouched): **2 passed**.
+  - `kiln-workspace --lib` (the prototype's new unit test and the three old `path.rs` tests among them): **59 passed**.
+    The command was `cargo test -q --locked -p xtask --test guard_t079 --test acceptance_t079 --test acceptance_t074 -p
+    kiln-cli --test acceptance_t008_cli -p kiln-workspace --lib`, 0 failed in every binary.
+  - `paths.md`, `control-protocol.md` → `apps/kiln-cli/tests/acceptance_t008_cli.rs` (`:549-578`: the lexical bullet and
+    the save bullet verbatim, `outside_root`/`not_a_file` present, no claim that links are followed outside), with the
+    prototype's Windows sentence appended to the lexical bullet: **9 passed**.
+  - The registry's quoted sentences (a script over `xtask/platform-tests.toml` and the three documents, whitespace
+    squashed): all 7 `paths.md`, 4 `project.md` ("not valid UTF-8 or contain") and 3 `control-protocol.md` quotes
+    present after the prototype edits (and `no-skip` PASS above, which checks them).
+  - `project.md` → five files, comments or `project.rs`'s own docs. No main test names `guard_t095.rs`.
+  - Searched for names this rule would refuse in existing tests: `grep -rn 'RelPath::new("[^"]*[:<>|?*]' --include=*.rs
+    crates apps` gives no hit. JSON `"path"` strings in other crates' tests are not searched; they run on Windows only
+    after T-092/T-098, whose re-checks cover them.
 - **S-5 Unmeasured and marked:** `>` and U+0002 to U+001F at base; the spelling after a save under another case; a
   short name on `C:`; names with refused characters from another system. None decides a choice, so there is no
   probe; the test author's first CI run measures the two `MEASURED:` items.
@@ -267,12 +292,36 @@ CI rounds: **about 450,000** (ceiling 1,100,000). Arm: high → independent test
 edits the same documents, names run 44358453526 (all 15 guards; `tasks/ci-runs/T-074-round-1.md`) there.
 (Done in Pinned (i), last item.)
 
+### Rulings (director, D-272)
+- **1: Windows only.** The lexical refusals apply on Windows; a Unix file named `a:b` stays openable. The documents
+  say that a project moved to Windows cannot reach such a name there.
+- **2: allow.** Reserved device names and names ending in a dot or a space are allowed and stated (they are ordinary
+  files under the paths Kiln uses; a project with `aux.rs` stays usable).
+- **3: limits.** Case and 8.3 short names are stated limits with the two CI measurements, not a stricter check on
+  the walk.
+- **4: one acceptance test is required.** `cargo xtask join` refuses a task with no acceptance test
+  (`xtask/src/join.rs:259`), and the methodology wants one that fails on base. The test author writes
+  `crates/kiln-workspace/tests/acceptance_t095.rs`: the criteria that can fail on base on every platform, which are
+  the document statements this task must add (the Windows names paragraph; the two citations of D-270 naming run
+  44358453526), read from the repository's files, as T-073's manifest test was (ruling y1 of T-073). The runtime
+  tests stay guards in `guard_t095.rs`. The planner adds the file to `touches` and the criterion to the spec at the
+  spec check.
+- **5: T-093 first.** `depends_on` T-074 and T-093; this task's sentences are re-checked beside T-093's when it
+  has merged. T-092 runs beside both (no shared path).
+
 ## Log
 ### director
 <!-- end director log -->
 ### planner
 - 2026-11-18 · draft · did: cut from T-074 at its re-specification under v1.5 · next: director (T-074 Q-1)
-- 2026-11-18 · R-386 · draft · specification in progress against main `4eb349d` · next: spec-check runs
+- 2026-11-18 · R-386 · draft · did: full specification under v1.5 against main `4eb349d`. Read: T-074's merged
+  `disk.rs`, `paths.md`, `project.md`, `control-protocol.md`, `guard_t074.rs`, the records `T-074-round-1.md`,
+  `T-092-probe-1.md`, D-256 to D-271, and T-092's and T-093's specs. Ran in the scratch clone (branch `t095` from the
+  primary's main): the prototype of Pinned (g) (Windows clippy clean, `path::` 4 passed); main's six `xtask` steps PASS
+  (S-2); main's pinning tests 6/2/2/9/59 passed (S-4); the quote script (S-4). Prototype reverted, `target/` deleted.
+  No probe: no choice hangs on unmeasured behaviour; two items are to be measured by the test author on CI (Interface
+  (3)). Tier high (confinement boundary; no gate path). Pinned (h) n/a. Not run: anything on Windows; the join tool
+  with zero acceptance targets (Q-4) · next: director (Q-1 to Q-5), fresh spec check
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

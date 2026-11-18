@@ -611,3 +611,36 @@ Steps through Cache cargo registry and target: success. Gate: failure (18:01:12Z
 
 ### Not read here
 Final run conclusion; `gate-windows` completion and artefacts; any artefact or log of the re-run.
+
+## Addendum for T-093 (ruling Q-4): test names on macOS
+Made for `tasks/T-093-macos-document-sentences.md` (rule E1, question Q-4 option A). Source: job `gate-macos` (job 134992871807, runner label macos-15, green) of run 44358453526 (`platforms.yml`, `ci/candidate`, head `720f1d56ac27b83594dd96f16734b04b2f8d4c7f`), fetched by the method of `tasks/ci-runs/README.md` (`actions_list` `list_workflow_run_artifacts`, `actions_get` `download_workflow_run_artifact`, `curl`, size checked, unpacked).
+
+### Artefact
+- Name `gate-macos-44358453526` (artefact id 14456243039), created 2026-11-18T17:58:30Z, expires 2026-12-18T17:58:28Z; zip 31,673 bytes (equals `size_in_bytes`). Files: `core-crates.txt` 40,686 bytes; `gate-report.json` 2,024 bytes, 72 lines; `test-list.txt` 77,528 bytes, 1,588 lines (1,461 non-empty; 1,182 lines ending `: test`). No `test-output.txt` (green gate).
+- Quoted below with ANSI escapes stripped. "Under" is the nearest preceding `Running …` line of `test-list.txt`; the list line is the line as listed, with its line number in the file.
+
+### Gate report lines (`gate-report.json`)
+- line 2: `"passed": true,`
+- line 3: `"failed_step": null,`
+- line 52 (step `test`): `"detail": "1183 passed, 0 failed, 0 ignored in 140 suites"`
+- the `scorecard` step's detail: `"macos: 64 items; 216 tests ran; 3 registered absent here; page not compared (computed on Linux)"`
+
+### Row 2, the `\` half
+- `tree_counts_skipped_names_on_disk`: listed. Line 1092: `tree_counts_skipped_names_on_disk: test`. Under line 1088: `Running tests/acceptance_t019_workspace.rs (target/debug/deps/acceptance_t019_workspace-12739ecd699fd46d)` (the binary of `crates/kiln-workspace/tests/acceptance_t019_workspace.rs`).
+
+### Row 6
+- `walk_corner_cases`: listed. Line 1110: `walk_corner_cases: test`. Under line 1104: `Running tests/confinement.rs (target/debug/deps/confinement-0b444dcf1ce177ed)`.
+
+### Row 7
+- `disk::tests::failed_rename_removes_own_temp_and_keeps_target`: listed. Line 984: `disk::tests::failed_rename_removes_own_temp_and_keeps_target: test`. Under line 977: `Running unittests src/lib.rs (target/debug/deps/kiln_workspace-8889d7096220f9a7)`.
+- `disk::tests::root_given_through_a_link_that_is_retargeted`: listed. Line 998: `disk::tests::root_given_through_a_link_that_is_retargeted: test`. Under line 977, same binary.
+- (Not a spec name, same list: line 1567 `ac2_failed_rename_removes_own_temp_and_keeps_target_has_no_platform_cfg: test`, under line 1564 `Running tests/guard_t079.rs (target/debug/deps/guard_t079-add253df73ef5f78)`.)
+
+### Row 8
+- `acw2_root_replaced_at_same_path_is_outside_root`: listed. Line 1132: `acw2_root_replaced_at_same_path_is_outside_root: test`. Under line 1127: `Running tests/guard_t073.rs (target/debug/deps/guard_t073-714e42974e6df280)`.
+
+### Row 9
+- `acw2_root_parent_replaced_is_outside_root`: listed. Line 1131: `acw2_root_parent_replaced_is_outside_root: test`. Under line 1127, same binary (`guard_t073.rs`).
+
+### Finding
+All six names the spec names for rows 2 (`\` half) and 6 to 9 are present in the list, each once under the binary the spec's file path implies. The list gives names only; which branch a test took on macOS is not in the artefact.

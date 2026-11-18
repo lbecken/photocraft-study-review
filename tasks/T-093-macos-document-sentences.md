@@ -2,7 +2,7 @@
 id: T-093
 title: "State in the documents where Kiln's file and project behaviour differs on macOS, each sentence with a test that runs there"
 tier: low               # METHODOLOGY v1.5 §4: documentation and tests, no behaviour change; see Q-1 (a reviewer's read)
-state: specified
+state: ready
 owner_role: planner
 scorecard_items: []
 depends_on: [T-079]     # merged: the macOS gate is green, so a sentence's test can be shown to run there
@@ -207,6 +207,17 @@ Questions for the director:
   macOS on a green run (rule above). **Recommendation: A**, with the Windows branch named in T-095's spec check.
 - **Q-6 (planner, spec check). Row 9 if Q-4 A is not taken in time.** Word it "(macOS: by the gate's count)" as D-251
   allows. **Recommendation:** only as a fallback; prefer E1 by name.
+
+### Rulings on the spec check after T-074 (director, D-272)
+- **Q-3: A.** Row 5 says "the host's path limit, unmeasured on macOS" with no figure; rows 6 and 7 get a citation,
+  not a new sentence.
+- **Q-4: A.** The director has the E1 quotations for rows 2 (the `\` half) and 6 to 9 appended to
+  `tasks/ci-runs/T-074-round-1.md` ("Addendum for T-093") from the macOS test list of run 44358453526, and passes
+  the result to the implementer.
+- **Q-5: A.** The new test's expected result is set by platform; on Windows it expects the macOS result (an
+  inference, not run before T-098 makes `kiln-cli`'s test targets compile there); T-095 writes the Windows sentence.
+- **Q-6:** row 9 is worded "(macOS: by the gate's count)" only if the quotation of Q-4 does not show the test.
+- Order: before T-095, beside T-092.
 
 ## Log
 ### director
