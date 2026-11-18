@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-18 04:55 UTC_
+_Last updated: 2026-11-18 08:07 UTC_
 
 ## Now
 The `ci/…` branches can stay (the owner, D-207).
@@ -14,22 +14,25 @@ branches may be pushed and are deleted after their task merges (D-185).
 planned feature items.** The pause of D-207 is over; the earlier paragraph about it above is history.
 
 In flight (restarts at 2026-11-17T23:02Z, 23:53Z and 2026-11-18T00:19Z; D-224, D-225):
-- **T-071 merged** at `0f8ea64` (D-238; queue attempt 2): main's tools follow the platform-test rule; the
-  registry has no entry yet.
-- **T-079** (the macOS gate green, plus the eight registry entries of `xtask`'s own tests; high; `in_progress`;
-  the first task under v1.5; D-233, D-235, D-239): implementer R-327 (`.worktrees/T-079`), independent test
-  author R-328 (`.worktrees/T-079-tests`), from main `ee9b130`. The implementer's first commit is the patch
-  `tasks/T-079-restore-from-T-071.patch`; before the join it runs main's tool on its tree (Pinned (j)). Then:
-  merge the tests branch, join, push the joined head to `ci/candidate`, CI record from the artefacts (resume the
-  planner of ADR-0009): the pending criterion is `gate-macos` green and `xtask` exit status 0 on `gate-windows`;
-  review (a fresh reviewer; round 1 full); a row beginning `Approve T-079` with `gate paths` and the CI
-  criterion; queue. The local branch `park/T-071-reviewed` can be deleted after T-079 merges.
+- **Merged on 2026-11-18:** T-071 (`0f8ea64`, D-238: the platform-test rule in main's tools) and T-079
+  (`bc8d097`, D-244: the registry of 20 platform tests, four split tests, four portable fixes). **The macOS gate
+  was green on T-079's candidate** (D-243); its first run on main (run 44261526710 at `7b86bdf`) was still in its
+  Gate step when read (D-246): read its conclusion next; `gate-macos` counts from its first green run on main.
+- **T-073** (the first Windows product task: `kiln-workspace` builds for Windows, the root held and identified,
+  the save by rename, one reported Windows test step in CI; high; `in_progress`; D-245): implementer R-338
+  (`.worktrees/T-073`), independent test author R-339 (`.worktrees/T-073-tests`), from main `7de171b`. Then:
+  merge the tests branch, join, push the joined head to `ci/candidate` (a forced push there is allowed), CI
+  record from the artefacts (resume the planner of ADR-0009), review (a fresh reviewer), a row beginning
+  `Approve T-073` with `gate paths` and the dependency change, queue. Estimate about 1,050,000 of 1,100,000: an
+  `Extend` row before the run that would pass the ceiling.
+- **Specified and waiting** (D-245): T-072 (CI evidence; beside T-074, after a re-check), T-093 (macOS document
+  sentences; when `docs/protocol/paths.md` is free, beside T-092). Then T-074, T-092, T-075 to T-078.
 - **Methodology v1.5** is written (D-221) and in force from the task after T-071.
 - **Tooling batch** (T-043 re-specified, drafts T-087 to T-090): waits behind the platform track, to be put to
   the owner with the platform report (D-223). Accepted work not done, listed here by v1.5 change 13.
 Then, by D-199: T-079 (`specified`; spec check against main first), T-072, T-073, T-074, T-075, T-076, T-077,
 T-078. After the platform track: the planned feature items (drafts T-060 to T-063, T-022, T-024 to T-031 and
-others; each needs its spec). Next free task number: T-093. Next run id: R-329. Next decision: D-241.
+others; each needs its spec). Next free task number: T-094. Next run id: R-340. Next decision: D-247.
 The evaluation at cut 2 is published (`evaluations/iter-2-cut-2.md`, T-084, D-215).
 
 Merged since cut 1: T-069 (CI fix), T-057 (project panel), T-070 (`platforms.yml`: gate on three systems, the
