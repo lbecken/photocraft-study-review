@@ -200,7 +200,7 @@ its work (`no-skip`'s `inert-helper` rule). They run on Windows in T-073's repor
     followed: a save through a symbolic link or a junction is refused (`outside_root`), and a link at a temporary name
     makes the save use the next name; see `docs/protocol/paths.md`." Evidence: PROBE C4, H2 (base) and `guard_t074.rs`
     (head). The bullet's first sentence ("… (on Unix); through a symlink, the link's target is replaced and the link is
-    kept.") stays verbatim (`apps/kiln-cli/tests/acceptance_t008_cli.rs:560-566`).
+    kept.") stays verbatim (`apps/kiln-cli/tests/acceptance_t008_cli.rs:563-574`, the bullet at `:566-568`).
   - `disk.rs` module docs (`:94-96`): "The walk below the root … is not decided here (T-074)" → the Windows rule of (1)
     and (3), naming T-095 for names and case.
 
@@ -302,7 +302,7 @@ list out of scope; 8 the probe record is the Windows fail-on-base evidence.
   Rust signature.
 - **S-3 Main's tool on the candidate (D-235).** No file under `xtask/src/`, no fixture: main's tool (also after T-072,
   which changes `xtask/ledger.toml` and no rule) is the candidate's. `no-skip`: PASS if each new counterpart has no
-  platform cfg on its fn, each per-platform helper and `#[cfg]` statement has its twin doing work, and the 8 quoted
+  platform cfg on its fn, each per-platform helper and `#[cfg]` statement has its twin doing work, and the 7 quoted
   `paths.md` sentences stay (`35 … (10 pending)`); a counterpart naming a missing or Unix-only test fails it. `hygiene`:
   PASS (no session path in documents or code; review files as usual). `scorecard --check`: PASS (no item, no listed test
   changes; the page is computed on Linux). `layers`: PASS (no manifest or lock change). `ui-commands`: PASS (no `kiln-ui`
@@ -314,9 +314,9 @@ list out of scope; 8 the probe record is the Windows fail-on-base evidence.
   `apps/kiln-cli/tests/acceptance_t008_cli.rs:576-578` (contains `outside_root`, `not_a_file`: passes); `disk.rs`, `vfs.rs`
   name it in comments. `project.md` → `crates/kiln-ui/src/panels/project.rs`, `crates/kiln-commands/src/project.rs`,
   `crates/kiln-workspace/src/project.rs`, `apps/kiln/tests/acceptance_t057.rs`, `apps/kiln/tests/project_t057.rs`: doc
-  references, no sentence read. `control-protocol.md` → `acceptance_t008_cli.rs:549-570` pins the lexical bullet and the save
+  references, no sentence read. `control-protocol.md` → `acceptance_t008_cli.rs:549-574` pins the lexical bullet and the save
   bullet's first sentence verbatim (kept: passes) and that the doc does not claim symlinks are followed out of the root
-  (the new sentence does not say so: passes); the other 15 files read other sections (kinds, synopsis); no test contains
+  (the new sentence does not say so: passes); the other 16 files read other sections (kinds, synopsis); no test contains
   "How symlinks are followed" (grep: none). `platform-tests.toml` → `xtask/tests/acceptance_t079.rs` (T-079's 20 only, none
   of the nine: passes); `acceptance_t071.rs`, `guard_t071.rs` write toy registries in scratch trees; other hits are
   comments. New files (`guard_t074.rs`, `acceptance_t074.rs`): no main test names them; `guard_t079` only requires base
