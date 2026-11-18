@@ -2,7 +2,7 @@
 id: T-073
 title: "Make the workspace crate build and its root work on Windows: the root's identity and holding it open, the save's temporary file, every library and binary built and lint-clean for Windows"
 tier: high              # METHODOLOGY v1.5 §4: the persistence path and the confinement boundary (disk.rs); a dependency edge (Cargo.toml target table, Cargo.lock); gate paths if Q-1 A (platforms.yml, xtask/tests) and the registry (xtask/platform-tests.toml)
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: []     # none claimed: ws.* items are verified on Linux; per-platform confirmation is the evaluator's
 depends_on: [T-072, T-093]   # T-072: shares platforms.yml and acceptance_t070.rs under Q-1 A; T-093: shares docs/protocol/paths.md
