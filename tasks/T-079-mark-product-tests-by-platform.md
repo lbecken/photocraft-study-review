@@ -657,6 +657,29 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   entry changed). Checks on the committed state: `cargo fmt --check`, `cargo clippy -p xtask --tests -- -D
   warnings` ok; `cargo xtask no-skip` PASS (0 registered); `cargo xtask hygiene` PASS. Not run: `cargo xtask
   ci`, macOS/Windows runs. · next: join
+- 2026-11-18 · R-333 · guard fixed per ruling · did: ruling D-242 x3 acknowledged and accepted (review r1 finding 4,
+  mutant M15). `guard_t079.rs`: the Linux-name scan (`kept_on_linux`, used for test fns, inline mods, the file's
+  `#![…]` and its `mod` declaration) now collects the cfg predicates in effect from `#[cfg(p)]` and from
+  `#[cfg_attr(c, a, b, …)]`: when `c` holds on Linux, or has a predicate the evaluator does not know (then the
+  inner cfgs count, so an unknown can only make a name absent), `a, b, …` are read recursively (nested
+  `cfg_attr` and several attributes in one are handled, not counted as absent); the test exists only if every
+  collected predicate holds. Attributes that are not `cfg` (`ignore`, `allow`, …) remove nothing: an ignored test
+  is still in `cargo test -- --list` and is `no-skip`'s finding (the coordinator's case below; ruling x3's
+  parenthesis about `ignore` read that way). AC-2: before, a `cfg_attr` counted only if its predicate named a
+  platform (so `cfg_attr(target_os = "linux", cfg(any()))` was already rejected, `cfg_attr(test, cfg(unix))` was
+  not); now also if any attribute it applies names one. On this branch: all 6 guards PASS; the base's 1,121 names
+  are all still found (`BASE`, `BASE_COUNT` unchanged; the new scan can only drop names, and drops none on base).
+  Scratch copy (deleted), on `kiln-text` `insert_matches_naive_model`: `cfg_attr(target_os = "linux", cfg(any()))`
+  (M15) FAILS every_linux_test_name…; `cfg_attr(target_os = "macos", cfg(any()))` passes;
+  `cfg_attr(unix, cfg(target_os = "macos"))` FAILS; `cfg_attr(windows, ignore)` passes; also FAIL:
+  `cfg_attr(unix, cfg_attr(test, cfg(windows)))`, `cfg_attr(unix, allow(unused), cfg(windows))`,
+  `cfg_attr(feature = "x", cfg(windows))`, `cfg_attr(unix, cfg(windows))` on `disk.rs`'s `mod tests` (and
+  ac2_failed_rename…), `#![cfg_attr(target_os = "linux", cfg(any()))]` on the file; passes:
+  `cfg_attr(not(unix), cfg(any()))`. On `tree_order_and_counts`: `cfg_attr(target_os = "linux", cfg(any()))`,
+  `cfg_attr(test, cfg(unix))`, `cfg_attr(test, cfg_attr(test, cfg(target_os = "linux")))` each FAIL
+  ac2_tree_order_and_counts…. Checks on the committed state: `cargo fmt --check`, `cargo clippy -p xtask --tests
+  -- -D warnings` ok; `cargo xtask no-skip` PASS; `cargo xtask hygiene` PASS. Not run: `cargo xtask ci`,
+  macOS/Windows runs; a `cfg_attr` inside a macro-generated item is not seen (none on base). · next: join
 <!-- end test author log -->
 ### reviewer
 - 2026-11-18 · R-330 · review round 1 · `reviews/T-079-r1.md` at `885f4f1` · verdict **request-changes**. Rulings read
