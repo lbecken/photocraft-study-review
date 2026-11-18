@@ -250,9 +250,7 @@ impl DiskFs {
         }
         // Windows (T-073): the directory reached now must be the same file as the held root.
         #[cfg(windows)]
-        if meta.is_dir()
-            && same_file::Handle::from_path(&root).is_ok_and(|now| now == self.root_handle)
-        {
+        if meta.is_dir() && is_held_root(same_file::Handle::from_path(&root), &self.root_handle) {
             Ok(root)
         } else {
             Err(outside())
@@ -371,6 +369,15 @@ impl DiskFs {
         }
         Ok(Location { path, dir, found })
     }
+}
+
+/// Whether the directory reached now is the held root: only when its identity could be read
+/// (`now` is `Ok`) and equals the held one; a failed read answers "outside" (T-073, ruling c5).
+/// No platform cfg: the Windows root check calls it, and its unit test runs on every platform.
+/// The Unix check compares `(dev, ino)` itself and does not use it.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_held_root<T: PartialEq, E>(now: Result<T, E>, held: &T) -> bool {
+    now.is_ok_and(|now| now == *held)
 }
 
 fn io_error(path: &RelPath, e: &io::Error) -> VfsError {
@@ -613,6 +620,20 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// T-073 (ruling c5): the decision of the Windows root check, on every platform: inside only
+    /// for an identity that was read and equals the held one; a failed read is outside.
+    #[test]
+    fn held_root_check_is_inside_only_for_a_read_identity_equal_to_the_held_one() {
+        let held = (7_u64, 42_u64);
+        assert!(is_held_root(Ok::<_, io::Error>((7_u64, 42_u64)), &held));
+        assert!(!is_held_root(Ok::<_, io::Error>((7_u64, 43_u64)), &held));
+        assert!(!is_held_root(Ok::<_, io::Error>((8_u64, 42_u64)), &held));
+        assert!(!is_held_root(
+            Err::<(u64, u64), _>(io::Error::other("the identity could not be read")),
+            &held
+        ));
     }
 
     fn listing(dir: &Path) -> Vec<String> {
