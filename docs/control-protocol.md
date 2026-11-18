@@ -132,7 +132,10 @@ current directory). What is checked today:
   `docs/protocol/paths.md`.
 - A save replaces the file by writing a temporary file `.kiln-tmp-<n>` next to it and renaming
   it over the target (on Unix); through a symlink, the link's target is replaced and the link is
-  kept.
+  kept. On Windows (T-073), each part unchecked until T-073's CI record: the temporary file is
+  created with no Unix mode, a target Kiln cannot open for writing (a read-only file) is refused
+  and left unchanged, and the target is replaced by renaming the temporary file over it; how
+  symlinks are followed there is not yet stated (T-074).
 
 ## Determinism
 

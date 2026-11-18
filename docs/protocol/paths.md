@@ -29,6 +29,16 @@ written in the other directory. `project.tree` and `nav.workspace-symbols` are r
 renamed or removed with nothing in its place). If the path leads to the root directory again
 (moved back, or a link at that path pointed at it), the session works there again.
 
+On Windows (T-073) Kiln holds the root open in the same way, and the identity it compares is
+that of the held directory: the directory `--root` leads to is the root when it is the same file
+on the same volume (the same volume serial number and file index). What holding the root open
+allows there, whether another process can rename, remove or replace the root while a session
+runs, is unchecked: it is to be measured on the Windows CI runner (T-073), and until then the
+sentences above about a replaced root are unchecked on Windows.
+
+The rules below this section are stated for Linux and macOS; for Windows they are not yet stated
+(T-074).
+
 ## Lexical refusals (unchanged)
 
 Before the file system is consulted, a path is refused as `rejected` / `invalid_path` if it is
