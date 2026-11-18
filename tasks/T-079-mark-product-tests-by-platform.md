@@ -512,7 +512,7 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   `symbols-deep-chain` case of `disk_refusals_through_control` on macOS's shorter `PATH_MAX`); only CI shows it.
 - gate attempt 2 (`cargo xtask ci` at `c71c8e7`, the committed state): `GATE PASSED in 549.2s` (`test` 1126
   passed, 0 failed, 0 ignored in 131 suites = 1122 + the 4 `_non_utf8`; `hygiene` PASS; `no-skip` `… 20 platform
-  test(s) registered (8 pending) …`). 2 gate attempts, both green; 0 CI rounds yet. Scratch (`/home/user/kiln-impl-T-079/`)
+  test(s) registered (8 pending) …`). 2 gate attempts, both green; 0 CI rounds yet. Scratch dir
   deleted. Not run: macOS, Windows (the director's CI). No information outside the repository was needed but the
   director's mid-run rulings w1, w2. Next: director (CI round 1).
 - CI-REQUEST: c71c8e74782397bfa55a3135346d681561e9b31b
