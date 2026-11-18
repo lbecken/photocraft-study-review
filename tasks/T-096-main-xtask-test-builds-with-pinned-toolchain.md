@@ -359,6 +359,59 @@ not run: … · missing context: none|… · next: …` (+ `QUESTION:` lines)
   required by §5.7 (no `depends_on`), the director may still ask for one (gate path).
 <!-- end planner log -->
 ### implementer
+- 2026-11-18T14:45Z · R-366 · in_progress (branch at 9cc4d82; main cb3d7f6 differs only in ledger
+  lines and this file's `state`) · ACs in my words: AC-2 (mine): the unit test passes whether the
+  machine's default toolchain is the pinned 1.97.0 or 1.100.0, because its tiny repository commits
+  a byte copy of this checkout's `rust-toolchain.toml`, read at run time; AC-1 is the test
+  author's. Rulings D-259 acknowledged and accepted: Q-1 (a) implemented; Q-3 used (the `deps`
+  read panics with a message naming the layout assumption); Q-2, Q-4, Q-5 need nothing from me.
+  · did: 7bf898d, inside `tests::main_xtask_is_rebuilt_from_base_on_every_run` only: reads
+  `CARGO_MANIFEST_DIR/../rust-toolchain.toml` (panic naming the path if unreadable) and adds
+  `("rust-toolchain.toml", <those bytes>)` to `portable_init`'s list; the `read_dir(&deps)`
+  `unwrap` became `unwrap_or_else(panic!(…))` naming the layout; no assertion removed or changed;
+  name, place, `#[cfg(unix)]` and its comment kept; `cargo fmt` clean.
+  **AC-2 run 1** (machine default `stable-x86_64-unknown-linux-gnu`, cargo 1.97.0, 14:13:40Z):
+  `cargo test -p xtask --bin xtask queue::tests::main_xtask_is_rebuilt_from_base_on_every_run` →
+  `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 137 filtered out; finished in 0.93s`.
+  **AC-2 run 2** (14:14:18Z): scratch `RUSTUP_HOME`/`CARGO_HOME` under `/home/user/kiln-impl-T-096/`,
+  `rustup set auto-self-update disable`, `rustup toolchain install 1.100.0 --profile minimal
+  --no-self-update` → `1.100.0-x86_64-unknown-linux-gnu installed - rustc 1.100.0 (0ef1bc386
+  2026-11-09)`, `rustup default 1.100.0`; `toolchains/1.97.0-x86_64-unknown-linux-gnu` a symlink
+  to the real pinned toolchain (`rustc --print sysroot`); checks: outside the checkout `cargo
+  --version` → `cargo 1.100.0 (3acc79c0c 2026-11-05)`, in it `rustup show active-toolchain` →
+  `1.97.0-… (overridden by '…/T-096/rust-toolchain.toml')`. Then with that `RUSTUP_HOME`,
+  `RUSTUP_AUTO_INSTALL=0`, real `CARGO_HOME` (registry): `cargo test --offline -p xtask --bin xtask
+  <the test>` → `test result: ok. 1 passed; 0 failed; … 137 filtered out; finished in 0.72s`.
+  Same setup with base's `queue.rs` checked out temporarily (restored with `git checkout HEAD --`)
+  → `panicked at xtask/src/queue.rs:2038:43`, `test result: FAILED. 0 passed; 1 failed` (P-2
+  reproduced, so the run reaches the toolchain). Scratch toolchain removed afterwards; the
+  machine's `rustup default` still `stable-x86_64-unknown-linux-gnu (default)`, never changed.
+  **D-235** (main cb3d7f6 from `git archive main`, `cargo build --offline -q -p xtask` in
+  `/home/user/kiln-impl-T-096/main`, binary run from this worktree's root; each exit 0):
+  `PASS no-skip: self-test ok (17 known findings); 201 files scanned, 0 allowlisted skip(s), 35
+  platform test(s) registered (19 pending)`; `PASS hygiene: reviews: 59 of 71 … ok; session-paths:
+  696 tracked file(s) clean`; `PASS layers: 11 crates, 14 internal edges, layer table holds`;
+  `PASS ui-commands: self-test ok; 14 kiln-ui file(s) scanned, 5 allowlisted path(s)`; `PASS
+  schema: 30 commands; audit ok; docs/commands.json current`; `scorecard --check` (14:16:29Z-
+  14:24:34Z) → `PASS scorecard: 64 items: 47 verified, 0 implemented, 0 failing, 17 planned.`
+  **D-249:** `cargo test -p xtask` exit 0, every result line ok: `unittests src/main.rs` 138
+  passed; `tests/acceptance_t079.rs` `ok. 2 passed`; `tests/guard_t079.rs` `ok. 6 passed` (the
+  spec's table has these two counts the other way round).
+  · gate attempts: 1 (last: green; `cargo xtask ci` 14:27:56Z-14:44:18Z, `GATE PASSED in 981.7s`,
+  test `1147 passed, 0 failed, 0 ignored in 135 suites`, fuzz and budgets EMPTY) · not run: the
+  macOS and Windows jobs (CI round below); the Q-3 message under a cargo with the new layout
+  for the tiny build (only reachable by removing the toolchain file, which is the base failure
+  above, whose text is base's `unwrap`) · missing context: none · next: CI round, then join with
+  the test author's `acceptance_t096.rs`.
+- **CI expectation (this commit's head, `platforms.yml`):** `gate-linux`: Gate success, and
+  `queue::tests::main_xtask_is_rebuilt_from_base_on_every_run` listed and `ok` in the test output
+  (it is `#[cfg(unix)]`). The Linux image a run gets cannot be chosen: on `ubuntu-24.04`
+  `20261116.376.1` or later (default Rust 1.100.0) this run shows the fix on the real image; on an
+  older image it passes as it did before, and the evidence for 1.100.0 is AC-2 run 2 above.
+  `gate-macos`: Gate success, the same test `ok` (Unix). `gate-windows`: the test is not compiled
+  (registered `unix`, counterpart `none`), so it appears in no list; the `xtask` binaries' exit
+  status 0 as on main (D-243). `acceptance_t096` is not on this branch; it shows only on the
+  joined head.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
