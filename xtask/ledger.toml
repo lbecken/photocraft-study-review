@@ -43,5 +43,9 @@ path = "methodology/"
 mode = "any"
 
 [[ledger]]
+path = "incidents/"
+mode = "any"
+
+[[ledger]]
 path = "scorecard/items/"
 mode = "add-only"

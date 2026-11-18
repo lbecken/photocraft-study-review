@@ -32,6 +32,8 @@ on:
       - 'evaluations/**'
       - 'methodology'
       - 'methodology/**'
+      - 'incidents'
+      - 'incidents/**'
   schedule:
     # Nightly at 03:17 UTC, on the default branch.
     - cron: '17 3 * * *'
@@ -94,7 +96,7 @@ jobs:
           : > core-crates.txt
           summary=""
           for p in kiln-text kiln-syntax kiln-search xtask; do
-            echo "==== cargo test --locked -p $p" >> core-crates.txt
+            echo "==== cargo test --locked --no-fail-fast -p $p" >> core-crates.txt
             cargo test --locked --no-fail-fast -p "$p" >> core-crates.txt 2>&1
             rc=$?
             echo "==== $p: exit status $rc" >> core-crates.txt
@@ -104,13 +106,42 @@ jobs:
           echo "CORE CRATES: exit status per package:$summary (reported, not required)"
           exit 0
 
+      - name: Test list
+        if: always()
+        # T-072 (ruling Q-3 A1, D-254): every test name per test binary, on every run. It reuses the
+        # binaries the gate's `test` step built and runs no test; the verdicts are the gate's. The log
+        # prints each binary's `Running` / `Doc-tests` line and every `error` line (colour codes
+        # removed), then the exit status, which is recorded, not used.
+        run: |
+          set +e
+          cargo test --workspace --locked --no-fail-fast -- --list > test-list.txt 2>&1
+          rc=$?
+          awk '{ gsub(/\033\[[0-9;]*[A-Za-z]/, "") } /^( +Running |   Doc-tests |error)/' test-list.txt
+          echo "TEST LIST: exit status $rc (recorded; the gate step decides the colour)"
+          exit 0
+
       - name: Full test output (gate failed)
         if: failure() && steps.gate.outcome == 'failure'
         run: |
           set +e
           cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
           rc=$?
-          grep -E -A1 "^(test result:|thread '.*panicked at|---- .* stdout ----)" test-output.txt | head -200
+          # T-072: no line cap. Printed (colour codes removed): each failing test's `---- <name> stdout ----`
+          # block with the 20 lines after it; a binary that aborted with its `Running` line and the abort
+          # lines; every `error: could not compile`, `error[` and `error: test failed` line and the list
+          # of failed targets; the `test result:` line of every binary.
+          awk '
+            { gsub(/\033\[[0-9;]*[A-Za-z]/, "") }
+            /^ +Running |^   Doc-tests / { run = $0; shown = 0; n = 0; tl = 0; next }
+            /^---- .* stdout ----$/ { if (!shown) { print run; shown = 1 } print; n = 20; tl = 0; next }
+            n > 0 { print; n--; next }
+            /^test result:/ { print; next }
+            /^error(\[|: could not compile|: test failed|: [0-9]+ targets? failed)/ { print; tl = ($0 ~ /targets? failed/); next }
+            tl && /^    `/ { print; next }
+            /has overflowed its stack|^fatal runtime error|^Caused by:|process didn.t exit successfully/ {
+              if (!shown) { print run; shown = 1 } print; next
+            }
+          ' test-output.txt
           echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
           exit 0
 
@@ -133,6 +164,7 @@ jobs:
             gate-report.json
             core-crates.txt
             test-output.txt
+            test-list.txt
           if-no-files-found: warn
           retention-days: 30
 
@@ -178,7 +210,7 @@ jobs:
           : > core-crates.txt
           summary=""
           for p in kiln-text kiln-syntax kiln-search xtask; do
-            echo "==== cargo test --locked -p $p" >> core-crates.txt
+            echo "==== cargo test --locked --no-fail-fast -p $p" >> core-crates.txt
             cargo test --locked --no-fail-fast -p "$p" >> core-crates.txt 2>&1
             rc=$?
             echo "==== $p: exit status $rc" >> core-crates.txt
@@ -202,13 +234,66 @@ jobs:
           echo "WORKSPACE TESTS: exit status $rc (reported, not required)"
           exit 0
 
+      - name: Test list
+        if: always()
+        # T-072 (ruling Q-3 A1, D-254): every test name per test binary, on every run. It reuses the
+        # binaries the gate's `test` step built and runs no test; the verdicts are the gate's. The log
+        # prints each binary's `Running` / `Doc-tests` line and every `error` line (colour codes
+        # removed), then the exit status, which is recorded, not used.
+        run: |
+          set +e
+          cargo test --workspace --locked --no-fail-fast -- --list > test-list.txt 2>&1
+          rc=$?
+          awk '{ gsub(/\033\[[0-9;]*[A-Za-z]/, "") } /^( +Running |   Doc-tests |error)/' test-list.txt
+          echo "TEST LIST: exit status $rc (recorded; the gate step decides the colour)"
+          exit 0
+
+      - name: kiln-workspace test targets (reported, not required)
+        if: always()
+        # T-072 Interface (6) (ruling Q-5 A, D-254): every file crates/kiln-workspace/tests/<t>.rs, in
+        # name order, as its own run, so a target added later is reported with no workflow edit and a
+        # target that does not compile on Windows stops no other. Each run is appended to
+        # windows-tests.txt with its exit status; the step's status is always 0, the gate step decides.
+        run: |
+          set +e
+          export LC_ALL=C
+          : > windows-tests.txt
+          summary=""
+          for f in crates/kiln-workspace/tests/*.rs; do
+            [ -f "$f" ] || continue
+            t="${f##*/}"; t="${t%.rs}"
+            echo "==== cargo test --locked --no-fail-fast -p kiln-workspace --test $t -- --show-output" >> windows-tests.txt
+            cargo test --locked --no-fail-fast -p kiln-workspace --test "$t" -- --show-output >> windows-tests.txt 2>&1
+            rc=$?
+            echo "==== $t: exit status $rc" >> windows-tests.txt
+            summary="$summary $t=$rc"
+          done
+          awk '{ gsub(/\033\[[0-9;]*[A-Za-z]/, "") } /^(==== |test |test result:|---- |thread |error|MEASURED:)/' windows-tests.txt
+          echo "WINDOWS TESTS: exit status per target:$summary (reported, not required)"
+          exit 0
+
       - name: Full test output (gate failed)
         if: failure() && steps.gate.outcome == 'failure'
         run: |
           set +e
           cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
           rc=$?
-          grep -E -A1 "^(test result:|thread '.*panicked at|---- .* stdout ----)" test-output.txt | head -200
+          # T-072: no line cap. Printed (colour codes removed): each failing test's `---- <name> stdout ----`
+          # block with the 20 lines after it; a binary that aborted with its `Running` line and the abort
+          # lines; every `error: could not compile`, `error[` and `error: test failed` line and the list
+          # of failed targets; the `test result:` line of every binary.
+          awk '
+            { gsub(/\033\[[0-9;]*[A-Za-z]/, "") }
+            /^ +Running |^   Doc-tests / { run = $0; shown = 0; n = 0; tl = 0; next }
+            /^---- .* stdout ----$/ { if (!shown) { print run; shown = 1 } print; n = 20; tl = 0; next }
+            n > 0 { print; n--; next }
+            /^test result:/ { print; next }
+            /^error(\[|: could not compile|: test failed|: [0-9]+ targets? failed)/ { print; tl = ($0 ~ /targets? failed/); next }
+            tl && /^    `/ { print; next }
+            /has overflowed its stack|^fatal runtime error|^Caused by:|process didn.t exit successfully/ {
+              if (!shown) { print run; shown = 1 } print; next
+            }
+          ' test-output.txt
           echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
           exit 0
 
@@ -232,6 +317,8 @@ jobs:
             core-crates.txt
             test-output.txt
             workspace-tests.txt
+            test-list.txt
+            windows-tests.txt
           if-no-files-found: warn
           retention-days: 30
 
@@ -279,7 +366,7 @@ jobs:
           : > core-crates.txt
           summary=""
           for p in kiln-text kiln-syntax kiln-search xtask; do
-            echo "==== cargo test --locked -p $p" >> core-crates.txt
+            echo "==== cargo test --locked --no-fail-fast -p $p" >> core-crates.txt
             cargo test --locked --no-fail-fast -p "$p" >> core-crates.txt 2>&1
             rc=$?
             echo "==== $p: exit status $rc" >> core-crates.txt
@@ -289,13 +376,42 @@ jobs:
           echo "CORE CRATES: exit status per package:$summary (reported, not required)"
           exit 0
 
+      - name: Test list
+        if: always()
+        # T-072 (ruling Q-3 A1, D-254): every test name per test binary, on every run. It reuses the
+        # binaries the gate's `test` step built and runs no test; the verdicts are the gate's. The log
+        # prints each binary's `Running` / `Doc-tests` line and every `error` line (colour codes
+        # removed), then the exit status, which is recorded, not used.
+        run: |
+          set +e
+          cargo test --workspace --locked --no-fail-fast -- --list > test-list.txt 2>&1
+          rc=$?
+          awk '{ gsub(/\033\[[0-9;]*[A-Za-z]/, "") } /^( +Running |   Doc-tests |error)/' test-list.txt
+          echo "TEST LIST: exit status $rc (recorded; the gate step decides the colour)"
+          exit 0
+
       - name: Full test output (gate failed)
         if: failure() && steps.gate.outcome == 'failure'
         run: |
           set +e
           cargo test --workspace --locked --no-fail-fast > test-output.txt 2>&1
           rc=$?
-          grep -E -A1 "^(test result:|thread '.*panicked at|---- .* stdout ----)" test-output.txt | head -200
+          # T-072: no line cap. Printed (colour codes removed): each failing test's `---- <name> stdout ----`
+          # block with the 20 lines after it; a binary that aborted with its `Running` line and the abort
+          # lines; every `error: could not compile`, `error[` and `error: test failed` line and the list
+          # of failed targets; the `test result:` line of every binary.
+          awk '
+            { gsub(/\033\[[0-9;]*[A-Za-z]/, "") }
+            /^ +Running |^   Doc-tests / { run = $0; shown = 0; n = 0; tl = 0; next }
+            /^---- .* stdout ----$/ { if (!shown) { print run; shown = 1 } print; n = 20; tl = 0; next }
+            n > 0 { print; n--; next }
+            /^test result:/ { print; next }
+            /^error(\[|: could not compile|: test failed|: [0-9]+ targets? failed)/ { print; tl = ($0 ~ /targets? failed/); next }
+            tl && /^    `/ { print; next }
+            /has overflowed its stack|^fatal runtime error|^Caused by:|process didn.t exit successfully/ {
+              if (!shown) { print run; shown = 1 } print; next
+            }
+          ' test-output.txt
           echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
           exit 0
 
@@ -318,6 +434,7 @@ jobs:
             gate-report.json
             core-crates.txt
             test-output.txt
+            test-list.txt
           if-no-files-found: warn
           retention-days: 30
 
