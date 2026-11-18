@@ -606,6 +606,49 @@ renamed to carry the new bound (it is not on main yet). The test author states i
   Gate and `cargo test -p xtask` re-run after this edit (results in the next line). CI expectation for round 2 unchanged.
 - 2026-11-18 · R-359 · after D-258's edit: `cargo test --locked --no-fail-fast -p xtask` 25 binaries, 311 passed, 0
   failed; `cargo xtask ci` attempt 3 PASS (835.8 s; test 1171 passed, 0 failed, 0 ignored in 137 suites).
+- 2026-11-18 · R-371 · rework after review round 1 (`reviews/T-072-r1.md`). Rulings u1 and u4 (D-260) accepted;
+  u2, u3 are the test author's. **u1** (`aace8eb`, all three jobs, scripts byte-identical): the block rule now
+  comes before the heading rule; while a block is open every line is printed and counts towards its 20 lines, a
+  `Running`/`Doc-tests`-shaped line included (it then becomes the current heading, marked shown, because it was just
+  printed: a real next binary's heading that falls in a short block's window is not lost and not printed twice); a
+  heading starts a binary only outside a block. The `---- <name> stdout ----` rule stays first, so each failing test
+  still gets its own 20 lines. The other rules: `test result:`, `error[`/`could not compile`/`test failed` and the
+  abort lines inside a block are printed as block lines (so still printed); the "N targets failed" flag is also set
+  inside a block, so its target list after the block is printed. Re-run here (mawk 1.3.4): real cargo output of a
+  scratch crate, with `CARGO_TERM_COLOR=always` and `never` (logs equal but for test order and timings): a failing
+  unit test, a stack-overflow abort, a 40-line block (header + 20), a block quoting `     Running …` and `   Doc-tests
+  …` lines followed by `AFTER-RUNNING line 4/5` (all printed in the block, no false heading), short blocks whose
+  window reaches the next binary's `Running` line (printed once, in place), a failing doc-test, the targets list; a
+  compile error (`error[E0308]`, `could not compile`); and the reviewer's replay of round 1's block: `TEST LIST: exit
+  status 101 (recorded; …)` now printed, `Doc-tests kiln_a` stays inside the first block. Every step exit 0.
+  **u4** (`aace8eb`, `5953be1`): "the first run with `gate-macos` green" → "a run with `gate-macos` green, as was the
+  earlier run 44253737976" (no claim of which was first: I did not check every earlier run); the probe sentence moved
+  under T-070's run 43752760283 (`tasks/ci-runs/T-070-round-1.md`, window-probe (macos-15): `PROBE: exit status 0`),
+  and a sentence that this run's record does not show the probe's output; the Linux `df` cell gives only the line
+  ("the record gives no header"); the column says "the record's lines, spaces collapsed", not "as printed".
+  **Table source kept** (run 44297266071): run 44315616697 (round 2, joined head) is complete and green on Linux and
+  macOS too and gives the Linux header, but its `window-probe (macos-15)` was cancelled with no runner, so that row
+  would have no figure; 44297266071 has a conclusion for all six jobs. No figure changed for that reason.
+  **Round 2 against my expectation** (`tasks/ci-runs/T-072-round-2.md`): `gate-linux` green, 1171 passed, 0 failed,
+  137 suites (expected about 1171): met; list 136 binaries (128 + 8), 1,170 names, `TEST LIST: exit status 0` + remark:
+  met; full output skipped, artefact three files: met; `xtask` exit 0, `acceptance_t072` 17/0, `guard_t072` 7/0: met.
+  `gate-macos` green (26 min 09 s), list 136 binaries, 1,153 names, exit 0 + remark, full output skipped: met.
+  `gate-windows` red at clippy/scorecard/test: met; list exit 101, 0/0: met; the 14 status lines as round 1: met;
+  full output `error[`/`could not compile`, `TEST OUTPUT: exit status 101`: met; `acceptance_t072` 17/0, `guard_t072`
+  7/0: met; six files: met. Window jobs "as in round 1": not met for `window-probe (macos-15)` (cancelled, no runner
+  assigned; GitHub's side, nothing of this task runs before a runner).
+  Gate: `cargo xtask ci` attempt 4 PASS (1000.4 s; test 1171 passed, 0 failed, 137 suites). `cargo test --locked
+  --no-fail-fast -p xtask`: 25 binaries, 311 passed, 0 failed. D-235: main (`f216d01`) exported, plus this branch's
+  diff from `b96ee55` without the ledger paths: `no-skip`, `hygiene` (700 files), `scorecard --check`, `layers`,
+  `ui-commands`, `schema` PASS; that tree differs from this worktree in ledger files only. Not run: the test
+  author's u2/u3 tests (not seen until the join); BSD `awk` (the reviewer ran four `awk`s on round 1's printer,
+  `reviews/T-072-r1.md` item 2; the new rules use the same constructs).
+- **CI expectation for round 3** (this head; the test author's new u2/u3 tests join later, their counts are not
+  known here): as round 2. `gate-linux` and `gate-macos` green, list 136 binaries (more if the join adds test files),
+  `TEST LIST: exit status 0` + remark, full output skipped; `gate-windows` red at clippy/scorecard/test, list 0/0 exit
+  101, the same 14 status lines, full output compile errors only (the new printer rules are not reached by a
+  compile-error-only output); `xtask` exit 0 on all three. The changed printer is seen on the runners only if a gate
+  is red with failing tests (AC-8's negative candidate).
 <!-- end implementer log -->
 ### test-author
 - 2026-11-18 · R-352 · tests from the spec alone (worktree base `b96ee55`; spec read on main, with the rulings Q-3 A1, Q-4 A, Q-5 A, Q-6 A of D-254 and the note added 11:20Z: accepted, AC-9 checks `-- --show-output`) · files `xtask/tests/acceptance_t072.rs` (17 tests), `xtask/tests/guard_t072.rs` (7 tests); YAML reader and `if:` evaluator copied from `acceptance_t070.rs`; step scripts run in `bash --noprofile --norc -eo pipefail` (GitHub's form) with fakes first on `PATH`, Git Bash on Windows or a failure naming why; no platform cfg, no `#[ignore]`.
