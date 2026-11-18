@@ -63,18 +63,27 @@ them, as now, to `rejected` / `invalid_path`. The precedence is the existing one
 
 This covers stream names (`f.txt:s`, `f.txt::$DATA`, `f.txt:s:$DATA`), drive-relative segments anywhere (`C:x`, `C:`,
 `x/C:y`) and the characters Win32 does not allow in a name. The `PathError.reason` text is not specified, and no test
-pins it.
+pins it. `RelPath` is shared by the disk and the in-memory file systems, so on Windows `--memory` and `--memory-seed`
+(`apps/kiln-cli/src/main.rs:256`) refuse the same paths (corrected (spec check): stated). `--root` is a host path, not a
+`RelPath`, and is not affected (`C:\proj` stays a valid root).
 
 Reason for this set: it is the set of characters other than `\`, `/` and NUL that Win32 does not allow in a file name.
 The rule rests on Microsoft's naming rules (read, not run). Measured samples: PROBE I1 gave os error 123 for `<`, `?`,
-`*`, `|`, `"` and U+0001, and every `:` form was refused by the file system (`f.txt:s` write) or reached a stream or
-another drive (I1-I3). So no file a Windows project can hold through Win32 becomes unreachable; `>` and U+0002 to U+001F
-were not sampled.
+`*`, `|`, `"` and U+0001; every `:` write failed (`f.txt:s`, `f.txt:s:$DATA`, `f.txt::$DATA`: os error 123; `C:x`, `C:`,
+`D:x`: `OutsideRoot`; `x/C:y`: `NotFound`, because `x` does not exist), and the reads reached a stream (`f.txt::$DATA`
+`Ok([102])`; `f.txt:s` `NotFound`) or another drive (`OutsideRoot`) (I1-I3; corrected (spec check): the draft said every
+`:` form reached a stream or another drive, which `x/C:y` did not). So no file a Windows project can hold through Win32
+becomes unreachable; `>` and U+0002 to U+001F were not sampled at the file system. (`RelPath::new` at base has no
+platform code, so that it accepts them on Windows at base is shown by the Linux run: the sketch's unit test passes on
+Linux asserting acceptance.)
 ### (2) Not refused (stated)
 Reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`…`COM9`, `COM¹`…, `LPT1`…, `CONIN$`, with or without an
 extension: `aux.rs`, `con.txt`) and names ending in a dot or a space (`a.`, `b `, `c. .`) stay valid. Under the `\\?\`
 paths Kiln uses they are ordinary files of the project, read and written like any other (PROBE I1-I3 `Ok` for
-each, I5/I6 listed).
+each name sampled, I5/I6 listed). Sampled at base: `CON`, `con.txt`, `NUL`, `nul.rs`, `COM1`, `LPT1.txt`, `AUX`, `PRN`,
+`CONIN$`, `COM¹`, `a.`, `b `, `c. .`, through `write_atomic`, `read`, `check_location`, `list_dir`; not sampled:
+`aux.rs` itself, `COM2`…`COM9`, `LPT2`…, and a `Document` save (corrected (spec check); `aux.rs` and the save are
+shown by `guard_t095` in the CI round).
 - A project holding `aux.rs` (common in Rust repositories made on Unix) can be opened, saved and listed by Kiln on Windows.
 - Other Windows programs may not open such files: a non-`\\?\` write to `a.` made a file `a` (PROBE I11, I12).
 - Kiln creates such a file when a request saves a new one under that name. This is stated, not refused (Q-2).
@@ -103,7 +112,8 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
   `cfg!(windows)`; fixtures below `CARGO_TARGET_TMPDIR`, except the short-name case. It checks:
   - The refusal set of (1) as an equality over U+0000 to U+00FF except `/` (the separator), one at a time inside a name
     `a<c>b`: refused exactly for the set of (1) plus `\` and NUL on Windows, and for `\` and NUL alone on Linux and
-    macOS.
+    macOS; and the look-alikes U+FF1A, U+2236, U+FF1F, U+FF0A, U+FF1C, U+FF02 accepted on every platform (corrected
+    (spec check): the variant outside the list beyond U+00FF).
   - Every stream and drive form of (1) through `Document` open and save: `Err` before any file changes, the directory
     snapshot unchanged.
   - (2) through `DiskFs`: write, read, list and save of `aux.rs`, `CON`, `a.`, `b `.
@@ -308,6 +318,75 @@ edits the same documents, names run 44358453526 (all 15 guards; `tasks/ci-runs/T
   spec check.
 - **5: T-093 first.** `depends_on` T-074 and T-093; this task's sentences are re-checked beside T-093's when it
   has merged. T-092 runs beside both (no shared path).
+
+### Spec check (fresh planner)
+Read against main `76ccb9f` (ledger-only since `4eb349d` and `53be751`: `git diff --stat 53be751 76ccb9f` touches only
+`docs/decisions.md` and five task files; `path.rs`, `disk.rs`, the three documents unchanged), the branches `task/T-093`
+(`234f98c`) and `task/T-092` (`cbe3d21`, `79d5b76` on `-tests`), and D-235, D-249, D-256, D-266, D-267, D-270, D-272,
+D-273. Runs in a clone `/home/user/kiln-check-T095` of the primary (at `53be751`), uncommitted, `target/` deleted at the
+end. The sketch there: Interface (1) as one `#[cfg(windows)]` statement after the backslash check in `RelPath::new`
+(`path.contains(|c| matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*' | '\u{1}'..='\u{1f}'))`), the unit test of (5),
+the Pinned (i) sentences in the three documents, and two sketch test files `acceptance_t095.rs` (three document tests)
+and `guard_t095.rs` (the character equality). **Verdict: ready after rulings** — one blocker (Q-A), 15 corrections made
+in the text above (listed under each point, marked "corrected (spec check)"), seven questions.
+
+**1. The refusal itself.** VERIFIED unless marked.
+- *One gate.* Every path from outside becomes a `RelPath` through `RelPath::new` only (`RelPath(String)` is private;
+  the other constructors are `root_placeholder()` = `(root)` and `parent()`, a prefix of a valid path:
+  `path.rs:56,66-78`). The places that make one from outside input (`grep -rn "RelPath::new" crates apps`, product code):
+  `doc.open` (`kiln-commands/src/doc.rs:235`) and `project.tree` (`kiln-commands/src/project.rs:230`) — which carry
+  every control-protocol, `kiln-cli exec`/`run` request and, through `doc.open`, the desktop app's start paths and Path
+  box (`apps/kiln/src/main.rs` and `kiln-ui` hold no `RelPath`; `kiln-ui/src/lib.rs:89`); the `--memory-seed` manifest
+  (`apps/kiln-cli/src/main.rs:256`); listings (`disk.rs:626-631`) and the project tree (`kiln-workspace/src/project.rs:243-259`,
+  `child` of a listed name). The two file systems share `RelPath`, so on Windows `--memory`/`--memory-seed` refuse the
+  same paths (corrected (spec check): stated in Interface (1)).
+- *Listings.* A name read back from `read_dir` that fails `RelPath::new` is skipped and counted
+  (`disk.rs:626-631`), never an error: a listing of a directory holding such a name succeeds without it. Interface (4)
+  says so. Whether NTFS can hold such a name at all: unchecked (Interface (4)). Its example "WSL's own names" is weak:
+  WSL is commonly said to store such characters as private-use code points, which Kiln would list (INFERRED, not
+  measured) — the example is not in any document sentence, so no correction; the clause stays "unchecked".
+- *Link targets.* On Windows no target is read: every reparse point on the walk answers `OutsideRoot` before
+  `read_link` (`disk.rs:337-340`, before `:350`). On Unix target components become walk steps, not `RelPath`s, and are
+  unchanged. Nothing to state.
+- *`--root`.* A host path, never a `RelPath` (`apps/kiln-cli/src/main.rs:122,412`; `DiskFs::new(&Path)`,
+  `disk.rs:210`): `C:\proj` stays a valid root. `paths.md:3-4` already defines "path" as a request's `path`, so the new
+  paragraph cannot be read as covering `--root`. Two implementers agree (the rule is in `RelPath::new` only).
+- *`Path::join` before `RelPath`.* None: the walk joins one segment at a time (`disk.rs:332` `dir.join(&name)`, the
+  segments of `RelPath::segments`), and `dir` is the verbatim canonical root. At base `C:x` makes `dir.join` return
+  `C:x` (PROBE I10) and `fs::symlink_metadata("C:x")` is then called outside the root (`disk.rs:333`; the effect, a
+  lookup on another drive, is INFERRED from the code, not measured) before `inside` refuses it — the Goal's "the file
+  system outside was consulted" is right. After the rule a segment holds no `:`, `\` or `/`; with no `:` and no
+  separator, `std` on Windows parses no prefix or root in a component (INFERRED from `std`'s documented prefix forms,
+  `\\?\`, `\\.\`, `\\server\share`, `X:`, all needing `\`/`/` or `:`), so every join appends.
+- *Does refusing `:` refuse something a user needs?* Not a file: Win32 cannot make a name with `:` (PROBE I1: every
+  write of a `:` name failed or left the root). A request a Windows user may type — an absolute `C:\x\a.rs` or
+  `C:/x/a.rs` — changes kind: base `outside_root` (`C:x`, I1-I3) or `invalid_path` (`\`), after `invalid_path` for
+  both. Precedence says lexical first, so this is the specified answer; no test on main asserts `outside_root` for a drive
+  form (`grep -rnP '"[A-Za-z]:[^\\"]' crates apps --include=*.rs`: only message-like names, see Q-A).
+- *Separators and segments.* `a\b` is refused as one invalid path on every platform (`path.rs:42-44`; unchanged, the
+  spec says "as `\` and NUL are now"); `/` is the only separator. `/`, `/a`, `a/`, `a//b`, `.`, `..`, `a/.`, `a/../b`,
+  `""`, `a\0b` are refused today (`rejects_invalid_paths`, `path.rs:110-118`, in the 59 passing on Linux). The new
+  statement adds nothing for them. Order inside the lexical check is unobservable (one kind; reason text unpinned).
+- *Unicode look-alikes* (U+FF1A fullwidth colon, U+2236 ratio, U+FF1F, U+FF0A, U+FF1C, U+FF02): accepted by the sketch on
+  every platform (the `guard_t095` sketch's equality, below). Rust's `std` calls the wide (UTF-16) Windows API, so no
+  best-fit mapping turns them into `:` or `?` (INFERRED). The spec's equality covered U+0000-U+00FF only, so an
+  implementer refusing look-alikes (for example by a Unicode category) would pass it: corrected (spec check): the
+  guard's equality adds these six as accepted everywhere.
+- *Two implementers.* With the exact set of (1), the equality over U+0000-U+00FF plus the look-alikes, and "no
+  platform cfg on the test fn", two implementers build the same statement. Unspecified and harmless: where in the
+  lexical sequence it sits, the reason text.
+- *What the rule breaks elsewhere* (D-249; **blocker, Q-A**). With the sketch's statement under `#[cfg(all())]` in
+  place of `#[cfg(windows)]` (so Linux shows what Windows will do), `cargo test --workspace --locked --no-fail-fast`:
+  140 result lines, failures only in `path::tests::windows_name_characters` (expected) and in four other targets:
+  `kiln-cli` bin `tests::manifest_refusals_name_the_problem` (`main.rs:1216`, a manifest path `b,{"`),
+  `kiln-commands --test acceptance_t032` (`lower_layer_errors_map_to_pinned_reasons`, `refusals_carry_reasons_at_their_sources`:
+  fixture `missing: not found`, request `x: is a directory, not a file`), `--test acceptance_t032_json`
+  (`refusals_serialize_their_reason`) and `--test guard_t032` (`refusal_messages_and_codes_are_unchanged`). All four exit
+  0 on Windows at base (`tasks/ci-runs/T-092-probe-1.md:49,50,57` and `:124` `kiln-cli:--bins=0`). None is in this
+  task's, T-092's, T-098's, T-100's or T-099's `touches`. The spec's S-4 grep (`RelPath::new("…[:<>|?*]…")`) missed
+  them because the names reach `RelPath::new` through helpers (`files_ctx`, `p(…)`, JSON params). They stay hidden in
+  CI until T-098 (cargo stops at build errors), then T-099 would meet them as failures no task caused.
+  `kiln-control`'s `"x: not found"` (`acceptance_t032_control.rs:42`) is formatting only and passed.
 
 ## Log
 ### director
