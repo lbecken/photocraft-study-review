@@ -757,6 +757,16 @@ notes (point 2; the latter pending Q-B).
     statements keep mode and inode as before; paired `#[cfg(windows)]` blocks check the read-only attribute unchanged
     (new helper `readonly`, Windows only, one definition). Linux: 15 passed (as base); Windows stand-in clippy
     `--lib --test acceptance_t002 -D warnings` → `Finished`.
+  - W2-W11 (`acceptance_t002_r2.rs`): `support` twins (`#[cfg(unix)]`/`#[cfg(windows)]`, real body each):
+    `restore_perms` (Windows clears the read-only attribute), `set_mode` (Windows: no write bit sets read-only),
+    `mode_of` and the type `Mode` (bits on Unix, read-only attribute on Windows), `make_link` (Unix: `symlink` with the
+    same target string as before; Windows: target by `PathBuf::push`, `symlink_dir` if it resolves to a directory, else
+    `symlink_file`, Pinned (d)); `Entry::File`'s `ino` is `#[cfg(unix)]` (ruling 2: the only difference of the
+    snapshots). `mode`, `bits_do_not_stop_writes` and the `unix` import: `#[cfg(unix)]`, used only by W10/W11. W5's
+    Windows branch (`cfg!(windows)`): open and `write_atomic` through `work/l.txt` are `OutsideRoot`, snapshot unchanged.
+    W10, W11: `#[cfg(unix)]`, entries added now (registry kept in step with each file so `no-skip` stays green). Linux:
+    fixtures and assertions the same (same link targets, same modes, same snapshot fields); 10 passed as base. Stand-in
+    clippy Windows and macOS `-D warnings`: `Finished`. main's `no-skip`: PASS, 37 registered (10 pending).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
