@@ -1694,3 +1694,154 @@ fn ac1_m13_no_registry_file_lists_the_platform_tests_as_unlisted() {
         "no registry file",
     );
 }
+
+/// A file the s9 case creates with the quote: (path, tracked).
+type DocFile = Option<(&'static str, bool)>;
+
+/// s9: `doc` is exactly a repository-relative path, with `/`, of a tracked `.md` file under
+/// `docs/`; anything else is `platform-sentence` (the quote occurs in each file named).
+#[test]
+fn ac1_s9_doc_must_be_a_tracked_md_file_under_docs() {
+    // (case, doc as the registry names it, a file to create with the quote: (path, tracked))
+    let toml_str = |p: &str| p.replace('\\', "\\\\");
+    let cases: Vec<(&str, String, DocFile)> = vec![
+        ("the registry itself", REGISTRY.to_owned(), None),
+        ("the test file", PLAT.to_owned(), None),
+        (
+            "a tracked .md outside docs/",
+            "notes/toy-protocol.md".to_owned(),
+            Some(("notes/toy-protocol.md", true)),
+        ),
+        (
+            "an untracked .md under docs/",
+            "docs/untracked.md".to_owned(),
+            Some(("docs/untracked.md", false)),
+        ),
+        (
+            "a tracked non-.md file under docs/",
+            "docs/toy-protocol.txt".to_owned(),
+            Some(("docs/toy-protocol.txt", true)),
+        ),
+        (
+            "a `\\`-separated path",
+            "docs\\toy-protocol.md".to_owned(),
+            None,
+        ),
+        ("an absolute path", String::new(), None),
+    ];
+    for (i, (case, doc, file)) in cases.into_iter().enumerate() {
+        let t = Toy::no_skip(&format!("s9-doc-{i}"));
+        t.write(PLAT, PLAT_RS);
+        let doc = if doc.is_empty() {
+            t.dir.join(DOC).to_string_lossy().into_owned()
+        } else {
+            doc
+        };
+        // The quote occurs in the named file: the registry and the test file carry it in a
+        // comment, the others in their text.
+        t.write(PLAT, &format!("{PLAT_RS}// {QUOTE}\n"));
+        let r = reg(&[entry_doc(
+            PLAT,
+            "unix_only",
+            "unix",
+            &toml_str(&doc),
+            quote,
+            NONE,
+        )]);
+        t.write(REGISTRY, &format!("{}# {QUOTE}\n", r.text));
+        let o = match file {
+            Some((path, true)) => {
+                t.write(path, DOC_TEXT);
+                t.run_no_skip()
+            }
+            Some((path, false)) => {
+                t.commit(TODAY);
+                t.write(path, DOC_TEXT);
+                let o = t.xtask(&["no-skip", "--today", TODAY], 120);
+                precondition_self_test(&o);
+                o
+            }
+            None => t.run_no_skip(),
+        };
+        assert_one(
+            &o,
+            "platform-sentence",
+            &[entry_place(&r, 0)],
+            &fi(PLAT, "unix_only"),
+            &format!("doc = {case}"),
+        );
+    }
+    // Control: a tracked .md under docs/ with the quote.
+    let (t, _) = plat_toy("s9-doc-ok", &[entry(PLAT, "unix_only", "unix", NONE)]);
+    assert_pass(&t.run_no_skip(), "doc = a tracked .md under docs/");
+}
+
+/// s10: off Linux the scorecard step's output names the platform and says the page was not
+/// compared, whether it passes or reports problems, that line first. On Linux (Interface (3)):
+/// the page is computed and compared.
+#[test]
+fn ac4_s10_off_linux_the_first_line_names_the_platform_and_page_not_compared() {
+    let t = scorecard_toy("s10-scorecard", &sc_entries("windows"));
+    let h = host();
+    let first = |o: &Out| {
+        o.text
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+    };
+    let with_problem = SC_ITEM.replace(
+        "\"toy_a::t::mac_only\"]",
+        "\"toy_a::t::mac_only\", \"toy_a::t::nope\"]",
+    );
+    assert_ne!(with_problem, SC_ITEM);
+    if h == "linux" {
+        let o = t.xtask(&["scorecard"], 600);
+        assert_eq!(o.code, Some(0), "linux: the page is computed:\n{}", o.text);
+        let o = t.xtask(&["scorecard", "--check"], 600);
+        assert_eq!(
+            o.code,
+            Some(0),
+            "linux: the page compares equal:\n{}",
+            o.text
+        );
+        t.write("docs/scorecard.md", STALE);
+        let o = t.xtask(&["scorecard", "--check"], 600);
+        assert_eq!(
+            o.code,
+            Some(1),
+            "linux: a stale page is a problem:\n{}",
+            o.text
+        );
+    } else {
+        let o = t.xtask(&["scorecard", "--check"], 600);
+        assert_eq!(o.code, Some(0), "{h}: passes:\n{}", o.text);
+        let l = first(&o);
+        assert!(
+            l.contains(h) && l.contains("not compared"),
+            "{h}, passing: the first line names the platform and says the page was not compared:\n{}",
+            o.text
+        );
+        t.write("scorecard/items/toy.plat.toml", &with_problem);
+        let o = t.xtask(&["scorecard", "--check"], 600);
+        assert_eq!(
+            o.code,
+            Some(1),
+            "{h}: a listed test that exists nowhere:\n{}",
+            o.text
+        );
+        let l = first(&o);
+        assert!(
+            l.contains(h) && l.contains("not compared"),
+            "{h}, with problems: the first line names the platform and says the page was not compared:\n{}",
+            o.text
+        );
+        assert!(
+            o.text
+                .lines()
+                .any(|l| l.contains("toy_a::t::nope") && l.contains("does not exist")),
+            "{h}: the problem names toy_a::t::nope:\n{}",
+            o.text
+        );
+    }
+}
