@@ -813,6 +813,42 @@ listing kind, the root cases, the registry plan and the gate-tool side (D-235) c
 - Token use: within my share (about 350,000); not passed. Not run: anything on Windows; `guard_t074.rs`,
   `acceptance_t074.rs` (the test author's, not seen) · next: director (CI round on a head rebased on a main holding
   T-072). CI-REQUEST: 2d96a2e7db5353e9b731435c9b5d70c5ba36da49
+- 2026-11-18 · R-362 · rework after `reviews/T-074-r1.md` (request-changes; findings 1-3) and the early CI look (run
+  44307677646, `tasks/ci-runs/T-074-early-1.md`, on a merge of `8681304` with T-072's branch). Ruling r3 (D-257)
+  accepted; r1, r2 are the test author's; M9 noted (std already adds the reparse flag for `create_new`).
+- Record against my committed expectation, point by point: T-073's step lib `running 43 tests`, `43 passed; 0 failed`
+  (expected 43/0: **matches**); each of the seven counterparts `ok` by name (matches); `link_at_temp_name…` `ok`, but
+  which temporary name each case used is not printed (the assertion on it passed, so a `.kiln-tmp-2`, b-d `.kiln-tmp-1`
+  held: shown only by the test passing); the root cases incl. the junction at a removed root's name and the directory
+  link as `--root` `ok` (matches, and `guard_t074` `awa4_*` show them with `MEASURED:` lines); no fixture failure, so
+  links, junctions and the junction loop could be made where `std::env::temp_dir()` is (the record does not print
+  the volume, so "on `C:`" stays unshown; F-12 needs no fixture move). Linux and macOS: Linux lib in that run passed
+  (the only Linux failures are xtask's, below); macOS: job unfinished, not shown.
+- Settled ("unchecked until CI round 1"): the temporary-name rule (Pinned (b2)) — shown as behaviour (save `Ok`
+  through the next name, link and target unchanged, for a junction, a file link to an outside file, a dangling file
+  link, alone and as the pair: `guard_t074::awa3_*`, the counterpart #2), not as mechanism: M9 shows the explicit flag
+  changes nothing observable, so the docs now say std adds it too and claim only the behaviour; a dangling junction
+  (r2 fixture (e)) is not in this record (the test author's new test): unchecked until a record shows it. Directory
+  link as `--root`: shown (`awa4_root_given_through_a_directory_link_and_retargeted`, all calls). Junction at the
+  name of a removed root: shown (`awa4_root_removed_while_held`, `root_removed_on_every_platform`); no document
+  sentence rests on it (Interface (4)). Links and junction loops in the lib's fixtures: made and passing
+  (`check_location_outside_on_every_platform`); the volume unshown.
+- Sentences changed: `paths.md` removed-root bullet narrowed (r3) to the five calls named, citing 44290286460 for
+  `check_location`/`list_dir`/`read` and 44307677646 + `awa4_root_removed_while_held` for all five and the save;
+  `..` bullet and the `--root` link bullet each cite 44307677646 and their `awa4_*` test; the Windows walk paragraph
+  cites the four `awa1_*` tests in 44307677646 (other reparse points: unchecked, kept); `project.md` cites the
+  `awa1_*` tests (they assert the `Symlink` kind and `project::tree`); `control-protocol.md` temporary-name sentence
+  cites `awa3_*` and counterpart #2 (the save bullet's first sentence untouched); `disk.rs` module and item docs on
+  the flag reworded (std adds it; behaviour as shown). Registry quotes untouched: `cargo xtask no-skip` PASS `35 …
+  (10 pending)`; `cargo test --locked -p xtask` 289 passed, 0 failed; `acceptance_t008_cli` 9 passed.
+- Still unchecked: reparse points other than links and junctions (listing kind M11, refusal, cloud/dedup files); the
+  dangling junction at a temporary name; the fixture volume; macOS in that run.
+- `queue::tests::main_xtask_is_rebuilt_from_base_on_every_run` (Linux, `queue.rs:2038`, `NotFound`): nothing in my
+  change bears on it — my diff touches no `xtask/src` file, no toolchain or manifest, only `xtask/platform-tests.toml`
+  (read by `no-skip`, not by the queue); the test passes here (`cargo test -p xtask`, above).
+- Gate attempt 2 (on `22eea4e`): `GATE PASSED` (test `1169 passed, 0 failed, 0 ignored in 137 suites`; no-skip `35 …
+  (10 pending)`). Main's tool (`git archive main` `9021d48`, built in scratch): no-skip, hygiene, scorecard --check,
+  layers, ui-commands, schema all PASS. Scratch `target/` deleted · next: director (merge r1/r2 tests, formal CI round)
 <!-- end implementer log -->
 ### test author
 - 2026-11-18 · R-356 · tests from the spec alone (main's task file read in full, incl. the fresh spec check and D-256; the
