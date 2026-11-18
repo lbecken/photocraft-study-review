@@ -17,6 +17,7 @@ touches:                # one role per path (D-153)
   - xtask/tests/acceptance_t070.rs           # GATE PATH: implementer, only with Q-1 A: the expectation of that step
   - crates/kiln-workspace/tests/acceptance_t073.rs   # test author: Windows behaviour (Interface (4))
   - crates/kiln-workspace/tests/guard_t073.rs        # test author: the runtime tests of Interface (4), which pass on Unix base (ruling y1, D-247)
+  - xtask/tests/acceptance_t079.rs                  # GATE PATH: test author: its two registry tests go from "exactly T-079's 20" to "T-079's 20 are present, each exactly" (ruling z1, D-249)
 budget_tokens: 1100000  # high (v1.5); estimate about 1,050,000 (an Extend row is likely)
 iteration: 2
 found_by: planner       # ADR-0009 (R-255); re-specified R-336 (v1.5 §5.7)
@@ -208,6 +209,25 @@ high → independent test author.
   sentence on a held root.
 - Not tested and noted for T-074: removing (not renaming) a held root; and, if Windows refuses both renames, the
   identity check has no Windows test in this task.
+
+### Rulings on the implementer's block (director, D-249; told to both builders)
+- **z1 (the block: main's `acceptance_t079` fails on any tree that adds a registry entry).** T-079's two tests
+  pinned the whole registry (`exactly the twenty`), which was right for T-079's diff and makes every later task
+  that adds an entry fail main's tests. They change, in this task, by the test author
+  (`xtask/tests/acceptance_t079.rs` joins `touches`): **each of T-079's 20 (file, item) pairs has exactly one
+  entry, with exactly T-079's fields; the pending entries among those 20 are exactly T-079's 8 with their task and
+  expiry; entries for other (file, item) pairs are not these tests' matter.** What they still reject: one of the
+  20 missing, changed (platforms, counterpart, task, expiry) or entered twice. What guards the rest stays where it
+  is: `no-skip` checks every entry against a cfg'd item, and the base-names guard keeps every Linux test.
+  The implementer's gate attempt 1 (1108 passed, 2 failed: exactly these two tests) counts as its gate evidence;
+  the whole gate runs at the join on the merged head.
+- **z2 (the implementer's second question).** Confirmed: the save bullet of `docs/control-protocol.md` keeps
+  "(on Unix)" word for word (`apps/kiln-cli/tests/acceptance_t008_cli.rs` pins it) and the Windows sentence is
+  appended after it.
+- **z3 (the 15 pending entries).** They stay as written (`task = "T-092"`), by Interface (5). The reviewer says
+  for each whether its counterpart is T-092's (a Windows form of the same check), T-074's (the walk and
+  replaced-root cases) or `none` (a facility Windows lacks, such as mode bits); the director moves the task
+  names by a ruling after the review, and T-092 and T-074 are noted to carry them.
 
 ## Log
 ### director

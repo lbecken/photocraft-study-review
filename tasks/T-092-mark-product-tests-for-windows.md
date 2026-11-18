@@ -36,6 +36,14 @@ The four non-UTF-8 entries are `linux` with a reason that claims macOS only. On 
 unpaired surrogate (`reviews/T-079-r1.md`, finding 1): this task decides whether those tests get a Windows
 counterpart with such a name.
 
+## Note from T-073 (director, D-249, ruling z3)
+T-073 registers 15 tests of `crates/kiln-workspace/src/disk.rs`'s own test module as `unix` with
+`counterpart = "pending"`, `task = "T-092"`, expiring 2026-12-31 (modes, inodes, uid, Unix symlinks, FIFOs). This
+task writes their Windows counterparts or changes an entry to `none` with the reason; those about the walk and
+a replaced root may move to T-074 by a ruling after T-073's review. `xtask/platform-tests.toml` is in `touches`.
+Also: `xtask/tests/acceptance_t079.rs` checks T-079's 20 entries one by one; a task that changes one of those 20
+lists that file for its test author.
+
 ## Log
 ### director
 - 2026-11-18 filed as a draft (D-233).
