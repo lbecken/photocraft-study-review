@@ -84,11 +84,13 @@
 //!   identity is that handle's (volume serial number and file index); every call that re-checks
 //!   the root opens the directory the given path reaches now and goes on only if it is the same
 //!   file as the held one, otherwise `OutsideRoot`.
-//! - The save's temporary file is created exclusively (`create_new`) with no mode; the target's
-//!   `Permissions` (the read-only attribute) are copied as above, then it is renamed over the
-//!   target. The directory sync stays best effort as above: any failure to open or sync the
-//!   directory is ignored (unchecked on Windows, where opening a directory this way is expected
-//!   to fail).
+//! - The save's temporary file is created exclusively (`create_new`) with no mode. A read-only
+//!   target is refused before that (the open for writing fails), so the target's `Permissions`
+//!   copied as above are its whole attribute word (hidden, system, archive, …) without the
+//!   read-only bit; its access list is not copied: the new file has the one its directory gives.
+//!   Then it is renamed over the target. The directory sync stays best effort as above: any
+//!   failure to open or sync the directory is ignored (unchecked on Windows, where opening a
+//!   directory this way is expected to fail).
 //! - The walk below the root runs the code above unchanged; how links, junctions and other
 //!   reparse points, prefixes, reserved names, streams and case are treated is not decided here
 //!   (T-074).
@@ -119,8 +121,8 @@ pub struct DiskFs {
     /// kept as a symlink). Each call resolves it again ([`DiskFs::current_root`]) and goes on
     /// only if it still leads to the directory recorded at construction (ruling v8).
     given: PathBuf,
-    /// Device and inode of the root directory at construction: the root *is* this directory,
-    /// whatever later happens to the path that led to it.
+    /// Unix: device and inode of the root directory at construction: the root *is* this
+    /// directory, whatever later happens to the path that led to it (Windows: `root_handle`).
     #[cfg(unix)]
     root_id: (u64, u64),
     /// The root directory, held open (read-only, never read through) for as long as this
@@ -183,7 +185,8 @@ impl DiskFs {
     /// opened for reading (then it cannot be held open, so it is refused: `Io` with
     /// `PermissionDenied` for lack of permission, the open's own kind otherwise). Every
     /// `DiskFs` returned holds its root directory open for as long as it lives and takes the
-    /// root's identity (device, inode) from the directory it holds.
+    /// root's identity from the directory it holds: (device, inode) on Unix, the
+    /// `same_file::Handle` (volume serial number, file index) on Windows.
     ///
     /// The error cannot name a `RelPath` of the root (none is valid), and must not name the
     /// host path, so it uses the placeholder path `(root)`. The root is the directory `root`
@@ -233,7 +236,8 @@ impl DiskFs {
 
     /// The path at which the root directory is reached now: the root path as given resolved
     /// again (`fs::canonicalize`), which must still be the directory found at construction
-    /// (same device and inode; the held handle keeps that inode from being reused). If the
+    /// (Unix: same device and inode, and the held handle keeps that inode from being reused;
+    /// Windows: the same volume serial number and file index, [`is_held_root`]). If the
     /// root path, or a directory above it, has since been replaced (for example by a symlink
     /// to another directory), or no longer leads anywhere, every location is outside the
     /// root: `OutsideRoot`. If the given path still leads to the root directory through other
