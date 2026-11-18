@@ -1991,10 +1991,19 @@ mod tests {
     #[test]
     #[cfg(unix)] // runs a planted `#!/bin/sh` file as the built xtask (xtask/platform-tests.toml)
     fn main_xtask_is_rebuilt_from_base_on_every_run() {
-        // D-026 R1, with real cargo on a tiny workspace (no dependencies).
+        // D-026 R1, with real cargo on a tiny workspace (no dependencies). The tiny workspace
+        // carries this checkout's own `rust-toolchain.toml`, as the export of main does in the
+        // real queue, so its build uses the pinned toolchain, not the machine's default (T-096).
+        let toolchain_file = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("rust-toolchain.toml");
+        let pinned = std::fs::read_to_string(&toolchain_file)
+            .unwrap_or_else(|e| panic!("read this checkout's {}: {e}", toolchain_file.display()));
         let repo = portable_init(
             "q-rebuild",
             &[
+                ("rust-toolchain.toml", pinned.as_str()),
                 (
                     "Cargo.toml",
                     "[workspace]\nresolver = \"2\"\nmembers = [\"xtask\"]\n",
@@ -2035,7 +2044,16 @@ mod tests {
         // (newer mtime, so a freshness check would trust it) and edits the export.
         let fake = "#!/bin/sh\necho poisoned\n";
         let deps = bin.parent().unwrap().join("deps");
-        for e in std::fs::read_dir(&deps).unwrap() {
+        // The pinned toolchain's cargo puts member artefacts in `<profile>/deps`; a toolchain
+        // without that layout (cargo 1.100.0 has none, T-096) fails here, as `seed.rs` assumes it.
+        let entries = std::fs::read_dir(&deps).unwrap_or_else(|e| {
+            panic!(
+                "{} ({e}): the test assumes the pinned toolchain's target layout, \
+                 with member artefacts in target/debug/deps",
+                deps.display()
+            )
+        });
+        for e in entries {
             let p = e.unwrap().path();
             let n = p.file_name().unwrap().to_string_lossy().into_owned();
             if n.starts_with("xtask-") && !n.contains('.') {
