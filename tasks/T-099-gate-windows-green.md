@@ -5,7 +5,7 @@ tier: high              # provisional: gate paths (xtask/platform-tests.toml) an
 state: draft
 owner_role: planner
 scorecard_items: []
-depends_on: [T-098]     # after T-098 every target compiles on Windows, so the gate's test and scorecard steps run them all
+depends_on: [T-098, T-100]     # T-100 added with D-273; after T-098 every target compiles on Windows, so the gate's test and scorecard steps run them all
 touches: []             # fixed at specification; at least apps/kiln-cli/tests/{acceptance_t004_r2,acceptance_t004_r3,guard_t015_cli,guard_t032_cli}.rs (probe) and what T-098's CI round and the xtask.exe note add
 budget_tokens: 1100000  # high (v1.5); estimate 500,000-700,000 (4 tests, the xtask.exe note, T-098's leftovers, the counting run)
 iteration: 2
@@ -18,7 +18,8 @@ origin_task: T-092
 Draft cut from T-092 at its specification (`tasks/T-092-mark-product-tests-for-windows.md`, "Cut").
 
 ## Goal (draft)
-After T-092 and T-098 every test target compiles on Windows. What may still fail there is **unchecked**: the targets that
+After T-092, T-100 (the two listing targets of `kiln-workspace`, cut from T-092 by D-273) and T-098 every test
+target compiles on Windows. What may still fail there is **unchecked**: the targets that
 compile today have never run on Windows, because the gate's `test` step stops at the first build errors (VERIFIED:
 `tasks/ci-runs/T-072-round-3.md`, 0 `test result:` lines in `test-output.txt`): every target of `kiln-commands` but two,
 `kiln-control`, `kiln-ui`, `kiln-testkit`, 23 of `kiln-cli`'s, 9 of `kiln`'s, and the doc tests. T-092's probe

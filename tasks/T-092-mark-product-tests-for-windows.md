@@ -1,28 +1,26 @@
 ---
 id: T-092
-title: "Make every test target of kiln-workspace compile, lint clean and pass on Windows: each test either asserts every platform's specified behaviour or is registered as a Unix test with its counterpart or reason; the two pending disk.rs entries get their Windows counterparts"
+title: "Make every test target of kiln-workspace except the two listing targets (T-100, D-273) compile, lint clean and pass on Windows: each test either asserts every platform's specified behaviour or is registered as a Unix test with its counterpart or reason; the two pending disk.rs entries get their Windows counterparts"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (xtask/platform-tests.toml, xtask/tests/); it changes what confinement and persistence tests assert (the save and the walk of disk.rs); the approval row must say `gate paths`. No product code, no dependency change, no document change.
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: []     # none claimed: the ws.*/io.* items are verified on Linux; per-platform confirmation is the evaluator's (ADR-0009 Decision 3)
 depends_on: [T-073, T-074, T-072]   # ruling 7 (D-269). T-073 merged (8bf4c3a); T-072 merged (D-268; its general reported Windows step, this task's evidence, is on main); T-074 approved by review, not merged when this was finalized (shares disk.rs's test module, xtask/platform-tests.toml, acceptance_t002.rs): a fresh spec check by another planner follows once T-074 is on main (§5.7).
-touches:                # one role per path (D-153). All implementer except the last two (test author).
+touches:                # one role per path (D-153). All implementer except the last two (test author). Cut D-273: acceptance_t019_workspace.rs and project.rs moved to T-100.
   - crates/kiln-workspace/tests/acceptance_t002.rs          # implementer: the one test disk_save_replaces_via_rename_without_leftovers (Interface row W1)
   - crates/kiln-workspace/tests/acceptance_t002_r2.rs       # implementer
   - crates/kiln-workspace/tests/acceptance_t008.rs          # implementer
   - crates/kiln-workspace/tests/acceptance_t015_tools.rs    # implementer
-  - crates/kiln-workspace/tests/acceptance_t019_workspace.rs   # implementer
   - crates/kiln-workspace/tests/acceptance_t036_workspace.rs   # implementer
   - crates/kiln-workspace/tests/confinement.rs              # implementer
   - crates/kiln-workspace/tests/guard_t008.rs               # implementer
   - crates/kiln-workspace/tests/guard_t036_removal_workspace.rs   # implementer
   - crates/kiln-workspace/tests/guard_t036_workspace.rs     # implementer
-  - crates/kiln-workspace/tests/project.rs                  # implementer
   - crates/kiln-workspace/src/disk.rs                       # implementer: its #[cfg(test)] module only (two new tests, Interface row W40-W41)
   - xtask/platform-tests.toml                               # GATE PATH: implementer: exactly the entries of Interface (2)
   - xtask/tests/acceptance_t092.rs                          # GATE PATH: test author: AC-1 (fails on base)
   - xtask/tests/guard_t092.rs                               # GATE PATH: test author: AC-2 (passes on base)
-budget_tokens: 1100000  # high (v1.5); estimate about 950,000 (see Estimate)
+budget_tokens: 1100000  # high (v1.5); estimate about 930,000 after the cut (D-273; see Estimate)
 iteration: 2
 found_by: planner       # spec check R-321 of T-079 (D-233, ruling Q-4 B)
 origin_task: T-079
@@ -53,8 +51,10 @@ and inode numbers are Unix metadata; …"); `acceptance_t015_tools` 2 passed 1 f
 `:131:5`, "precondition: the fake `cargo`/`rustfmt` of this test are shell scripts and need Unix")). Two Unix-only tests of
 `disk.rs` wait on this task (`counterpart = "pending"`, `task = "T-092"`).
 
-After this task, on Windows: **every `crates/kiln-workspace/tests/<t>.rs` target compiles, is clippy-clean with
-`-D warnings`, and passes**; each test either asserts on every platform that platform's specified behaviour, or is a Unix
+After this task, on Windows (cut D-273): **every `crates/kiln-workspace/tests/<t>.rs` target except
+`acceptance_t019_workspace` and `project` compiles, is clippy-clean with `-D warnings`, and passes** (13 of 15; the two
+listing targets are T-100's, `tasks/T-100-listing-tests-on-windows.md`, and stay as they are: see "The end after the
+cut"); each test either asserts on every platform that platform's specified behaviour, or is a Unix
 test listed in `xtask/platform-tests.toml` with its document sentence and the test that checks that sentence on Windows
 (or `none` and why); the two pending entries name their Windows counterparts. Linux and macOS: no test name disappears
 (`xtask/tests/guard_t079.rs`), no Linux assertion is weakened, the gate stays green.
@@ -97,7 +97,7 @@ of `kiln-commands` (16), `kiln-control` (2 + lib), `kiln-ui` (lib), `kiln-testki
 (225 errors in 27 files, R-321 probe 2) predate T-073 and T-074: `kiln-workspace` fell from 111 to 84 (the `disk.rs` test
 module now compiles), `kiln-cli` 93 → 94.
 
-**This task's share:** the 9 non-compiling targets, `acceptance_t015_tools` (warnings and one failing test), one test of
+**This task's share** (after the cut, D-273: 7 of the 9; `acceptance_t019_workspace` and `project` are T-100's): the 9 non-compiling targets, `acceptance_t015_tools` (warnings and one failing test), one test of
 `acceptance_t002`, and the two pending `disk.rs` entries. `kiln-commands`, `kiln-cli`, `kiln` are T-098's; the failures of
 targets that compile today are T-099's (Cut).
 
@@ -164,7 +164,7 @@ originals of W17, W23, W28, W36, W37, W38 are P/w, W35's is P: spec check M2).
 | W19 | `acceptance_t008.rs` :: `parent_swapped_between_requests_is_refused` | rename of the held root's parent | U: the fixture cannot be made on Windows (VERIFIED: "rename of p while the root is held: refused: kind PermissionDenied … os error 5", same record) | `crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root` |
 | W20, W21 | `acceptance_t008.rs` :: `root_removed_and_replaced_by_link_is_refused`, `root_removed_and_replaced_by_new_directory_is_refused` | removal of the held root; inode in the note only | P/w (VERIFIED possible: PROBE `awa4_root_removed_while_held: windows: remove_dir_all of the held root with a file: Ok(())`, then every call `OutsideRoot`, also with a new directory or a junction at its name) | — |
 | W22 | `acceptance_t015_tools.rs` :: `no_tools_never_runs` | shell-script fakes | P (ruling 4, decided by PROBE P-D): the Windows branch builds the fakes `cargo.exe` and `rustfmt.exe` with `rustc` (P-D3 `status Some(0)`, 212 ms) and shows them working first by their marker (P-D4 `cargo with cargo.exe and cargo.cmd on PATH: status Some(0)`, marker `Ok("check")`). Script fakes must not be used for that first check: with only `cargo.cmd` or `rustfmt.bat` in the child's `PATH`, `Command::new` ran **the real tools** (P-D1 stdout `cargo 1.97.0 …`, P-D2 `rustfmt 1.9.0-stable …`, no marker): Windows' lookup is not limited to the child's `PATH`. The three helpers are then used on every platform, so the target is clippy-clean | — |
-| W23 | `acceptance_t019_workspace.rs` :: `disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names` | links; FIFO, socket | S: the original lists files, directories and links with the kinds `project.md` states per platform after T-074 | `_unix` → `none` (as W15) |
+| W23 **(T-100, D-273)** | `acceptance_t019_workspace.rs` :: `disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names` | links; FIFO, socket | S: the original lists files, directories and links with the kinds `project.md` states per platform after T-074 | `_unix` → `none` (as W15) |
 | W24 | `acceptance_t036_workspace.rs` :: `unreadable_root_is_refused_by_new` | mode 0311/0000, uid switch | U, file-level `#![cfg(unix)]`, one entry `<file>` (the file's only test; rule 2, third bullet; spec check M1) | `none`: modes and identities; on Windows unreadability is an access list, out of scope (ADR-0009 (b), `control-protocol.md:139` "Read and not measured") |
 | W25 | `confinement.rs` :: `escapes_are_refused_at_read_write_and_is_file` | links (outside) | P | — |
 | W26 | `confinement.rs` :: `links_inside_and_excursions_back_inside_are_followed` | links (inside) | P/w: on Windows each answers `outside_root` | — |
@@ -176,43 +176,42 @@ originals of W17, W23, W28, W36, W37, W38 are P/w, W35's is P: spec check M2).
 | W32, W33 | `guard_t036_removal_workspace.rs` (both tests) | inode reuse as the point (`trial`) | U, file-level `#![cfg(unix)]`, one entry `<file>` | `crates/kiln-workspace/src/disk.rs::tests::root_removed_on_every_platform` |
 | W34 | `guard_t036_workspace.rs` :: `retargeted_root_link_is_refused` | directory link | P (twin link helper) | — |
 | W35 | `guard_t036_workspace.rs` :: `vanished_root_is_refused` | three cases: root renamed, **root's parent renamed**, root removed | S: the original keeps `RenameRoot` and `Remove` (both VERIFIED possible while held: rows W18, W20); `vanished_root_is_refused_unix` holds `RenameParent`, whose fixture cannot be made on Windows (as W19) | `_unix` → `crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root` |
-| W36-W38 | `project.rs` :: `disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names`, `disk_list_dir_errors_follow_t008_precedence`, `symlinks_and_fifos_are_listed_not_followed` | links; FIFOs | S each | `_unix` → `none` (as W15) |
-| W39 | `project.rs` :: `a_prefix_directory_outside_the_root_refuses_the_path` | links | P/w | — |
+| W36-W38 **(T-100, D-273)** | `project.rs` :: `disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names`, `disk_list_dir_errors_follow_t008_precedence`, `symlinks_and_fifos_are_listed_not_followed` | links; FIFOs | S each | `_unix` → `none` (as W15) |
+| W39 **(T-100, D-273)** | `project.rs` :: `a_prefix_directory_outside_the_root_refuses_the_path` | links | P/w | — |
 | W40 | `disk.rs` :: new `tests::leftover_at_temp_name_is_never_touched_on_every_platform` | read-only leftover at `.kiln-tmp-0` (`set_readonly`) | new P test; counterpart of `tests::leftover_at_temp_name_is_never_touched`. Windows behaviour VERIFIED at base (PROBE P-B1..B8: both saves `Ok`, `a` = `newer`, leftover bytes and `readonly` `true` unchanged, listing `[".kiln-tmp-0", "a"]`) | — |
 | W41 | `disk.rs` :: new `tests::failed_save_after_writability_check_leaves_target_and_listing_unchanged_on_every_platform` | the three failures (case 1 by the public API, cases 2-3 injected); snapshot of listing, bytes and read-only attribute | new P test; counterpart of `tests::failed_save_after_writability_check_leaves_target_and_listing_unchanged`. Case 1 VERIFIED at base on Windows (PROBE P-C1 `Err(Io { path: RelPath("f"), kind: AlreadyExists, message: "all 100 temporary file names are taken" })`, P-C2 listing unchanged, P-C3 bytes unchanged, P-C4 `readonly` `false`); cases 2-3 are injected and platform-free | — |
-| W42 | `acceptance_t019_workspace.rs` :: new `disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names_not_unicode` (`#[cfg(windows)]`) | a name with an unpaired surrogate (`OsStringExt::from_wide`) | new Windows test (ruling 3, decided by PROBE P-A); asserts `list_dir` omits it and counts it in `skipped` | `none`: Linux holds such names as bytes (its `_non_utf8` tests), macOS refuses them |
-| W43 | `acceptance_t019_workspace.rs` :: new `tree_counts_skipped_names_on_disk_not_unicode` (`#[cfg(windows)]`) | the same name in a subdirectory | new Windows test (ruling 3); asserts `project::tree`'s `skipped` | `none` (as W42) |
+| W42 **(T-100, D-273)** | `acceptance_t019_workspace.rs` :: new `disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names_not_unicode` (`#[cfg(windows)]`) | a name with an unpaired surrogate (`OsStringExt::from_wide`) | new Windows test (ruling 3, decided by PROBE P-A); asserts `list_dir` omits it and counts it in `skipped` | `none`: Linux holds such names as bytes (its `_non_utf8` tests), macOS refuses them |
+| W43 **(T-100, D-273)** | `acceptance_t019_workspace.rs` :: new `tree_counts_skipped_names_on_disk_not_unicode` (`#[cfg(windows)]`) | the same name in a subdirectory | new Windows test (ruling 3); asserts `project::tree`'s `skipped` | `none` (as W42) |
 
 PROBE P-A (Windows, at base): `create "b\u{d800}.rs": Ok(())`; read_dir lists it; read back `Ok([98])`; `list_dir(None):
 Ok(DirListing { entries: [DirEntry { name: "ok.rs", kind: File }], skipped: 1 })`; `project::tree: Ok(ProjectTree { entries:
 [… "ok.rs" …], ignored: 0, skipped: 1, too_deep: 0, truncated: false })`. So W42 and W43 pass on base on Windows: they
 are the implementer's tests of existing behaviour, not acceptance tests.
 
-Every other test of these files is unchanged in body (their only Windows obstacle was a file-level import).
-**Counts** (rows): P 29 (W1; W2-W9 8; W12-W14 3; W17, W23, W28, W35, W36-W38 originals 7; W18, W20, W21; W22; W25, W26,
-W29, W31, W34, W39); U on existing tests 10 (W10, W11, W15, W16, W19, W24, W27, W30, W32, W33); new `_unix` tests 7 (W17,
-W23, W28, W35, W36-W38); new counterparts 2 (W40, W41); new Windows tests 2 (W42, W43).
+**Cut (D-273):** rows W23, W36, W37, W38, W39, W42, W43 (the files `acceptance_t019_workspace.rs`, `project.rs`) and the
+`\`-name tests of spec check M3 move to T-100; they stay in the table above for reference only and are **not** this
+task's. Every other test of the 9 files left is unchanged in body (their only Windows obstacle was a file-level import).
+**Counts after the cut** (36 rows): P 24 (W1; W2-W9 8; W12-W14 3; W17, W28, W35 originals 3; W18, W20, W21; W22; W25,
+W26, W29, W31, W34); U on existing tests 10 (W10, W11, W15, W16, W19, W24, W27, W30, W32, W33); new `_unix` tests 3 (W17,
+W28, W35); new counterparts 2 (W40, W41). (Before the cut: 43 rows, P 29, `_unix` 7, Windows tests 2.)
 
 ### (2) The registry (`xtask/platform-tests.toml`)
-After this task, the entries whose `file` is one of the 11 test files of `touches` are exactly 18 new ones,
-`(file, item, platforms, counterpart)`: 16 with `platforms = "unix"` — W10, W11, W15, W16, W17`_unix`, W19, W23`_unix`, (W24
-as `<file>`, spec check M1), W27, W28`_unix`, W30, (W32+W33 as `<file>`), W35`_unix`, W36`_unix`, W37`_unix`, W38`_unix` — and 2 with `platforms =
-"windows"` — W42, W43 — counterparts as in the table; **plus** the four T-079 non-UTF-8 entries of
-`acceptance_t019_workspace.rs` and `project.rs`, whose `platforms` and `counterpart` stay exactly as T-079 wrote them
-(`linux`, `none`; pinned by `xtask/tests/acceptance_t079.rs`), with `reason` no longer saying "the Windows side is T-092's"
-but naming W42/W43 as the Windows form (ruling 3). And the two `disk.rs`
+After this task (cut D-273), the entries whose `file` is one of the 9 test files of `touches` are exactly 12 new ones,
+`(file, item, platforms, counterpart)`, all `platforms = "unix"` — W10, W11, W15, W16, W17`_unix`, W19, (W24 as
+`<file>`, spec check M1), W27, W28`_unix`, W30, (W32+W33 as `<file>`), W35`_unix` — counterparts as in the table. The
+entries of W23`_unix`, W36-W38`_unix`, W42, W43 and the four T-079 non-UTF-8 entries' `reason`s are T-100's; this task
+does not touch any entry whose `file` is `acceptance_t019_workspace.rs` or `project.rs`. And the two `disk.rs`
 entries `tests::leftover_at_temp_name_is_never_touched` and
 `tests::failed_save_after_writability_check_leaves_target_and_listing_unchanged` name W40 and W41
 (`counterpart = "crates/kiln-workspace/src/disk.rs::tests::<W40|W41 name>"`, no `reason`, `task`, `expires`). Every `doc`/`quote`
-is an existing sentence (`paths.md:112` "Directories, FIFOs, sockets and devices are refused"; `project.md:80` "FIFOs,
-sockets and devices are listed with kind `other`"; `paths.md:13-15` for the unreadable root; the `decisions.md` and
+is an existing sentence (`paths.md:112` "Directories, FIFOs, sockets and devices are refused"; `paths.md:13-15` for the unreadable root; the `decisions.md` and
 `paths.md` sentences the `disk.rs` entries already quote); this task adds no document sentence. Other entries are not
 changed. After this task no entry has `task = "T-092"`; pending entries: 8 (T-076's 3, T-077's 5).
 
 ## Pinned
 - (a) Error variants, payloads, precedence: n/a: no product code changes; the tests assert the variants T-073/T-074
   specified (e.g. `VfsError::OutsideRoot { path }` for every reparse point on the Windows walk).
-- (b) Files read or written: the 13 files of `touches` and the two `xtask/tests` files. Fixtures stay under
+- (b) Files read or written: the 11 files of `touches` (after the cut) and the two `xtask/tests` files. Fixtures stay under
   `CARGO_TARGET_TMPDIR` as today.
 - (c) Order: the implementer first commits the Windows check of its tree with the stand-in (AC-4), then asks for a CI round
   (`CI-REQUEST`). What the rows assume of Windows is VERIFIED by records (each row names it: PROBE, `T-072-round-3.md`,
@@ -220,16 +219,23 @@ changed. After this task no entry has `task = "T-092"`; pending entries: 8 (T-07
   first CI round measures (AC-3). A row whose Windows run disagrees with the table is a `QUESTION:`, never a silent cfg.
 - (d) Platform assumptions: links on Windows are made with `symlink_dir` when the target, resolved from the link's
   directory, is an existing directory when the link is made, else `symlink_file`; junctions are not used by these tests
-  (T-074's guards cover them). Paths are compared as `/`-joined relative strings, as the files do now.
+  (T-074's guards cover them). Paths are compared as `/`-joined relative strings, as the files do now. Ruling Q-B
+  (D-273): relative link targets are built with `PathBuf::push` (as `guard_t074.rs:195-207`) and a directory link is
+  removed with `fs::remove_dir` (as `guard_t074.rs:240-251`, from `T-074-probe-1.md` E4): T-074's measured practice.
+  **Unchecked until CI round 1:** that a relative target with `..` after a directory link (`acceptance_t008.rs:262`,
+  `confinement.rs:138,201`) reaches on Windows the file the fixture's precondition expects, and that `canonicalize`
+  through `.`/`..` links (`acceptance_t008.rs:557-558`) gives the paths it expects. If the round shows otherwise, the
+  implementer logs a `QUESTION:` naming the row and the measured value; the precondition is then chosen with
+  `cfg!(windows)` like an expected value only after the director's ruling, never by a silent cfg or a dropped check.
 - (e) Threat model: the tests in `touches` are the evidence for the confinement boundary and the save. The risk is a test
   that passes on Windows without checking: excluded mechanically by `no-skip` for cfg'd tests, statements and helpers,
   and by AC-2 for the P rows; the reviewer checks each P/w row's Windows branch asserts the documented answer (not merely
   "no panic") and each U row's counterpart checks the same sentence.
 - (f) Tests pinning what this task changes: `xtask/tests/guard_t079.rs` (names: kept, see the rule; prototype run below);
-  `xtask/tests/acceptance_t079.rs` (the four non-UTF-8 entries' `platforms`/`counterpart`: kept); `xtask/tests/acceptance_t074.rs`
+  `xtask/tests/acceptance_t079.rs` (pins only entries of the two files moved to T-100: not touched by this task); `xtask/tests/acceptance_t074.rs`
   (its nine entries and "no `task = "T-074"`": untouched). None needs to change, so none is in `touches`.
 - (g) Worked examples executed: the prototype forms below (main's `no-skip` on a file-level `#![cfg(unix)]` with and
-  without its entry; a twin link helper compiled for Windows); the Windows behaviour W22, W40-W43 rest on: PROBE P-A to P-D,
+  without its entry; a twin link helper compiled for Windows); the Windows behaviour W22, W40, W41 rest on: PROBE P-B to P-D,
   quoted in their rows.
 - (h) Scorecard items: none claimed. The evaluator's call for a Windows confirmation is the CI record (ADR-0009 Decision 3).
 - (i) Document sentences: none added or changed (n/a).
@@ -237,32 +243,44 @@ changed. After this task no entry has `task = "T-092"`; pending entries: 8 (T-07
 ## Acceptance criteria
 - **AC-1 (registry; test author, `xtask/tests/acceptance_t092.rs`).** Parsing `xtask/platform-tests.toml` with `toml` (any
   spelling of the array of tables), the set of `(file, item, platforms, counterpart)` of entries whose `file` is one of the
-  11 test files of `touches` equals exactly Interface (2)'s 18 plus T-079's 4; the two `disk.rs`
+  9 test files of `touches` equals exactly Interface (2)'s 12; the two `disk.rs`
   entries have exactly the W40/W41 counterparts and no `reason`, `task`, `expires`; no entry has `task = "T-092"`. Fails on
-  base (the 18 are absent; the two are `pending`). Must reject: an entry `confinement.rs::walk_corner_cases` with
-  `platforms = "unix"` (a P row registered); W19 with `counterpart = "none"`.
-- **AC-2 (guard; test author, `xtask/tests/guard_t092.rs`).** Each P row's test (Interface (1), the 29 names) exists as exactly one `#[test]` fn and has no platform cfg attribute on the fn, its inline modules, the file
+  base (the 12 are absent; the two are `pending`). Must reject: an entry `confinement.rs::walk_corner_cases` with
+  `platforms = "unix"` (a P row registered); W19 with `counterpart = "none"`; W41's entry naming W40's test.
+- **AC-2 (guard; test author, `xtask/tests/guard_t092.rs`).** Each P row's test (Interface (1), the 24 names after the cut) exists as exactly one `#[test]` fn and has no platform cfg attribute on the fn, its inline modules, the file
   (`#![cfg]`) or the file's `mod` declaration (the reading of `guard_t079.rs` AC-2, without its in-body clause: P rows may
   hold paired platform statements, which `no-skip` checks). Passes on base (none of these has such a cfg today). Must
   reject `#[cfg(unix)]` on `guard_t008.rs::symlinks_inside_root_still_work`.
-- **AC-3 (pending CI criterion; record `tasks/ci-runs/T-092-round-N.md`).** On the head rebased on a main holding T-072 and
-  T-074, in `gate-windows`: the step "kiln-workspace test targets (reported, not required)" prints exactly one line
-  `==== <t>: exit status 0` per file `crates/kiln-workspace/tests/<t>.rs` of the tree (15 at T-074's tree) and no other
-  status line; "Workspace lib and T-073 tests" prints a line beginning `WORKSPACE TESTS: exit status 0` with `test
-  disk::tests::<W40 name> ... ok` and `… <W41 name> ... ok`, and the general step's block for `acceptance_t019_workspace`
-  has `test <W42 name> ... ok` and `test <W43 name> ... ok`; each target's `test result: ok.` count is the one listed in
-  "Spec check (fresh planner)", point 4 (90 in the general step, library 45). Base (VERIFIED, `T-074-early-2.md:173-202`, and PROBE's
-  table lines 26-41, `probe_t092` aside): 11 of 15 exit 101, 4 exit 0 (spec check: was "10 of 15").
-  Must reject any `exit status 101`. `gate-windows`' clippy, scorecard and test steps still fail, and every `could not
-  compile` line in their kept text and in `test-output.txt` names a package other than `kiln-workspace`. `gate-linux`,
-  `window-linux` success; `gate-macos` success (or D-262's rule for a job the host cancels before any step, which this
-  diff can bear on only through the test files it builds: the reviewer states it).
+- **AC-3 (pending CI criterion; record `tasks/ci-runs/T-092-round-N.md`; restated after the cut, D-273).** On the head
+  rebased on a main holding T-072 and T-074, in `gate-windows`, the step "kiln-workspace test targets (reported, not
+  required)" (`windows-tests.txt`) prints exactly these 15 status lines and no other: `==== <t>: exit status 0` for each of
+  the 13 targets `acceptance_t002`, `acceptance_t002_r2`, `acceptance_t008`, `acceptance_t015_tools`, `acceptance_t036_workspace`, `acceptance_t073`, `confinement`, `guard_t008`, `guard_t036_removal_workspace`, `guard_t036_workspace`, `guard_t073`, `guard_t074`, `tools_contract`, each with `test result: ok.` and exactly this many passed: 15, 8, 7, 3, 0, 1, 4, 1, 0, 2, 10, 15, 5
+  (71 in all; the two 0s are the Unix-only files of W24 and W32/W33, `running 0 tests`, by design); and `==== <t>: exit
+  status 101` for exactly `acceptance_t019_workspace` and `project`, each whose block holds `error: could not compile
+  `kiln-workspace` (test "<t>")` (base: due to 5 and to 3 previous errors, the `std::os::unix` imports and
+  `is_fifo`/`is_socket`; T-092 does not touch these files, so the same) and no `test result:` line. The step "Workspace lib
+  and T-073 tests" prints a line beginning `WORKSPACE TESTS: exit status 0` and `test result: ok. 45 passed` for the library
+  (43 + W40, W41) with `test disk::tests::<W40 name> ... ok` and `test disk::tests::<W41 name> ... ok`. Base (VERIFIED,
+  `T-074-round-1.md:178-192`, `T-074-early-2.md:175-189`, PROBE's table lines 26-41 without `probe_t092`): 11 of 15 exit
+  101, 4 exit 0. Must reject: any `exit status 101` among the 13; a third `exit status 101`; a listing target with `exit
+  status 0` reported as this task's (it would mean T-100's files changed: a scope finding); a count other than the one
+  given. `gate-windows`' clippy, scorecard and test steps still fail; every `could not compile` line in their kept text
+  and in `test-output.txt` names a package other than `kiln-workspace` or one of the two listing targets.
+  `gate-linux`, `window-linux` success; `gate-macos` success (or D-262's rule for a job the host cancels before any step,
+  which this diff can bear on only through the test files it builds: the reviewer states it).
 - **AC-4 (procedure; implementer first, reviewer again).** With the stand-in of "The inventory":
-  `cargo clippy -p kiln-workspace --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings` exits 0 (base:
-  exit 101, the 9 targets and the 3 warnings above); the same for `aarch64-apple-darwin` exits 0 (stand-in as
+  `cargo clippy -p kiln-workspace --lib --tests --locked --keep-going --target x86_64-pc-windows-msvc -- -D warnings` exits
+  101 with `could not compile` for exactly `acceptance_t019_workspace` and `project` (T-100's) and for no other target;
+  `--lib --test <t>` for each of the 13 targets of AC-3 exits 0 (base: exit 101, the 9 targets and the 3 warnings above); the same for `aarch64-apple-darwin` exits 0 (stand-in as
   `reviews/T-073-r1.md:58`: the stub with `--target=arm64-apple-macos11`, `AR_aarch64_apple_darwin=llvm-ar`); on the host `cargo xtask
   ci` is green with main's tool (D-235).
 - Guards that must keep passing (no change): `xtask/tests/guard_t079.rs` (both), `acceptance_t079.rs`, `acceptance_t074.rs`.
+- **The end after the cut (D-273).** 13 of the 15 targets exit 0 as AC-3 lists; `acceptance_t019_workspace` and `project`
+  still do not compile on Windows. Making them merely compile is not cheap without changing what they assert: their
+  errors are the `FileTypeExt`/`UnixListener` imports and the FIFO/socket fixtures inside W23, W36-W38 (`acceptance_t019_
+  workspace.rs:19-20,107,120,296`, `project.rs` imports), so compiling means putting those parts behind `#[cfg(unix)]`,
+  i.e. doing T-100's splits and registering them; and once compiled, the `\` names (spec check M3) would make
+  `tree_counts_skipped_names_on_disk` and `documented_differences_from_git` fail. So they stay as they are; T-100 owns them.
 
 ## Main's tool and main's tests on the planned tree (D-235, D-249), by runs
 Run twice: first on `plan-base` (main `bcca328` + T-074 + T-072); again at finalization on main `6a38a2b` (T-072 and T-096
@@ -323,18 +341,21 @@ Commit `b57a74ef2a9773a02a284564d880bc853cec6ae7` (branch `probe/T-092` in the p
 ## Cut (the draft's aim in three tasks)
 | Task | Scope | Measurable end | touches (dirs) | Tier | Estimate | Order |
 |---|---|---|---|---|---|---|
-| **T-092** (this) | `kiln-workspace`: 9 targets that do not compile, `acceptance_t015_tools`, one test of `acceptance_t002`, the 2 pending `disk.rs` entries | AC-3: 15 of 15 `exit status 0` (base 4 of 15) | `crates/kiln-workspace/tests/` (11 files), `disk.rs` test module, registry, `xtask/tests/` (2) | high | 950,000 | after T-072, T-074 |
+| **T-092** (this; cut D-273) | `kiln-workspace`: 7 of the 9 targets that do not compile, `acceptance_t015_tools`, one test of `acceptance_t002`, the 2 pending `disk.rs` entries | AC-3: 13 of 15 `exit status 0`, the two listing targets still 101 (base 4 of 15 at 0) | `crates/kiln-workspace/tests/` (9 files), `disk.rs` test module, registry, `xtask/tests/` (2) | high | 930,000 | after T-072, T-074 |
+| **T-100** (`tasks/T-100-listing-tests-on-windows.md`, D-273) | `acceptance_t019_workspace.rs`, `project.rs`: rows W23, W36-W39, W42, W43, the two `\`-name tests (Q-A ruled B: a paired helper) | those 2 targets exit 0 in the general step (15 of 15 with T-092) | the 2 files, registry, `xtask/tests/` (2) | high | 550,000 | after T-092 (registry) and T-095 (names on Windows) |
 | **T-098** (`tasks/T-098-kiln-cli-commands-and-app-tests-on-windows.md`) | `kiln-commands` (2), `kiln-cli` (11), `kiln` (4): every remaining target compiles under the same rule | `gate-windows` clippy step PASS; the test step builds; every test of its files passes on Windows or is registered absent | `apps/kiln-cli/tests/` (11), `apps/kiln/tests/` (4), `crates/kiln-commands/src/doc.rs` test module, `crates/kiln-commands/tests/acceptance_t037_commands.rs`, registry, `xtask/tests/` (2) | high | 1,000,000 | after T-092 (registry) |
 | **T-099** (`tasks/T-099-gate-windows-green.md`) | the Windows failures of targets that already compile (probe, T-098's round) and the scorecard step | `gate-windows` conclusion success on the rebased head, then on main; **this task proposes counting `gate-windows`** (§8.1: it counts from its first green run on main) | `apps/kiln-cli/tests/` (4 files of the probe) and what the `xtask.exe` note needs | high (provisional) | 500,000-700,000 | after T-098 |
 
-Each merges with the Windows gate strictly nearer to green: T-092 26 → 17 targets that do not compile and 2 → 0 known
+Each merges with the Windows gate strictly nearer to green (after the cut, D-273: T-092 26 → 19 targets that do not
+compile and 2 → 0 known failing tests; T-100 19 → 17; then T-098 17 → 0). As first written: T-092 26 → 17 targets that do not compile and 2 → 0 known
 failing tests; T-098 17 → 0 and clippy green; T-099 the remaining failures → `gate-windows` success.
 Drafts (ruling 1, D-269): T-075 is absorbed by T-092 and T-098; T-076 is narrowed to ruling x6's three `/dev/full`
 counterparts and runs after T-098 (shared `apps/kiln/tests/acceptance_t055.rs`; it also shares
 `apps/kiln-cli/tests/acceptance_t004_r2.rs` with T-099, so the director orders those two); T-077 runs after T-098 (shared
 `acceptance_t065.rs`, `window_t065.rs`); T-095 (after T-074) shares only the registry, and only if it adds an entry.
 
-**Should T-092 itself be cut?** Not recommended. A clean line exists: (a) the save — `acceptance_t002.rs`,
+**Should T-092 itself be cut?** (Superseded: D-273 cut the listings off as T-100; the paragraph is kept as the first
+answer.) Not recommended. A clean line exists: (a) the save — `acceptance_t002.rs`,
 `acceptance_t002_r2.rs`, `acceptance_t015_tools.rs`, `disk.rs` (W1-W11, W22, W40, W41; 7 entries incl. the two
 `disk.rs` ones; end: those three targets exit 0 and `WORKSPACE TESTS` shows W40, W41 ok) and (b) the walk and listings —
 the other 8 files (W12-W21, W23-W39, W42, W43; 13 entries; end: those 8 targets exit 0). But both parts edit the
@@ -347,11 +368,16 @@ overrun of the estimate, which the §11 `Extend` row covers; the reviewer's load
 proportional to rows, not to tasks.
 
 ## Estimate
-About 950,000 of 1,100,000: implementer about 380,000 (11 files, 43 rows, a Windows check per commit, one or two CI rounds),
-test author about 150,000 (two `xtask` test files from the tables), reviewer about 320,000 (each P/w row's Windows branch
-against T-074's documents, each counterpart's sentence, the stand-in, the CI record), rework about 100,000. Calibration:
-T-079 (the macOS half, high, 20 entries and 4 portable fixes) booked 846,099; T-074 897,911 (`metrics/tasks.jsonl`, summed
-by task).
+**After the cut (D-273): about 930,000 of 1,100,000**, by role against the booked costs of the three nearest high tasks
+(`metrics/tasks.jsonl`, summed by task and role; implementer / test author / reviewer): T-073 293,262 / 215,523 / 352,192
+(860,977); T-074 283,525 / 265,811 / 371,573 (920,909); T-079 274,703 / 211,253 / 360,143 (846,099).
+- implementer about 320,000: 9 files, 36 rows (24 portable rewrites, 10 registered, 3 splits, 2 new `disk.rs` tests),
+  12 entries, the stand-in per commit, one or two CI rounds; above the three (275,000-293,000) for the larger row count;
+- test author about 200,000: two `xtask` files of the shape of T-079's (211,253);
+- reviewer about 350,000: each P/w Windows branch, each counterpart's sentence, the stand-in, the CI record; at the low end
+  of the three (352,000-372,000) since the listings are gone;
+- rework about 60,000 (a second CI round if Pinned (d)'s unchecked forms differ on Windows).
+Before the cut the spec check put the whole at about 1,080,000 (D-273: cut).
 
 ## Out of scope and implementer notes
 - Product code (`crates/kiln-workspace/src/` outside `disk.rs`'s test module), documents, the workflow, `xtask/src`.
@@ -362,7 +388,7 @@ by task).
 - W22 (spec check, point 2): `rustc` is run from the test's `PATH`; if it cannot be started the test fails naming why
   (no fallback to `.cmd`/`.bat` fakes); the child's `PATH` is joined with `std::env::join_paths` (`;` on Windows); the
   `.exe` fakes append to the marker, as the shell fakes do.
-- Pending ruling Q-B of the spec check (recommended form C): on Windows a directory link is removed with
+- Ruling Q-B (D-273; Pinned (d)): on Windows a directory link is removed with
   `fs::remove_dir`, not `remove_file` (`guard_t074.rs:240-251`, from `T-074-probe-1.md` E4), and relative link targets
   are built with `PathBuf::push` as `guard_t074.rs:195-207` does.
 
@@ -626,6 +652,27 @@ earlier `acceptance_t*` files (`acceptance_t002`, `_t002_r2`, `_t008`, `_t015_to
 - **Q-C (estimate).** Record about 1,080,000 (point 7) instead of 950,000, keep the task whole, and name the listings cut
   in advance as the fallback. Cost of the recommendation: none now; it moves the `Extend` decision earlier.
 
+### After the rulings (D-273), the same day
+Rulings applied: the cut (the two listing files to T-100), Q-A B in T-100, Q-B in Pinned (d) ("unchecked until CI round
+1", with what follows a disagreement), Q-C by the cut and the new estimate. Re-run for what the cut changes, in the clone
+(branch `chk-cut` from main `32b597d`, never pushed): a registry mock-up holding only T-092-side entries (W24 `<file>`,
+W32/W33 `<file>`, W40's counterpart; no entry of the moved files changed) with those three forms in the tree → main's
+`cargo xtask no-skip` → `PASS no-skip: self-test ok (17 known findings); 206 files scanned, 0 allowlisted skip(s), 37
+platform test(s) registered (9 pending), today = 2026-11-18`; `cargo test -p xtask --test acceptance_t079 --test
+acceptance_t074 --test guard_t079 --test guard_t071` → 2, 2, 6, 6 passed. D-249 greps for the reduced `touches` (`git
+grep -l -F <name> main -- '*.rs'`): as point 6 minus `acceptance_t079.rs` (it names only the two moved files), so no main
+test pins an entry this task now changes beyond `acceptance_t074` (nine untouched) and `guard_t079` (names kept).
+Expected counts: AC-3 (71 in the general step's 13 targets, library 45; the two listing targets 101 at compile).
+**Roles, confirmed for the reduced `touches`:** implementer — the 9 existing test files and `disk.rs`'s test module (the
+rewritten tests are the deliverable) and the registry; test author — `xtask/tests/acceptance_t092.rs` (AC-1: the 12
+entries and the two `disk.rs` counterparts; fails on base, as T-074's `acceptance_t074.rs`) and `xtask/tests/guard_t092.rs`.
+One difference from the ruling's wording: `guard_t092.rs` as specified (AC-2) is a *source* guard (the 24 portable tests
+exist once and carry no platform cfg attribute; `syn`, as `guard_t079` AC-2), not a runtime guard. A runtime guard of the
+rewritten tests' behaviour would re-run what the implementer's own tests assert; their Windows behaviour is AC-3's (CI)
+and the reviewer's. Kept as is; the director may ask for a runtime guard, which would need its own criterion.
+**Verdict after the rulings: ready to dispatch.** Nothing open; the unchecked Windows fixture forms are stated in Pinned (d)
+with their handling, and AC-3 names every line and count to expect.
+
 ### Verdict
 **Ready after rulings** (Q-A, Q-B; Q-C is bookkeeping). Not "needs rework": the table's names, counterparts and
 registry arithmetic hold on main (point 1), the probe sentences hold or are labelled (point 2), main's tool and tests
@@ -667,6 +714,10 @@ notes (point 2; the latter pending Q-B).
   shows (Q-B), an optimistic estimate (Q-C, about 1,080,000). Corrections made in the text; design points as Q-A to
   Q-C. Tier high confirmed (gate paths; confinement and persistence tests). Verdict: ready after rulings. Clone
   `target/` deleted · next: director (rulings Q-A to Q-C)
+- 2026-11-18 · planner (spec check resumed for rulings D-273; booked to iter-2) · draft · spec check: applied the cut
+  (rows W23, W36-W39, W42, W43 and the `\`-name tests to T-100, draft written), Q-B into Pinned (d), the end restated
+  (13 of 15 targets exit 0, counts in AC-3; the two listing targets stay non-compiling), estimate about 930,000 by role;
+  re-ran `no-skip` on a mock-up and the D-249 greps; T-098 and T-099 order notes. Verdict: ready to dispatch · next: director
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->

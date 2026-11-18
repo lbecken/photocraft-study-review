@@ -39,6 +39,11 @@ Draft cut from T-092 at its specification (`tasks/T-092-mark-product-tests-for-w
 D-269): no widening of T-072's general step. Specified in full after T-092 merges. T-076 (narrowed to its three `/dev/full`
 counterparts) and T-077 run after this task (ruling 1, D-269).
 
+## Order note (D-273)
+T-092's listing files moved to T-100, which also edits `xtask/platform-tests.toml`: T-098 and T-100 are not in flight
+together (§5.2); the director orders them. T-100's paired helper for a name a listing must skip (`back\slash` on Unix,
+an unpaired-surrogate name on Windows, ruling Q-A B) is the precedent if any file of this task makes a name holding `\`.
+
 ## Facts from T-092's probe (run 44355322518, `tasks/ci-runs/T-092-probe-1.md`)
 - Exactly these 17 targets do not compile on Windows (record lines 195-259), with the first errors T-092's inventory lists.
 - Every other target of these packages runs and passes on Windows except 4 of `kiln-cli` that are T-099's
