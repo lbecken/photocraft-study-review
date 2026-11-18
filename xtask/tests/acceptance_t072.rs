@@ -777,6 +777,12 @@ fn failing_output() -> String {
 /// [`failing_output`] with a fake `cargo` exiting 101; checks the invocation and the step's
 /// status, returns its log as trimmed lines.
 fn run_output_step(tag: &str, id: &str) -> Vec<String> {
+    run_output_step_on(tag, id, &failing_output())
+}
+
+/// As [`run_output_step`] on `out`; the log's colour codes are removed before the lines are
+/// compared (a printer may print a line with or without them).
+fn run_output_step_on(tag: &str, id: &str, out: &str) -> Vec<String> {
     let w = workflow();
     let st = steps(job(&w, id));
     let hits = writers(st, "test-output.txt");
@@ -785,7 +791,7 @@ fn run_output_step(tag: &str, id: &str) -> Vec<String> {
         1,
         "job `{id}`: steps writing test-output.txt: {hits:?}"
     );
-    let (b, env) = cargo_bench(&format!("output-{tag}-{id}"), &failing_output(), 101);
+    let (b, env) = cargo_bench(&format!("output-{tag}-{id}"), out, 101);
     let o = b.run(run_of(&st[hits[0]]), &env, 120);
     assert_eq!(
         o.code,
@@ -800,12 +806,104 @@ fn run_output_step(tag: &str, id: &str) -> Vec<String> {
     );
     let got = std::fs::read_to_string(b.tree.join("test-output.txt")).unwrap_or_default();
     assert!(
-        got.contains(&failing_output()),
+        got.contains(out),
         "job `{id}`: test-output.txt does not hold cargo's whole output"
     );
-    let lines = trimmed_lines(&o.stdout);
+    let lines = trimmed_lines(&strip_ansi(&o.stdout));
     std::fs::remove_dir_all(&b.dir).unwrap();
     lines
+}
+
+/// `s` without ANSI escape sequences (`ESC [ … letter`).
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        if c == '\u{1b}' && it.peek() == Some(&'[') {
+            it.next();
+            for d in it.by_ref() {
+                if d.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Cargo's colours under `CARGO_TERM_COLOR=always` (the workflow's `env`): status words bold
+/// green, `error` bold red, then the message bold.
+fn colour(text: &str) -> String {
+    text.lines()
+        .map(|l| {
+            for w in ["Running", "Doc-tests", "Compiling", "Finished"] {
+                if l.trim_start().starts_with(w) {
+                    let lead = &l[..l.len() - l.trim_start().len()];
+                    let rest = &l.trim_start()[w.len()..];
+                    return format!("\u{1b}[1m\u{1b}[92m{lead}{w}\u{1b}[0m{rest}");
+                }
+            }
+            if let Some(rest) = l.strip_prefix("error") {
+                return format!("\u{1b}[1m\u{1b}[91merror\u{1b}[0m\u{1b}[1m{rest}\u{1b}[0m");
+            }
+            if let Some(rest) = l.strip_prefix("test result: FAILED") {
+                return format!("test result: \u{1b}[31mFAILED\u{1b}[0m{rest}");
+            }
+            if let Some(rest) = l.strip_prefix("test result: ok") {
+                return format!("test result: \u{1b}[32mok\u{1b}[0m{rest}");
+            }
+            l.to_owned()
+        })
+        .map(|l| l + "\n")
+        .collect()
+}
+
+/// The 25 lines after the header of a failing block that quotes a step's log (the model is
+/// CI round 1 of this task, `tasks/ci-runs/T-072-round-1.md`): binary-heading-shaped lines
+/// (`     Running …`, `   Doc-tests …`) inside an open block.
+fn quoting_block() -> Vec<String> {
+    let mut v: Vec<String> = [
+        "thread 'quoting_one' (184487) panicked at xtask/tests/acceptance_t072.rs:966:17:",
+        "job `gate-macos`: no line `TEST LIST: exit status 101`:",
+        "     Running unittests src/lib.rs (target/debug/deps/quoted_a-00ee55)",
+        "     Running tests/quoted_list.rs (target/debug/deps/quoted_list-00ff66)",
+        "   Doc-tests quoted_a",
+        "error: could not compile `quoted-b` (test \"quoted_omega\") due to 2 previous errors",
+        "TEST LIST: exit status 101 (recorded; the gate step decides the colour)",
+    ]
+    .iter()
+    .map(|s| (*s).to_owned())
+    .collect();
+    for k in v.len() + 1..=BLOCK {
+        v.push(format!("  quoted detail {k}"));
+    }
+    v
+}
+
+/// One binary with two failing tests: `quoting_one`, whose block is [`quoting_block`], and
+/// `after_quote`, whose block follows it; then a green binary.
+fn quoting_output() -> String {
+    let mut s = String::new();
+    s.push_str("     Running tests/quoting.rs (target/debug/deps/quoting-00ab12)\n\n");
+    s.push_str("running 2 tests\ntest quoting_one ... FAILED\ntest after_quote ... FAILED\n\nfailures:\n\n");
+    s.push_str("---- quoting_one stdout ----\n");
+    for l in quoting_block() {
+        s.push_str(&l);
+        s.push('\n');
+    }
+    s.push_str("\n---- after_quote stdout ----\n");
+    s.push_str("thread 'after_quote' panicked at xtask/tests/quoting.rs:9:5:\n");
+    s.push_str("  after detail 2\n\n");
+    s.push_str("failures:\n    quoting_one\n    after_quote\n\n");
+    s.push_str("test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\n");
+    s.push_str("error: test failed, to rerun pass `-p xtask --test quoting`\n");
+    s.push_str("     Running tests/green_after.rs (target/debug/deps/green_after-00cd34)\n\n");
+    s.push_str("running 1 test\ntest green_two ... ok\n\n");
+    s.push_str("test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n");
+    s.push_str("error: 1 target failed:\n    `-p xtask --test quoting`\n");
+    s
 }
 
 // ---- AC-1: the test list --------------------------------------------------------------------
@@ -1118,6 +1216,131 @@ fn ac2_the_printer_prints_an_aborted_binarys_running_line_and_abort_lines() {
                 "job `{id}`: the log lacks the aborted binary's line `{want}`"
             );
         }
+    }
+}
+
+#[test]
+fn ac2_the_printer_keeps_heading_shaped_lines_inside_a_failing_block() {
+    // Ruling u1 (D-260): while a failing block is open, a line shaped like a binary heading is
+    // printed as part of the block and counts towards its 20 lines.
+    let block = quoting_block();
+    for id in GATE_JOBS {
+        let log = run_output_step_on("quoting", id, &quoting_output());
+        let head = "---- quoting_one stdout ----";
+        let at = log
+            .iter()
+            .position(|l| l == head)
+            .unwrap_or_else(|| panic!("job `{id}`: the log lacks `{head}`:\n{}", log.join("\n")));
+        let want: Vec<String> = block[..20].iter().map(|l| l.trim().to_owned()).collect();
+        let got: Vec<String> = log.iter().skip(at + 1).take(20).cloned().collect();
+        assert_eq!(
+            got, want,
+            "job `{id}`: the 20 lines after `{head}` must be the block's own, heading-shaped lines included"
+        );
+        for l in &block[20..] {
+            assert!(
+                !log.iter().any(|x| x == l.trim()),
+                "job `{id}`: the log prints `{}`, the block's line 21 or later",
+                l.trim()
+            );
+        }
+        for l in &block[2..5] {
+            let n = log.iter().filter(|x| *x == l.trim()).count();
+            assert_eq!(
+                n,
+                1,
+                "job `{id}`: the block's heading-shaped line `{}` is printed {n} times (once, in the block)",
+                l.trim()
+            );
+        }
+        let next = "---- after_quote stdout ----";
+        let j = log
+            .iter()
+            .position(|l| l == next)
+            .unwrap_or_else(|| panic!("job `{id}`: the log lacks `{next}`"));
+        assert!(
+            j > at + 20
+                && log[at + 21..j]
+                    .iter()
+                    .all(|l| !block.iter().any(|b| b.trim() == l)),
+            "job `{id}`: a line of the quoting block is printed again before `{next}`:\n{}",
+            log.join("\n")
+        );
+        assert!(
+            log.iter()
+                .any(|l| l == "thread 'after_quote' panicked at xtask/tests/quoting.rs:9:5:"),
+            "job `{id}`: the next block's first line is missing"
+        );
+    }
+}
+
+#[test]
+fn ac2_the_printer_reads_cargos_coloured_output() {
+    // `CARGO_TERM_COLOR=always` (the workflow's env): cargo's lines start with colour codes.
+    let plain = failing_output();
+    let coloured = colour(&plain);
+    assert_ne!(plain, coloured, "precondition: the fixture is coloured");
+    for id in GATE_JOBS {
+        let log = run_output_step_on("colour", id, &coloured);
+        let has = |l: &str| log.iter().any(|x| x == l);
+        for want in plain.lines().map(str::trim).filter(|l| {
+            l.starts_with("error[")
+                || l.starts_with("error: could not compile")
+                || l.starts_with("test result:")
+                || l.starts_with("Running tests/abort_bin.rs")
+                || l.starts_with("fatal runtime error")
+        }) {
+            assert!(
+                has(want),
+                "job `{id}`: on coloured output the log lacks `{want}`"
+            );
+        }
+        for i in [0, FAILING / 2, FAILING - 1] {
+            let head = format!("---- t{i:03} stdout ----");
+            assert!(
+                has(&head),
+                "job `{id}`: on coloured output the log lacks `{head}`"
+            );
+            assert!(
+                has(&format!("detail 20 of t{i:03}")),
+                "job `{id}`: on coloured output the log lacks line 20 after `{head}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn ac1_the_list_step_prints_the_binaries_of_a_coloured_list() {
+    // `CARGO_TERM_COLOR=always`: the list's `Running`/`Doc-tests`/`error` lines are coloured.
+    let coloured = colour(LIST_OUT);
+    let w = workflow();
+    for id in GATE_JOBS {
+        let st = steps(job(&w, id));
+        let hits = writers(st, "test-list.txt");
+        assert_eq!(
+            hits.len(),
+            1,
+            "job `{id}`: steps writing test-list.txt: {hits:?}"
+        );
+        let (b, env) = cargo_bench(&format!("list-colour-{id}"), &coloured, 101);
+        let o = b.run(run_of(&st[hits[0]]), &env, 120);
+        assert_eq!(
+            o.code,
+            Some(0),
+            "job `{id}`: the list step's status:\n{}",
+            o.stderr
+        );
+        let log = trimmed_lines(&strip_ansi(&o.stdout));
+        for want in LIST_OUT.lines().map(str::trim).filter(|l| {
+            l.starts_with("Running ") || l.starts_with("Doc-tests ") || l.starts_with("error")
+        }) {
+            assert!(
+                log.iter().any(|l| l == want),
+                "job `{id}`: on a coloured list the log lacks `{want}`:\n{}",
+                o.stdout
+            );
+        }
+        std::fs::remove_dir_all(&b.dir).unwrap();
     }
 }
 

@@ -1346,3 +1346,65 @@ fn guard_jobs_labels_conditions_and_the_gate_step_decide_the_colour() {
         );
     }
 }
+
+// ---- u3 (D-260): the evidence steps' conditions, exact per gate job ------------------------------
+
+#[test]
+fn guard_evidence_steps_conditions_are_exact_per_gate_job() {
+    // Interface (1): the list step `always()`; the full-output step only when the gate step
+    // failed (`failure() && steps.gate.outcome == 'failure'`), so a failed setup step (gate
+    // skipped) starts no full run; the other recording steps and the upload `always()`.
+    let w = workflow();
+    let always = vec!["always()".to_owned()];
+    let mut gate_failed = vec![
+        "failure()".to_owned(),
+        "steps.gate.outcome=='failure'".to_owned(),
+    ];
+    gate_failed.sort();
+    for id in GATE_JOBS {
+        let st = steps(job(&w, id));
+        let one = |f: &str| {
+            let h = writers(st, f);
+            assert_eq!(h.len(), 1, "job `{id}`: steps writing {f}: {h:?}");
+            h[0]
+        };
+        let mut want: Vec<(&str, usize, &Vec<String>)> = vec![
+            (
+                "report",
+                step_idx(id, st, "prints gate-report.json", |s| {
+                    let r = run_of(s);
+                    r.contains("cat gate-report.json") && !r.contains(GATE_CMD)
+                }),
+                &always,
+            ),
+            ("core crates", one("core-crates.txt"), &always),
+            ("full test output", one("test-output.txt"), &gate_failed),
+            (
+                "disk",
+                step_idx(id, st, "prints the disk lines", |s| {
+                    run_of(s).contains("df -h")
+                }),
+                &always,
+            ),
+            ("upload", upload_idx(id, st), &always),
+        ];
+        // The steps T-072 and T-073 add: every step writing their files (on the base of T-072
+        // there is none of the first and third; AC-1 and AC-9 require exactly one each).
+        for (what, f) in [
+            ("test list", "test-list.txt"),
+            ("T-073's step", "workspace-tests.txt"),
+            ("general Windows step", "windows-tests.txt"),
+        ] {
+            for i in writers(st, f) {
+                want.push((what, i, &always));
+            }
+        }
+        for (what, i, c) in want {
+            assert_eq!(
+                &conds(&st[i]),
+                c,
+                "job `{id}`: the {what} step's set of conditions"
+            );
+        }
+    }
+}
