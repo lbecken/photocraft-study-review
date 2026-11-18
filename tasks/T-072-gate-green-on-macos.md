@@ -2,7 +2,7 @@
 id: T-072
 title: "Make every CI gate job show which tests ran and why one failed, on success too; make incidents/ a ledger path; settle the nightly run"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (.github/workflows/platforms.yml, xtask/ledger.toml, xtask/tests/); the approval row must contain `gate paths`. No dependency change, no product code.
-state: specified
+state: ready
 owner_role: planner
 scorecard_items: []     # produces evidence; changes no behaviour of Kiln's binaries
 depends_on: [T-079, T-073]   # both merged (bc8d097; 8bf4c3a): T-073 changed platforms.yml and acceptance_t070.rs (spec check after T-073, below)
@@ -285,7 +285,143 @@ always()`, writes `workspace-tests.txt`), that file added to the Windows upload 
 command, its place between gate and upload, `set +e` … `exit 0`, and its file in the upload, in `gate-windows` and in no
 other gate job. Every line number below is VERIFIED with `cat -n` / `grep -n` at `72522f2`.
 
-(work in progress: S-1 … follow)
+Prototypes and measurements were made in a scratch clone of main (`72522f2`), never in the primary checkout; the
+script that builds both prototype trees is described in S-4 (`proto.py`: ledger entry after `methodology/`, the two
+`paths-ignore` lines after `methodology/**`, the three labels, `head -200` replaced by an `awk` block printer, and
+either a "Test list" step plus its upload line (A1) or `if: always()` on the full output (A2)).
+
+- **S-1 Corrected in this file (stale since T-073), verdict: fixed.** Goal line numbers now cite all three jobs
+  (`:107-108`/`:205-206`/`:292-293`, `:113`/`:211`/`:298`, `:97`/`:181`/`:282`, `:98`/`:182`/`:283`); Pinned (c) names
+  T-073's Windows step "Workspace lib and T-073 tests (reported, not required)" (`:191-203`) in the order; Pinned (f)
+  names T-073's test fn and the 14-fn count; Pinned (g) drops the pre-T-073 "about 6 s" Windows figure; the pending
+  criterion lists the counted jobs as now (the Linux gate, `window-linux`, `window-probe (macos-15)`, `gate-macos`)
+  and `gate-windows` red as since T-073 (clippy, scorecard, test; not "at `kiln-workspace`"), with
+  `workspace-tests.txt` kept; Interface (5) adds T-073's step to the documented evidence and replaces the stale
+  sentence `docs/development.md:633-634`; Collisions: T-073 merged; `depends_on` gains T-073 (merged). Outside this
+  file (a ledger file, the director's, at the merge): `tasks/ci-runs/README.md` "What an artefact holds" says
+  `test-output.txt` comes "only when the gate failed, until T-072 uploads it always"; under A1 it becomes
+  `test-list.txt` always, `test-output.txt` on a red gate.
+- **S-2 Unchanged and still true** (VERIFIED at `72522f2`): the trigger `schedule: - cron: '17 3 * * *'` at
+  `platforms.yml:35-37`; the upload lists `:132-136`, `:230-235`, `:317-321` name `test-output.txt`; no
+  `continue-on-error` (`acceptance_t070.rs` `ac1_name_permissions_no_concurrency_no_continue_on_error` passes); every
+  `uses:` pinned by sha; `xtask/ledger.toml` has 9 `any` entries and 1 `add-only` (`scorecard/items/`), no `incidents/`.
+- **S-3 Ruling Q-2's variant, measured (Linux, 4 CPU, scratch clone, test binaries already built by `cargo test
+  --workspace --locked --no-run`, which from an empty `target/` took `Finished … in 1m 25s` and left 2.8 GB):**
+
+  | command (in the clone's root; output to a file) | wall time | size | lines | test names |
+  |---|---|---|---|---|
+  | `cargo test --workspace --locked --no-fail-fast -- --list` (3 runs) | 1.41 s, 1.43 s, 1.26 s | 72,960 B | 1,537 | 1,146 in 134 groups (126 binaries + 8 doc-test groups), exit 0 |
+  | `cargo test --workspace --locked --no-fail-fast` | 461.1 s | 92,219 B | 1,958 | 1,146 `test … …` lines; `test result:` sum 1,147 passed in 135 lines |
+  | `cargo test --workspace --locked --no-fail-fast -- --show-output` | 462.7 s | 170,173 B | 3,857 | as above |
+
+  Time measured with `date +%s.%N` before and after; sizes `wc -c -l`; names by a `python3 -I` reading of both files
+  (per binary: `(Running|Doc-tests) <path>` then `^test (.*) \.\.\. ` resp. `^(.*): (test|bench)$`, ANSI stripped). The
+  two name sets per binary are equal (1,146 each) but for one line of the full output, where
+  `tests/confinement.rs`'s re-run of its own binary interleaved two lines into one; that child run is also why the
+  `test result:` lines sum to 1,147 in 135 lines against 134 groups (`confinement.rs` prints a second `test result:
+  ok. 1 passed; … 5 filtered out`). So: the list gives every test name per binary in about 1.4 s (the ruling's bound
+  is one minute), 79 % of the plain full output's bytes (43 % of the `--show-output` one) and 0.3 % of its time; it runs no test, so it carries no verdict
+  and no `MEASURED:` lines (`--show-output` adds 77,954 B, 3 `MEASURED`/`panicked` lines in all). **Recommendation:
+  the list (A1)**, as the ruling's condition provides: a green run's names from the list, its verdicts from the gate's
+  totals (`0 failed`; counts compared as names, not as numbers, because of the child run), a red run's from the full
+  output, which runs then as now. Limits: the runners' times are not measured here (Pinned (g): to be measured by the
+  director); on Windows the list holds compile errors and no names until T-092 (same `cargo test --workspace` build).
+- **S-4 D-235, main's tool on the planned tree: no blocker, no cut.** On prototype A1 (`72522f2` plus the ledger
+  entry, the `paths-ignore` lines, the labels, the list step and the uncapped printer), with the tool built from main's
+  sources (this task changes no `xtask/src/` file and no fixture, so main's tool and the task's are one): `cargo xtask
+  layers` "PASS layers: 11 crates, 14 internal edges, layer table holds"; `ui-commands` "PASS … self-test ok; 14 kiln-ui
+  file(s) scanned, 5 allowlisted path(s)"; `hygiene` "PASS … session-paths: 690 tracked file(s) clean"; `schema` "PASS
+  … 30 commands; audit ok; docs/commands.json current"; `scorecard --check` "PASS scorecard: 64 items: 47 verified, 0
+  implemented, 0 failing, 17 planned."; `no-skip` "PASS … 201 files scanned, 0 allowlisted skip(s), 35 platform test(s)
+  registered (19 pending)". `cargo test --locked --no-fail-fast -p xtask`: exit 0, 287 passed, 0 failed in 23
+  binaries, `acceptance_t070` unchanged included. On prototype A2 main's `acceptance_t070` fails exactly one test,
+  `ac1_gate_jobs_run_the_gate_and_upload_the_reports_whatever_its_result`, at `acceptance_t070.rs:1180` ("the
+  test-output step must run when the gate failed and only then (if: Some(Str("always()")))"; 13 passed, 1 failed): A2
+  must edit it, A1 need not. The rule this task changes is the ledger (`incidents/`); it would use the new rule only by
+  committing under `incidents/`, which it does not (not in `touches`), and the queue's `ledger`/`main-history` checks
+  read main's `xtask/ledger.toml` (`xtask/src/precheck.rs:4-9`), so the new entry acts only after the merge: no cut.
+  The new tests: with a platform cfg they would be `cfg-disabled` findings of main's `no-skip` unless registered in
+  `xtask/platform-tests.toml`, which is outside `touches`: hence Pinned (d), no platform cfg. Not run: `fmt`, `clippy`,
+  `test` (the workspace test was run separately, S-3) and `cargo xtask ci` as a whole on the prototype; the builder
+  still runs main's `cargo xtask ci` on the branch before the join (Pinned (j)).
+- **S-5 D-249, main's tests that read this task's paths** (`grep -rln <path> xtask/tests crates/*/tests apps/*/tests`
+  at `72522f2`, one line per hit):
+  - `.github/workflows/platforms.yml`: only `xtask/tests/acceptance_t070.rs` → passes unchanged on A1 (S-4); on A2
+    fails at `:1180` (the task edits it then). T-073's `t073_…` test counts only steps containing its exact command
+    (`:1215-1227`), so new steps, A1's or (6)'s, do not disturb it.
+  - `xtask/ledger.toml`: `acceptance_t070.rs` (`ledger_paths_ignore`, derived: passes); `acceptance_t005.rs:1145-1183`,
+    `acceptance_t005_r2.rs:44`, `acceptance_t005_r3.rs:889`, `acceptance_t005_support.rs:220-227,294` copy the shipped
+    file into toy repositories (no test names `incidents`: `grep -rn incidents xtask/tests` empty) → pass (287/0, S-4).
+  - `xtask/tests/acceptance_t070.rs` (as a path): `guard_t079.rs:1581-1593` pins 13 of its test names in the 1,121-name
+    base list, and `guard_t070.rs:4` names it in a comment → every name must stay (Pinned (f)); dropping or renaming
+    one, e.g. when loosening the 120-s test, fails `every_linux_test_name_of_the_base_still_exists`.
+  - `docs/development.md`: `acceptance_t013_docs.rs:61-85` (no stale v1.0 strings; the "Join" section) → unaffected by
+    a "CI" edit unless it adds one of the four strings; `guard_t079.rs:1539` (a test name); `confinement.rs:486`,
+    `acceptance_t036_workspace.rs:137`, `acceptance_t036_cli.rs:132`, `acceptance_t037_cli.rs:150`,
+    `guard_t036_removal_cli.rs:158`, `guard_t037_cli.rs:147` (message text only) → unaffected.
+  - `xtask/tests/acceptance_t072.rs`, `xtask/tests/guard_t072.rs`: no hit (new files); `guard_t079.rs`'s base list is a
+    floor, so added names pass.
+  - No hit pins a count this task changes (the case that blocked T-073, D-249): `acceptance_t079.rs` pins the registry,
+    which this task does not touch; the gate's test total rises by the new tests only.
+  Verdict: under A1 and Q-4 A, `acceptance_t070.rs` needs no edit and leaves `touches` (done above; restored if Q-3 A2
+  or Q-4 B).
+- **S-6 Ambiguity, verdict: resolved in Interface (1), director may strike it.** The drafted printer printed failing
+  tests' blocks only; on Windows the full output holds compile errors and no test line (`T-073-round-2.md`:
+  `test-output.txt` 172 lines, all build errors), so "why one failed" there is the `could not compile` / `error[` lines.
+  Added to Interface (1) and AC-7.
+- **S-7 A general Windows step (Interface (6), Q-5), measured cost.** `cargo check --locked --target
+  x86_64-pc-windows-msvc -p kiln-workspace --lib --tests --keep-going` in the clone (4 s, deps cached): of the 14
+  files in `crates/kiln-workspace/tests/`, 9 do not compile for Windows (`acceptance_t002_r2`, `acceptance_t008`,
+  `acceptance_t019_workspace`, `acceptance_t036_workspace`, `confinement`, `guard_t008`,
+  `guard_t036_removal_workspace`, `guard_t036_workspace`, `project`: E0433 `unix`, E0599 `is_fifo`/`uid`/`ino`/
+  `from_mode`), 5 do (`acceptance_t002`, `acceptance_t015_tools`, `acceptance_t073`, `guard_t073`, `tools_contract`);
+  a type check, not a Windows link or run (INFERRED for the runner). Costs: 14 `cargo test` invocations on
+  `gate-windows` (time on the runner unmeasured; T-073's step built and ran its 3 targets in 4.92 s,
+  `T-073-round-2.md`); `acceptance_t002`'s known Windows failure would then be reported with its message (useful:
+  "not read" in that record); one AC (AC-9, test author) and about 40,000 tokens; no change to T-073's step or test.
+  What it saves: T-074 Interface (5) and T-095's step edit (each one workflow step and one `acceptance_t070.rs` fn) and
+  the shared paths with this task (S-8). The whole-workspace form (93 test files in 8 packages) is left to T-092,
+  which makes the gate's own `test` step build on Windows.
+- **S-8 Order with T-074 (specified now, beside this task per D-245).** T-074's draft touches `platforms.yml` (a
+  `gate-windows` step) and `acceptance_t070.rs` (one fn), both shared with this task's draft, and
+  `xtask/platform-tests.toml` (not shared). Shared paths mean not in flight together (§5.2). **Finding: this task
+  merges first** (T-074's own Q-2 A agrees; this task is specified, T-074 a draft; this task re-orders every gate
+  job's evidence steps and T-074 adds one). T-074's re-check then reads: the order and names of `gate-windows`'s steps
+  and the upload list; whether its step's file is picked up by this task's AC-1/AC-2 (it is not: they select by file
+  name); `acceptance_t070.rs` as this task leaves it (unchanged under A1/Q-4 A). If T-074 went first, this task would
+  re-check Pinned (c) and the step set its tests read in `gate-windows`. Under Q-5 A T-074 drops `platforms.yml` and
+  `acceptance_t070.rs` from its `touches`: no shared path is left (this task does not touch `xtask/platform-tests.toml`
+  or `disk.rs`), so the two may be in flight together as D-245 planned; T-074's Windows evidence then needs this
+  task merged before T-074's CI round (its `guard_t074.rs` reported by (6)), so T-074 still re-checks after this merge.
+- **S-9 Not checked:** the branches of tasks in flight (none dispatched that shares a path: T-074 and T-095 are drafts,
+  read on main); the `awk` printer against a real failing output (the implementer's; AC-8's negative run shows it);
+  any time on the runners.
+
+### Questions from the spec check after T-073 (planner)
+- **Q-3. Green-run evidence (ruling Q-2's condition).** A1: the list step (measured 1.3–1.4 s locally, S-3), full
+  output only on red as now. A2: full output on every run as drafted (about 10.5 min per green macOS run; edits
+  `acceptance_t070.rs`). **Recommendation: A1** — the measured condition of ruling Q-2 holds by a factor above 40; the
+  runner time is recorded in round 1, and if it exceeds a minute the director rules A2 then.
+- **Q-4. T-070 review round 2 finding 2 (the two window-probe layout pins).** A: to T-077, which changes the window
+  jobs (this task's G-4 keeps them unchanged). B: here, keeping both fn names (guard_t079). **Recommendation: A** —
+  with A1 it takes `acceptance_t070.rs` out of this task.
+- **Q-5. A general Windows step (Interface (6)).** A: add it here (cost S-7). B: no; T-074 and T-095 each add their
+  own step and test fn after this task. **Recommendation: A** — the later tasks then need no workflow edit, and T-074
+  can be in flight beside this task as D-245 planned.
+- **Q-6. The compile-error lines of S-6.** A: keep them in Interface (1) and AC-7. B: strike. **Recommendation: A.**
+
+### Rulings on the spec check after T-073 (director, D-254)
+- **Q-3: A1.** Every gate job uploads the list of test names per binary on every run; the full output only on a
+  red one (measured: 1.3 s and 72,960 bytes against 461 s and 92,219 bytes for the same 1,146 names).
+- **Q-4: A.** The two window-probe tests are not loosened here; that goes to T-077. `xtask/tests/acceptance_t070.rs`
+  stays out of `touches`.
+- **Q-5: A.** The general reported Windows step is added here (Interface (6), AC-9), so that later Windows tasks
+  (T-074, T-095, T-092) do not edit the workflow to have their tests reported. Estimate about 740,000.
+- **Q-6: A.** Compile-error lines are printed in the log too.
+- Order: T-072 runs beside T-074, which gives up `platforms.yml` and `acceptance_t070.rs`; T-074's CI round is read
+  on its head rebased on a main that holds this task.
+- D-235 applies: before the join, builder and reviewer run main's `xtask` (built from `git archive main` in a
+  scratch directory) on the candidate tree.
 
 ## Log
 ### director
@@ -293,4 +429,5 @@ other gate job. Every line number below is VERIFIED with `cat -n` / `grep -n` at
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
 - 2026-11-18 · R-336 · draft · did: re-specified in full under v1.5 (cut: workflow evidence here, macOS document sentences to T-093) · not run: CI · next: director
+- 2026-11-18 · spec check: re-check after T-073 merged (v1.5 §5.7), against main `72522f2` · did: corrected what T-073 made stale (line numbers of all three jobs, T-073's Windows step in the order, the 14 test fns of `acceptance_t070.rs`, counted jobs and `gate-windows`'s red steps in the pending criterion, the stale `docs/development.md:633-634` sentence, `depends_on` + T-073); rewrote Interface (1), AC-1, AC-2, AC-7 for ruling Q-2's variant after measuring it (S-3: `-- --list` 1.26–1.43 s, 72,960 B, 1,146 names vs full run 461.1 s / 92,219 B, `--show-output` 462.7 s / 170,173 B; same name sets); D-235 on prototype A1 with main's tool: six steps PASS, `cargo test -p xtask` 287/0, no cut (S-4); D-249 grep of every touched path (S-5): `guard_t079.rs` pins 13 `acceptance_t070` names, A2 alone fails `:1180`; dropped `acceptance_t070.rs` from `touches` under Q-3 A1 / Q-4 A; added optional Interface (6)/AC-9 (general Windows step, Q-5, Windows type-check of 14 targets: 5 compile, S-7); order with T-074: this task first (S-8) · tier: high unchanged (gate paths `platforms.yml`, `xtask/ledger.toml`, `xtask/tests/`) · questions Q-3 to Q-6 · not run: `cargo xtask ci` whole, fmt/clippy on the prototype, anything on the runners, the `awk` printer on a failing output · scratch clone and its `target/` deleted · state line left as it was · next: director
 <!-- end planner log -->
