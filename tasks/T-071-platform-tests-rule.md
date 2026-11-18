@@ -22,6 +22,7 @@ touches:                # one role per path (D-153). All but the last two: imple
   - xtask/tests/guard_t005.rs               # GATE PATH
   - xtask/src/queue.rs                     # GATE PATH: its #[cfg(test)] module only (from line 803): two tests fail on macOS (R-285)
   - xtask/src/worktree.rs                  # GATE PATH: its #[cfg(test)] module only (from line 228): one test fails on macOS (R-285)
+  - xtask/src/join.rs                      # GATE PATH: its #[cfg(test)] module only: the toy repositories' git settings (ruling s13, D-228)
   - xtask/tests/acceptance_t013_publish.rs # GATE PATH: reads /proc (lines 942, 994); fails on macOS (R-285)
   - crates/kiln-workspace/tests/acceptance_t002.rs        # the two inert helpers (lines 169–187) and the test that uses them (line 924): this task's own rule fails on them, so it fixes them
   - docs/development.md                     # implementer: the `no-skip` and `scorecard` rows of "The gate" and a paragraph on the registry
@@ -395,6 +396,10 @@ way of writing a test falls into is closed; a contrived one is stated as a limit
   `cfg-attr-ignore` keeps reporting `#[cfg_attr(<predicate>, ignore)]`; s1 adds only that
   `#[cfg_attr(<any predicate>, test)]` is `cfg-disabled`. The empty statement of s7 is `#[cfg(windows)] ();`
   (`#[cfg(windows)] ;` is not valid Rust).
+- **s13 (the implementer's question in run R-313; D-228).** `xtask/src/join.rs` joins `touches` for its
+  `#[cfg(test)]` module only: its toy repositories get the same four settings as those of `queue.rs`, `publish.rs`
+  and `worktree.rs` (`core.autocrlf=false`, `core.eol=lf`, `core.safecrlf=false`, `core.longpaths=true`), so the
+  three `join::tests` that still fail under `core.autocrlf=true` pass. `xtask/src/git.rs` stays untouched.
 
 ## Log
 ### director
