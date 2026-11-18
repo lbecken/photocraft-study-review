@@ -810,6 +810,9 @@ listing kind, the root cases, the registry plan and the gate-tool side (D-235) c
 - Unchecked until the CI round: every Windows sentence of Pinned (i) that cites `guard_t074.rs` or "every call";
   the directory symbolic link as `--root`; the temporary-name sentence of `control-protocol.md`; any Windows run of
   the seven tests.
+- Token use: within my share (about 350,000); not passed. Not run: anything on Windows; `guard_t074.rs`,
+  `acceptance_t074.rs` (the test author's, not seen) · next: director (CI round on a head rebased on a main holding
+  T-072). CI-REQUEST: 2d96a2e7db5353e9b731435c9b5d70c5ba36da49
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
