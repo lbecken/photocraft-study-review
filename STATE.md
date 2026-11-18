@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-18 10:50 UTC_
+_Last updated: 2026-11-18 16:50 UTC_
 
 ## Now
 Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.5** (D-221). Cut 2 is built and
@@ -11,22 +11,35 @@ Follow-ups of cut 2 stay drafts unless a platform or feature task needs one. The
 
 Scorecard on main: 64 items: 47 verified, 0 implemented, 0 failing, 17 planned.
 
-**Platform track, state on 2026-11-18 10:50Z**
-- Merged: T-070 (`platforms.yml`), T-071 (`0f8ea64`, the platform-test rule), T-079 (`bc8d097`, registry and
-  portable fixes: macOS gate green), **T-073 (`8bf4c3a`, D-252: `kiln-workspace` and `kiln` build for Windows; the
-  root held and identified there; 47 of 47 file-system tests pass on the Windows runner)**.
+**Platform track, state on 2026-11-18 16:50Z**
+- Merged: T-070, T-071, T-079, T-073 (`8bf4c3a`, D-252), **T-096 (`aed3d88`, D-263: a tool test no longer depends on
+  the runner's default Rust; found on a candidate, D-258)**.
 - Counted jobs (a red run on main is an incident): the Linux gate (`ci.yml`), `window-linux`,
   `window-probe (macos-15)` (D-202), `gate-macos` (D-248). Not green yet: `gate-windows` (other crates' test
   targets: T-092), `window-probe (windows-2025)` (no OpenGL 2.0 on the hosted runner: T-077).
-- **In flight:** a planner specifies T-074 in full under v1.5 (Windows confinement rules; high; carries 9 pending
-  registry entries); another re-checks T-072's spec (CI evidence) against the tree after T-073. Both are then
-  dispatched side by side (D-245). CI on the push with T-073's merge is still to be read.
-- Order after that (D-245): T-092 (product tests on Windows) with T-093 (macOS document sentences) beside it,
-  then T-075, T-076 (becomes high tier), T-077, T-078 (unsigned artefacts only).
-- Pending registry entries expire 2026-12-31: 9 on T-074, 2 on T-092, 3 on T-076, 5 on T-077.
-- After the track: a platform report to the owner, with the deferred tooling batch (T-043, T-087 to T-090, about
-  4 to 5 M tokens; D-223: the owner decides) and the drafts T-091, T-094. Then the feature items, each draft
-  re-specified in full under v1.5.
+- **GitHub assigns no macOS runner to this repository** (D-261): `window-probe (macos-15)` since about 13:00Z,
+  `gate-macos` since about 15:16Z; jobs are cancelled after 15 minutes with no runner; no public incident; the
+  owner is told. D-262's ruling (a job cancelled before any step has no result; the clause counts as met only if
+  the diff cannot bear on the job, its last run on main was green, and a re-run was tried) was used once, for T-096.
+- **T-072** (CI evidence; high): 4 joins, review rounds 1 and 2 (approve at `0dbeac1`, `reviews/T-072-r2.md`);
+  823,527 tokens of 1,100,000. **Open: the CI criterion** — its head merged with main (`1275379`) and the negative
+  candidate of AC-8 (`0f8e5b9`) went to `ci/candidate` at 16:43Z: read Linux and Windows now; the macOS clauses
+  need a runner (its diff bears on `gate-macos`, so D-262's ruling does not apply). Then a row `Approve T-072`
+  with `gate paths`, `reviewed`, `queued`, queue.
+- **T-074** (Windows confinement; high): 2 joins, review rounds 1 and 2 (approve at `1d62ae0`, addendum `ed02d3e`);
+  897,911 of 1,100,000. Two early CI looks (`tasks/ci-runs/T-074-early-1.md`, `-early-2.md`) show its 15 guards
+  passing on Windows (176 `MEASURED:` lines) and on macOS, the library 43 of 43. **Open: the formal CI round** on
+  its head merged with a main that holds T-072 (D-254), macOS included. Then `Approve T-074`, queue. Worktrees
+  `.worktrees/T-074`, `-tests` (build directories deleted for disk; a rebuild takes about 10 minutes).
+- **T-092** (Windows gate green): a planner is writing the full specification and a cut (drafts T-098 on).
+- After T-074: T-095 (names and case in `path.rs`; draft, to be specified against T-074's merged tree), T-093
+  beside T-092, then T-075, T-076 (becomes high tier), T-077, T-078 (unsigned artefacts only). T-097 (toolchain
+  bump readiness) is a draft, not urgent.
+- Pending registry entries expire 2026-12-31: on main 9 on T-074, 2 on T-092, 3 on T-076, 5 on T-077 (T-074's
+  branch settles its 9).
+- After the track: a platform report to the owner, with the deferred tooling batch (T-043, T-087 to T-090; D-223:
+  the owner decides), the stated Windows limits (cloud placeholders and deduplicated files are refused, D-254) and
+  the drafts T-091, T-094, T-097. Then the feature items, each draft re-specified in full under v1.5.
 
 **Rules added by decisions since v1.5** (to go into the next methodology version): D-235 (a task that changes a
 gate rule does not also use it; the spec check states what main's tool says about the candidate tree, and builder
@@ -37,7 +50,7 @@ D-229 (a ruling changed after a test was written to it goes to both builders wit
 (stored as `tasks/ci-runs/T-NNN-round-N.md`); small lookups by a light helper through the GitHub tools. The
 nightly `platforms.yml` run on main (cron `17 3 * * *`) is read at each session start and handoff.
 
-Ids: next task number T-095, next run R-348, next decision D-253.
+Ids: next task number T-098 (the T-092 planner may take T-098 on), next run R-378 (the T-092 planner), next decision D-264.
 
 Drafts: T-074 to T-078, T-091, T-092, T-094 (platform); T-043, T-087 to T-090 (tooling, deferred); T-082, T-083,
 T-085, T-086, T-066, T-068, T-053, T-064, T-080, T-081, T-051, T-033, T-041 (last; the owner is told first),
