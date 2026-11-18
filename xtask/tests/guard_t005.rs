@@ -134,7 +134,7 @@ mod support {
             &root,
             "seedmember/Cargo.toml",
             &format!(
-                "[package]\nname = \"seedmember\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\noutsidedep = {{ path = \"{}\" }}\n",
+                "[package]\nname = \"seedmember\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\noutsidedep = {{ path = '{}' }}\n",
                 dep.display()
             ),
         );
