@@ -1541,6 +1541,42 @@ fn tree_under_a_path_applies_prefix_gitignores() {
 // ---------------------------------------------------------------------------------------------
 // AC-6
 
+/// A chain of directories `chain/d/d/…` (each holding only the next), taken down when dropped
+/// the way [`deep_trees_stop_at_the_depth_bound`] builds it, reversed: the chain is moved to
+/// `top`, then its one child is moved out to `spare`, `top` removed and `spare` moved to `top`,
+/// until a directory with no child is left. Every call names a short path and none recurses, so
+/// no step needs a stack or open descriptors that grow with the depth.
+struct DeepChain {
+    chain: PathBuf,
+    top: PathBuf,
+    spare: PathBuf,
+}
+
+impl DeepChain {
+    /// Take the chain down; the number of levels removed.
+    fn take_down(&self) -> std::io::Result<usize> {
+        fs::rename(&self.chain, &self.top)?;
+        let mut levels = 1;
+        while fs::symlink_metadata(self.top.join("d")).is_ok() {
+            fs::rename(self.top.join("d"), &self.spare)?;
+            fs::remove_dir(&self.top)?;
+            fs::rename(&self.spare, &self.top)?;
+            levels += 1;
+        }
+        fs::remove_dir(&self.top)?;
+        Ok(levels)
+    }
+}
+
+impl Drop for DeepChain {
+    fn drop(&mut self) {
+        let taken = self.take_down();
+        if !thread::panicking() {
+            taken.expect("take the deep chain down level by level");
+        }
+    }
+}
+
 fn chain(n: usize) -> String {
     vec!["d"; n].join("/")
 }
@@ -1625,6 +1661,13 @@ fn deep_trees_stop_at_the_depth_bound() {
         fs::rename(&parent, &top).expect("a level of the 2,100-deep chain");
     }
     fs::rename(&top, w.at("c2100/d")).expect("the 2,100-deep chain into c2100");
+    // Taken down level by level before `w` is dropped (declared after it, so dropped first):
+    // `fs::remove_dir_all` recurses once per level, which overflows a test thread's stack.
+    let _chain = DeepChain {
+        chain: w.at("c2100/d"),
+        top,
+        spare: parent,
+    };
     let mut find = Command::new("find");
     // `find`'s start point `d` is depth 0: exactly one directory at depth 2,099 or more.
     find.args(["d", "-mindepth", "2099", "-type", "d"])
