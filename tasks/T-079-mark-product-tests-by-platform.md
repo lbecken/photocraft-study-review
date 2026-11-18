@@ -593,6 +593,18 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
     errors (`--tests` for Windows: errors only in `publish.rs` and `acceptance_t005_r4.rs`, the patch's AC-4).
     Not run: `cargo xtask ci` (it builds the workspace; this run builds only `-p xtask` targets), macOS and
     Windows runs. Scratch removed. · next: director (Q-T1), join
+- 2026-11-18 · R-329 · AC-1 changed per ruling · did: rulings D-241 w1 and w2 acknowledged and accepted (w2: the
+  guard unchanged). `ac1_registry_entries_are_exactly_the_twenty_of_interface_2_and_2a`: the 4 non-UTF-8 tuples
+  are no longer open; each fixes its test and accepts as `item` exactly that name (Interface (1)) or that name +
+  `_non_utf8`, nothing else; each expected tuple still takes exactly one entry, so an entry under each of the
+  two names leaves one over ("not one of the 20"). The other 16 tuples unchanged. On this branch both AC-1 tests
+  still FAIL by assertion (0 entries). Scratch stub (`git archive` + patch + the 12 entries; deleted): unsplit
+  (four original names) passes; split (all four, or one, as `<name>_non_utf8`) passes; split-out fn with
+  another suffix (`_linux`, `_non_utf`) fails ac1_registry…; both names registered for one test fails
+  ac1_registry…; a split name in the other file fails ac1_registry…; ac1_pending… passes in all (no pending
+  entry changed). Checks on the committed state: `cargo fmt --check`, `cargo clippy -p xtask --tests -- -D
+  warnings` ok; `cargo xtask no-skip` PASS (0 registered); `cargo xtask hygiene` PASS. Not run: `cargo xtask
+  ci`, macOS/Windows runs. · next: join
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
