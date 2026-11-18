@@ -9,7 +9,7 @@ depends_on: [T-074]     # cut from T-074 (D-254 ruling 1); shares docs/protocol/
 touches:                # provisional, fixed at specification; one role per path (D-153)
   - crates/kiln-workspace/src/path.rs        # implementer: the Windows lexical refusals in `RelPath::new` and its unit tests
   - docs/protocol/paths.md                   # implementer: "Lexical refusals" for Windows; the case and short-name limits; T-074's "T-095's" clause removed
-  - docs/control-protocol.md                 # implementer: a Windows sentence after the lexical bullet, which stays verbatim (acceptance_t008_cli.rs:560-563)
+  - docs/control-protocol.md                 # implementer: a Windows sentence after the lexical bullet, which stays verbatim (acceptance_t008_cli.rs:563-574, the lexical bullet at :564-565; corrected by T-074's spec check)
   - docs/protocol/project.md                 # implementer, if names refused on Windows are counted in `skipped` (to be decided at specification)
   - crates/kiln-workspace/tests/guard_t095.rs   # test author: Windows runtime tests (pass on Unix base)
   - crates/kiln-workspace/tests/acceptance_t095.rs  # test author: what fails on base on every platform, if any (to be decided at specification)

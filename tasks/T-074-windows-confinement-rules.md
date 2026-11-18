@@ -153,8 +153,11 @@ its work (`no-skip`'s `inert-helper` rule). They run on Windows in T-073's repor
   that are reparse points without being links are refused too.
 - (f) Tests pinning what this task changes: none on Linux. `xtask/tests/guard_t079.rs` pins all 1,121 Linux test names of
   its base (`:515-516`), among them the 22 of `disk.rs` (`:1241-1262`): none renamed, removed or re-cfg'd, and
-  `failed_rename_removes_own_temp_and_keeps_target` keeps no platform cfg (`:506-511`). The 8 entries quoting `paths.md`
-  (`platform-tests.toml:310-376`) keep their quoted sentences word for word.
+  `failed_rename_removes_own_temp_and_keeps_target` keeps no platform cfg (`:506-511`). The 7 entries quoting `paths.md`
+  (`platform-tests.toml:310-376`; `grep -n 'doc = "docs/protocol/paths.md"' xtask/platform-tests.toml` → 7 entries and the
+  template comment `:13`; spec check C-1) keep their quoted sentences word for word. On Windows (spec check F-11):
+  `crates/kiln-workspace/tests/acceptance_t002.rs::save_through_symlink_updates_target` (no platform cfg, a relative file
+  link made by `symlink_file`, `:188-191`, `:945-973`) passes at base and fails after Interface (1) — Q-5.
 - (g) Worked examples, executed on the runner at base (PROBE lines) against the model "Windows follows no link; a taken
   name is skipped": `read sr` (relative file link to `f.txt`): base `Ok([102])` (C1), after `OutsideRoot`; `read j/x`
   (junction to `d` inside, `d/x` exists): base `OutsideRoot` (C3), after `OutsideRoot`; `write_atomic f.txt` with links at
@@ -179,8 +182,10 @@ its work (`no-skip`'s `inert-helper` rule). They run on Windows in T-073's repor
     `guard_t074.rs` on the head (spec check C-3).
   - `paths.md` "The root", a Windows bullet: "**A difference from Linux and macOS:** a `..` in `--root` is resolved by its
     text before any link is followed: with `link` a junction, `--root link\..\b` is the `b` beside `link`, not the one
-    beside the directory `link` leads to." Evidence: PROBE K2, K4 (Unix side: the Unix sentence of `paths.md:11-12` and
-    `std::path` semantics, unchecked by a command here).
+    beside the directory `link` leads to." Evidence: PROBE K2, K4. Unix side (spec check, Linux, scratch): with `k/link ->
+    a/real` a symbolic link, `readlink -f k/link/../b` → `…/k/a/b` and its `f.txt` reads `physical` (the `b` beside the
+    target), `readlink -f` standing in for `fs::canonicalize` (both `realpath` semantics; INFERRED equivalence, not run
+    through `DiskFs`); macOS: unchecked.
   - `paths.md` "The root", a Windows bullet: "A junction or symbolic link given as `--root` leads to the root; if it is
     pointed elsewhere while a session runs, every call answers `outside_root`, and pointed back the session works there
     again, as on Linux and macOS." Evidence: for a junction PROBE E2-E7 (after a retarget only `read` was run, E5),
@@ -511,6 +516,93 @@ what the counterpart asserts with the quote.
   ruling (added 11:20Z) carries `--show-output`, on which AC-W1-W4's `MEASURED:` lines depend: confirmed in T-072's
   rulings, still unchecked against T-072's branch (not read). Nothing in T-072's spec pins a path of T-074.
 
+#### 5. Pinned: commands run
+| Sentence | Command (this check) | Result |
+|---|---|---|
+| "`git diff --stat 8bf4c3a 72522f2 -- crates apps xtask .github docs/protocol` is empty" | the same, in the clone | empty: holds |
+| Goal: nine entries `task = "T-074"`, expiring 2026-12-31, `:238-380` | `grep -c 'task = "T-074"'`; read `:237-380` | 9, all `2026-12-31`: holds |
+| (f) "1,121 Linux test names … 22 of `disk.rs` (`:1241-1262`)", `:506-511`, `:515-516` | `grep -n`/`grep -c "kiln-workspace/src/disk.rs::" xtask/tests/guard_t079.rs` | 22 at `:1241-1262`; `BASE_COUNT: usize = 1121` at `:516`: holds |
+| (f) "The 8 entries quoting `paths.md`" | `grep -n 'doc = "docs/protocol/paths.md"' xtask/platform-tests.toml` | **7** (8 lines, one the template comment `:13`): corrected (C-1) |
+| (f) "Tests pinning what this task changes: none on Linux" | `grep -rln "symlink_file\|symlink_dir\|mklink" --include=*.rs crates apps xtask` | true on Linux; **false on Windows** (`acceptance_t002`, F-11) |
+| AC-1 "the 28 of `ws.path-confinement`" | count of `tests` in `scorecard/items/ws.path-confinement.toml` | 28: holds |
+| AC-4 `35 … (10 pending)` (19 − 9) | main's `no-skip` on the mock-up (§3) | holds; base 19 pending |
+| AC-2 "`kiln-workspace` needs no C compiler stub" | §3 clippy runs without `CC_*` set | holds for `--lib` and `--lib --profile test` |
+| Interface (5) "run on Windows in T-073's reported step (`-p kiln-workspace --lib`)" | `grep -n "acceptance_t073" .github/workflows/platforms.yml` | `:199`, `--lib --test acceptance_t073 --test guard_t073 -- --show-output`: holds |
+| Pinned (i) control-protocol: "`acceptance_t008_cli.rs:560-566`" | `grep -n "A save replaces the file\|lost a Paths bullet" apps/kiln-cli/tests/acceptance_t008_cli.rs` | bullet at `:566-568` in the loop `:563-574`: corrected (C-2) |
+| S-4 "`:549-570`", "the other 15 files" | `sed -n 540,585p …`; `git grep -lE 'control-protocol.md' 72522f2 -- '*.rs' \| wc -l` | `:549-574`; 17 files, so 16 others: corrected (C-2) |
+| Pinned (i) K sentence, Unix side "unchecked by a command here" | `readlink -f k/link/../b` in a scratch tree | physical `a/b`: evidence added (macOS unchecked) |
+| Pinned (i) F sentence "every call", root sentence "junction or symbolic link" | the probe record | narrower than the sentence: evidence lines corrected (C-3, C-4) |
+| Estimate "T-073 … booked 860,977 (D-252)" | `grep -n "^| D-252" docs/decisions.md` | holds |
+Every other Pinned sentence for a document carries PROBE lines, "`guard_t074.rs` on the head" or "unchecked"; none was
+found without one after C-3/C-4. Line references checked and holding: `disk.rs:11-13`, `:94-96`, `:272-375`, `:300-302`,
+`:335-337`, `:431-449`; `paths.md:50-51`; `project.md:57`, `:79-80`; `control-protocol.md:141`; `platform-tests.toml:9-18`.
+- **F-12 (fixture location of the seven counterparts).** The probe ran in `CARGO_TARGET_TMPDIR` on `D:` (B6, I9); the
+  counterparts live in the lib's test module, where `CARGO_TARGET_TMPDIR` is not set (cargo sets it for integration tests
+  only), so they use `fresh_dir` under `std::env::temp_dir()` (`disk.rs:620-626`), on the runner's `C:` volume (8.3 names
+  enabled there, I9). The 36 lib tests already pass there (T-073-round-2), so the root handling is shown; `symlink_file`,
+  `symlink_dir` and `mklink /J` on `C:` are unprobed (INFERRED to work: the privilege is per process, not per volume).
+  Note for the implementer; first CI round shows it.
+
+#### 6. Scope, roles, estimate
+- **Cut with T-095:** clean. One sentence to watch: Interface (1)'s "the location is the root joined with the request's
+  segments" is not literally true for a segment `C:x` (`Path::join` replaces the root, PROBE I10); the walk still ends
+  outside (I1-I3 `OutsideRoot`), and the lexical refusal is T-095's. No change asked; T-095's specification should
+  restate it. Nothing of T-095 needs to move here or the reverse.
+- **One role per path:** kept (implementer: `disk.rs` incl. its test module, the registry, three documents; test author:
+  `guard_t074.rs`, `acceptance_t074.rs`). Q-5 A would add `acceptance_t002.rs` for the test author.
+- **Estimate.** T-073 (860,977) had about 125 changed `disk.rs` lines, 1,046 lines of new test files, 160 registry lines,
+  a dependency, 2 CI rounds (`git diff --stat 7c44427b16db 8bf4c3a -- crates apps xtask docs .github Cargo.lock`). T-074:
+  fewer product lines (prototype: 21), but seven portable unit tests that make links and junctions whose Windows branches
+  the implementer can only type-check (their first run is CI), a guard over a larger matrix (four link kinds × three
+  destinations × two positions × six operations, plus four root cases), the registry, six document places, and F-11.
+  780,000 is plausible only if the first CI round is clean. **My estimate: about 880,000** (≈800,000 with two clean CI
+  rounds; ≈1,000,000 with a third round); the 1,100,000 ceiling holds.
+
+#### Corrections made (plain errors)
+- C-1: Pinned (f), S-3: "8 entries/sentences quoting `paths.md`" → 7.
+- C-2: Pinned (i) `acceptance_t008_cli.rs:560-566` → `:563-574` (bullet `:566-568`); S-4 `:549-570` → `:549-574`, "the
+  other 15 files" → 16. In T-095: `acceptance_t008_cli.rs:560-563` → `:563-574`, lexical bullet `:564-565`.
+- C-3: Pinned (i) F sentence: evidence narrowed to the calls the probe ran.
+- C-4: Pinned (i) root sentence: the symbolic-link half marked unchecked.
+- C-5: Pinned (d), AC-1: comments, doc comments and the `#[cfg(test)]` module excepted from "every changed product line".
+- C-6: AC-2: the `--test guard_t074` clippy form is the test author's and the reviewer's.
+- C-7: pending criterion: expected counts and the rule for other targets in T-072's step.
+- C-8: AC-W3: fail-on-base evidence is the pair only.
+- (also) Pinned (f): the Windows pin of F-11 recorded; Pinned (i) K sentence: the Unix side's command added.
+
+#### Questions for the director (design choices; not changed here)
+- **Q-1 (F-2) How does the Windows create avoid following a link at a temporary name?** A: pin it: the Windows
+  `create_temp` opens with `OpenOptionsExt::custom_flags(0x0020_0000)` (`FILE_FLAG_OPEN_REPARSE_POINT`, std, no
+  dependency; my prototype is clippy-clean for Windows), so a link there is never followed whatever std does. B: a second
+  probe of base `create_new` on a dangling link alone, then decide (one CI round and a record, about 60,000-80,000
+  tokens, and a day's latency). C: rely on std as it is (unchecked). **Recommendation: A** (a line and a test case, about
+  5,000 tokens), with Q-2's case as its test.
+- **Q-2 (F-1) Cases for Interface (3).** Add to counterpart #2 and `guard_t074`: H's pair exactly (junction at
+  `.kiln-tmp-0`, file link at `.kiln-tmp-1`: the only fail-on-base evidence), and a dangling file link to an outside path
+  alone at `.kiln-tmp-0` (the outside path must still not exist afterwards: the Unix test's case). **Recommendation: yes**;
+  about 10,000 tokens.
+- **Q-3 (F-3) Exhaustion and a failing look.** State in Interface (3): when every one of the 100 names holds an entry the
+  save fails `AlreadyExists` ("all 100 temporary file names are taken") as on Unix, whatever the creates answered; if
+  `symlink_metadata` of the name fails with anything but `NotFound`, the create's own error is returned. **Recommendation:
+  state it, no new Windows test** (100 junctions cost 100 `mklink` spawns; the existing no-cfg
+  `all_temp_names_taken_fails_without_changes_then_recovers` covers plain files on Windows); the reviewer reads the code.
+  Nil cost.
+- **Q-4 (F-6) A symbolic link as `--root`.** A: add a directory symbolic link given as `--root` (made by `symlink_dir`, PROBE
+  A2) to `guard_t074`'s root cases and to counterpart #12, so the sentence is measured. B: narrow the sentence to
+  junctions. **Recommendation: A** (about 5,000 tokens; #12's quote is about a symlink).
+- **Q-5 (F-11) `acceptance_t002::save_through_symlink_updates_target` on Windows.** A: add
+  `crates/kiln-workspace/tests/acceptance_t002.rs` to `touches` for the test author: that test's Windows branch
+  (`cfg!(windows)`) expects `outside_root` at open and save with link and target unchanged; the Unix branch, the name
+  (`guard_t079.rs:1301`) and `io.save-atomic`'s list unchanged; T-092 (draft, after this task) then starts from it. About
+  30,000-40,000 tokens. B: leave it to T-092 and have the record name it as the one test expected to turn from pass to
+  fail on Windows; no cost now, but for that interval a test asserts on Windows the opposite of the specified behaviour
+  (§8.1) and `io.save-atomic` gains a Windows failure. **Recommendation: A.**
+
+#### Verdict
+**Ready after rulings** on Q-1 to Q-5 (Q-5 is the one that would otherwise surface as an unexplained Windows failure in
+the CI round; Q-1 decides whether Interface (3) holds by construction). No rework of the design: the walk rule, the
+listing kind, the root cases, the registry plan and the gate-tool side (D-235) check out by run.
+
 ## Log
 ### director
 <!-- end director log -->
@@ -533,8 +625,8 @@ what the counterpart asserts with the quote.
   on Windows myself · next: fresh spec check, director
 - 2026-11-18 · spec check: fresh planner (high tier, confinement boundary), against main `9603d97` (drift from `72522f2`:
   `git diff --stat 72522f2 9603d97 -- crates apps xtask .github docs` → `docs/decisions.md` only); scratch clone
-  `/home/user/kiln-check-T074` · did: section "Spec check (fresh planner)" (F-1 to F-14, corrections C-1 to C-9, questions
-  Q-1 to Q-5); ran main's `no-skip` on a mock-up of the planned registry and three variants, main's seven gate steps and
+  `/home/user/kiln-check-T074` · did: section "Spec check (fresh planner)" (findings F-1 to F-12, corrections C-1 to C-8, questions
+  Q-1 to Q-5; T-095: one line reference); ran main's `no-skip` on a mock-up of the planned registry and three variants, main's seven gate steps and
   `cargo test -p xtask` on a prototype tree, Windows clippy of a prototype of Interface (1)-(3) · verdict: ready after
   rulings · not run: anything on Windows; T-072's branch (not read) · state left `draft` · next: director
 <!-- end planner log -->
