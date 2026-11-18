@@ -2,7 +2,7 @@
 id: T-096
 title: "The rebuild-from-base test of main's xtask builds with the repository's pinned toolchain"
 tier: high              # gate paths: xtask/src/queue.rs and xtask/tests/ (METHODOLOGY §4)
-state: self_verified
+state: tests_joined
 owner_role: planner
 scorecard_items: []
 depends_on: []
