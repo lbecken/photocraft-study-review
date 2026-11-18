@@ -1,6 +1,6 @@
 # State
 
-_Last updated: 2026-11-17 23:08 UTC_
+_Last updated: 2026-11-18 00:43 UTC_
 
 ## Now
 The `ci/…` branches can stay (the owner, D-207).
@@ -13,16 +13,19 @@ branches may be pushed and are deleted after their task merges (D-185).
 **Resumed on 2026-11-17 (D-218, the owner: "continue with 1, and then 2"): first the platform track, then the 17
 planned feature items.** The pause of D-207 is over; the earlier paragraph about it above is history.
 
-In flight (machine restarted 2026-11-17T23:02:26Z; dispatched after it):
-- **T-071** (platform-test rule in the tools; high; `in_progress`): implementer R-305 (`.worktrees/T-071`),
-  independent test author R-306 (`.worktrees/T-071-tests`), from main `550e457`. After the join: push the candidate
-  to `ci/T-071`, read jobs and artefacts (AC-6; and the Windows verdict of `guard_t054`'s backtrace test, ruling
-  Q-4 A of T-054), review, a row beginning `Approve T-071` with `gate paths`, queue.
-- **Retrospective of cut 2** (run R-304, a fresh analyst; brief in the scratchpad as `analyst-s2c2-brief.md`):
-  writes `retrospectives/iter-2-stage-2-cut-2.md`. Its changes (v1.5) apply from the task after T-071.
+In flight (restarts at 2026-11-17T23:02Z, 23:53Z and 2026-11-18T00:19Z; D-224, D-225):
+- **T-071** (platform-test rule in the tools; high; `in_progress`; ceiling extended to 1,500,000 by D-227): review
+  round 1 request-changes and CI round 1 not green on Windows (D-226, rulings s1 to s12). Rework running:
+  implementer R-313 (`.worktrees/T-071`, head `5bf01d8` before it), test author R-314 (`.worktrees/T-071-tests`).
+  Then: merge the tests branch, re-join, push the joined head to `ci/candidate` (CI round 2; a non-fast-forward
+  push there is not yet tried), CI record from the artefacts (resume the planner of ADR-0009), review round 2
+  (resume the reviewer of R-311), a row beginning `Approve T-071` with `gate paths` and the CI criterion, queue.
+- **Methodology v1.5** is written (D-221) and in force from the task after T-071.
+- **Tooling batch** (T-043 re-specified, drafts T-087 to T-090): waits behind the platform track, to be put to
+  the owner with the platform report (D-223). Accepted work not done, listed here by v1.5 change 13.
 Then, by D-199: T-079 (`specified`; spec check against main first), T-072, T-073, T-074, T-075, T-076, T-077,
 T-078. After the platform track: the planned feature items (drafts T-060 to T-063, T-022, T-024 to T-031 and
-others; each needs its spec). Next free task number: T-087. Next run id: R-307. Next decision: D-219.
+others; each needs its spec). Next free task number: T-091. Next run id: R-315. Next decision: D-228.
 The evaluation at cut 2 is published (`evaluations/iter-2-cut-2.md`, T-084, D-215).
 
 Merged since cut 1: T-069 (CI fix), T-057 (project panel), T-070 (`platforms.yml`: gate on three systems, the
