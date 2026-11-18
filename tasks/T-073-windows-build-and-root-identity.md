@@ -482,6 +482,7 @@ high → independent test author.
   accepted · all 7 round-1 findings fixed (1, 2, 5, 6, 7) or ruled (3 → T-094, 4 → T-074 note, sentences marked read);
   lib IR base 7de171b vs 5858927 equal on Linux and macOS after normalising, `is_held_root` not instantiated on Unix;
   12 mutants (own 3, procedure 9, survived 0); main's tool six PASS; CI expectation committed (fa032f9) before the
-  round-2 record, which was not on main at the end · verdict approve, CI criterion of round 2 pending (listed in
-  `reviews/T-073-r2.md`); nit 1 and the stale T-092 note as follow-ups · next: director
+  round-2 record; the record (run 44279298877) then reached main and matches it, criterion met (the scorecard's
+  `acceptance_t002::disk_save_replaces_via_rename_without_leftovers` fails on Windows by its designed precondition
+  panic, T-092's) · verdict approve; nit 1, the stale T-092 note and that panic's text as follow-ups · next: director
 <!-- end reviewer log -->
