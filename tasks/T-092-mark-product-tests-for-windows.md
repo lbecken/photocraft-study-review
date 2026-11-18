@@ -786,6 +786,10 @@ notes (point 2; the latter pending Q-B).
     by a FIFO"), counterpart the original. W29 (P/w): `loop`, `h39`, `h40`, `viaparent`, `absin` → `outside_root` on
     Windows; Unix statements unchanged; `toloop`, `f.txt/x`, `nodir/x` the same on both. Linux: 7 passed (base 6 + the
     new `_unix`); expected on Windows 4; stand-in clippy Windows and macOS: `Finished`; no-skip PASS (45 registered).
+  - W31 (`guard_t008.rs`, P/w): twin `symlink` (Unix: std's; Windows: Pinned (d), Q-B), the fixture and
+    `assert_links_kept` shared; `cfg!(windows)` → each of `in`, `din/t.txt`, `ain`, `in2`, `back` is `outside_root` at
+    read and write, `is_file` false, target unchanged; `ghost` refused, not created; the Unix branch is the former
+    body; `DiskFs::new`'s errors (dangling, file link) the same on both. Linux: 1 passed; stand-in clippy: `Finished`.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

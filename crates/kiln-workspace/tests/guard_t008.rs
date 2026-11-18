@@ -5,10 +5,13 @@
 //!
 //! Fixtures live in fresh directories under `std::env::temp_dir()`; no process is spawned and
 //! nothing here touches a FIFO, socket or device.
+//!
+//! On Windows (T-074) no link is followed: every link on the walk answers `outside_root`, a link
+//! whose location stays inside included, so the expected answers are chosen with `cfg!(windows)`
+//! (T-092); the fixture and the checks that the links are kept are the same on every platform.
 #![cfg(test)]
 
 use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
 use kiln_workspace::{DiskFs, RelPath, Vfs, VfsError};
@@ -35,6 +38,32 @@ impl Work {
 impl Drop for Work {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// A symlink at `link` to `target`, verbatim.
+#[cfg(unix)]
+fn symlink(target: &Path, link: PathBuf) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+/// Windows: a relative target is rebuilt with `PathBuf::push` from its components (ruling Q-B
+/// of T-092); a directory link when the target, resolved from the link's directory, is an
+/// existing directory when the link is made, else a file link (Pinned (d)).
+#[cfg(windows)]
+fn symlink(target: &Path, link: PathBuf) -> std::io::Result<()> {
+    let t = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        let mut t = PathBuf::new();
+        for c in target.components() {
+            t.push(c.as_os_str());
+        }
+        t
+    };
+    if link.parent().unwrap().join(&t).is_dir() {
+        std::os::windows::fs::symlink_dir(&t, &link)
+    } else {
+        std::os::windows::fs::symlink_file(&t, &link)
     }
 }
 
@@ -104,37 +133,69 @@ fn symlinks_inside_root_still_work() {
     for given in ["root", "rootlink"] {
         let w = fixture(&format!("in-{given}"));
         let mut fs_ = DiskFs::new(&w.at(given)).unwrap();
-        for p in ["in", "din/t.txt", "ain", "in2", "back"] {
+        if cfg!(windows) {
+            // T-074: every link on the walk is `outside_root` on Windows; nothing is written.
+            for p in ["in", "din/t.txt", "ain", "in2", "back"] {
+                assert_eq!(
+                    fs_.read(&rp(p)),
+                    Err(VfsError::OutsideRoot { path: rp(p) }),
+                    "Windows: read({p}) with root `{given}`"
+                );
+                assert!(
+                    !fs_.is_file(&rp(p)),
+                    "Windows: is_file({p}) with root `{given}`"
+                );
+                assert_eq!(
+                    fs_.write_atomic(&rp(p), format!("via {p}\n").as_bytes()),
+                    Err(VfsError::OutsideRoot { path: rp(p) }),
+                    "Windows: write_atomic({p}) with root `{given}`"
+                );
+                assert_eq!(
+                    fs::read(w.at("root/real/t.txt")).unwrap(),
+                    b"target\n",
+                    "Windows: write_atomic({p}) with root `{given}` changed the target"
+                );
+                assert_links_kept(&w);
+            }
             assert_eq!(
-                fs_.read(&rp(p)).unwrap(),
-                b"target\n",
-                "read({p}) with root `{given}`"
+                fs_.write_atomic(&rp("ghost"), b"g"),
+                Err(VfsError::OutsideRoot { path: rp("ghost") }),
+                "Windows: write_atomic(ghost) with root `{given}`"
             );
-            assert!(fs_.is_file(&rp(p)), "is_file({p}) with root `{given}`");
+            assert!(!w.at("root/real/new.txt").exists());
+        } else {
+            for p in ["in", "din/t.txt", "ain", "in2", "back"] {
+                assert_eq!(
+                    fs_.read(&rp(p)).unwrap(),
+                    b"target\n",
+                    "read({p}) with root `{given}`"
+                );
+                assert!(fs_.is_file(&rp(p)), "is_file({p}) with root `{given}`");
+            }
+            for p in ["in", "din/t.txt", "ain", "in2", "back"] {
+                let bytes = format!("via {p}\n");
+                fs_.write_atomic(&rp(p), bytes.as_bytes())
+                    .unwrap_or_else(|e| panic!("write_atomic({p}) with root `{given}`: {e}"));
+                assert_eq!(
+                    fs::read(w.at("root/real/t.txt")).unwrap(),
+                    bytes.as_bytes(),
+                    "write_atomic({p}) with root `{given}`"
+                );
+                assert_links_kept(&w);
+            }
+            assert!(!w.at("root/real/new.txt").exists());
+            fs_.write_atomic(&rp("ghost"), b"g").unwrap();
+            assert_eq!(fs::read(w.at("root/real/new.txt")).unwrap(), b"g");
         }
-        for p in ["in", "din/t.txt", "ain", "in2", "back"] {
-            let bytes = format!("via {p}\n");
-            fs_.write_atomic(&rp(p), bytes.as_bytes())
-                .unwrap_or_else(|e| panic!("write_atomic({p}) with root `{given}`: {e}"));
-            assert_eq!(
-                fs::read(w.at("root/real/t.txt")).unwrap(),
-                bytes.as_bytes(),
-                "write_atomic({p}) with root `{given}`"
-            );
-            assert_links_kept(&w);
-        }
-        assert!(!w.at("root/real/new.txt").exists());
-        fs_.write_atomic(&rp("ghost"), b"g").unwrap();
-        assert_eq!(fs::read(w.at("root/real/new.txt")).unwrap(), b"g");
         assert_links_kept(&w);
         no_temp(&w.dir);
     }
 
     // DiskFs::new keeps its errors.
     let w = Work::new("new");
-    symlink(w.at("missing"), w.at("dangling")).unwrap();
+    symlink(&w.at("missing"), w.at("dangling")).unwrap();
     fs::write(w.at("file"), b"x").unwrap();
-    symlink(w.at("file"), w.at("tofile")).unwrap();
+    symlink(&w.at("file"), w.at("tofile")).unwrap();
     let e = DiskFs::new(&w.at("dangling")).unwrap_err();
     assert!(matches!(e, VfsError::NotFound { .. }), "{e:?}");
     assert_eq!(e.path().as_str(), "(root)");
