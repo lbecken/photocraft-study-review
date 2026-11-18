@@ -190,14 +190,15 @@ jobs:
 
       - name: Workspace lib and T-073 tests (reported, not required)
         if: always()
-        # T-073 (ruling Q-1 A, D-245): the gate's `test` step cannot build on Windows until T-092;
-        # these two test targets can. Each test's line (`test <name> ... ok`) is kept in
-        # workspace-tests.txt; the step's status is always 0, the gate step decides the colour.
+        # T-073 (rulings Q-1 A, D-245, and y2, D-247): the gate's `test` step cannot build on Windows
+        # until T-092; these test targets can. Each test's line (`test <name> ... ok`) and the passing
+        # tests' output (`MEASURED:` lines) are kept in workspace-tests.txt; the step's status is
+        # always 0, the gate step decides the colour.
         run: |
           set +e
-          cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073 > workspace-tests.txt 2>&1
+          cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073 --test guard_t073 -- --show-output > workspace-tests.txt 2>&1
           rc=$?
-          grep -E '^(test |     Running |error)' workspace-tests.txt
+          grep -E '^(test |     Running |error|MEASURED:)' workspace-tests.txt
           echo "WORKSPACE TESTS: exit status $rc (reported, not required)"
           exit 0
 

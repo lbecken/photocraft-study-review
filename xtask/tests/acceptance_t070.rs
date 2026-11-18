@@ -1202,14 +1202,14 @@ fn ac1_gate_jobs_run_the_gate_and_upload_the_reports_whatever_its_result() {
     }
 }
 
-/// T-073 (ruling Q-1 A, D-245): `gate-windows`, and no other gate job, has one reported step
-/// that runs `cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073`
-/// after the gate, whatever the gate's result, writes its output to a file the job's upload
+/// T-073 (rulings Q-1 A, D-245, and y2, D-247): `gate-windows`, and no other gate job, has one
+/// reported step that runs `cargo test --locked --no-fail-fast -p kiln-workspace --lib --test
+/// acceptance_t073 --test guard_t073 -- --show-output` after the gate, whatever the gate's result, writes its output to a file the job's upload
 /// includes, and never turns the job red (`set +e`, ending in `exit 0`).
 #[test]
 fn t073_gate_windows_reports_the_workspace_lib_and_t073_tests() {
-    const CMD: &str =
-        "cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073";
+    const CMD: &str = "cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073 \
+         --test guard_t073 -- --show-output";
     let w = workflow();
     let is_it = |s: &Y| {
         run_of(s)
