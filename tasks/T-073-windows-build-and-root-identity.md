@@ -283,6 +283,18 @@ high → independent test author.
   kiln" succeeds for the first time; the probe exits 2 with `kiln: no window: egui_glow: OpenGL: egui_glow
   requires opengl 2.0+.` — the hosted Windows runner offers no OpenGL 2.0, which is T-077's matter (noted there).
 
+- 2026-11-18 **CI round 2: the pending CI criterion is met on the final candidate** (record
+  `tasks/ci-runs/T-073-round-2.md`, made by a fresh helper from `tasks/ci-runs/README.md`, run R-347): run 44279298877
+  on `ci/candidate` at the joined head `5858927aacfedc2d3973ee115a41687a9637d80b`. The four counted jobs success
+  (`gate-linux` 1147 passed, `gate-macos` 1130 passed, 0 failed). Windows: the reported step passes 47 of 47 (lib
+  36 with the new unit test `ok`, `acceptance_t073` 1, `guard_t073` 10), the same two `MEASURED:` lines as round 1;
+  `no-skip` prints `35 … (19 pending)` on all three platforms; fmt, layers, ui-commands, hygiene, schema and
+  no-skip PASS; clippy, scorecard and test FAIL at test targets of other crates only (no library, no binary, not
+  `kiln-workspace`'s lib). The scorecard's list names one run-time failure on Windows,
+  `kiln_workspace::acceptance_t002::disk_save_replaces_via_rename_without_leftovers`: the test T-071 left red on
+  Windows by design (it fails there naming why, until the product test files are done for Windows): T-092's,
+  noted there. The probe: `kiln` builds, exit status 2, no OpenGL 2.0 on the runner (T-077).
+
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
 - 2026-11-18 · R-336 · draft · did: re-specified in full under v1.5; prototype probed (scratch, deleted) · not run: CI, Windows runtime · next: director

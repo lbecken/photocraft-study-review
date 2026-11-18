@@ -44,6 +44,14 @@ a replaced root may move to T-074 by a ruling after T-073's review. `xtask/platf
 Also: `xtask/tests/acceptance_t079.rs` checks T-079's 20 entries one by one; a task that changes one of those 20
 lists that file for its test author.
 
+## Note from T-073's CI round 2 (director, 2026-11-18)
+Since `kiln-workspace` compiles for Windows, `acceptance_t002::disk_save_replaces_via_rename_without_leftovers`
+runs there and fails (`tasks/ci-runs/T-073-round-2.md`, the scorecard's list): T-071 made it fail on Windows by
+design, naming why, in place of two twins that did nothing. This task gives it its Windows form: the checks every
+platform has stay unconditional, the mode and inode checks become a registered Unix part with a counterpart or a
+reason. The other targets the Windows gate still names: `kiln-cli` `acceptance_t008_cli` and `acceptance_t019_cli`,
+`kiln` `acceptance_t055`, `script_t055`, `acceptance_t065`, `window_t065`.
+
 ## Log
 ### director
 - 2026-11-18 filed as a draft (D-233).
