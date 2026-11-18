@@ -66,6 +66,12 @@ nearest tasks: T-073 860,977, T-074 920,909, T-079 846,099 (`metrics/tasks.jsonl
 After T-092 (registry) and T-095 (depends_on). It shares `xtask/platform-tests.toml` with T-098, so the two are not in
 flight together (§5.2): the director orders them. T-099 needs this task too (every `kiln-workspace` target compiles).
 
+## Note from T-092's review (director, D-281)
+`crates/kiln-workspace/tests/acceptance_t008.rs:331-333`: a comment states as fact that Windows reads `..` in a
+link target by its text before following the link; when it was written that was an inference from the root-path
+probe. CI round 2 of T-092 then measured the fixture (`root/t` does not reach; `tasks/ci-runs/T-092-round-2.md`):
+the comment may cite that run. A small edit for whichever task next touches the file.
+
 ## Log
 ### director
 <!-- end director log -->

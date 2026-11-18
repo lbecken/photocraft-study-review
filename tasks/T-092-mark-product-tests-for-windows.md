@@ -2,7 +2,7 @@
 id: T-092
 title: "Make every test target of kiln-workspace except the two listing targets (T-100, D-273) compile, lint clean and pass on Windows: each test either asserts every platform's specified behaviour or is registered as a Unix test with its counterpart or reason; the two pending disk.rs entries get their Windows counterparts"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (xtask/platform-tests.toml, xtask/tests/); it changes what confinement and persistence tests assert (the save and the walk of disk.rs); the approval row must say `gate paths`. No product code, no dependency change, no document change.
-state: tests_joined
+state: queued
 owner_role: planner
 scorecard_items: []     # none claimed: the ws.*/io.* items are verified on Linux; per-platform confirmation is the evaluator's (ADR-0009 Decision 3)
 depends_on: [T-073, T-074, T-072]   # ruling 7 (D-269). T-073 merged (8bf4c3a); T-072 merged (D-268; its general reported Windows step, this task's evidence, is on main); T-074 approved by review, not merged when this was finalized (shares disk.rs's test module, xtask/platform-tests.toml, acceptance_t002.rs): a fresh spec check by another planner follows once T-074 is on main (§5.7).
