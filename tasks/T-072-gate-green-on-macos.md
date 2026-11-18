@@ -467,3 +467,19 @@ renamed to carry the new bound (it is not on main yet). The test author states i
 - 2026-11-18 · R-336 · draft · did: re-specified in full under v1.5 (cut: workflow evidence here, macOS document sentences to T-093) · not run: CI · next: director
 - 2026-11-18 · spec check: re-check after T-073 merged (v1.5 §5.7), against main `72522f2` · did: corrected what T-073 made stale (line numbers of all three jobs, T-073's Windows step in the order, the 14 test fns of `acceptance_t070.rs`, counted jobs and `gate-windows`'s red steps in the pending criterion, the stale `docs/development.md:633-634` sentence, `depends_on` + T-073); rewrote Interface (1), AC-1, AC-2, AC-7 for ruling Q-2's variant after measuring it (S-3: `-- --list` 1.26–1.43 s, 72,960 B, 1,146 names vs full run 461.1 s / 92,219 B, `--show-output` 462.7 s / 170,173 B; same name sets); D-235 on prototype A1 with main's tool: six steps PASS, `cargo test -p xtask` 287/0, no cut (S-4); D-249 grep of every touched path (S-5): `guard_t079.rs` pins 13 `acceptance_t070` names, A2 alone fails `:1180`; dropped `acceptance_t070.rs` from `touches` under Q-3 A1 / Q-4 A; added optional Interface (6)/AC-9 (general Windows step, Q-5, Windows type-check of 14 targets: 5 compile, S-7); order with T-074: this task first (S-8) · tier: high unchanged (gate paths `platforms.yml`, `xtask/ledger.toml`, `xtask/tests/`) · questions Q-3 to Q-6 · not run: `cargo xtask ci` whole, fmt/clippy on the prototype, anything on the runners, the `awk` printer on a failing output · scratch clone and its `target/` deleted · state line left as it was · next: director
 <!-- end planner log -->
+### implementer
+- 2026-11-18 · R-351 · started. Rulings acknowledged and accepted: D-245 Q-1 A (nightly kept), Q-2 A with its
+  measured variant; D-254 Q-3 A1 (list step on every run, full output only on red), Q-4 A (window-probe pins to
+  T-077; `acceptance_t070.rs` not touched), Q-5 A (general reported `kiln-workspace` step on `gate-windows`,
+  Interface (6)), Q-6 A (compile-error lines printed). Criteria in my words: (AC-1) each gate job has exactly one
+  step, `if: always()`, after the gate and before the upload, that runs `cargo test --workspace --locked
+  --no-fail-fast -- --list` into `test-list.txt`, and the upload names that file; the full-output step keeps
+  its "gate failed" condition. (AC-2) neither the list step nor the full-output step cuts its output by lines
+  (no `head -200`). (AC-4) the core-crates label echoes exactly the command run, `--no-fail-fast` included.
+  (AC-9) one `gate-windows`-only step, `if: always()`, `set +e` … `exit 0`, loops over the files
+  `crates/kiln-workspace/tests/*.rs` (no fixed list), runs `cargo test --locked --no-fail-fast -p kiln-workspace
+  --test <t>` for each and appends a `==== <t>: exit status N` line to `windows-tests.txt`, which is uploaded.
+  (AC-5) `xtask/ledger.toml` = main's entries plus `incidents/` mode `any`; `paths-ignore` derived from it.
+  Guards G-1..G-4: the probe's watchdog, recording steps ending `exit 0`, no `continue-on-error`, pinned
+  `uses:`, window jobs unchanged — none of them is to be broken by my edits. (AC-7/AC-8) through CI only.
+<!-- end implementer log -->
