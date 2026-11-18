@@ -351,6 +351,19 @@ fails there, it is ruled as a stated platform difference before this task is que
 ## Log
 ### director
 <!-- end director log -->
+- 2026-11-18 **CI round 1** (the pending CI criterion AC-6; record `tasks/ci-runs/T-071-round-1.md`, written from the
+  artefacts in run R-312): run 44201932507 of `platforms.yml` on `ci/candidate` at the joined head
+  `f7d511352027bdd8b0e48f207c3aac9ad5bbca85`. `gate-linux` success (`xtask` 261 passed; the 7 registered tests ran);
+  `window-linux` and `window-probe (macos-15)` success (the counted jobs). **macOS: `xtask` exit status 0** (256
+  passed, 0 failed; by count the five `linux` entries are absent); the `gate-macos` artefact was not uploaded
+  (`ETIMEDOUT`), so no test names. **Windows: the `xtask` tests compile for the first time; the unit-test binary
+  ran with 108 passed and 22 failed** and cargo stopped there, so no integration binary ran: 15 queue tests whose
+  `touches` refusal lists files as changed, 4 merge or rebase conflicts in toy repositories, 1 CRLF content, 1
+  path separator in a message, 1 file Windows cannot execute. AC-6: clause "`xtask` exit status 0 on
+  `gate-windows`" not met; clause "the scorecard step on macOS prints the platform detail line" not met as printed
+  (the step printed `6 scorecard problems: …`; the page was not compared). The Windows verdict of `guard_t054`'s
+  backtrace test stays pending (its binary did not run). Rework is ruled with the review's findings.
+
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
 - 2026-11-15 · R-261 · draft · did: full spec against 15555cc (above) · not run: hosted runners · next: director (Q-1–Q-4, specified)
