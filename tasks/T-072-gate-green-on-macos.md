@@ -2,7 +2,7 @@
 id: T-072
 title: "Make every CI gate job show which tests ran and why one failed, on success too; make incidents/ a ledger path; settle the nightly run"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (.github/workflows/platforms.yml, xtask/ledger.toml, xtask/tests/); the approval row must contain `gate paths`. No dependency change, no product code.
-state: ready
+state: in_progress
 owner_role: planner
 scorecard_items: []     # produces evidence; changes no behaviour of Kiln's binaries
 depends_on: [T-079, T-073]   # both merged (bc8d097; 8bf4c3a): T-073 changed platforms.yml and acceptance_t070.rs (spec check after T-073, below)
