@@ -951,25 +951,54 @@ fn save_through_symlink_updates_target() {
 
     let mut disk = DiskFs::new(&root).unwrap();
     let path = rp("d/link.txt");
-    let mut doc = Document::open(&disk, &path).unwrap();
-    assert_eq!(doc.buffer().text(), "target\n");
-    insert_end(&mut doc, "via link\n");
-    doc.save(&mut disk).unwrap();
+    if cfg!(windows) {
+        // T-074 Interface (1), (7): on Windows no link is followed; the save is refused.
+        let opened = Document::open(&disk, &path);
+        assert!(
+            matches!(opened, Err(OpenError::Vfs(VfsError::OutsideRoot { .. }))),
+            "Windows: Document::open through a file symlink: expected Err(Vfs(OutsideRoot)), got {opened:?}"
+        );
+        assert_eq!(
+            disk.write_atomic(&path, b"target\nvia link\n"),
+            Err(VfsError::OutsideRoot { path: path.clone() }),
+            "Windows: write_atomic through a file symlink"
+        );
+        assert_eq!(
+            std::fs::read(root.join("d/target.txt")).unwrap(),
+            b"target\n".to_vec(),
+            "Windows: the target file is unchanged"
+        );
+        let lm = std::fs::symlink_metadata(root.join("d/link.txt")).unwrap();
+        assert!(
+            lm.file_type().is_symlink(),
+            "Windows: the symlink stays a symlink"
+        );
+        assert_eq!(
+            listing(&root.join("d")),
+            listing_before,
+            "Windows: the listing of d changed"
+        );
+    } else {
+        let mut doc = Document::open(&disk, &path).unwrap();
+        assert_eq!(doc.buffer().text(), "target\n");
+        insert_end(&mut doc, "via link\n");
+        doc.save(&mut disk).unwrap();
 
-    let link = root.join("d/link.txt");
-    let lm = std::fs::symlink_metadata(&link).unwrap();
-    assert!(lm.file_type().is_symlink(), "the symlink stays a symlink");
-    assert_eq!(
-        std::fs::read_link(&link).unwrap(),
-        std::path::PathBuf::from("target.txt")
-    );
-    assert_eq!(
-        std::fs::read(root.join("d/target.txt")).unwrap(),
-        b"target\nvia link\n".to_vec(),
-        "the target file holds the new content"
-    );
-    assert_eq!(listing(&root.join("d")), listing_before, "no leftovers");
-    assert_eq!(disk.read(&path).unwrap(), b"target\nvia link\n".to_vec());
+        let link = root.join("d/link.txt");
+        let lm = std::fs::symlink_metadata(&link).unwrap();
+        assert!(lm.file_type().is_symlink(), "the symlink stays a symlink");
+        assert_eq!(
+            std::fs::read_link(&link).unwrap(),
+            std::path::PathBuf::from("target.txt")
+        );
+        assert_eq!(
+            std::fs::read(root.join("d/target.txt")).unwrap(),
+            b"target\nvia link\n".to_vec(),
+            "the target file holds the new content"
+        );
+        assert_eq!(listing(&root.join("d")), listing_before, "no leftovers");
+        assert_eq!(disk.read(&path).unwrap(), b"target\nvia link\n".to_vec());
+    }
 }
 
 // ---------------------------------------------------------------- AC-11 errors
