@@ -117,7 +117,8 @@ jobs:
           cargo test --workspace --locked --no-fail-fast -- --list > test-list.txt 2>&1
           rc=$?
           awk '{ gsub(/\033\[[0-9;]*[A-Za-z]/, "") } /^( +Running |   Doc-tests |error)/' test-list.txt
-          echo "TEST LIST: exit status $rc (recorded; the gate step decides the colour)"
+          echo "TEST LIST: exit status $rc"
+          echo "TEST LIST: the status is recorded, not used; the gate step decides the colour"
           exit 0
 
       - name: Full test output (gate failed)
@@ -142,7 +143,8 @@ jobs:
               if (!shown) { print run; shown = 1 } print; next
             }
           ' test-output.txt
-          echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
+          echo "TEST OUTPUT: exit status $rc"
+          echo "TEST OUTPUT: the status is recorded, not used; the gate step decides the colour"
           exit 0
 
       - name: Disk
@@ -245,7 +247,8 @@ jobs:
           cargo test --workspace --locked --no-fail-fast -- --list > test-list.txt 2>&1
           rc=$?
           awk '{ gsub(/\033\[[0-9;]*[A-Za-z]/, "") } /^( +Running |   Doc-tests |error)/' test-list.txt
-          echo "TEST LIST: exit status $rc (recorded; the gate step decides the colour)"
+          echo "TEST LIST: exit status $rc"
+          echo "TEST LIST: the status is recorded, not used; the gate step decides the colour"
           exit 0
 
       - name: kiln-workspace test targets (reported, not required)
@@ -294,7 +297,8 @@ jobs:
               if (!shown) { print run; shown = 1 } print; next
             }
           ' test-output.txt
-          echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
+          echo "TEST OUTPUT: exit status $rc"
+          echo "TEST OUTPUT: the status is recorded, not used; the gate step decides the colour"
           exit 0
 
       - name: Disk
@@ -387,7 +391,8 @@ jobs:
           cargo test --workspace --locked --no-fail-fast -- --list > test-list.txt 2>&1
           rc=$?
           awk '{ gsub(/\033\[[0-9;]*[A-Za-z]/, "") } /^( +Running |   Doc-tests |error)/' test-list.txt
-          echo "TEST LIST: exit status $rc (recorded; the gate step decides the colour)"
+          echo "TEST LIST: exit status $rc"
+          echo "TEST LIST: the status is recorded, not used; the gate step decides the colour"
           exit 0
 
       - name: Full test output (gate failed)
@@ -412,7 +417,8 @@ jobs:
               if (!shown) { print run; shown = 1 } print; next
             }
           ' test-output.txt
-          echo "TEST OUTPUT: exit status $rc (recorded; the gate step decides the colour)"
+          echo "TEST OUTPUT: exit status $rc"
+          echo "TEST OUTPUT: the status is recorded, not used; the gate step decides the colour"
           exit 0
 
       - name: Disk

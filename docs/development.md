@@ -645,8 +645,9 @@ After the gate, whatever its result, each gate job prints the report and runs:
   followed by its `<name>: test` lines). It reuses the binaries the gate's `test` step built and
   runs no test, so on a green job the names are this list and the verdicts are the gate's `test`
   totals (`0 failed`); the log prints the `Running` / `Doc-tests` and `error` lines and `TEST
-  LIST: exit status N` (recorded, not used). On Windows the list holds the compile errors and no
-  names while the workspace's tests do not build there (T-092);
+  LIST: exit status N` (recorded, not used). On Windows the list holds 0 binaries and 0 test
+  names, only the compile errors (exit status 101), until T-092 makes the workspace's tests build
+  there (`tasks/ci-runs/T-072-round-1.md`: 172 lines of compile errors);
 - on `gate-windows` only, after the list, the step "kiln-workspace test targets (reported, not
   required)": for each file `crates/kiln-workspace/tests/<t>.rs`, in name order, `cargo test
   --locked --no-fail-fast -p kiln-workspace --test <t> -- --show-output`, appended to
@@ -690,25 +691,29 @@ differing from their blobs without it and 0 of 589 with it, T-070 Pinned (g)).
 
 **Runners, wall times and disk.** Labels as pinned by T-070: `macos-15` (arm64), `windows-2025`
 (x64), `ubuntu-24.04` (x64); GitHub's documentation gives 3 CPU and 7 GB of memory for
-`macos-15` and 4 CPU and 16 GB for the other two, which no run here shows. Run 43752760283 of
-`platforms` (candidate `cd1121b` on `ci/T-070`; the director's record "CI round 1" in
-`tasks/T-070-ci-jobs-for-macos-and-windows.md` and `tasks/ci-runs/T-070-round-1.md`) showed,
-per job (wall time = the job's completion minus its start, so queueing is not counted; the disk
-columns are the job's `DISK` lines as printed):
+`macos-15` and 4 CPU and 16 GB for the other two, which no run here shows. Run 44297266071 of
+`platforms` (T-072's candidate `277e258` on `ci/candidate`, the first run with `gate-macos`
+green; the director's record `tasks/ci-runs/T-072-round-1.md`, section "The implementer's head")
+showed, per job (wall time = the job's completion minus its start, so queueing is not counted;
+the disk columns are the job's `DISK` lines as printed, header first):
 
-| Job | Result | Wall time | `df -h .` (size, used, avail, use) | `du -sh target` |
+| Job | Result | Wall time | `df -h .` as printed | `du -sh target` |
 |---|---|---|---|---|
-| `gate-linux` | green | 15 min 34 s | `/dev/root 145G 69G 76G 48% /` | 8.6G |
-| `gate-macos` | red (gate: scorecard, test) | 21 min 20 s, of which 11 min 26 s the full-test-output step | `/dev/disk2s5 320Gi 262Gi 40Gi 87% 2.3M 419M 1% /System/Volumes/Data` (size, used, avail, capacity, iused, ifree, %iused, mounted on) | 4.4G |
-| `gate-windows` | red (gate: clippy, schema, scorecard, test) | 9 min 15 s | `D: 150G 5.5G 145G 4% /d` | 2.5G |
-| `window-linux` | green | 2 min 13 s | (no disk line) | |
-| `window-probe` (`macos-15`) | green | 2 min 26 s | (no disk line) | |
-| `window-probe` (`windows-2025`) | red at "Build kiln" | 2 min 8 s | (no disk line) | |
+| `gate-linux` | green | 11 min 49 s, of which the gate step 8 min 24 s and the test list under 1 s | `Filesystem Size Used Avail Use% Mounted on` / `/dev/mapper/cow-root 145G 62G 83G 43% /` | 4.5G |
+| `gate-macos` | green | 24 min 13 s, of which the gate step 15 min 58 s and the test list 4 s | `Filesystem Size Used Avail Capacity iused ifree %iused Mounted on` / `/dev/disk2s5 320Gi 260Gi 42Gi 87% 2.3M 436M 1% /System/Volumes/Data` | 3.2G |
+| `gate-windows` | red (gate: clippy, scorecard, test) | 18 min 38 s, of which the gate step 6 min 26 s, the test list 2 s and the full test output 1 s | `Filesystem Size Used Avail Use% Mounted on` / `D: 220G 3.7G 217G 2% /d` | 3.5G |
+| `window-linux` | green | 59 s | (no disk line) | |
+| `window-probe` (`macos-15`) | green | 51 s | (no disk line) | |
+| `window-probe` (`windows-2025`) | red | 1 min 56 s | (no disk line) | |
 
-The macOS and Windows gate figures are of red runs, not of a passing gate; on Windows the
-workspace did not compile (`kiln-workspace`), so its `target` is that of a partial build. The
-macOS probe ran the three-line script in the window form and `kiln` exited 0; the window on macOS is still built, not observed,
-until CI has run the window procedure there (METHODOLOGY §8.1; ADR-0009 Q-5).
+Runner images (from the job logs, as the record gives them): `ubuntu-24.04` 20261111.127.1,
+`macos-15-arm64` 20261104.0514.1, `windows-2025-vs2026` 20261103.298.1. The Windows gate is red
+as on `main` since T-073: the workspace's tests do not build there until T-092, so its `target`
+is that of a partial build, and its `test-list.txt` held 0 binaries and 0 test names, only
+compile errors (172 lines; the list step's exit status 101; same record). The macOS probe ran
+the three-line script in the window form; the window on macOS is still built, not observed,
+until CI has run the window procedure there (METHODOLOGY §8.1; ADR-0009 Q-5). The table of
+T-070's run 43752760283 is in `tasks/ci-runs/T-070-round-1.md`.
 
 **What the confinement tests need from the machine.** The tests of `ws.path-confinement` that
 need a root the process under test cannot read (`acceptance_t036_workspace`,
