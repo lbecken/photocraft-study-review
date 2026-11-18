@@ -2,7 +2,7 @@
 id: T-079
 title: "Make the gate pass on macOS: register the product tests of facilities macOS lacks, each with its sentence and counterpart, and fix the tests that assume Linux where macOS has the facility"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (xtask/platform-tests.toml, xtask/tests/); the approval row must contain `gate paths`. No dependency change, no product code.
-state: queued
+state: merged
 owner_role: planner
 scorecard_items: []     # none claimed; the tests stay tied to their items
 depends_on: [T-071]     # the registry's format and the no-skip rule; and both edit xtask/platform-tests.toml
