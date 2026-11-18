@@ -1989,6 +1989,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // runs a planted `#!/bin/sh` file as the built xtask (xtask/platform-tests.toml)
     fn main_xtask_is_rebuilt_from_base_on_every_run() {
         // D-026 R1, with real cargo on a tiny workspace (no dependencies).
         let repo = portable_init(
@@ -2120,6 +2121,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")] // lock liveness reads /proc (xtask/platform-tests.toml)
     fn basic_refusals_write_nothing() {
         let repo = setup("q-refuse");
         let root = repo.path();

@@ -707,6 +707,7 @@ fn committed_state(r: &Repo) -> String {
 }
 
 #[cfg(test)]
+#[cfg(target_os = "linux")] // used by the Linux-only lock test only
 /// Every file under `dir` with its length and modification time (empty if `dir` is absent).
 fn tree_snap(dir: &Path) -> Vec<String> {
     let mut out = Vec::new();
@@ -927,6 +928,7 @@ fn a_failing_git_add_in_step_2_is_a_commit_failure() {
 }
 
 #[test]
+#[cfg(target_os = "linux")] // the lock's liveness is read from /proc (xtask/platform-tests.toml)
 fn publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue() {
     // Ruling m: lock `<git-common-dir>/kiln-queue.lock` held by a live process (this test's own)
     // → exit 1, `publish: refused: another queue or publish run holds <lock path>`, nothing

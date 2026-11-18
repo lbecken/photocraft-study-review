@@ -300,6 +300,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")] // xtask/platform-tests.toml
     fn create_seed_list_remove() {
         let repo = portable_init("wt", &[("a.txt", "a")]);
         let root = repo.path();
