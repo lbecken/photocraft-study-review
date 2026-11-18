@@ -1,0 +1,258 @@
+diff --git a/xtask/platform-tests.toml b/xtask/platform-tests.toml
+index 27825a8..f131989 100644
+--- a/xtask/platform-tests.toml
++++ b/xtask/platform-tests.toml
+@@ -17,5 +17,78 @@
+ # task = "T-075"               # "pending" only: the task that writes the counterpart
+ # expires = "2026-12-31"       # "pending" only (today = HEAD's commit date)
+ #
+-# No entry yet (D-235 u1): the tests that need one are marked and listed by T-079, after this
+-# rule has reached main.
++# The entries below are T-071's: tests of the director's tools (queue, worktree, publish) that
++# assume Linux or Unix. Those tools run on the director's Linux machine only (ADR-0009 (c),
++# ruling Q-5 A of T-071, D-199), so they have no counterpart elsewhere.
++
++[[test]]
++file = "xtask/src/queue.rs"
++item = "tests::basic_refusals_write_nothing"
++platforms = "linux"
++doc = "docs/development.md"
++quote = "a lock whose process is gone is reclaimed"
++counterpart = "none"
++reason = "the queue reads a lock holder's liveness from /proc/<pid>, which only Linux has; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
++
++[[test]]
++file = "xtask/src/worktree.rs"
++item = "tests::create_seed_list_remove"
++platforms = "linux"
++doc = "docs/development.md"
++quote = "deletes the branch only if merged"
++counterpart = "none"
++reason = "on macOS the temporary directory is reached through the /var -> /private/var link, so `worktree list` names another path (R-285); the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
++
++[[test]]
++file = "xtask/src/publish.rs"
++item = "tests::a_failed_content_commit_in_step_four_exits_one"
++platforms = "unix"
++doc = "docs/development.md"
++quote = "a failed content commit in step 4 included"
++counterpart = "none"
++reason = "the test installs a git hook by setting its executable bit, which Windows does not have; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
++
++[[test]]
++file = "xtask/tests/acceptance_t013_publish.rs"
++item = "publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue"
++platforms = "linux"
++doc = "docs/development.md"
++quote = "a lock held by a live process is refused"
++counterpart = "none"
++reason = "the test and the lock's liveness check read /proc/<pid>, which only Linux has; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
++
++[[test]]
++file = "xtask/tests/guard_t005.rs"
++item = "worktree_build_does_not_touch_main_target"
++platforms = "unix"
++doc = "docs/development.md"
++quote = "never hard links, symlinks or a shared directory"
++counterpart = "none"
++reason = "hard links are found by device and inode numbers, which stable Rust exposes on Unix only; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
++
++[[test]]
++file = "xtask/tests/acceptance_t005_r3.rs"
++item = "tampered_cached_gate_binary_does_not_decide_the_gate"
++platforms = "linux"
++doc = "docs/development.md"
++quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
++counterpart = "none"
++reason = "the test finds the queue's built xtask by its ELF header, which macOS (Mach-O) and Windows (PE) binaries do not have, and replaces it with a shell script; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
++
++[[test]]
++file = "xtask/tests/acceptance_t005_r4.rs"
++item = "planted_future_dated_xtask_does_not_decide_the_gate"
++platforms = "linux"
++doc = "docs/development.md"
++quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
++counterpart = "none"
++reason = "the test finds the queue's built xtask by its ELF header, which macOS (Mach-O) and Windows (PE) binaries do not have, and replaces it with a shell script; the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
++
++[[test]]
++file = "xtask/src/queue.rs"
++item = "tests::main_xtask_is_rebuilt_from_base_on_every_run"
++platforms = "unix"
++doc = "docs/development.md"
++quote = "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted"
++counterpart = "none"
++reason = "the test writes a `#!/bin/sh` script over the cached xtask and runs it (`out(&bin)` expects `poisoned`); Windows cannot execute a shebang script (os error 216 in CI run 44201932507); the queue, worktree and publish tools run on the director's Linux machine only (ADR-0009 (c))"
+diff --git a/xtask/src/publish.rs b/xtask/src/publish.rs
+index 9cfd655..c6c47f1 100644
+--- a/xtask/src/publish.rs
++++ b/xtask/src/publish.rs
+@@ -1345,6 +1345,7 @@ mod tests {
+     }
+ 
+     #[test]
++    #[cfg(unix)] // the hook needs an executable bit (xtask/platform-tests.toml)
+     fn a_failed_content_commit_in_step_four_exits_one() {
+         // Ruling D-047 (q): a stop in step 4 exits 1, a failed commit on task/T-NNN included;
+         // exit 2 is the ledger commits' pinned line only.
+diff --git a/xtask/src/queue.rs b/xtask/src/queue.rs
+index 65a85df..8bf3741 100644
+--- a/xtask/src/queue.rs
++++ b/xtask/src/queue.rs
+@@ -1989,6 +1989,7 @@ mod tests {
+     }
+ 
+     #[test]
++    #[cfg(unix)] // runs a planted `#!/bin/sh` file as the built xtask (xtask/platform-tests.toml)
+     fn main_xtask_is_rebuilt_from_base_on_every_run() {
+         // D-026 R1, with real cargo on a tiny workspace (no dependencies).
+         let repo = portable_init(
+@@ -2120,6 +2121,7 @@ mod tests {
+     }
+ 
+     #[test]
++    #[cfg(target_os = "linux")] // lock liveness reads /proc (xtask/platform-tests.toml)
+     fn basic_refusals_write_nothing() {
+         let repo = setup("q-refuse");
+         let root = repo.path();
+diff --git a/xtask/src/worktree.rs b/xtask/src/worktree.rs
+index ceb88d6..5e8438f 100644
+--- a/xtask/src/worktree.rs
++++ b/xtask/src/worktree.rs
+@@ -300,6 +300,7 @@ mod tests {
+     }
+ 
+     #[test]
++    #[cfg(target_os = "linux")] // xtask/platform-tests.toml
+     fn create_seed_list_remove() {
+         let repo = portable_init("wt", &[("a.txt", "a")]);
+         let root = repo.path();
+diff --git a/xtask/tests/acceptance_t005_r3.rs b/xtask/tests/acceptance_t005_r3.rs
+index e34a248..0e3ba0f 100644
+--- a/xtask/tests/acceptance_t005_r3.rs
++++ b/xtask/tests/acceptance_t005_r3.rs
+@@ -258,11 +258,14 @@ fn lock_version(lock: &str, name: &str) -> Option<String> {
+ 
+ // ---- R1: the gate binary is rebuilt from base_sha every run -------------------------------
+ 
++#[cfg(target_os = "linux")]
+ const FAKE_GATE: &str = "#!/bin/sh\n# tampered copy of xtask (T-005 R1 test)\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = --report ]; then printf '%s' '{\"passed\": true, \"failed_step\": null, \"seconds\": 0.0, \"steps\": []}' > \"$2\"; fi\n  shift\ndone\necho 'tampered gate: PASSED'\nexit 0\n";
+ 
+ /// Overwrite every built `xtask` executable (ELF named `xtask` or `xtask-<hash>`) under `dir`
+ /// with a fake that reports a green gate; its mtime becomes newer than any source, so cargo
+-/// considers it fresh. Returns the files replaced.
++/// considers it fresh. Returns the files replaced. Linux only: the queue's build tree and its
++/// ELF binaries (xtask/platform-tests.toml).
++#[cfg(target_os = "linux")]
+ fn tamper_xtask_binaries(dir: &Path) -> Vec<PathBuf> {
+     use std::os::unix::fs::PermissionsExt as _;
+     let mut out = Vec::new();
+@@ -301,6 +304,7 @@ fn tamper_xtask_binaries(dir: &Path) -> Vec<PathBuf> {
+ }
+ 
+ #[test]
++#[cfg(target_os = "linux")] // xtask/platform-tests.toml
+ fn tampered_cached_gate_binary_does_not_decide_the_gate() {
+     let r = Repo::new("r3-r1-tamper");
+     let scratch_dir = r.root.parent().unwrap().to_path_buf();
+diff --git a/xtask/tests/acceptance_t005_r4.rs b/xtask/tests/acceptance_t005_r4.rs
+index 24e7f1d..710abcb 100644
+--- a/xtask/tests/acceptance_t005_r4.rs
++++ b/xtask/tests/acceptance_t005_r4.rs
+@@ -7,7 +7,9 @@
+ //! committed on main before each run (R6). Outside the R12 test, any `metrics/` change a run
+ //! leaves is committed by the test (a no-op once the queue commits its own record).
+ 
+-use std::path::{Path, PathBuf};
++use std::path::Path;
++#[cfg(target_os = "linux")] // used by the Linux-only R13 (a) test only
++use std::path::PathBuf;
+ use std::process::Command;
+ 
+ use serde_json::Value;
+@@ -21,6 +23,7 @@ type Files<'a> = &'a [(&'a str, Option<&'a str>)];
+ /// One file change.
+ type Change<'a> = (&'a str, Option<&'a str>);
+ /// Extra environment for a queue run.
++#[cfg(target_os = "linux")] // used by the Linux-only R13 (a) test only
+ type Env = Vec<(&'static str, String)>;
+ 
+ // ---- helpers ------------------------------------------------------------------------------
+@@ -71,6 +74,7 @@ fn record_raw(r: &Repo, id: &str, env: &[(&'static str, String)]) -> (Out, Value
+     (o, rec)
+ }
+ 
++#[cfg(target_os = "linux")] // used by the Linux-only R13 (a) test only
+ fn record(r: &Repo, id: &str, env: &[(&'static str, String)]) -> (Out, Value) {
+     let out = record_raw(r, id, env);
+     commit_ledger(r);
+@@ -549,10 +553,13 @@ fn queue_commits_its_own_record_and_hand_edits_are_refused() {
+ 
+ // ---- R13 (a): a planted, future-dated fake xtask does not decide the gate -----------------
+ 
++#[cfg(target_os = "linux")]
+ const FAKE_GATE: &str = "#!/bin/sh\n# planted fake xtask (T-005 R13 test)\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = --report ]; then printf '%s' '{\"passed\": true, \"failed_step\": null, \"seconds\": 0.0, \"steps\": []}' > \"$2\"; fi\n  shift\ndone\necho 'planted gate: PASSED'\nexit 0\n";
+ 
+ /// Replace every built `xtask` executable under `dir` (an ELF whose name contains `xtask`
+ /// and has no extension) with a fake green gate dated one day in the future. Returns them.
++/// Linux only: the queue's build tree and its ELF binaries (xtask/platform-tests.toml).
++#[cfg(target_os = "linux")]
+ fn plant_future_fakes(dir: &Path) -> Vec<PathBuf> {
+     use std::os::unix::fs::PermissionsExt as _;
+     let future = std::time::SystemTime::now() + std::time::Duration::from_secs(86_400);
+@@ -596,6 +603,7 @@ fn plant_future_fakes(dir: &Path) -> Vec<PathBuf> {
+ }
+ 
+ #[test]
++#[cfg(target_os = "linux")] // xtask/platform-tests.toml
+ fn planted_future_dated_xtask_does_not_decide_the_gate() {
+     let r = Repo::new("r4-r13-plant");
+     let s = r.root.parent().unwrap().to_path_buf();
+diff --git a/xtask/tests/acceptance_t013_publish.rs b/xtask/tests/acceptance_t013_publish.rs
+index ce1baa2..29c505e 100644
+--- a/xtask/tests/acceptance_t013_publish.rs
++++ b/xtask/tests/acceptance_t013_publish.rs
+@@ -707,6 +707,7 @@ fn committed_state(r: &Repo) -> String {
+ }
+ 
+ #[cfg(test)]
++#[cfg(target_os = "linux")] // used by the Linux-only lock test only
+ /// Every file under `dir` with its length and modification time (empty if `dir` is absent).
+ fn tree_snap(dir: &Path) -> Vec<String> {
+     let mut out = Vec::new();
+@@ -927,6 +928,7 @@ fn a_failing_git_add_in_step_2_is_a_commit_failure() {
+ }
+ 
+ #[test]
++#[cfg(target_os = "linux")] // the lock's liveness is read from /proc (xtask/platform-tests.toml)
+ fn publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue() {
+     // Ruling m: lock `<git-common-dir>/kiln-queue.lock` held by a live process (this test's own)
+     // → exit 1, `publish: refused: another queue or publish run holds <lock path>`, nothing
+diff --git a/xtask/tests/guard_t005.rs b/xtask/tests/guard_t005.rs
+index 53c5461..bd972d4 100644
+--- a/xtask/tests/guard_t005.rs
++++ b/xtask/tests/guard_t005.rs
+@@ -197,6 +197,7 @@ mod support {
+     }
+ 
+     /// (device, inode) of every regular file under `dir`, and the symlinks found there.
++    #[cfg(unix)]
+     pub fn inodes(dir: &Path) -> (BTreeMap<(u64, u64), String>, Vec<String>) {
+         use std::os::unix::fs::MetadataExt;
+         let mut files = BTreeMap::new();
+@@ -220,6 +221,7 @@ mod support {
+ 
+     /// Symlinks under `seed`, and files under `seed` that are the same inode as a file under
+     /// `source` (hard links). Cargo's own uplift hard links inside one target are fine.
++    #[cfg(unix)]
+     pub fn shared_entries(source: &Path, seed: &Path) -> Vec<String> {
+         let (src, _) = inodes(source);
+         let (files, mut out) = inodes(seed);
+@@ -272,6 +274,7 @@ fn seeded_worktree_builds_its_own_source() {
+ // AC-11: guard. Base seeds with `cp -a --reflink=auto`, an independent copy; a seed made of hard
+ // links, symlinks or a shared directory would fail this.
+ #[test]
++#[cfg(unix)] // device and inode numbers are Unix metadata (xtask/platform-tests.toml)
+ fn worktree_build_does_not_touch_main_target() {
+     let root = seed_repo("ac11");
+     let main_target = root.join("target");
