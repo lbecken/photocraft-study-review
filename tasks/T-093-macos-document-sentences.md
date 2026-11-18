@@ -2,7 +2,7 @@
 id: T-093
 title: "State in the documents where Kiln's file and project behaviour differs on macOS, each sentence with a test that runs there"
 tier: low               # METHODOLOGY v1.5 §4: documentation and tests, no behaviour change; see Q-1 (a reviewer's read)
-state: queued
+state: merged
 owner_role: planner
 scorecard_items: []
 depends_on: [T-079]     # merged: the macOS gate is green, so a sentence's test can be shown to run there
