@@ -626,6 +626,25 @@ task cannot both change the rule and use it in the tree: main's tool judges the 
   each; control passes); s10 `ac4_s10_off_linux_the_first_line_names_the_platform_and_page_not_compared`
   (off Linux, passing and with a problem: the first output line names the platform and "not compared";
   on Linux: page computed, compared, stale fails). Both fail on base by assertion.
+  Guard change: `guard_the_six_existing_kinds_…` accepts `cfg-attr-ignore` or `cfg-disabled` for the
+  conditional `#[cfg_attr(target_os = "linux", ignore)]` (s1 makes it `cfg-disabled`; Interface (2) keeps the
+  six kinds; whether it is reported as one, the other or both is not ruled). QUESTION 8: under s1, does
+  `#[cfg_attr(<p>, ignore)]` still give `cfg-attr-ignore` as well as `cfg-disabled`, or only `cfg-disabled`?
+  The tests accept both.
+  s11 (iv): `acceptance_t070.rs` unchanged. On a scratch copy with `--no-fail-fast` added to the three
+  per-package lines (before `-p`, before `--locked`, and at the end) its 13 tests pass, and one
+  `cargo test --locked --no-fail-fast -p kiln-text -p kiln-syntax -p kiln-search -p xtask` still fails
+  `ac1_gate_jobs_run_the_gate_and_upload_the_reports_whatever_its_result` (the ruling m1 mutant).
+  Self-check: a stub of the rulings on a scratch copy (deleted) passes all 34 tests; mutants, each killed
+  only by the named test: s1 conditional test/ignore not flagged → `ac1_s1_…`; enclosing mod/impl cfg
+  ignored → `ac3_s2_…`; impl methods not collected → `ac3_m21_…`; complement with a second cfg counted →
+  `ac1_s3_…`; nested fns not visited → `ac1_s4_…`; enclosing cfg not intersected → `ac1_s5_…`; only
+  unqualified `None`/`Ok`/`Default::default` trivial → `ac3_s6_…`; empty complement counted → `ac1_s7_…`;
+  `doc` not checked for tracked / under `docs/` / `.md` → `ac1_s9_…` (each); every item exempt like `use` →
+  `ac1_m9_…`; missing registry file → step passes → `ac1_m13_…`. Not seeded: the absolute and `\` checks of
+  s9 (with `docs/` required they are equivalent on Linux); the off-Linux scorecard branch (s10) and the
+  write-mode refusal (CI only). Run: clippy `-D warnings`, `fmt --check`, `no-skip`, `hygiene` on the committed
+  state. Not run: `cargo xtask ci`; macOS, Windows. · next: director (re-join; QUESTION 8)
 <!-- end test author log -->
 ### reviewer
 - 2026-11-18 · R-311 · review round 1 · reviewed f7d511352027bdd8b0e48f207c3aac9ad5bbca85 · verdict: request-changes (`reviews/T-071-r1.md`). Rulings D-180, D-199, D-205, D-220 p1–p7, D-222 q1, q2 read on main and accepted. Findings: 7 defects (AC-6 Windows clause not met per the CI record, run 44201932507: 22 xtask unit tests fail on Windows, no integration binary ran; `cfg_attr(unix, test)` unseen; `mod`/`impl` twins not `inert-helper`; a complement disabled by another cfg counts; nested fns in a test not inspected; a test behind `windows` inside a `unix` mod passes with entries; `Option::None`/`Result::Ok(())` not trivial), 5 spec gaps (AC-6's macOS detail-line clause cannot hold while the step fails; empty complement; runtime `cfg!`, single helpers, macro bodies, other forms; `doc` may be any file; "seven" kinds in Pinned (a)), 3 test gaps (mutants M9, M13, M21 survive), 1 nit. Mutants 23: 18 killed by acceptance, 17 by own tests (overlap), 2 by own tests only, 3 survived. AC-5 run: Windows and macOS check 0 errors; no xtask test name of base lost (225 → 261). Machine restarted at 00:19Z during the run; earlier results kept were written down before it. Not run: macOS, Windows, the whole `cargo xtask ci`; CI record read at the end (R-312, main 14130e6): agrees on Linux and macOS xtask exit 0, disagrees on Windows and the macOS detail line; `guard_t054` Windows verdict still pending. · next: director

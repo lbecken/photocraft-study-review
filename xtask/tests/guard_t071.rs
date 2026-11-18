@@ -398,19 +398,21 @@ fn guard_the_six_existing_kinds_are_still_reported_with_file_line_and_item() {
     t.write(OLD, OLD_RS);
     let o = t.run_no_skip();
     assert_eq!(o.code, Some(1), "the six kinds fail the step:\n{}", o.text);
-    for (kind, item, line) in [
-        ("doc-ignore", "documented", 2),
-        ("ignore", "slow_case", 3),
-        ("cfg-attr-ignore", "linux_ignored", 4),
-        ("skip-call", "helper_skip", 5),
-        ("early-return", "early_exit", 6),
-        ("cfg-disabled", "feature_gated", 7),
+    // A conditional `ignore` is `cfg-attr-ignore` today and also a `cfg-disabled` finding by
+    // ruling s1 (D-226); either kind is accepted for it.
+    for (kinds, item, line) in [
+        (&["doc-ignore"][..], "documented", 2),
+        (&["ignore"][..], "slow_case", 3),
+        (&["cfg-attr-ignore", "cfg-disabled"][..], "linux_ignored", 4),
+        (&["skip-call"][..], "helper_skip", 5),
+        (&["early-return"][..], "early_exit", 6),
+        (&["cfg-disabled"][..], "feature_gated", 7),
     ] {
         assert!(
-            kind_lines(&o, kind)
+            kinds.iter().any(|kind| kind_lines(&o, kind)
                 .iter()
-                .any(|l| has_token(l, item) && names_at(l, OLD, &(line..=line))),
-            "a `{kind}` line naming {OLD}:{line} and `{item}`:\n{}",
+                .any(|l| has_token(l, item) && names_at(l, OLD, &(line..=line)))),
+            "a {kinds:?} line naming {OLD}:{line} and `{item}`:\n{}",
             o.text
         );
     }
