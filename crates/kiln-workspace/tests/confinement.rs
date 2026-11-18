@@ -3,14 +3,26 @@
 //! files assert `Display` and `path()` only). Every call that could block on a FIFO runs under
 //! a hard timeout, so a regression fails instead of hanging the suite. T-036 adds the refusal of
 //! a root that cannot be opened for reading, run as an unprivileged identity.
+//!
+//! Platforms (T-092): the FIFO, socket and device test, the FIFO part of the swaps
+//! (`swaps_between_open_and_save_are_checked_again_unix`) and the unreadable root (modes,
+//! identities) are Unix tests listed in `xtask/platform-tests.toml`; every other test runs on
+//! every platform. On Windows every reparse point on the walk answers `outside_root` (T-074,
+//! `docs/protocol/paths.md`), so where a link is followed on Unix the expected answer is chosen
+//! with `cfg!(windows)`.
 
 use kiln_workspace::{DiskFs, Document, RelPath, Vfs, VfsError};
 use std::fs;
-use std::os::unix::fs::{FileTypeExt, symlink};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
+#[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::process::Command;
+#[cfg(unix)]
 use std::sync::mpsc;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use support::*;
@@ -20,6 +32,8 @@ mod support {
     use super::*;
 
     pub const SECRET: &[u8] = b"s3cr3t-content\n";
+    /// Only the Unix tests (FIFOs, the unprivileged child) need a timeout.
+    #[cfg(unix)]
     pub const TIMEOUT: Duration = Duration::from_secs(5);
 
     pub fn p(s: &str) -> RelPath {
@@ -80,6 +94,7 @@ mod support {
     }
 
     /// Run `f` on another thread; fail (never hang) if it takes longer than `TIMEOUT`.
+    #[cfg(unix)]
     pub fn bounded<T: Send + 'static>(what: &str, f: impl FnOnce() -> T + Send + 'static) -> T {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
@@ -89,7 +104,35 @@ mod support {
             .unwrap_or_else(|_| panic!("{what} blocked for more than {TIMEOUT:?}"))
     }
 
+    /// A symlink at `link` to `target`, verbatim.
+    #[cfg(unix)]
+    pub fn symlink(target: impl AsRef<Path>, link: impl AsRef<Path>) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+    /// Windows: a relative target is rebuilt with `PathBuf::push` from its components (ruling
+    /// Q-B of T-092); a directory link when the target, resolved from the link's directory, is
+    /// an existing directory when the link is made, else a file link (Pinned (d)).
+    #[cfg(windows)]
+    pub fn symlink(target: impl AsRef<Path>, link: impl AsRef<Path>) -> std::io::Result<()> {
+        let (target, link) = (target.as_ref(), link.as_ref());
+        let t = if target.is_absolute() {
+            target.to_path_buf()
+        } else {
+            let mut t = PathBuf::new();
+            for c in target.components() {
+                t.push(c.as_os_str());
+            }
+            t
+        };
+        if link.parent().unwrap().join(&t).is_dir() {
+            std::os::windows::fs::symlink_dir(&t, link)
+        } else {
+            std::os::windows::fs::symlink_file(&t, link)
+        }
+    }
+
     /// `mkfifo <path>` under a timeout.
+    #[cfg(unix)]
     pub fn mkfifo(path: &Path) {
         let mut child = Command::new("mkfifo").arg(path).spawn().unwrap();
         let deadline = Instant::now() + TIMEOUT;
@@ -111,6 +154,7 @@ mod support {
         VfsError::OutsideRoot { path: p(path) }
     }
 
+    #[cfg(unix)]
     pub fn not_a_file(path: &str) -> VfsError {
         VfsError::NotAFile { path: p(path) }
     }
@@ -204,10 +248,23 @@ fn links_inside_and_excursions_back_inside_are_followed() {
         let mut fs_ = DiskFs::new(&root_arg).unwrap();
         for path in ["in", "din/t.txt", "ain", "in2", "back", "dd"] {
             fs::write(root.join("real/t.txt"), b"target\n").unwrap();
-            assert_eq!(fs_.read(&p(path)).unwrap(), b"target\n", "read {path}");
-            assert!(fs_.is_file(&p(path)));
-            fs_.write_atomic(&p(path), path.as_bytes()).unwrap();
-            assert_eq!(fs::read(root.join("real/t.txt")).unwrap(), path.as_bytes());
+            if cfg!(windows) {
+                // T-074: on Windows every reparse point on the walk is `outside_root`, a link
+                // whose location stays inside included; nothing is read or written.
+                assert_eq!(fs_.read(&p(path)), Err(outside(path)), "Windows: read {path}");
+                assert!(!fs_.is_file(&p(path)), "Windows: is_file {path}");
+                assert_eq!(
+                    fs_.write_atomic(&p(path), path.as_bytes()),
+                    Err(outside(path)),
+                    "Windows: write {path}"
+                );
+                assert_eq!(fs::read(root.join("real/t.txt")).unwrap(), b"target\n");
+            } else {
+                assert_eq!(fs_.read(&p(path)).unwrap(), b"target\n", "read {path}");
+                assert!(fs_.is_file(&p(path)));
+                fs_.write_atomic(&p(path), path.as_bytes()).unwrap();
+                assert_eq!(fs::read(root.join("real/t.txt")).unwrap(), path.as_bytes());
+            }
         }
         for link in ["in", "din", "ain", "in2", "back", "dd", "ghost"] {
             assert!(
@@ -217,13 +274,24 @@ fn links_inside_and_excursions_back_inside_are_followed() {
                     .is_symlink()
             );
         }
-        assert_eq!(
-            fs_.read(&p("ghost")),
-            Err(VfsError::NotFound { path: p("ghost") })
-        );
-        fs_.write_atomic(&p("ghost"), b"g").unwrap();
-        assert_eq!(fs::read(root.join("real/new.txt")).unwrap(), b"g");
-        fs::remove_file(root.join("real/new.txt")).unwrap();
+        if cfg!(windows) {
+            // A dangling link inside: `outside_root` on Windows (a reparse point), not created.
+            assert_eq!(fs_.read(&p("ghost")), Err(outside("ghost")), "Windows");
+            assert_eq!(
+                fs_.write_atomic(&p("ghost"), b"g"),
+                Err(outside("ghost")),
+                "Windows"
+            );
+            assert!(!root.join("real/new.txt").exists(), "Windows: ghost's target created");
+        } else {
+            assert_eq!(
+                fs_.read(&p("ghost")),
+                Err(VfsError::NotFound { path: p("ghost") })
+            );
+            fs_.write_atomic(&p("ghost"), b"g").unwrap();
+            assert_eq!(fs::read(root.join("real/new.txt")).unwrap(), b"g");
+            fs::remove_file(root.join("real/new.txt")).unwrap();
+        }
     }
     no_temp_files(&work);
     // DiskFs::new keeps its errors.
@@ -242,6 +310,7 @@ fn links_inside_and_excursions_back_inside_are_followed() {
 }
 
 #[test]
+#[cfg(unix)]
 fn non_regular_files_are_refused_without_blocking() {
     let work = work("fifo");
     let root = work.join("root");
@@ -309,12 +378,11 @@ fn swaps_between_open_and_save_are_checked_again() {
     fs::create_dir(root.join("sub")).unwrap();
     fs::write(root.join("sub/f.txt"), b"f\n").unwrap();
     fs::write(work.join("outside/f.txt"), b"outside f\n").unwrap();
-    fs::write(root.join("g.txt"), b"g\n").unwrap();
     fs::write(root.join("c.txt"), b"c\n").unwrap();
     fs::create_dir(root.join("real")).unwrap();
     fs::write(root.join("real/t.txt"), b"c\n").unwrap();
 
-    let mut docs: Vec<Document> = ["a.txt", "sub/f.txt", "g.txt", "c.txt"]
+    let mut docs: Vec<Document> = ["a.txt", "sub/f.txt", "c.txt"]
         .iter()
         .map(|path| {
             let mut d = Document::open(&fs_, &p(path)).unwrap();
@@ -326,31 +394,59 @@ fn swaps_between_open_and_save_are_checked_again() {
     symlink("../outside/secret.txt", root.join("a.txt")).unwrap();
     fs::rename(root.join("sub"), root.join("sub-old")).unwrap();
     symlink("../outside", root.join("sub")).unwrap();
-    fs::remove_file(root.join("g.txt")).unwrap();
-    mkfifo(&root.join("g.txt"));
     fs::remove_file(root.join("c.txt")).unwrap();
     symlink("real/t.txt", root.join("c.txt")).unwrap();
     let before = snapshot(&work);
 
     assert_eq!(docs[0].save(&mut fs_), Err(outside("a.txt")));
     assert_eq!(docs[1].save(&mut fs_), Err(outside("sub/f.txt")));
-    let mut g = docs.remove(2);
-    let (g, mut fs_) = bounded("save onto FIFO", move || {
-        assert_eq!(g.save(&mut fs_), Err(not_a_file("g.txt")));
-        (g, fs_)
-    });
     assert_eq!(snapshot(&work), before);
-    assert!(docs[0].is_dirty() && docs[1].is_dirty() && g.is_dirty());
+    assert!(docs[0].is_dirty() && docs[1].is_dirty());
     no_temp_files(&work);
 
-    docs[2].save(&mut fs_).unwrap();
-    assert_eq!(fs::read(root.join("real/t.txt")).unwrap(), b"EDIT c\n");
+    if cfg!(windows) {
+        // T-074: a link that stays inside is `outside_root` on Windows; nothing changes.
+        assert_eq!(docs[2].save(&mut fs_), Err(outside("c.txt")), "Windows");
+        assert!(docs[2].is_dirty(), "Windows");
+        assert_eq!(fs::read(root.join("real/t.txt")).unwrap(), b"c\n");
+        assert_eq!(snapshot(&work), before, "Windows");
+    } else {
+        docs[2].save(&mut fs_).unwrap();
+        assert_eq!(fs::read(root.join("real/t.txt")).unwrap(), b"EDIT c\n");
+    }
     assert!(
         fs::symlink_metadata(root.join("c.txt"))
             .unwrap()
             .file_type()
             .is_symlink()
     );
+    assert_eq!(fs::read(work.join("outside/secret.txt")).unwrap(), SECRET);
+    no_temp_files(&work);
+}
+
+/// The Unix part of `swaps_between_open_and_save_are_checked_again`: a regular file replaced by
+/// a FIFO between open and save is refused as not a regular file, without blocking.
+#[test]
+#[cfg(unix)]
+fn swaps_between_open_and_save_are_checked_again_unix() {
+    let work = work("swapunix");
+    let root = work.join("root");
+    let fs_ = DiskFs::new(&root).unwrap();
+    fs::write(root.join("g.txt"), b"g\n").unwrap();
+    let mut g = Document::open(&fs_, &p("g.txt")).unwrap();
+    g.buffer_mut().insert(0, "EDIT ").unwrap();
+    fs::remove_file(root.join("g.txt")).unwrap();
+    mkfifo(&root.join("g.txt"));
+    let before = snapshot(&work);
+
+    let (g, _fs) = bounded("save onto FIFO", move || {
+        let mut fs_ = fs_;
+        assert_eq!(g.save(&mut fs_), Err(not_a_file("g.txt")));
+        (g, fs_)
+    });
+    assert_eq!(snapshot(&work), before);
+    assert!(g.is_dirty());
+    no_temp_files(&work);
     assert_eq!(fs::read(work.join("outside/secret.txt")).unwrap(), SECRET);
 }
 
@@ -363,10 +459,15 @@ fn walk_corner_cases() {
     // A loop inside the root: I/O error as before; a loop entered outside reveals nothing.
     symlink("loop", root.join("loop")).unwrap();
     let e = fs_.read(&p("loop")).unwrap_err();
-    assert_eq!(
-        e.to_string(),
-        "loop: I/O error: too many levels of symbolic links"
-    );
+    if cfg!(windows) {
+        // T-074: on Windows the loop is a reparse point on the walk: `outside_root`.
+        assert_eq!(e, outside("loop"), "Windows");
+    } else {
+        assert_eq!(
+            e.to_string(),
+            "loop: I/O error: too many levels of symbolic links"
+        );
+    }
     symlink("../outside/oloop", root.join("toloop")).unwrap();
     symlink("oloop", work.join("outside/oloop")).unwrap();
     assert_eq!(fs_.read(&p("toloop")), Err(outside("toloop")));
@@ -377,8 +478,14 @@ fn walk_corner_cases() {
         symlink(&prev, root.join(&name)).unwrap();
         prev = name;
     }
-    assert_eq!(fs_.read(&p("h39")).unwrap(), b"f");
-    assert!(matches!(fs_.read(&p("h40")), Err(VfsError::Io { .. })));
+    if cfg!(windows) {
+        // On Windows no link is followed: the first hop is already `outside_root`.
+        assert_eq!(fs_.read(&p("h39")), Err(outside("h39")), "Windows");
+        assert_eq!(fs_.read(&p("h40")), Err(outside("h40")), "Windows");
+    } else {
+        assert_eq!(fs_.read(&p("h39")).unwrap(), b"f");
+        assert!(matches!(fs_.read(&p("h40")), Err(VfsError::Io { .. })));
+    }
     // A non-directory or missing component inside the root is NotFound.
     for path in ["f.txt/x", "nodir/x"] {
         assert_eq!(
@@ -392,18 +499,26 @@ fn walk_corner_cases() {
     }
     // A link to the root's own parent and back in by name is inside.
     symlink("../root/f.txt", root.join("viaparent")).unwrap();
-    assert_eq!(fs_.read(&p("viaparent")).unwrap(), b"f");
     // An absolute link through `/` to a file inside the root.
     let canonical = fs::canonicalize(&root).unwrap();
     symlink(canonical.join("f.txt"), root.join("absin")).unwrap();
-    assert_eq!(fs_.read(&p("absin")).unwrap(), b"f");
+    for link in ["viaparent", "absin"] {
+        if cfg!(windows) {
+            // On Windows a link whose location is inside is still `outside_root` (T-074).
+            assert_eq!(fs_.read(&p(link)), Err(outside(link)), "Windows: {link}");
+        } else {
+            assert_eq!(fs_.read(&p(link)).unwrap(), b"f", "{link}");
+        }
+    }
     no_temp_files(&work);
 }
 
 /// T-036: the environment variable that marks the re-run of this test binary as the
 /// unprivileged identity U; its value is the fixture directory.
+#[cfg(unix)]
 const T036_CHILD: &str = "KILN_T036_CONFINEMENT_CHILD";
 /// What the child run writes to its marker file once every assertion has run.
+#[cfg(unix)]
 const T036_DONE: &str = "unreadable roots: all assertions ran\n";
 
 /// T-036 (Interface 1): a root that cannot be opened for reading is refused by `DiskFs::new`
@@ -414,6 +529,7 @@ const T036_DONE: &str = "unreadable roots: all assertions ran\n";
 /// uid 0, the test's own identity otherwise), on a fixture owned by U. The parent fails, naming
 /// the precondition, if the child cannot be started, fails, or did not reach its end.
 #[test]
+#[cfg(unix)]
 fn root_that_cannot_be_opened_for_reading_is_refused_by_new() {
     if let Some(work) = std::env::var_os(T036_CHILD) {
         t036::child(Path::new(&work));
@@ -422,8 +538,9 @@ fn root_that_cannot_be_opened_for_reading_is_refused_by_new() {
     }
 }
 
-/// T-036's parent and child runs.
+/// T-036's parent and child runs (Unix: modes, `chown`, `Command::uid`).
 #[cfg(test)]
+#[cfg(unix)]
 mod t036 {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
