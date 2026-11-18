@@ -125,7 +125,11 @@ below says for a path that is already open:
   was replaced in between by a link that leads outside, or the file by a FIFO, the save is
   refused, and the document stays modified.
 - **A path that is already open is checked again, for where it leads only.** A `doc.open` of a
-  path that is open in the session (the same path text) reads nothing. It is refused with
+  path that is open in the session (the same path text) reads nothing. On macOS, on the runner's
+  volume, which folds case, `doc.open` of `A.rs` while `a.rs` is open opens a second document of
+  the same file (`already_open: false`), and a save through it changes what `a.rs` holds
+  (`apps/kiln-cli/tests/macos_t093.rs::reopen_with_other_case_is_a_new_document_where_case_folds`,
+  listed on the green `gate-macos` job of CI run 44381094009, `tasks/ci-runs/T-093-round-1.md`; the job keeps no per-test output on a green run, so nothing beyond what the test asserts is shown); on a case-sensitive macOS volume: unmeasured on macOS. It is refused with
   `outside_root` when the root path no longer leads to the root (also when it can no longer be
   followed, for example because a directory above the root cannot be searched, which refuses a
   first open, a save and `project.tree` the same way) or the path's location is now outside the
@@ -159,7 +163,8 @@ error object on stderr.
   Changes made between two requests, to the path or to the root and the directories above it,
   are always caught: the next request checks the path again (`doc.open` of a path that is
   already open checks only where it leads, see The rule).
-- **Platforms.** The rules of this page hold on Linux and macOS as written. On macOS: the tests
+- **Platforms.** The rules of this page hold on Linux and macOS as written, with the macOS case
+  difference stated in The rule (a path already open is recognised by its text). On macOS: the tests
   of the scorecard item `ws.path-confinement` (`scorecard/items/ws.path-confinement.toml`) ran and
   passed on the green `gate-macos` job of CI run 44358453526 (`tasks/ci-runs/T-074-round-1.md`,
   scorecard step `macos: 64 items; 216 tests ran; 3 registered absent here`, the 3 being

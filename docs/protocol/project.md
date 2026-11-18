@@ -125,6 +125,11 @@ result can mix the states before and after, and the residual limits of
 
 Entries are in preorder, each directory's entries in byte order of their names; no case
 folding.
+On a file system that folds case two names that differ only by case cannot both exist, so the
+listing holds one: on macOS, on the runner's volume, which folds case, `A.rs` written after
+`a.rs` reaches the same file and the listing holds `a.rs` only
+(`apps/kiln-cli/tests/macos_t093.rs::tree_lists_names_differing_only_by_case_as_the_file_system_holds_them`,
+listed on the green `gate-macos` job of CI run 44381094009, `tasks/ci-runs/T-093-round-1.md`; the job keeps no per-test output on a green run, so nothing beyond what the test asserts is shown); on a case-sensitive macOS volume: unmeasured on macOS.
 
 In memory (`--memory`, `--memory-seed`) a directory exists only while a file lies below it, so
 a directory without files is not listed, and every entry is a `file` or a `dir`.
