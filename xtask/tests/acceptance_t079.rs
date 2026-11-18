@@ -19,14 +19,11 @@
 //! Not pinned (AC-1's tuple leaves them to `no-skip` and the reviewer): `doc`, `quote`, `reason`,
 //! the order of entries, comments, `expires` of a `none` entry (`no-skip` refuses it).
 //!
-//! QUESTION Q-T1 (test author, R-328; see the task log): Interface (1) lets the 4 non-UTF-8
-//! tests be split ("split out if the test checks other things"; Interface (3): "a split keeps
-//! the original name for the part that stays"), and the spec does not name the split-out
-//! Linux fn the entry then lists. Until a ruling, those 4 expected tuples fix `file` (2 in
-//! `crates/kiln-workspace/tests/acceptance_t019_workspace.rs`, 2 in
-//! `crates/kiln-workspace/tests/project.rs`), `platforms = "linux"`, `counterpart = "none"`
-//! and no `task`, and accept any `item` (distinct entries: the same `file::item` twice is
-//! refused). The other 16 tuples are exact.
+//! Ruling w1 (D-241, on question Q-T1): for each of the 4 non-UTF-8 tests the registered item
+//! is exactly one of two names: the test's name as Interface (1) gives it (not split), or that
+//! name followed by `_non_utf8` (the Linux-only part split out). Each of the 4 has exactly one
+//! entry: any other item matches nothing, and an entry under each of the two names leaves one
+//! of them over. The other 16 tuples have one item each.
 //!
 //! On the base the registry has no entry, so both tests fail by assertion. Only `std::fs` and
 //! `toml` are used (Linux, macOS, Windows alike); `file` values are compared as the
@@ -39,11 +36,12 @@ const REGISTRY: &str = "xtask/platform-tests.toml";
 /// Ruling Q-6 A (D-233): every `pending` entry expires on this date.
 const EXPIRES: &str = "2026-12-31";
 
-/// One expected entry: `item` `None` is the open item of Q-T1 (any item in `file`).
+/// One expected entry. `split` (ruling w1): the item may also be `item` + [`SPLIT_SUFFIX`].
 #[derive(Clone, Copy, Debug)]
 struct Expected {
     file: &'static str,
-    item: Option<&'static str>,
+    item: &'static str,
+    split: bool,
     platforms: &'static str,
     counterpart: &'static str,
     task: Option<&'static str>,
@@ -52,7 +50,8 @@ struct Expected {
 const fn none(file: &'static str, item: &'static str, platforms: &'static str) -> Expected {
     Expected {
         file,
-        item: Some(item),
+        item,
+        split: false,
         platforms,
         counterpart: "none",
         task: None,
@@ -62,18 +61,23 @@ const fn none(file: &'static str, item: &'static str, platforms: &'static str) -
 const fn pending(file: &'static str, item: &'static str, task: &'static str) -> Expected {
     Expected {
         file,
-        item: Some(item),
+        item,
+        split: false,
         platforms: "linux",
         counterpart: "pending",
         task: Some(task),
     }
 }
 
-/// A non-UTF-8-name entry of Interface (2): item open (Q-T1).
-const fn non_utf8(file: &'static str) -> Expected {
+/// Ruling w1 (D-241): the name of the Linux-only part split out of a non-UTF-8 test.
+const SPLIT_SUFFIX: &str = "_non_utf8";
+
+/// A non-UTF-8-name entry of Interface (2): `item` or `item` + `_non_utf8` (ruling w1).
+const fn non_utf8(file: &'static str, item: &'static str) -> Expected {
     Expected {
         file,
-        item: None,
+        item,
+        split: true,
         platforms: "linux",
         counterpart: "none",
         task: None,
@@ -142,11 +146,17 @@ const EXPECTED: [Expected; 20] = [
         "run_exits_1_when_stdout_cannot_be_written",
         "T-076",
     ),
-    // (2) non-UTF-8 names (4): counterpart "none" (item open, Q-T1).
-    non_utf8(T019_WS),
-    non_utf8(T019_WS),
-    non_utf8(PROJECT),
-    non_utf8(PROJECT),
+    // (2) non-UTF-8 names (4): counterpart "none"; split or not (ruling w1).
+    non_utf8(T019_WS, "tree_counts_skipped_names_on_disk"),
+    non_utf8(
+        T019_WS,
+        "disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names",
+    ),
+    non_utf8(PROJECT, "documented_differences_from_git"),
+    non_utf8(
+        PROJECT,
+        "disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names",
+    ),
     // (2) no display (5): pending T-077.
     pending(
         "apps/kiln/tests/acceptance_t065.rs",
@@ -190,8 +200,9 @@ struct Entry {
 impl Entry {
     fn matches(&self, e: &Expected) -> bool {
         self.file.as_deref() == Some(e.file)
-            && e.item.is_none_or(|i| self.item.as_deref() == Some(i))
-            && self.item.is_some()
+            && self.item.as_deref().is_some_and(|i| {
+                i == e.item || (e.split && i.strip_suffix(SPLIT_SUFFIX) == Some(e.item))
+            })
             && self.platforms.as_deref() == Some(e.platforms)
             && self.counterpart.as_deref() == Some(e.counterpart)
             && self.task.as_deref() == e.task
@@ -267,10 +278,8 @@ fn ac1_registry_entries_are_exactly_the_twenty_of_interface_2_and_2a() {
         }
     }
 
-    // Exact expected tuples first, then the open-item ones (Q-T1), one entry each.
-    let mut order: Vec<&Expected> = EXPECTED.iter().filter(|e| e.item.is_some()).collect();
-    order.extend(EXPECTED.iter().filter(|e| e.item.is_none()));
-    for want in order {
+    // Each expected tuple takes one entry (no two tuples can match the same entry).
+    for want in &EXPECTED {
         match left.iter().position(|e| e.matches(want)) {
             Some(i) => {
                 left.remove(i);
@@ -304,7 +313,7 @@ fn ac1_pending_entries_name_their_task_and_expire_on_2026_12_31() {
         .map(|e| {
             (
                 e.file.to_owned(),
-                e.item.expect("pending entries are named").to_owned(),
+                e.item.to_owned(),
                 e.task.expect("pending entries name a task").to_owned(),
                 EXPIRES.to_owned(),
             )
