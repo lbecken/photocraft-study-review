@@ -302,6 +302,46 @@ fn tree_of(items: &[(&str, Node)]) -> Tree {
     t
 }
 
+/// Whether the file system holding `dir` folds case (macOS's default does): a file made as
+/// `case-probe-Aa` is then found as `case-probe-aA`. Probed in `dir`, not assumed from the
+/// platform; the probe file is removed again.
+fn folds_case(dir: &Path) -> bool {
+    let probe = dir.join("case-probe-Aa");
+    fs::write(&probe, b"").unwrap();
+    let folds = dir.join("case-probe-aA").exists();
+    fs::remove_file(&probe).unwrap();
+    folds
+}
+
+/// `t` as the file system holding `dir` can hold it. Where case is not folded, `t` itself.
+/// Where it is, of paths equal but for (ASCII) case the first in byte order stays, as
+/// [`materialize`] would leave it, and the others are left out with what lies below them.
+fn as_held_in(t: Tree, dir: &Path) -> Tree {
+    if !folds_case(dir) {
+        return t;
+    }
+    let mut kept = BTreeSet::new();
+    let mut held = Tree::new();
+    for (p, n) in t {
+        let parent = parent_of(&p);
+        if (parent.is_empty() || held.contains_key(parent)) && kept.insert(p.to_ascii_lowercase()) {
+            held.insert(p, n);
+        }
+    }
+    held
+}
+
+/// `list` as the file system holding `dir` can hold it. Where case is not folded, `list`
+/// itself; where it is, the entries whose paths `t` (from [`as_held_in`]) still holds.
+fn as_listed_in(list: Vec<(String, String)>, t: &Tree, dir: &Path) -> Vec<(String, String)> {
+    if !folds_case(dir) {
+        return list;
+    }
+    list.into_iter()
+        .filter(|(p, _)| t.contains_key(p))
+        .collect()
+}
+
 fn file(text: &str) -> Node {
     Node::File(text.as_bytes().to_vec())
 }
@@ -1057,33 +1097,41 @@ fn tree_order_and_counts() {
     assert_eq!(lines[0]["result"], got, "{stdout}");
     assert_eq!(out.status.code(), Some(0));
 
-    // Rule 2 for `.git` of every kind, at any depth; a dot name sorts by its bytes.
-    let dot_git = tree_of(&[
-        (".git/HEAD", file("ref\n")),
-        ("s/.git", file("gitdir: elsewhere\n")),
-        ("s/.gitx", file("listed\n")),
-        ("s/t/.git", link("..")),
-        ("s/t/-", file("1")),
-        ("s/t/_", file("2")),
-        ("s/t/Z", file("3")),
-        ("s/t/\u{e9}", file("4")),
-        ("s/t/z", file("5")),
-    ]);
+    // Rule 2 for `.git` of every kind, at any depth; a dot name sorts by its bytes. `s/t/Z` and
+    // `s/t/z` are two files only where the file system does not fold case.
+    let dot_git = as_held_in(
+        tree_of(&[
+            (".git/HEAD", file("ref\n")),
+            ("s/.git", file("gitdir: elsewhere\n")),
+            ("s/.gitx", file("listed\n")),
+            ("s/t/.git", link("..")),
+            ("s/t/-", file("1")),
+            ("s/t/_", file("2")),
+            ("s/t/Z", file("3")),
+            ("s/t/\u{e9}", file("4")),
+            ("s/t/z", file("5")),
+        ]),
+        &w.dir,
+    );
     check_against_model("dot-git", &dot_git, &w.at("dg"));
     let got = listing(&tree_ok(&w.dir, &json!({}), &["--root", "dg"], TIMEOUT));
     assert_eq!(got.ignored, 3, "{got:?}");
     assert_eq!(
         got.entries,
-        entries(&[
-            ("s", "dir"),
-            ("s/.gitx", "file"),
-            ("s/t", "dir"),
-            ("s/t/-", "file"),
-            ("s/t/Z", "file"),
-            ("s/t/_", "file"),
-            ("s/t/z", "file"),
-            ("s/t/\u{e9}", "file"),
-        ])
+        as_listed_in(
+            entries(&[
+                ("s", "dir"),
+                ("s/.gitx", "file"),
+                ("s/t", "dir"),
+                ("s/t/-", "file"),
+                ("s/t/Z", "file"),
+                ("s/t/_", "file"),
+                ("s/t/z", "file"),
+                ("s/t/\u{e9}", "file"),
+            ]),
+            &dot_git,
+            &w.dir
+        )
     );
 
     for (i, (name, t)) in hand_trees().iter().enumerate() {
