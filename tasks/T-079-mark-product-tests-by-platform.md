@@ -516,6 +516,51 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   deleted. Not run: macOS, Windows (the director's CI). No information outside the repository was needed but the
   director's mid-run rulings w1, w2. Next: director (CI round 1).
 - CI-REQUEST: c71c8e74782397bfa55a3135346d681561e9b31b
+#### Rework after review round 1 (R-332)
+- 2026-11-18 · R-332 · start: `uptime -s` 2026-11-18 04:43:09 (no restart); worktree clean at `0be64ec`. Read
+  `reviews/T-079-r1.md`, `tasks/ci-runs/T-079-round-1.md` and rulings x1–x6 (D-242) on main; x1, x2, x5 accepted.
+- x1 → `e393e52`. Before, at `0be64ec`: `RUST_MIN_STACK=262144 cargo test -p kiln-cli --test acceptance_t019_cli
+  deep_trees_stop_at_the_depth_bound` → `thread 'deep_trees_stop_at_the_depth_bound' … has overflowed its stack`,
+  `fatal runtime error: stack overflow, aborting`. Change: a `DeepChain` value declared after `w` (so dropped
+  first) takes the chain down as it was built, reversed: `c2100/d` renamed to `c2100-chain`, then its one child
+  renamed to `c2100-parent`, `remove_dir` of the emptied level, `c2100-parent` renamed back, until a level has no
+  child; every call names a short path and none recurses. On a normal end a failure of it panics
+  (`expect`); while the test is already panicking it is best effort. No assertion changed (the build, `find`, and
+  listing assertions are as before; nothing removed). After (binary built first without the variable, since
+  `RUST_MIN_STACK` also shrinks rustc's stack and it crashes): the test alone → `ok`; the whole binary under 256 KiB →
+  `test result: ok. 7 passed; 0 failed`.
+  Other deep fixtures, under the same 256 KiB (binaries run alone):
+  - `guard_t038_cli.rs` `deep_chain` (18 levels of 250-byte names, for the `symbols-deep-chain` case of
+    `disk_refusals_through_control`): the fixture `Work` removes it on drop with `fs::remove_dir_all` (18 levels of
+    recursion) → `test result: ok. 2 passed`.
+  - `crates/kiln-workspace/tests/project.rs` `depth_bound_on_disk_and_in_memory` (130 levels) → the binary
+    `ok. 14 passed`.
+  - `apps/kiln-cli/tests/acceptance_t023_cli.rs` depth case (130 levels): the binary with `outline_agrees_with_syn`
+    skipped → `ok. 10 passed`; `outline_agrees_with_syn` itself overflows at 256 KiB (`syn` parsing, not a
+    directory chain; outside `touches`; it passes with the default stack and passed on macOS in CI round 1). Named,
+    not changed.
+  - `memory_seed.rs` `"a/".repeat(5_000)`: a manifest path in memory, no directory made. Not run under the small
+    stack.
+- x2 → `876c928`. Old: `let dot_git = as_held_in(tree_of(&[…]), &w.dir);` New: `let dot_git_written =
+  tree_of(&[…same…]);` materialized once at `dg-written`, then `assert_eq!(twins, if folds_case(&w.dir) { 1 } else {
+  2 }, "`s/t/Z` and `s/t/z` on disk against the case probe")` (twins = entries of `dg-written/s/t` equal to `z`
+  ignoring ASCII case), `dg-written` removed, then `let dot_git = as_held_in(dot_git_written, &w.dir);`. Every other
+  line of the test is as before. Mutant M9 (`folds_case` returns `exists() || true`): `tree_order_and_counts`
+  FAILED at the new assertion, `left: 2`, `right: 1`; file restored (`git diff` showed only the x2 change), the test
+  `ok` again.
+- x5 → `c2aa676`: the four non-UTF-8 entries' `reason` is now "macOS refuses a file name that is not valid UTF-8 (os
+  error 92, Illegal byte sequence, in the macOS run of R-285), so the fixture cannot be made there; the Windows side
+  is T-092's" (source: Interface (1)'s printed cause). `platforms`, `counterpart`, `doc`, `quote` unchanged.
+- `cargo xtask no-skip` after each step: `… 199 files scanned, 0 allowlisted skip(s), 20 platform test(s) registered
+  (8 pending) …` PASS.
+- Stand-ins: stub C compiler as before (scratch); `cargo check` and `cargo clippy … -- -D warnings` for
+  `aarch64-apple-darwin` → exit 0, no warning; `cargo check -p xtask --all-targets --locked --target
+  x86_64-pc-windows-msvc` → exit 0, 0 errors. The stand-in cannot show a stack overflow (it does not run tests).
+- Main's gate (Pinned (j)): main `74bc064`, `git diff --stat ee9b130 main -- xtask` empty; export, one build, run in
+  the worktree: `PASS  no-skip: self-test ok (17 known findings); 199 files scanned, 0 allowlisted skip(s), 20
+  platform test(s) registered (8 pending), today = 2026-11-18`; `hygiene` (56 of 68 review files, 678 tracked files
+  clean), `scorecard` (64 items: 47 verified, 0 implemented, 0 failing, 17 planned), `layers`, `ui-commands`,
+  `schema` PASS.
 <!-- end implementer log -->
 ### test author
 - 2026-11-18 · R-328 · tests written (one QUESTION) · did: `xtask/tests/acceptance_t079.rs` (2 tests) and
