@@ -242,6 +242,17 @@ Against `task/T-071` @ `b7dd7d6` (as main), methodology v1.5. Changed:
 - **Q-6: A.** `pending` entries expire on 2026-12-31; the date moves by a ruling if T-076 or T-077 slip.
 - **Q-7: A.** Dispatch when T-071 has merged, if the merge equals `b7dd7d6` in this task's paths.
 
+### Ruling from T-071's queue refusal (director, D-235; changes this spec before dispatch)
+T-071 merges without the eight registry entries of `xtask`'s own tests and without their cfg lines (main's old
+tool rejects a tree that uses the rule it does not know yet). **This task adds them**, exactly as reviewed on
+branch `park/T-071-reviewed` (`8cb8464b9825ef2467ccc1ee14f8b95e40bb81b1`: `xtask/platform-tests.toml` and the cfg
+lines in `xtask/src/queue.rs`, `publish.rs`, `worktree.rs` test modules, `xtask/tests/acceptance_t013_publish.rs`,
+`guard_t005.rs`, `acceptance_t005_r3.rs`, `acceptance_t005_r4.rs`), beside its own twelve. Those paths join
+`touches` (implementer), and T-071's AC-5 (`cargo check -p xtask --all-targets --locked --target
+x86_64-pc-windows-msvc`: 0 errors) and AC-6 (`xtask` exit status 0 on `gate-macos` and `gate-windows`) join this
+task's criteria and its pending CI criterion. The planner re-checks this spec against main after T-071 merges
+(v1.5 change 10) and writes these in.
+
 ## Log
 ### director
 <!-- end director log -->

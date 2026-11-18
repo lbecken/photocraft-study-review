@@ -2,7 +2,7 @@
 id: T-071
 title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; the gate's own tests compile and pass on all three"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (xtask/); the approval row must contain `gate paths`. No dependency change.
-state: queued
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed; the tests it marks stay tied to their items
 depends_on: [T-070]     # its Windows evidence is T-070's gate-windows core-crates step; and both edit docs/development.md (§5.2)
@@ -412,6 +412,28 @@ way of writing a test falls into is closed; a contrived one is stated as a limit
   reviewer's confirmation of the delta (the two lines) as round 3; nothing else is reworked.
 - **R2-2, R2-3, R2-5, R2-6, R2-7** (a spec gap, a test gap, three nits) go to T-091 (draft); **R2-4** (the echo
   label in `platforms.yml`) to T-072.
+
+### Rulings after the queue's refusal at main's gate (director, D-235)
+The queue ran main's gate (the old tool) on the rebased tree first, as it does for every task that changes a gate
+path, and it failed at `main:no-skip`: the old self-test reads `xtask/fixtures/no-skip/violations.rs` and
+`clean.rs`, which this task extended. The old scan would also call the eight registered tests `cfg-disabled`. A
+task cannot both change the rule and use it in the tree: main's tool judges the tree. So the task is cut in two.
+- **u1 (this task keeps the rule and the tool; implementer).** `violations.rs` and `clean.rs` go back to main's
+  bytes; the cases of the new kinds move to new fixture files that the new self-test reads beside them (the old
+  self-test reads only the two old files). The eight entries of `xtask/platform-tests.toml` and the platform cfg
+  attributes on those eight test fns (and nothing else) leave the branch: the registry file stays with its
+  header and no entry. Everything else stays as reviewed at `b7dd7d6`.
+- **u2 (the proof before the join; implementer).** On the reworked head, main's tool passes: run the primary
+  checkout's `target/debug/xtask no-skip` (built from main) with the worktree as working directory, then
+  `cargo xtask ci` (the task's own gate).
+- **u3 (the usage moves to T-079).** The eight entries and their cfg lines, exactly as reviewed here (branch
+  `park/T-071-reviewed`, head `8cb8464b9825ef2467ccc1ee14f8b95e40bb81b1`), are added by T-079 together with its
+  twelve, after this task has merged and main's tool knows the rule. **AC-5 (the Windows check of `xtask`'s
+  tests) and AC-6 (the CI clauses) move to T-079** with them; CI rounds 3 and 4 stay on record as the evidence
+  that the combined tree works. This task's remaining criteria: AC-1 to AC-4 and the guards.
+- **u4 (review).** Round 4 confirms the delta: the fixture cases are the same cases in new files (the self-test
+  still knows 17 findings, one per new kind), the two old fixture files equal main's, and the tree differs from
+  the reviewed one only by u1.
 
 ## Log
 ### director

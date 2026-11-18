@@ -347,6 +347,11 @@ task file; the director's front-matter commits on the branch then failed the que
 precondition; a rebase conflict with main's adjacent `state` line). The hygiene check reads the task's tier from
 main, or the queue takes main's front matter for the task file when it replays the branch.
 
+## Note from T-071's queue refusal (director, D-235)
+The join runs only the task's own gate. For a task that changes a gate path the queue also runs main's gate (the
+old tool) on the rebased tree, and T-071 failed there after three review rounds and four CI rounds. The join
+should run main's gate too for such a task, so the conflict shows at the first join.
+
 ## Log
 Append to your role's section only, above its end marker. One entry per run:
 `- <UTC time> · R-NNN · <state seen> · did: … · gate attempts: n (last: green|red <step>) ·
