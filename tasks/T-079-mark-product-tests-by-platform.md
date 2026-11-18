@@ -2,12 +2,20 @@
 id: T-079
 title: "Make the gate pass on macOS: register the product tests of facilities macOS lacks, each with its sentence and counterpart, and fix the tests that assume Linux where macOS has the facility"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (xtask/platform-tests.toml, xtask/tests/); the approval row must contain `gate paths`. No dependency change, no product code.
-state: specified
+state: ready
 owner_role: planner
 scorecard_items: []     # none claimed; the tests stay tied to their items
 depends_on: [T-071]     # the registry's format and the no-skip rule; and both edit xtask/platform-tests.toml
 touches:                # one role per path (D-153); all implementer except the last two. Scope of ruling Q-4 B (R-321); Q-4 A adds the list in Interface (W)
-  - xtask/platform-tests.toml                              # GATE PATH: the 12 entries of Interface (2)
+  - xtask/platform-tests.toml                              # GATE PATH: the 8 restored entries (Interface (2a), the patch's hunk) and the 12 of Interface (2)
+  - xtask/src/queue.rs                                     # GATE PATH: its #[cfg(test)] module, exactly the patch's hunk (2 tests)
+  - xtask/src/publish.rs                                   # GATE PATH: its #[cfg(test)] module, exactly the patch's hunk
+  - xtask/src/worktree.rs                                  # GATE PATH: its #[cfg(test)] module, exactly the patch's hunk
+  - xtask/tests/acceptance_t013_publish.rs                 # GATE PATH: exactly the patch's hunk
+  - xtask/tests/guard_t005.rs                              # GATE PATH: exactly the patch's hunk
+  - xtask/tests/acceptance_t005_r3.rs                      # GATE PATH: exactly the patch's hunk
+  - xtask/tests/acceptance_t005_r4.rs                      # GATE PATH: exactly the patch's hunk
+  - docs/development.md                                    # exactly the sentence "The registry has no entry yet: …" (lines 101–102 on e95e7c3), replaced (Pinned (i))
   - crates/kiln-workspace/src/disk.rs                      # its #[cfg(test)] module only (from line 535): failed_rename_removes_own_temp_and_keeps_target; product code unchanged (T-073)
   - crates/kiln-workspace/tests/acceptance_t019_workspace.rs
   - crates/kiln-workspace/tests/project.rs
@@ -21,7 +29,7 @@ touches:                # one role per path (D-153); all implementer except the 
   - apps/kiln/tests/guard_t055.rs
   - xtask/tests/acceptance_t079.rs                         # GATE PATH: test author
   - xtask/tests/guard_t079.rs                              # GATE PATH: test author (every Linux test name kept)
-budget_tokens: 1100000  # high (v1.5); estimate about 800,000 for Q-4 B, see Estimate
+budget_tokens: 1100000  # high (v1.5); estimate about 850,000 (R-325), see Estimate
 iteration: 2
 found_by: planner       # ADR-0009 (R-255); split off T-071 by D-180 Q-1 B; re-specified R-321
 origin_task: null
@@ -31,8 +39,9 @@ origin_task: null
 
 Re-specified in full under METHODOLOGY v1.5 (§5.7: a draft written under an earlier version) in run R-321,
 against `task/T-071` at `b7dd7d621f4a90b4eb7165f6118a0be88fb7dad1` (T-071 joined and green, not merged) read as
-main. The Windows half of the R-285 spec is out of this scope unless ruling Q-4 says A (Interface (W)): the probe
-of R-321 shows it cannot be evidenced before T-073.
+main. The Windows half of the R-285 spec is out of this scope (ruling Q-4 B, D-233: it is T-092). Re-checked in
+run R-325 against main `e95e7c3` after T-071 merged without its eight registry entries (D-235): this task restores
+them (Interface (2a)).
 
 ## Goal
 On macOS the gate fails at `scorecard` and `test`: in run 44215218474 (`tasks/ci-runs/T-071-round-3.md`, the whole
@@ -41,10 +50,16 @@ artefact) the workspace has **1,101 passed, 16 failed**, and the 16 are exactly 
 4 assume Linux where macOS has the facility. After this task, on macOS, the 12 are registered platform tests that
 do not exist there (each with its sentence and its counterpart or the reason there is none), the 4 pass, and
 `gate-macos` is green; on Linux every test name of the base still exists and passes and no assertion changes.
-Gate paths: `xtask/platform-tests.toml`, `xtask/tests/acceptance_t079.rs`, `xtask/tests/guard_t079.rs`.
+Second part (D-235): T-071 merged the rule and the tool without the eight entries of `xtask`'s own tests and
+without their cfg lines, so on main `xtask`'s tests again do not compile for Windows and five fail on macOS. This
+task applies `tasks/T-079-restore-from-T-071.patch` (the reviewed diff of those eight paths; `reviews/T-071-r4.md`
+has the reviewer's table) unchanged, so that `xtask` passes on all three again (T-071's AC-5 and AC-6, D-235).
+Gate paths: `xtask/platform-tests.toml`, the seven `xtask` files of the patch, `xtask/tests/acceptance_t079.rs`,
+`xtask/tests/guard_t079.rs`.
 
 Reading list: METHODOLOGY v1.5 §5.7, §6, §8.1; `docs/development.md` "The gate" (`no-skip`, `scorecard` rows) and
-"Platform tests" on `task/T-071`; `xtask/platform-tests.toml` there (8 entries); `tasks/ci-runs/T-071-round-3.md`.
+"Platform tests" on main; `tasks/T-079-restore-from-T-071.patch`; `reviews/T-071-r4.md` (the eight);
+`tasks/ci-runs/T-071-round-3.md` and `-round-4.md`.
 
 ## Interface
 
@@ -87,6 +102,20 @@ The counterpart tasks exist: `tasks/T-076-portable-tests-cli-and-desktop.md`, `t
 `cfg(target_os = "linux")` and no twin (a twin with a trivial body is `inert-helper`; an unguarded helper used only
 by a Linux test is dead code on macOS and fails clippy's `-D warnings` there).
 
+### (2a) The 8 restored entries (from the patch; `counterpart = "none"` for all, reason as in the patch)
+| file :: item | platforms | doc / quote (occurs on main, R-325) |
+|---|---|---|
+| `xtask/src/queue.rs` :: `tests::basic_refusals_write_nothing` | linux | `docs/development.md` / "a lock whose process is gone is reclaimed" |
+| `xtask/src/worktree.rs` :: `tests::create_seed_list_remove` | linux | same / "deletes the branch only if merged" |
+| `xtask/src/publish.rs` :: `tests::a_failed_content_commit_in_step_four_exits_one` | unix | same / "a failed content commit in step 4 included" |
+| `xtask/tests/acceptance_t013_publish.rs` :: `publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue` | linux | same / "a lock held by a live process is refused" |
+| `xtask/tests/guard_t005.rs` :: `worktree_build_does_not_touch_main_target` | unix | same / "never hard links, symlinks or a shared directory" |
+| `xtask/tests/acceptance_t005_r3.rs` :: `tampered_cached_gate_binary_does_not_decide_the_gate` | linux | same / "so a binary left by an earlier run (or overwritten by task code during an earlier gate) is never trusted" |
+| `xtask/tests/acceptance_t005_r4.rs` :: `planted_future_dated_xtask_does_not_decide_the_gate` | linux | same / same |
+| `xtask/src/queue.rs` :: `tests::main_xtask_is_rebuilt_from_base_on_every_run` | unix | same / same |
+The patch is applied as it is (`git apply`); nothing else in those seven `.rs` files changes. Its first hunk also
+replaces the registry header's "No entry yet (D-235 u1) …" comment. The 12 entries of (2) follow the 8.
+
 ### (3) Unchanged
 No assertion is changed, removed or loosened on Linux; every Linux test name of the base still exists (a split keeps
 the original name for the part that stays). No product code; no `docs/` sentence (the macOS sentences go to T-072).
@@ -118,7 +147,21 @@ show it before T-073, because `kiln-workspace` does not compile there and no tes
     `guard_t036_workspace.rs` 1); **0 in `xtask`** (T-071) and 0 in T-057/T-058/T-059's files. R-261 counted 238 in 33
     files; the 6 `xtask` files are now portable, and T-069/T-071 changed the rest.
 - (h) Evaluator: none (no item).
-- (i) None.
+- (i) `docs/development.md`, "Platform tests": the sentence "The registry has no entry yet: the tests that need one
+  are marked and listed by T-079 (D-235)." becomes, worded by the implementer: the registry lists the platform tests
+  of `xtask` (the director's tools, Linux or Unix only) and of the product tests that test a facility macOS lacks;
+  the Windows marking of the product tests is T-092's. **Unchecked** (the reviewer's first check: that each clause
+  matches the registry at the head, e.g. `grep -c '^\[\[test\]\]' xtask/platform-tests.toml` = 20).
+- (j) **Main's gate on the candidate tree** (D-235's rule). Main's tool is T-071's (`no-skip` reads the registry), so
+  the queue's first gate (main's `xtask`) and the task's own gate are the same tool for every step this task touches:
+  the task changes no file under `xtask/src/` outside test modules, no fixture, no `noskip.rs`/`platforms.rs`/
+  `scorecard.rs`, no workflow. Measured (R-325, scratch export of main `e95e7c3` with the patch applied, main's own
+  `cargo xtask no-skip`): `PASS  no-skip: self-test ok (17 known findings); 197 files scanned, 0 allowlisted skip(s),
+  8 platform test(s) registered (0 pending), today = 2026-11-18` (exit 0); on main without the patch the same line
+  with `0 platform test(s) registered`. **Before the join** the implementer runs, in a scratch export of main with the
+  branch's diff applied, main's `cargo xtask ci` (or at least `no-skip` and `scorecard --check`) built from main's
+  sources, and logs the `no-skip` detail line (it must say `20 platform test(s) registered`); the director's join
+  and the queue then repeat what that showed.
 
 ### The pending CI criterion (v1.5 §8.1), for the approval row
 The CI record (`tasks/ci-runs/T-079-round-N.md`, from the artefacts) of the rebased head on `ci/candidate` shows:
@@ -130,15 +173,18 @@ The CI record (`tasks/ci-runs/T-079-round-N.md`, from the artefacts) of the reba
   (registered `linux`: "registered absent here", which `docs/development.md`'s `scorecard` row says is not a problem),
   `acceptance_t019_cli::tree_order_and_counts`, `…::deep_trees_stop_at_the_depth_bound` (portable fixes); the full test
   output 0 failed, and none of the 12 registered names in it;
-- `gate-windows` red at `kiln-workspace` (lib), as before (T-073); its record shows the `core-crates` step unchanged
-  (`xtask` and the three core crates) — T-079 has no part to show there under Q-4 B.
+- `gate-macos`'s `core-crates` step `==== xtask: exit status 0` (the 5 macOS-failing `xtask` tests absent by name:
+  the 5 `linux` entries of (2a));
+- `gate-windows` red at `kiln-workspace` (lib), as before (T-073), **and** its `core-crates` step
+  `==== xtask: exit status 0`, every `xtask` binary run (21 on round 4), and the 8 restored tests absent by name — as
+  `tasks/ci-runs/T-071-round-4.md` showed for the same tree (270 passed, 0 failed).
 After the merge, the first green `gate-macos` run on main is recorded: from then on it counts (§8.1, ADR-0009 Q-1 A).
 
 ## Acceptance criteria
 Gate tests by the independent test author (`xtask/tests/acceptance_t079.rs`), reading the repository's files:
-- AC-1: the set of entries of `xtask/platform-tests.toml` equals exactly T-071's 8 plus the 12 `(file, item,
-  platforms = "linux")` of Interface (1)/(2), each with the `counterpart` and `task` stated there; fails on base (8
-  entries). Must reject, among others: one of the 12 with `platforms = "unix"` (outside the stated set).
+- AC-1: the set of `(file, item, platforms, counterpart, task)` of `xtask/platform-tests.toml`'s entries equals
+  exactly the 20 of Interface (2a) and (2): the 8 restored ones and the 12; fails on base (main has 0 entries). Must
+  reject, among others: one of the 12 with `platforms = "unix"`, and a 21st entry (both outside the stated set).
 - AC-2: for the 4 portable fixes, the set of platform-cfg'd items in their test fns equals ∅ (the four tests have no
   `cfg` and no platform branch of their own); passes on base, so it is a guard of intent, written in `guard_t079.rs`.
   Must reject a `#[cfg(target_os = "linux")]` on `tree_order_and_counts`.
@@ -149,10 +195,15 @@ is `no-skip`'s (`platform-mismatch`, `platform-sentence`, `platform-unlisted`), 
 re-check it. R-285's scans AC-1 to AC-3 (`std::os::unix`, `/dev/full`, raw errno literals) are dropped: the first is
 the Windows half (Q-4), the second follows from AC-1 + `no-skip`, the third is shown only by macOS CI (on Linux the
 literal 40 is right).
+Local, by the implementer and re-run by the reviewer (T-071's AC-5, D-235):
+- AC-4: `cargo check -p xtask --all-targets --locked --target x86_64-pc-windows-msvc` at the head reports 0 errors
+  (needs no C stub: `xtask` does not depend on `tree-sitter`). Fails on base: R-325 measured 7 `xtask/…: error` lines
+  on main `e95e7c3` and exit 0 with the patch applied.
+- Main's gate on the candidate tree (Pinned (j)): logged before the join.
 Through CI (pending criterion above; the reviewer claims only what the record shows):
 - AC-3: `gate-macos` green on the candidate, as stated.
-- AC-W (only with Q-4 A; local, implementer and reviewer): probe 2's command on the head reports 0 errors in test
-  code (225 on `b7dd7d6`).
+- AC-5 (T-071's AC-6): `==== xtask: exit status 0` on `gate-macos` and on `gate-windows`, the 8 absent by name there
+  as their `platforms` say. Fails on base (main: `xtask` does not compile for Windows; five fail on macOS, D-235).
 
 ## Out of scope and implementer notes
 - Windows marking (Q-4 B: a new task after T-073, below), Windows counterparts (T-073 to T-076), the window on macOS/Windows (T-077),
@@ -162,10 +213,10 @@ Through CI (pending criterion above; the reviewer claims only what the record sh
 - Each CI round is a `CI-REQUEST` (§8.1) and counts as a gate attempt.
 
 ## Collisions and order (§5.7 re-check rule)
-- After T-071 (both edit `xtask/platform-tests.toml`). In flight now: only T-071.
-- T-091 (draft; `xtask/src/platforms.rs`, `noskip.rs`, `xtask/tests/acceptance_t091.rs`, `guard_t071.rs`,
-  `docs/development.md`): no shared path, may be in flight together; if T-091 changes what `no-skip` reports, this
-  spec is re-checked when it merges.
+- T-071 merged (`0f8ea64`). In flight on `e95e7c3`: none of the drafts below.
+- `docs/development.md` and `xtask/platform-tests.toml` are also in the `touches` of the drafts T-043 (also
+  `queue.rs`, `publish.rs`, `acceptance_t005_r3/r4.rs`), T-089, T-090, T-091 (`docs/development.md` only) and T-092
+  (`xtask/platform-tests.toml`): none of them is in flight with this task (§5.2); each is re-checked when this merges.
 - T-072 (`disk.rs`, `docs/protocol/paths.md`, `ui.md`): shares `disk.rs` → after this task, re-checked when it merges.
 - T-073, T-074 (`disk.rs`): after; T-075 (`crates/kiln-workspace/tests/`), T-076 (`apps/kiln-cli/tests/`, four
   `apps/kiln/tests/` files): directory overlaps → after; each re-checked when this merges.
@@ -174,10 +225,11 @@ Through CI (pending criterion above; the reviewer claims only what the record sh
 
 ## Estimate
 T-071: 1,215,738 tokens booked against the planner's estimate of about 800,000 (×1.5; its CI rounds and a reviewer
-finding holes in a checker). This task under Q-4 B: 12 markings with entries, 4 portable fixes, two scan/guard tests,
-1–2 CI rounds; about 550,000 by the stage's figures, **about 800,000** with T-071's overrun factor, inside the high
-ceiling 1,100,000. Under Q-4 A add the 27-file marking: about 1,300,000, over the ceiling. Arm: high → independent
-test author.
+finding holes in a checker). This task: 12 markings with entries, 4 portable fixes, two scan/guard tests, 1–2 CI
+rounds: about 550,000 by the stage's figures, about 800,000 with T-071's factor. The eight add little building (a
+reviewed patch applied, `git apply --check` passes on `e95e7c3`) but a reviewer's check of 7 gate-path files against
+`reviews/T-071-r4.md` and the main-gate run of Pinned (j): about **+50,000**. **About 850,000**, inside the high
+ceiling 1,100,000. Arm: high → independent test author.
 
 ## Questions and rulings
 - **Q-1 (planner, R-285). T-072 after this task.** A: T-072 shrinks to the macOS document sentences (non-UTF-8
@@ -253,12 +305,36 @@ x86_64-pc-windows-msvc`: 0 errors) and AC-6 (`xtask` exit status 0 on `gate-maco
 task's criteria and its pending CI criterion. The planner re-checks this spec against main after T-071 merges
 (v1.5 change 10) and writes these in.
 
+### Spec check R-325
+Against main `e95e7c3` (T-071 merged at `0f8ea64` without its entries, D-235). Changed: `touches` gains the seven
+`xtask` files of the patch (exactly its hunks) and one sentence of `docs/development.md`; Goal and Interface (2a) the
+eight; AC-1 now 20 entries; AC-4 (T-071's AC-5) and AC-5 (T-071's AC-6) added, each failing on base; the pending CI
+criterion gains `xtask` exit status 0 on macOS and Windows; Pinned (i) the replaced sentence, (j) main's gate on the
+candidate tree; Collisions and Estimate. Evidence (scratch `/home/user/kiln-plan-T-079/`, an export of `e95e7c3` as
+a git repository, deleted; `df -h /home/user`: 23 GB free): `git apply --check` of the patch passes; main's `cargo
+xtask no-skip` passes on main + patch (8 registered) and on main (0); `cargo check -p xtask --all-targets --locked
+--target x86_64-pc-windows-msvc`: exit 0 with the patch, 7 error lines without. The nine `doc`/`quote` pairs (the 8's
+six quotes and the 12's three) occur in tracked `.md` files on main (whitespace-collapsed substring test). The 12 and
+the 4 fixes are unchanged by T-071's merge (their files are not in the patch). Not run: the 12 (not written yet), CI.
+
+- **Q-8 (planner, R-325). One patch or two commits?** A: the implementer applies the patch as its first commit
+  (`git apply`), then the twelve — the reviewer then compares that commit with `park/T-071-reviewed` path by path.
+  B: interleaved. **Recommendation: A** — the reviewed eight stay identifiable.
+
+### Ruling on spec check R-325 (director, D-239)
+- **Q-8: A.** The patch `tasks/T-079-restore-from-T-071.patch` is the implementer's first commit, unchanged
+  (`git apply`), then the twelve entries and the four portable fixes in later commits, so the reviewer compares
+  that first commit path by path with the head reviewed in T-071.
+- Pinned (j) stands as written: before the join the implementer runs main's gate (built from main's sources) on
+  the candidate tree and logs its `no-skip` line (`20 platform test(s) registered`).
+
 ## Log
 ### director
 <!-- end director log -->
 ### planner
 - 2026-11-15 · R-285 · draft · did: full spec from the split of T-071 (D-180 Q-1 B) · not run: builds · next: director
 - 2026-11-18 · R-321 · specified · did: re-specified in full under v1.5 against task/T-071 @ b7dd7d6; Windows check probed twice (scratch, deleted) · not run: CI · next: director (Q-4 to Q-8)
+- 2026-11-18 · R-325 · specified · did: re-check after T-071's merge (D-235): the eight written in; main's no-skip on main + patch run (scratch, deleted) · not run: CI · next: director (Q-8)
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
