@@ -873,6 +873,68 @@ notes (point 2; the latter pending Q-B).
   CI-REQUEST: 0019cbb8fde3c9da5dd3ce012b6047567b1f8fa4 (the commit after it adds only this line to the log)
 <!-- end implementer log -->
 ### test author
+- 2026-11-18 · test author (R-392) · in_progress · did: wrote `xtask/tests/acceptance_t092.rs` (AC-1) and
+  `xtask/tests/guard_t092.rs` (AC-2) from this file alone (Interface (1), (2), AC-1, AC-2, Pinned (e)/(f), "Out of
+  scope"), on base `569ecca`; did not read `task/T-092`, its worktree or the planner's clones. Rulings acknowledged and
+  accepted: D-269 (rulings 1-7; ruling 5 fixes `<name>_unix`), D-273 (the cut: W23, W36-W39, W42, W43 not tested here,
+  no entry of `acceptance_t019_workspace.rs`/`project.rs` is in my 12; Q-B is the implementer's; the 24 P names of AC-2).
+  - **Criterion → tests → base** (`cargo test -p xtask --test acceptance_t092`: 0 passed, 5 failed, all by assertion):
+    - AC-1 `ac1_entries_of_the_nine_files_are_exactly_the_twelve`: multiset of `(file, item, platforms, counterpart)` of
+      the entries whose `file` is one of the 9 files = Interface (2)'s 12. Base: "12 of the 12 missing or changed … 0 not
+      among the 12".
+    - AC-1 `ac1_the_two_disk_entries_name_w40_and_w41`: each exactly once, `unix`, exact W40/W41 counterpart, no
+      `reason`/`task`/`expires`. Base: "counterpart = Some("pending"), expected "…_on_every_platform"; has `reason` …"
+      for both.
+    - AC-1 `ac1_no_entry_waits_on_t092`: entries with `task = "T-092"` = `[]`. Base: `left` holds the two disk.rs entries.
+    - AC-1, source side (director's brief: Unix-only tests and splits) `ac1_unix_only_tests_of_the_nine_files_are_exactly_the_listed_ones`:
+      in the 9 files, the map test → platform cfgs (fn, inline mods, `#![cfg]`, `mod` declaration; `syn`) = the 13 of
+      Interface (1) (7 test-level U, the 3 `_unix` halves at `fn=unix`; W24's and W32/W33's tests at `file=unix`); a cfg
+      is read as its platform set, so `not(windows)` counts as `unix`. Base: "found (0) … expected (13)".
+    - AC-1, the counterparts `ac1_w40_and_w41_exist_once_in_disk_tests_without_platform_cfg`. Base: "no such #[test] fn" ×2.
+  - **Guards** (`cargo test -p xtask --test guard_t092`: 3 passed on base): AC-2 `ac2_portable_tests_exist_once_and_carry_no_platform_cfg`
+    (the 24 P names, each one `#[test]` fn, no platform cfg attribute on fn/mods/file/`mod` line; body not read, as AC-2
+    says); `no_test_of_the_touched_files_is_ignored` (the 9 files and `disk.rs`: `ignore` attributes = `[]`);
+    `registry_entries_of_other_tasks_are_as_on_base` (the base's 33 entries other than the two disk.rs ones, one by one,
+    `(file, item, platforms, counterpart, task)`; new entries not compared). Decided by run, as the spec says: AC-2 passes
+    on base (guard); the Unix-only set and W40/W41 fail on base (acceptance file). "Other entries unchanged" passes on base,
+    so by D-189 it cannot be an acceptance test: it is in the guard file (question 1).
+  - **Positive control** (scratch `/home/user/kiln-test-T-092/tree`, a plausible implementation of the sources' cfgs,
+    `_unix` stubs, W40/W41 stubs and the 14 registry edits): acceptance 5/5, guard_t092 3/3, guard_t079 6/6; main's
+    `no-skip` PASS "47 platform test(s) registered (8 pending)", as Interface (2) predicts.
+  - **Seeded faults** (each on the control; `--no-fail-fast`): F1 W11's counterpart names the parent test →
+    `…_exactly_the_twelve` only (no-skip PASS). F2 W41's disk entry left pending on T-092 → `ac1_no_entry_waits_on_t092`,
+    `…_name_w40_and_w41` (no-skip PASS). F3 `#[cfg(unix)]` on `guard_t008.rs::symlinks_inside_root_still_work` →
+    `ac2_portable_…`, `ac1_unix_only_…`; no-skip `platform-unlisted`. F4 W27's entry removed (cfg kept) →
+    `…_exactly_the_twelve`; no-skip `platform-unlisted`. F5 `vanished_root_is_refused_unix` removed (entry kept) →
+    `ac1_unix_only_…`; no-skip `platform-unused`. F6 `walk_corner_cases` renamed → `ac2_portable_…` and `guard_t079`
+    `every_linux_test_name_of_the_base_still_exists` (no-skip PASS). F7 `walk_corner_cases` cfg'd and registered `unix`
+    (AC-1's variant) → `…_exactly_the_twelve`, `ac1_unix_only_…`, `ac2_portable_…` (no-skip PASS). F8 W19 `counterpart =
+    "none"` → `…_exactly_the_twelve` (no-skip PASS). F9 W41's entry naming W40 → `…_name_w40_and_w41` (no-skip PASS).
+    F10 W24 test-level cfg and item → `…_exactly_the_twelve`, `ac1_unix_only_…` (no-skip PASS). F11 `#[ignore]` on
+    `no_tools_never_runs` → `no_test_of_the_touched_files_is_ignored`; no-skip `ignore`. F12 T-077's
+    `ac1_no_display_every_window_form` moved to `unix` → `registry_entries_of_other_tasks_are_as_on_base`; no-skip
+    `platform-mismatch`. F13 W40 behind `#[cfg(unix)]` → `ac1_w40_…`; no-skip `platform-unlisted`. F14 W19 behind
+    `target_os = "linux"`, entry `linux` → `…_exactly_the_twelve`, `ac1_unix_only_…` (no-skip PASS). F15 W10 left
+    portable, entry kept → `ac1_unix_only_…`; no-skip `platform-mismatch`. No fault survived.
+  - **Outside-the-list variants (v1.5)**, one each: `…_exactly_the_twelve` rejects `confinement.rs::walk_corner_cases`
+    registered (F7); `…_name_w40_and_w41` rejects W41 naming W40 (F9); `ac1_no_entry_waits_on_t092` rejects a pending
+    entry on T-092 (F2); `ac1_unix_only_…` rejects `#[cfg(unix)]` on `guard_t008.rs::symlinks_inside_root_still_work` (F3);
+    `ac1_w40_…` rejects W40 behind `#[cfg(unix)]` (F13); `ac2_portable_…` rejects the same F3 (AC-2's named variant);
+    `no_test_…_ignored` rejects F11; `registry_entries_…_as_on_base` rejects F12.
+  - **Runs on the branch** (`b881976` + this log): `cargo test -p xtask --test acceptance_t092` 0/5 (fails on base, as
+    required); `--test guard_t092` 3/3; `--test guard_t079` 6/6; `cargo fmt --check` clean; `cargo clippy -p xtask
+    --all-targets -- -D warnings` clean; `cargo xtask no-skip` PASS "208 files scanned, 0 allowlisted skip(s), 35 platform
+    test(s) registered (10 pending)". Not run: `cargo xtask ci` (whole gate), any Windows/macOS build (my files use only
+    `std::fs`, `toml`, `syn`). Scorecard items: none (`scorecard_items: []`).
+  - QUESTION 1: "no entry of another task changed" is a "left alone" check (D-043/D-069 say the reviewer's diff check,
+    not a permanent guard) and passes on base (D-189: not an acceptance test). I put it in `guard_t092.rs` pinned to the
+    base's 33 tuples, so T-076/T-077 must update it when they resolve their pending entries, as they must update
+    `acceptance_t079.rs`. Recommendation: keep it until T-092 merges and let the director drop it then if D-043 governs.
+  - QUESTION 2: the two source-side tests in the acceptance file (`ac1_unix_only_…`, `ac1_w40_…`) go beyond AC-1's
+    wording (registry only) at the director's request; they follow Interface (1) exactly (rows give every name and form).
+    Recommendation: count them under AC-1; if the director prefers AC-1's text alone, drop them and keep no-skip as the
+    check (it misses F10, F14).
+  · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
