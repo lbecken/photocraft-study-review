@@ -396,7 +396,14 @@ fn windows_expect(req: &RelPath, list: &RelPath) -> Expect {
 }
 
 /// Unix today: every link is followed as the kernel does (module docs of `disk.rs`).
-fn unix_expect(kind: Kind, dest: Dest, pos: Pos, req: &RelPath, list: &RelPath) -> Expect {
+fn unix_expect(
+    kind: Kind,
+    dest: Dest,
+    pos: Pos,
+    nested: bool,
+    req: &RelPath,
+    list: &RelPath,
+) -> Expect {
     let to_dir = pos == Pos::Middle || kind.is_dir_link();
     let nf = |p: &RelPath| VfsError::NotFound { path: p.clone() };
     let naf = |p: &RelPath| VfsError::NotAFile { path: p.clone() };
@@ -430,7 +437,11 @@ fn unix_expect(kind: Kind, dest: Dest, pos: Pos, req: &RelPath, list: &RelPath) 
             list: Ok(vec![entry("y.txt", EntryKind::File)]),
             open: Ok(IN_X.to_vec()),
             write: Ok(()),
-            written: Some("root/d/x.txt"),
+            written: Some(if nested {
+                "root/e/x.txt"
+            } else {
+                "root/d/x.txt"
+            }),
         },
         // A dangling link as the last component: a save creates its target.
         (Dest::Nowhere, Pos::Last) => Expect {
@@ -458,33 +469,61 @@ fn unix_expect(kind: Kind, dest: Dest, pos: Pos, req: &RelPath, list: &RelPath) 
 /// directory `out/` beside it holding the same shape, and a link `root/l` of `kind` to the
 /// destination; then every call through it.
 fn link_case(test: &str, kind: Kind, dest: Dest, pos: Pos, problems: &mut Vec<String>) {
-    let case = format!("{test}: {kind:?} to {dest:?} as {pos:?} component");
-    let w = Work::new(&format!("{kind:?}-{dest:?}-{pos:?}"));
+    link_case_at(test, kind, dest, pos, false, problems);
+}
+
+/// [`link_case`]; with `nested`, the link is below the first level (ruling r1, D-257): at
+/// `root/d/l`, with requests `d/l/x.txt` (listing `d/l/s`) or `d/l`, and an inside directory
+/// destination `root/e` (the same shape as `d`, so the link does not lead to its own parent).
+fn link_case_at(
+    test: &str,
+    kind: Kind,
+    dest: Dest,
+    pos: Pos,
+    nested: bool,
+    problems: &mut Vec<String>,
+) {
+    let level = if nested {
+        "below the first level"
+    } else {
+        "at the first level"
+    };
+    let case = format!("{test}: {kind:?} to {dest:?} as {pos:?} component, {level}");
+    let w = Work::new(&format!(
+        "{kind:?}-{dest:?}-{pos:?}-{}",
+        if nested { "nested" } else { "top" }
+    ));
     w.file("root/f.txt", PLAIN);
     w.file("root/t.txt", IN_T);
     w.file("root/d/x.txt", IN_X);
     w.file("root/d/s/y.txt", IN_Y);
+    if nested {
+        w.file("root/e/x.txt", IN_X);
+        w.file("root/e/s/y.txt", IN_Y);
+    }
     w.file("out/t.txt", OUT_T);
     w.file("out/d/x.txt", OUT_X);
     w.file("out/d/s/y.txt", OUT_X);
     let to_dir = pos == Pos::Middle || kind.is_dir_link();
     let target = match (dest, to_dir) {
         (Dest::Inside, false) => "root/t.txt",
+        (Dest::Inside, true) if nested => "root/e",
         (Dest::Inside, true) => "root/d",
         (Dest::Outside, false) => "out/t.txt",
         (Dest::Outside, true) => "out/d",
         (Dest::Nowhere, false) => "root/gone.txt",
         (Dest::Nowhere, true) => "root/gone",
     };
-    plant(&w, kind, "root/l", target);
+    let at = if nested { "d/" } else { "" };
+    plant(&w, kind, &format!("root/{at}l"), target);
     let (req, list) = match pos {
-        Pos::Middle => (rp("l/x.txt"), rp("l/s")),
-        Pos::Last => (rp("l"), rp("l")),
+        Pos::Middle => (rp(&format!("{at}l/x.txt")), rp(&format!("{at}l/s"))),
+        Pos::Last => (rp(&format!("{at}l")), rp(&format!("{at}l"))),
     };
     let want = if cfg!(windows) {
         windows_expect(&req, &list)
     } else {
-        unix_expect(kind, dest, pos, &req, &list)
+        unix_expect(kind, dest, pos, nested, &req, &list)
     };
     let before = snapshot(&w.dir);
     let mut disk = new_disk(&w.at("root"), &case);
@@ -524,16 +563,62 @@ fn link_case(test: &str, kind: Kind, dest: Dest, pos: Pos, problems: &mut Vec<St
 
     // Interface (2): the link itself is listed `symlink`, and the project tree never descends
     // into it (both platforms; base behaviour, PROBE C7).
+    let (root_list, tree_want) = if nested {
+        same(
+            problems,
+            &format!("{case}: list_dir(d)"),
+            listing(disk.list_dir(Some(&rp("d")))),
+            Ok(vec![
+                entry("l", EntryKind::Symlink),
+                entry("s", EntryKind::Dir),
+                entry("x.txt", EntryKind::File),
+            ]),
+        );
+        (
+            vec![
+                entry("d", EntryKind::Dir),
+                entry("e", EntryKind::Dir),
+                entry("f.txt", EntryKind::File),
+                entry("t.txt", EntryKind::File),
+            ],
+            vec![
+                entry("d", EntryKind::Dir),
+                entry("d/l", EntryKind::Symlink),
+                entry("d/s", EntryKind::Dir),
+                entry("d/s/y.txt", EntryKind::File),
+                entry("d/x.txt", EntryKind::File),
+                entry("e", EntryKind::Dir),
+                entry("e/s", EntryKind::Dir),
+                entry("e/s/y.txt", EntryKind::File),
+                entry("e/x.txt", EntryKind::File),
+                entry("f.txt", EntryKind::File),
+                entry("t.txt", EntryKind::File),
+            ],
+        )
+    } else {
+        (
+            vec![
+                entry("d", EntryKind::Dir),
+                entry("f.txt", EntryKind::File),
+                entry("l", EntryKind::Symlink),
+                entry("t.txt", EntryKind::File),
+            ],
+            vec![
+                entry("d", EntryKind::Dir),
+                entry("d/s", EntryKind::Dir),
+                entry("d/s/y.txt", EntryKind::File),
+                entry("d/x.txt", EntryKind::File),
+                entry("f.txt", EntryKind::File),
+                entry("l", EntryKind::Symlink),
+                entry("t.txt", EntryKind::File),
+            ],
+        )
+    };
     same(
         problems,
         &format!("{case}: list_dir(root)"),
         listing(disk.list_dir(None)),
-        Ok(vec![
-            entry("d", EntryKind::Dir),
-            entry("f.txt", EntryKind::File),
-            entry("l", EntryKind::Symlink),
-            entry("t.txt", EntryKind::File),
-        ]),
+        Ok(root_list),
     );
     let tree = project::tree(&disk, None, 1000).map(|t| {
         t.entries
@@ -545,15 +630,7 @@ fn link_case(test: &str, kind: Kind, dest: Dest, pos: Pos, problems: &mut Vec<St
         problems,
         &format!("{case}: project::tree(root)"),
         tree,
-        Ok(vec![
-            entry("d", EntryKind::Dir),
-            entry("d/s", EntryKind::Dir),
-            entry("d/s/y.txt", EntryKind::File),
-            entry("d/x.txt", EntryKind::File),
-            entry("f.txt", EntryKind::File),
-            entry("l", EntryKind::Symlink),
-            entry("t.txt", EntryKind::File),
-        ]),
+        Ok(tree_want),
     );
     same(
         problems,
@@ -674,6 +751,24 @@ fn awa1_junction_on_the_walk() {
     link_kind_test("awa1_junction_on_the_walk", Kind::Junction);
 }
 
+/// Ruling r1 (D-257): a link of every kind below the first level, at `root/d/l` (inside,
+/// outside, nowhere; middle and last component: `d/l/x.txt`, `d/l`). Windows: every call
+/// `OutsideRoot`, nothing changed; Unix: followed, as today. Rejects (Windows): a walk that
+/// checks only the first or only the last component of the path for a reparse point.
+#[test]
+fn awa1_link_below_the_first_level() {
+    let test = "awa1_link_below_the_first_level";
+    let mut problems = Vec::new();
+    for kind in [Kind::FileRel, Kind::FileAbs, Kind::DirSym, Kind::Junction] {
+        for dest in [Dest::Inside, Dest::Outside, Dest::Nowhere] {
+            for pos in [Pos::Middle, Pos::Last] {
+                link_case_at(test, kind, dest, pos, true, &mut problems);
+            }
+        }
+    }
+    finish(test, problems);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Interface (3): a link at a temporary name.
 
@@ -689,7 +784,15 @@ fn temp_case(test: &str, plants: &[(&str, Kind, &str)], out_files: &[(&str, &[u8
         w.file(rel, bytes);
     }
     for (name, kind, target) in plants {
-        plant(&w, *kind, &format!("root/{name}"), target);
+        let made = plant(&w, *kind, &format!("root/{name}"), target);
+        let exists = fs::symlink_metadata(w.at(target)).is_ok();
+        measured(
+            test,
+            &format!(
+                "fixture: {kind:?} made at {name} -> {} (target exists: {exists})",
+                made.display()
+            ),
+        );
     }
     let before = snapshot(&w.dir);
     let mut disk = new_disk(&w.at("root"), test);
@@ -1141,4 +1244,18 @@ fn awa4_dotdot_after_a_junction_in_the_root_text() {
         &mut problems,
     );
     finish(test, problems);
+}
+
+/// (e) Ruling r2 (D-257): a dangling junction alone at `.kiln-tmp-0` (Unix: a dangling symbolic
+/// link to an absolute path) to a missing outside directory: the save goes through the next
+/// free name, the junction is neither followed nor changed, the missing path still missing.
+/// Whether the runner can make a dangling junction is unchecked: the `MEASURED:` line shows
+/// it, and the test fails naming why if it cannot.
+#[test]
+fn awa3_temp_name_held_by_a_dangling_junction() {
+    temp_case(
+        "awa3_temp_name_held_by_a_dangling_junction",
+        &[(".kiln-tmp-0", Kind::Junction, "out/gone")],
+        &[],
+    );
 }
