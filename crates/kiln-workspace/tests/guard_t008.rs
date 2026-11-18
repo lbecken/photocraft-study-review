@@ -18,6 +18,10 @@ use kiln_workspace::{DiskFs, RelPath, Vfs, VfsError};
 
 struct Work {
     dir: PathBuf,
+    /// Each link of the fixture and its `read_link` taken right after it was made (ruling b2,
+    /// D-277): on Windows `read_link` returns an absolute target without the `\\?\` prefix
+    /// that the canonicalized work directory carries.
+    made: Vec<(String, PathBuf)>,
 }
 
 impl Work {
@@ -27,6 +31,7 @@ impl Work {
         fs::create_dir_all(&dir).unwrap();
         Work {
             dir: fs::canonicalize(&dir).unwrap(),
+            made: Vec::new(),
         }
     }
 
@@ -86,22 +91,25 @@ fn links(w: &Work) -> Vec<(String, PathBuf)> {
 }
 
 fn fixture(name: &str) -> Work {
-    let w = Work::new(name);
+    let mut w = Work::new(name);
     fs::create_dir_all(w.at("root/real")).unwrap();
     fs::create_dir_all(w.at("outside")).unwrap();
     fs::write(w.at("root/real/t.txt"), b"target\n").unwrap();
     for (at, target) in links(&w) {
         symlink(&target, w.at(&at)).unwrap();
+        let read = fs::read_link(w.at(&at)).unwrap();
+        w.made.push((at, read));
     }
     w
 }
 
 /// Every link still points where it did.
 fn assert_links_kept(w: &Work) {
-    for (at, target) in links(w) {
+    assert_eq!(w.made.len(), links(w).len(), "fixture: links recorded");
+    for (at, target) in &w.made {
         assert_eq!(
-            fs::read_link(w.at(&at)).unwrap(),
-            target,
+            fs::read_link(w.at(at)).unwrap(),
+            *target,
             "link {at} changed"
         );
     }

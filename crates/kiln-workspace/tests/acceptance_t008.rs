@@ -326,8 +326,34 @@ fn escape_fixture(name: &str) -> Work {
     w.link("root/t", "s/../secret.txt");
     w.link("root/px", "../rootx/secret.txt");
     w.link("rootlink", "root");
-    for link in ["rel", "abs", "dlink/secret.txt", "chain", "t", "px"] {
-        assert_reaches(&w, link, SECRET);
+    let links = ["rel", "abs", "dlink/secret.txt", "chain", "t", "px"];
+    if cfg!(windows) {
+        // Ruling b1 (D-277): on Windows each link is measured first. Windows resolves a `..` in
+        // a path by its text before any link is followed (`docs/protocol/paths.md`, T-074 probe
+        // K2), so `t` (`s/../secret.txt`) is expected not to reach. A link that does not reach
+        // is still asserted refused with nothing changed by the tests; at least one must reach,
+        // or the test shows no real escape and fails naming the forms tried.
+        let mut reached = Vec::new();
+        for link in links {
+            let outcome = match fs::read(w.root().join(link)) {
+                Ok(bytes) if bytes == SECRET => {
+                    reached.push(link);
+                    "reaches the outside content".to_owned()
+                }
+                Ok(bytes) => format!("does not reach: other content {}", bytes.escape_ascii()),
+                Err(e) => format!("does not reach: {:?}", e.kind()),
+            };
+            println!("MEASURED: acceptance_t008 {name}: windows: root/{link}: {outcome}");
+        }
+        assert!(
+            !reached.is_empty(),
+            "Windows fixture `{name}`: no link reaches the outside content (tried {links:?}); a \
+             test of escapes with no real escape shows nothing"
+        );
+    } else {
+        for link in links {
+            assert_reaches(&w, link, SECRET);
+        }
     }
     // `t` is outside only physically: lexically it would be `root/secret.txt`.
     assert!(!w.at("root/secret.txt").exists());
