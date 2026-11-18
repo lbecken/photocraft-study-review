@@ -5,13 +5,14 @@ Record by run R-344 (planner of ADR-0009); method as `tasks/ci-runs/README.md` (
 ## Run header
 - id 44268710587, run_number 22, attempt 1, event push, workflow `platforms`, title "Join task/T-073-tests into task/T-073"
 - branch `ci/candidate`; commit `786c592b21740de950ee0bd9576a9f07ec7884c8`; created_at 2026-11-18T08:38:13Z
-- (status at the first read: in progress, `gate-macos` in its core-crates step; completed below when read)
+- status at 09:08Z: every job completed (`gate-macos` uploaded its reports at 09:07:52Z and was in post-job cleanup); the
+  run's conclusion is failure because of `gate-windows` and `window-probe (windows-2025)`
 
 ## Job table
 | job | id | conclusion | wall | first failing step |
 |---|---|---|---|---|
 | gate-linux | 134679587059 | **success** | 11m34s (08:38:16Z–08:49:50Z) | none |
-| gate-macos | 134679587105 | (in progress; Gate step success 08:38:56Z–08:58:48Z) | | |
+| gate-macos | 134679587105 | **success** (every step through "Upload reports" success; read before the job's own completion time was set) | about 29m35s (08:38:17Z–09:07:52Z, upload) | none |
 | gate-windows | 134679587067 | failure | 17m48s (08:38:16Z–08:56:04Z) | Gate (08:38:50Z–08:44:56Z) |
 | window-linux | 134679587079 | **success** | 1m51s (08:38:16Z–08:40:07Z) | none |
 | window-probe (macos-15) | 134679587108 | **success** | 2m34s (08:38:16Z–08:40:50Z) | none |
@@ -19,7 +20,7 @@ Record by run R-344 (planner of ADR-0009); method as `tasks/ci-runs/README.md` (
 
 Artefacts: `gate-windows-…` 16,269 B (`gate-report.json`, `core-crates.txt`, `test-output.txt`, `workspace-tests.txt`),
 `gate-linux-…` 10,304 B, `window-linux-…` 577 B, `window-probe-macos-15-…` 703 B, `window-probe-windows-2025-…` 344 B;
-`gate-macos-…`: see "gate-macos" below. Fetched with `download_workflow_run_artifact` into
+`gate-macos-…` 10,299 B (`gate-report.json`, `core-crates.txt`). Fetched with `download_workflow_run_artifact` into
 `/home/user/kiln-plan-T-073-artefact/` (deleted after this record), sizes equal to `size_in_bytes`, `testzip()` clean.
 
 Counted window jobs: `window-linux` — `WINDOW CASES PASS`, `AC-3: exit=2 stdout_bytes=0 stderr_lines=1 panicked=0 (pass: 2
@@ -85,3 +86,36 @@ inferred this; now shown).
 ## xtask (`core-crates.txt`)
 Linux `==== xtask: exit status 0`, 23 binaries, 287 passed, 0 failed; Windows `==== xtask: exit status 0`, 23 binaries,
 279 passed, 0 failed. Core crates exit status 0 on both. `no-skip` registered: 35 (23 pending) on Linux and Windows.
+
+## gate-macos (counted, D-248)
+Gate report `passed: true`, 1,178.3 s: every step PASS (fuzz, budgets EMPTY); scorecard `macos: 64 items; 216 tests ran;
+3 registered absent here; page not compared (computed on Linux)` (no problem after it); test "1129 passed, 0 failed, 0
+ignored in 135 suites"; no-skip "… 35 platform test(s) registered (23 pending) …". `xtask`: `==== xtask: exit status 0`,
+23 binaries, 282 passed, 0 failed. No full test output (the gate passed).
+
+## Against T-073's pending CI criterion
+| Clause | Verdict | Quote |
+|---|---|---|
+| `gate-linux` green | **met** | `passed: true`; test "1146 passed, 0 failed, 0 ignored in 135 suites" |
+| `gate-macos` green | **met** | `passed: true`; test "1129 passed, 0 failed …" |
+| `window-linux`, `window-probe (macos-15)` green | **met** | `WINDOW CASES PASS`, `AC-3 PASS`, `PLAIN PASS`; `PROBE: exit status 0` |
+| `gate-windows`: fmt, layers, ui-commands, hygiene, **schema**, no-skip PASS | **met** | the six steps PASS; schema "30 commands; audit ok; docs/commands.json current" |
+| clippy, scorecard, test FAIL only with errors in test targets other than `kiln-workspace`'s lib test and `acceptance_t073`, named | **met** (as far as printed) | clippy: `kiln-cli (test "acceptance_t019_cli")`; test: `kiln (test "script_t055")`, `kiln (test "acceptance_t055")`; full output: `kiln` tests `window_t065`, `acceptance_t065`, `script_t055`, `acceptance_t055`; scorecard: "building test executables failed" and listed tests "which does not exist on windows". Cargo stops at the first failing targets, so not every failing test target is named |
+| core-crates `xtask` exit status 0 | **met** | `==== xtask: exit status 0` (279 / 0) |
+| the new step: every `acceptance_t073` and `kiln-workspace` lib test `ok` | **met** | lib 35/0, `acceptance_t073` 1/0, `guard_t073` 10/0, each `ok` by name |
+| `window-probe (windows-2025)`: "Build kiln" success and a `PROBE:` exit-status line | **met** | Build kiln success; `PROBE: exit status 2` (`kiln: no window: egui_glow: OpenGL: egui_glow requires opengl 2.0+.`) |
+
+## Differences from `tasks/ci-runs/T-079-round-2.md`
+- Windows: `kiln-workspace` and every library and binary now build (round 2: `could not compile kiln-workspace (lib) due to
+  6 previous errors`); schema FAIL → **PASS**; scorecard "18 tests ran … 199 scorecard problems" → "158 tests ran … 60
+  scorecard problems"; clippy and test now fail at product test targets of `kiln-cli` and `kiln` (T-092); "Build kiln" in
+  `window-probe` failure → success, the probe now runs: exit status 2, no OpenGL 2.0+; new reported step 46/0; `xtask`
+  278 → 279 passed; no-skip 20 (8 pending) → 35 (23 pending) registered.
+- macOS: green as before; test 1117 → 1129 passed in 135 suites; `xtask` 281 → 282; no-skip 35 registered.
+- Linux: green as before; test 1134 → 1146 passed in 135 suites; `xtask` 286 → 287; no-skip 35 registered.
+
+## Not read
+- Every failing Windows test target (cargo stops building after the first failures in clippy and test; the full output
+  names only `kiln`'s four).
+- macOS and Linux product test names (no `test-output.txt` on a green gate; T-072 changes that).
+- Job logs (all artefacts uploaded).

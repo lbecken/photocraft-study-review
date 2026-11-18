@@ -232,6 +232,20 @@ high → independent test author.
 ## Log
 ### director
 <!-- end director log -->
+- 2026-11-18 **CI round 1: the pending CI criterion is met; the first Windows runtime evidence of the project** (record
+  `tasks/ci-runs/T-073-round-1.md`, from the six artefacts, run R-344): run 44268710587 on `ci/candidate` at the
+  joined head `786c592b21740de950ee0bd9576a9f07ec7884c8`. `gate-linux`, `gate-macos` and the two counted window jobs
+  success. On Windows: `kiln-workspace` compiles; **the reported step passes 46 of 46** (lib 35, `acceptance_t073` 1,
+  `guard_t073` 10); the gate's fmt, layers, ui-commands, hygiene, schema (for the first time) and no-skip
+  (`35 platform test(s) registered (23 pending)`) PASS; clippy, scorecard and test FAIL only at other crates' test
+  targets (T-092: `kiln-cli` `acceptance_t019_cli`; `kiln` `script_t055`, `acceptance_t055`, `window_t065`,
+  `acceptance_t065`), with no error in any library or binary; the scorecard line went from 18 tests ran and 199
+  problems to 158 tests ran and 60 problems. **Measured on Windows** (the guards' `MEASURED:` lines): renaming
+  the root while it is held succeeds (the identity check then answers "outside", as the guard asserts);
+  renaming the root's parent is refused, `PermissionDenied`, raw OS error 5. `window-probe (windows-2025)`: "Build
+  kiln" succeeds for the first time; the probe exits 2 with `kiln: no window: egui_glow: OpenGL: egui_glow
+  requires opengl 2.0+.` — the hosted Windows runner offers no OpenGL 2.0, which is T-077's matter (noted there).
+
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
 - 2026-11-18 · R-336 · draft · did: re-specified in full under v1.5; prototype probed (scratch, deleted) · not run: CI, Windows runtime · next: director

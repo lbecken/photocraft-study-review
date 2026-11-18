@@ -50,6 +50,13 @@ writes their counterparts** for macOS and Windows (what `kiln` does there when n
 state can be made in a test) or changes the entries to `none` with the reason, and edits the registry:
 `xtask/platform-tests.toml` joins `touches`.
 
+## Note from T-073's CI round 1 (director, 2026-11-18)
+`kiln` builds for Windows since T-073's candidate, and on the hosted runner `windows-2025` the probe exits 2 with
+`kiln: no window: egui_glow: OpenGL: egui_glow requires opengl 2.0+.` (record `tasks/ci-runs/T-073-round-1.md`):
+the runner offers no OpenGL 2.0. This task decides how a window is evidenced on Windows (a software OpenGL on the
+runner, another rendering backend, or "built, not observed" as ADR-0009 Q-5 A allows) — and what a user's machine
+without OpenGL 2.0 gets: the message above is the specified no-window exit.
+
 ## Log
 ### director
 <!-- end director log -->
