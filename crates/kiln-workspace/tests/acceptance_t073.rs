@@ -12,8 +12,10 @@
 //! as the spec says, but check each: a refused rename is first shown not to be a general
 //! refusal (a directory that is not held is renamed in the same place), and then the session
 //! must still work on its root; an accepted one must make every call `OutsideRoot`. The outcome
-//! is written to stderr directly (not through the test harness's capture) as one line
-//! `MEASURED: <test>: <platform>: <outcome>`, so the step's output records it.
+//! is printed as one line `MEASURED: <test>: <platform>: <outcome>` on the test's (captured)
+//! stdout: shown for a failing test, and for a passing one when the run is given
+//! `-- --show-output` (then in the "successes" block, after the results, so it never splits a
+//! `test <name> ... ok` line).
 //!
 //! Every failure message names the platform, the step, what was expected and what was seen
 //! (for an OS error: its kind and raw OS error). No message text and no OS error number is
@@ -23,7 +25,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fs;
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
 use kiln_workspace::{DirListing, DiskFs, Document, EntryKind, RelPath, Vfs, VfsError};
@@ -120,10 +122,9 @@ fn os(e: &io::Error) -> String {
     )
 }
 
-/// One measurement line on stderr, written directly so the harness does not capture it.
+/// One measurement line on the test's captured stdout (module docs).
 fn measured(test: &str, outcome: &str) {
-    let line = format!("MEASURED: {test}: {OS}: {outcome}\n");
-    let _ = io::stderr().write_all(line.as_bytes());
+    println!("MEASURED: {test}: {OS}: {outcome}");
 }
 
 fn rp(s: &str) -> RelPath {
