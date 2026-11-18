@@ -1638,4 +1638,546 @@ mod tests {
         }
         assert!(listing(&dir).iter().all(|n| !n.starts_with(TEMP_PREFIX)));
     }
+
+    // ---- T-074: the counterparts of the nine Unix-only link tests (Interface (5)) ----------
+    // No platform cfg on these tests: each asserts Unix behaviour on Unix and the Windows rule
+    // (no link followed, every reparse point `OutsideRoot`) on Windows, chosen by `cfg!(windows)`
+    // where the two differ. The link helpers below are defined per platform, each doing its work.
+
+    /// A symbolic link at `link` to the file `target` (relative to the link's directory, or
+    /// absolute, as given).
+    #[cfg(unix)]
+    fn file_link(target: &Path, link: &Path) {
+        std::os::unix::fs::symlink(target, link)
+            .unwrap_or_else(|e| panic!("symlink {}: {e}", link.display()));
+    }
+
+    /// A file symbolic link (`symlink_file`; the runner allows it, T-074 probe A1, A5, A6).
+    #[cfg(windows)]
+    fn file_link(target: &Path, link: &Path) {
+        std::os::windows::fs::symlink_file(target, link).unwrap_or_else(|e| {
+            panic!(
+                "symlink_file {}: {e} (a file symbolic link cannot be made here)",
+                link.display()
+            )
+        });
+    }
+
+    /// A symbolic link at `link` to the directory `target` (relative or absolute, as given).
+    #[cfg(unix)]
+    fn dir_link(target: &Path, link: &Path) {
+        std::os::unix::fs::symlink(target, link)
+            .unwrap_or_else(|e| panic!("symlink {}: {e}", link.display()));
+    }
+
+    /// A directory symbolic link (`symlink_dir`; probe A2).
+    #[cfg(windows)]
+    fn dir_link(target: &Path, link: &Path) {
+        std::os::windows::fs::symlink_dir(target, link).unwrap_or_else(|e| {
+            panic!(
+                "symlink_dir {}: {e} (a directory symbolic link cannot be made here)",
+                link.display()
+            )
+        });
+    }
+
+    /// Unix has no junctions: a symbolic link to the same absolute directory stands in for one.
+    #[cfg(unix)]
+    fn junction(target: &Path, link: &Path) {
+        assert!(target.is_absolute(), "a junction target is absolute");
+        std::os::unix::fs::symlink(target, link)
+            .unwrap_or_else(|e| panic!("symlink {}: {e}", link.display()));
+    }
+
+    /// A junction at `link` to the absolute directory `target`, by `cmd /C mklink /J` (probe A3),
+    /// waited for at most 30 s; a junction that cannot be made fails the test, naming why.
+    #[cfg(windows)]
+    fn junction(target: &Path, link: &Path) {
+        use std::process::{Command, Stdio};
+        assert!(target.is_absolute(), "a junction target is absolute");
+        let mut child = Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(link)
+            .arg(target)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap_or_else(|e| panic!("cannot run `cmd /C mklink /J` to make a junction: {e}"));
+        let mut status = None;
+        for _ in 0..3000 {
+            if let Some(s) = child.try_wait().unwrap() {
+                status = Some(s);
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let Some(status) = status else {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("`mklink /J {}` did not finish within 30 s", link.display());
+        };
+        assert!(
+            status.success(),
+            "`mklink /J {}` failed ({status}): a junction cannot be made here",
+            link.display()
+        );
+    }
+
+    /// Whether `path` is itself a link (junctions included: `is_symlink` on Windows, probe B1).
+    fn is_link(path: &Path) -> bool {
+        fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+    }
+
+    /// Remove the link (file or directory link, or junction) at `path`, never its target.
+    fn remove_link(path: &Path) {
+        assert!(is_link(path), "{} is not a link", path.display());
+        fs::remove_file(path)
+            .or_else(|_| fs::remove_dir(path))
+            .unwrap_or_else(|e| panic!("remove link {}: {e}", path.display()));
+    }
+
+    /// Every call of the API answers `OutsideRoot` for each of `paths` (`is_file` false), and
+    /// `list_dir` of the root too: the root path no longer leads to the root.
+    fn assert_every_call_outside(fs_: &mut DiskFs, paths: &[&str], context: &str) {
+        for path in paths {
+            let want = VfsError::OutsideRoot { path: p(path) };
+            assert_eq!(
+                fs_.read(&p(path)),
+                Err(want.clone()),
+                "{context}: read {path}"
+            );
+            assert_eq!(
+                fs_.write_atomic(&p(path), b"PWNED"),
+                Err(want.clone()),
+                "{context}: write {path}"
+            );
+            assert!(!fs_.is_file(&p(path)), "{context}: is_file {path}");
+            assert_eq!(
+                fs_.list_dir(Some(&p(path))),
+                Err(want.clone()),
+                "{context}: list_dir {path}"
+            );
+            assert_eq!(
+                fs_.check_location(&p(path)),
+                Err(want),
+                "{context}: check_location {path}"
+            );
+        }
+        assert_eq!(
+            fs_.list_dir(None),
+            Err(VfsError::OutsideRoot {
+                path: RelPath::root_placeholder()
+            }),
+            "{context}: list_dir of the root"
+        );
+    }
+
+    /// Counterpart of `symlink_at_temp_name_is_not_followed` (registry #2; T-074 Interface (3)):
+    /// a link or junction at a temporary name is never followed or changed, and the save takes
+    /// the next name. The same on every platform (Unix: `O_EXCL` refuses the link; Windows: the
+    /// create opens the name itself and a taken name is skipped). Four fixtures, each in a fresh
+    /// directory: (a) the probe's pair (junction at `-0` to an outside directory, file link at
+    /// `-1` to a missing outside file); (b) a junction alone; (c) a file link alone to an
+    /// existing outside file; (d) a dangling file link alone to a missing outside path.
+    #[test]
+    fn link_at_temp_name_is_not_followed_on_every_platform() {
+        for case in ["a-pair", "b-junction", "c-file-link", "d-dangling"] {
+            let work = fresh_dir(&format!("tmp-link-{case}"));
+            let root = work.join("root");
+            let outside = work.join("outside");
+            fs::create_dir_all(&root).unwrap();
+            fs::create_dir_all(&outside).unwrap();
+            fs::write(outside.join("precious"), b"precious").unwrap();
+            fs::write(root.join("f"), b"old").unwrap();
+            let missing = outside.join("missing");
+            let t0 = root.join(format!("{TEMP_PREFIX}0"));
+            let planted: Vec<PathBuf> = match case {
+                "a-pair" => {
+                    let t1 = root.join(format!("{TEMP_PREFIX}1"));
+                    junction(&outside, &t0);
+                    file_link(&missing, &t1);
+                    vec![t0, t1]
+                }
+                "b-junction" => {
+                    junction(&outside, &t0);
+                    vec![t0]
+                }
+                "c-file-link" => {
+                    file_link(&outside.join("precious"), &t0);
+                    vec![t0]
+                }
+                _ => {
+                    file_link(&missing, &t0);
+                    vec![t0]
+                }
+            };
+            let targets: Vec<PathBuf> = planted.iter().map(|l| fs::read_link(l).unwrap()).collect();
+            let mut fs_ = DiskFs::new(&root).unwrap();
+            let mut used = None;
+            fs_.write_atomic_with(
+                &p("f"),
+                b"EDIT",
+                |_| Ok(()),
+                |from, to| {
+                    used = Some(from.to_path_buf());
+                    fs::rename(from, to)
+                },
+            )
+            .unwrap_or_else(|e| panic!("{case}: save: {e:?}"));
+            // The first name not planted.
+            let next = format!("{TEMP_PREFIX}{}", planted.len());
+            assert_eq!(
+                used,
+                Some(root.canonicalize().unwrap().join(&next)),
+                "{case}"
+            );
+            assert_eq!(fs::read(root.join("f")).unwrap(), b"EDIT", "{case}");
+            fs_.write_atomic(&p("f"), b"EDIT 2")
+                .unwrap_or_else(|e| panic!("{case}: second save: {e:?}"));
+            assert_eq!(fs::read(root.join("f")).unwrap(), b"EDIT 2", "{case}");
+            assert!(
+                fs::symlink_metadata(root.join("f"))
+                    .unwrap()
+                    .file_type()
+                    .is_file(),
+                "{case}"
+            );
+            for (link, target) in planted.iter().zip(&targets) {
+                assert!(is_link(link), "{case}: {} is still a link", link.display());
+                assert_eq!(&fs::read_link(link).unwrap(), target, "{case}");
+            }
+            assert_eq!(listing(&outside), ["precious"], "{case}: outside unchanged");
+            assert_eq!(fs::read(outside.join("precious")).unwrap(), b"precious");
+            assert!(
+                fs::symlink_metadata(&missing).is_err(),
+                "{case}: still missing"
+            );
+            let mut want: Vec<String> = planted
+                .iter()
+                .map(|l| l.file_name().unwrap().to_string_lossy().into_owned())
+                .collect();
+            want.push("f".to_owned());
+            assert_eq!(listing(&root), want, "{case}: no temporary file left");
+        }
+    }
+
+    /// Counterpart of `replace_swaps_inode_keeps_permissions_and_follows_symlinks` (#8) and of
+    /// `link_target_with_trailing_slash_requires_a_directory` (#13): a save and a read through a
+    /// file link (relative and absolute), a directory link and a junction on the way. Unix: the
+    /// link is followed, its target replaced and the link kept. Windows: `OutsideRoot`, and
+    /// link, target and directory unchanged.
+    #[test]
+    fn save_through_a_link_on_every_platform() {
+        let work = fresh_dir("save-through-link");
+        let root = work.join("root");
+        let t = root.join("t");
+        fs::create_dir_all(&t).unwrap();
+        fs::write(t.join("target"), b"old").unwrap();
+        file_link(&Path::new("t").join("target"), &root.join("rel"));
+        file_link(&t.join("target"), &root.join("abs"));
+        dir_link(Path::new("t"), &root.join("dl"));
+        junction(&t, &root.join("j"));
+        let links = ["abs", "dl", "j", "rel"];
+        let before: Vec<PathBuf> = links
+            .iter()
+            .map(|l| fs::read_link(root.join(l)).unwrap())
+            .collect();
+        let mut fs_ = DiskFs::new(&root).unwrap();
+        let mut doc = crate::Document::open(&fs_, &p("t/target")).unwrap();
+        for path in ["rel", "abs", "dl/target", "j/target"] {
+            let bytes = format!("via {path}");
+            let read = fs_.read(&p(path));
+            let saved = fs_.write_atomic(&p(path), bytes.as_bytes());
+            if cfg!(windows) {
+                let want = VfsError::OutsideRoot { path: p(path) };
+                assert_eq!(read, Err(want.clone()), "read {path}");
+                assert_eq!(saved, Err(want), "save {path}");
+                assert!(!fs_.is_file(&p(path)), "is_file {path}");
+                assert_eq!(fs::read(t.join("target")).unwrap(), b"old", "{path}");
+            } else {
+                assert!(read.is_ok(), "read {path}: {read:?}");
+                assert_eq!(saved, Ok(()), "save {path}");
+                assert!(fs_.is_file(&p(path)), "is_file {path}");
+                assert_eq!(fs::read(t.join("target")).unwrap(), bytes.as_bytes());
+            }
+        }
+        for (link, target) in links.iter().zip(&before) {
+            assert!(is_link(&root.join(link)), "{link} is still a link");
+            assert_eq!(&fs::read_link(root.join(link)).unwrap(), target, "{link}");
+        }
+        assert_eq!(listing(&root), ["abs", "dl", "j", "rel", "t"]);
+        assert_eq!(listing(&t), ["target"]);
+        // The target itself, reached without a link, saves on every platform.
+        doc.buffer_mut().insert(0, "direct ").unwrap();
+        doc.save(&mut fs_).unwrap();
+        assert!(fs::read(t.join("target")).unwrap().starts_with(b"direct "));
+    }
+
+    /// Counterpart of `root_replaced_by_a_symlink_between_requests_is_outside` (#9; T-074
+    /// Interface (4), second bullet): the root renamed away and a junction to another directory
+    /// put at its path: every call `OutsideRoot`, at open and at save, the other directory
+    /// unchanged; a junction at the path to the held root: the session works again. The same
+    /// on every platform (Unix: a symbolic link in place of the junction).
+    #[test]
+    fn root_replaced_by_a_link_on_every_platform() {
+        let work = fresh_dir("root-replaced-by-link");
+        let root = work.join("root");
+        let real = work.join("root.real");
+        let other = work.join("other");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&other).unwrap();
+        fs::write(root.join("f.txt"), b"in\n").unwrap();
+        fs::write(other.join("f.txt"), b"other\n").unwrap();
+        let mut fs_ = DiskFs::new(&root).unwrap();
+        let mut doc = crate::Document::open(&fs_, &p("f.txt")).unwrap();
+        doc.buffer_mut().insert(0, "PWNED ").unwrap();
+        fs::rename(&root, &real).unwrap();
+        junction(&other, &root);
+        // The swap works: the other directory is reached through the root path now.
+        assert_eq!(fs::read(root.join("f.txt")).unwrap(), b"other\n");
+        assert_every_call_outside(&mut fs_, &["f.txt", "new.txt"], "replaced");
+        assert_eq!(
+            doc.save(&mut fs_),
+            Err(VfsError::OutsideRoot { path: p("f.txt") })
+        );
+        assert!(doc.is_dirty());
+        assert_eq!(listing(&other), ["f.txt"]);
+        assert_eq!(fs::read(other.join("f.txt")).unwrap(), b"other\n");
+        assert_eq!(fs::read(real.join("f.txt")).unwrap(), b"in\n");
+        // A junction at the path to the held root: the session works there again.
+        remove_link(&root);
+        junction(&real, &root);
+        assert_eq!(fs_.read(&p("f.txt")).unwrap(), b"in\n");
+        doc.save(&mut fs_).unwrap();
+        assert_eq!(fs::read(real.join("f.txt")).unwrap(), b"PWNED in\n");
+        assert_eq!(listing(&real), ["f.txt"]);
+        assert_eq!(listing(&other), ["f.txt"]);
+    }
+
+    /// Counterpart of `root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside` (#11;
+    /// T-074 Interface (4), third bullet and last paragraph): the held root removed while a
+    /// session runs, empty (`remove_dir`) or with a file in it (`remove_dir_all`): every call
+    /// `OutsideRoot`, also after a new directory takes its name, and after a junction to a new
+    /// directory is put at its name; nothing there is read or written. The same on every
+    /// platform (Unix: a symbolic link in place of the junction).
+    #[test]
+    fn root_removed_on_every_platform() {
+        let work = fresh_dir("root-removed");
+        // Empty, removed with `remove_dir`; then a new directory at the name.
+        let root = work.join("root");
+        fs::create_dir_all(&root).unwrap();
+        let mut fs_ = DiskFs::new(&root).unwrap();
+        fs::remove_dir(&root).unwrap();
+        assert!(fs::symlink_metadata(&root).is_err());
+        assert_every_call_outside(&mut fs_, &["x", "f.txt"], "removed empty");
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("f.txt"), b"new dir\n").unwrap();
+        assert_every_call_outside(&mut fs_, &["x", "f.txt"], "new directory at the name");
+        assert_eq!(listing(&root), ["f.txt"]);
+        assert_eq!(fs::read(root.join("f.txt")).unwrap(), b"new dir\n");
+
+        // With a file, removed with `remove_dir_all`; then a junction to a new directory.
+        let root2 = work.join("root2");
+        fs::create_dir_all(&root2).unwrap();
+        fs::write(root2.join("f.txt"), b"in\n").unwrap();
+        let mut fs2 = DiskFs::new(&root2).unwrap();
+        assert_eq!(fs2.read(&p("f.txt")).unwrap(), b"in\n");
+        fs::remove_dir_all(&root2).unwrap();
+        assert!(fs::symlink_metadata(&root2).is_err());
+        assert_every_call_outside(&mut fs2, &["x", "f.txt"], "removed with a file");
+        let fresh = work.join("fresh");
+        fs::create_dir(&fresh).unwrap();
+        fs::write(fresh.join("f.txt"), b"fresh\n").unwrap();
+        junction(&fresh, &root2);
+        assert_eq!(fs::read(root2.join("f.txt")).unwrap(), b"fresh\n");
+        assert_every_call_outside(&mut fs2, &["x", "f.txt"], "junction to a new directory");
+        assert_eq!(listing(&fresh), ["f.txt"]);
+        assert_eq!(fs::read(fresh.join("f.txt")).unwrap(), b"fresh\n");
+    }
+
+    /// Counterpart of `root_given_through_a_link_that_is_retargeted` (#12; T-074 Interface (4),
+    /// first bullet, D-256 Q-4): `--root` given once as a junction and once as a directory
+    /// symbolic link leads to the root; pointed elsewhere while the session runs, every call
+    /// `OutsideRoot` (also the save of a document opened before) and nothing read or written
+    /// there; pointed back, the session works again. The same on every platform (Unix: both
+    /// are symbolic links).
+    #[test]
+    fn root_given_through_a_link_on_every_platform() {
+        for kind in ["junction", "dir-link"] {
+            let work = fresh_dir(&format!("root-through-{kind}"));
+            let real = work.join("real");
+            let other = work.join("other");
+            fs::create_dir_all(&real).unwrap();
+            fs::create_dir_all(&other).unwrap();
+            fs::write(real.join("f.txt"), b"real\n").unwrap();
+            fs::write(other.join("f.txt"), b"other\n").unwrap();
+            let link = work.join("rootlink");
+            let make = |target: &Path| match kind {
+                "junction" => junction(target, &link),
+                _ => dir_link(target, &link),
+            };
+            make(&real);
+            let mut fs_ = DiskFs::new(&link).unwrap();
+            assert_eq!(fs_.read(&p("f.txt")).unwrap(), b"real\n", "{kind}");
+            let mut doc = crate::Document::open(&fs_, &p("f.txt")).unwrap();
+            doc.buffer_mut().insert(0, "PWNED ").unwrap();
+            remove_link(&link);
+            make(&other);
+            assert_eq!(fs::read(link.join("f.txt")).unwrap(), b"other\n", "{kind}");
+            assert_every_call_outside(&mut fs_, &["f.txt", "new.txt"], kind);
+            assert_eq!(
+                doc.save(&mut fs_),
+                Err(VfsError::OutsideRoot { path: p("f.txt") }),
+                "{kind}"
+            );
+            assert!(doc.is_dirty(), "{kind}");
+            assert_eq!(listing(&other), ["f.txt"], "{kind}");
+            assert_eq!(fs::read(other.join("f.txt")).unwrap(), b"other\n", "{kind}");
+            // Pointed back: the session works there again.
+            remove_link(&link);
+            make(&real);
+            assert_eq!(fs_.read(&p("f.txt")).unwrap(), b"real\n", "{kind}");
+            doc.save(&mut fs_).unwrap();
+            assert_eq!(
+                fs::read(real.join("f.txt")).unwrap(),
+                b"PWNED real\n",
+                "{kind}"
+            );
+            assert_eq!(listing(&real), ["f.txt"], "{kind}");
+            assert_eq!(listing(&other), ["f.txt"], "{kind}");
+        }
+    }
+
+    /// `root/` with `a.txt`, `sub/c.txt` and `dir/`, and `outside/secret.txt` next to it.
+    fn link_fixture(name: &str) -> (PathBuf, PathBuf) {
+        let work = fresh_dir(name);
+        let root = work.join("root");
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::create_dir_all(root.join("dir")).unwrap();
+        fs::create_dir_all(work.join("outside")).unwrap();
+        fs::write(root.join("a.txt"), b"alpha\n").unwrap();
+        fs::write(root.join("sub/c.txt"), b"charlie\n").unwrap();
+        fs::write(work.join("outside/secret.txt"), b"s3cr3t-content\n").unwrap();
+        (work, root)
+    }
+
+    /// Counterpart of `check_location_is_ok_for_every_inside_location` (#14): `check_location`
+    /// is `Ok` for a file, a directory, nothing and a missing parent on every platform; for a
+    /// file link, a directory link and a junction leading inside, at the last and at a middle
+    /// component: `Ok` on Unix (followed, inside), `OutsideRoot` on Windows. Nothing is created.
+    #[test]
+    fn check_location_inside_on_every_platform() {
+        let (_work, root) = link_fixture("check-inside-links");
+        file_link(Path::new("a.txt"), &root.join("to-a"));
+        dir_link(Path::new("sub"), &root.join("dsub"));
+        junction(&root.join("sub"), &root.join("jsub"));
+        let fs_ = DiskFs::new(&root).unwrap();
+        for path in ["a.txt", "dir", "sub", "sub/c.txt", "none.txt", "nope/x.txt"] {
+            assert_eq!(fs_.check_location(&p(path)), Ok(()), "{path}");
+        }
+        for path in [
+            "to-a",
+            "dsub",
+            "jsub",
+            "dsub/c.txt",
+            "jsub/c.txt",
+            "jsub/none.txt",
+        ] {
+            let result = fs_.check_location(&p(path));
+            if cfg!(windows) {
+                assert_eq!(
+                    result,
+                    Err(VfsError::OutsideRoot { path: p(path) }),
+                    "{path}"
+                );
+            } else {
+                assert_eq!(result, Ok(()), "{path}");
+            }
+        }
+        assert!(fs::symlink_metadata(root.join("none.txt")).is_err());
+        assert!(fs::symlink_metadata(root.join("nope")).is_err());
+        assert!(fs::symlink_metadata(root.join("sub/none.txt")).is_err());
+        assert_eq!(listing(&root.join("sub")), ["c.txt"]);
+    }
+
+    /// Counterpart of `check_location_refuses_outside_loops_and_a_replaced_root` (#15): a
+    /// junction to outside is `OutsideRoot` on every platform; a junction to inside is `Ok` on
+    /// Unix and `OutsideRoot` on Windows; a junction loop is `Io` on Unix (too many links) and
+    /// `OutsideRoot` on Windows; a root replaced by a junction to another directory is
+    /// `OutsideRoot` on every platform, and moved back it is the root again.
+    #[test]
+    fn check_location_outside_on_every_platform() {
+        let (work, root) = link_fixture("check-outside-links");
+        let outside = work.join("outside");
+        // Unix: absolute link targets from the canonical root, so that a loop meets no other
+        // link (macOS reaches the temp dir through one) and is answered `Io` from inside.
+        let anchor = if cfg!(windows) {
+            root.clone()
+        } else {
+            root.canonicalize().unwrap()
+        };
+        junction(&outside, &root.join("jout"));
+        junction(&anchor.join("sub"), &root.join("jin"));
+        // A loop: `l1` to `l2` (a directory while `l1` is made), then `l2` a junction to `l1`.
+        fs::create_dir(root.join("l2")).unwrap();
+        junction(&anchor.join("l2"), &root.join("l1"));
+        fs::remove_dir(root.join("l2")).unwrap();
+        junction(&anchor.join("l1"), &root.join("l2"));
+        let fs_ = DiskFs::new(&root).unwrap();
+        for path in ["jout", "jout/secret.txt", "jout/none.txt"] {
+            assert_eq!(
+                fs_.check_location(&p(path)),
+                Err(VfsError::OutsideRoot { path: p(path) }),
+                "{path}"
+            );
+        }
+        for path in ["jin", "jin/c.txt"] {
+            let result = fs_.check_location(&p(path));
+            if cfg!(windows) {
+                assert_eq!(
+                    result,
+                    Err(VfsError::OutsideRoot { path: p(path) }),
+                    "{path}"
+                );
+            } else {
+                assert_eq!(result, Ok(()), "{path}");
+            }
+        }
+        for path in ["l1", "l1/x"] {
+            let result = fs_.check_location(&p(path));
+            if cfg!(windows) {
+                assert_eq!(
+                    result,
+                    Err(VfsError::OutsideRoot { path: p(path) }),
+                    "{path}"
+                );
+            } else {
+                assert!(
+                    matches!(&result, Err(VfsError::Io { path: got, .. }) if *got == p(path)),
+                    "{path}: {result:?}"
+                );
+            }
+        }
+        assert!(fs::symlink_metadata(outside.join("none.txt")).is_err());
+        assert_eq!(listing(&outside), ["secret.txt"]);
+
+        // The root renamed away and a junction to another directory at its path: outside.
+        let away = work.join("root.away");
+        fs::rename(&root, &away).unwrap();
+        junction(&outside, &root);
+        for path in ["secret.txt", "a.txt"] {
+            assert_eq!(
+                fs_.check_location(&p(path)),
+                Err(VfsError::OutsideRoot { path: p(path) }),
+                "replaced root: {path}"
+            );
+        }
+        // Moved back: the root again.
+        remove_link(&root);
+        fs::rename(&away, &root).unwrap();
+        assert_eq!(fs_.check_location(&p("a.txt")), Ok(()));
+    }
 }
