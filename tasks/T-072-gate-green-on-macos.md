@@ -203,6 +203,9 @@ high ceiling 1,100,000. Arm: high → independent test author.
 - Dispatched after T-073 merges (both edit `platforms.yml` and `acceptance_t070.rs`); the planner re-checks this
   spec then (v1.5 §5.7).
 
+### Spec check (after T-073)
+(in progress: planner spec check against main `72522f2`; sections follow)
+
 ## Log
 ### director
 <!-- end director log -->
