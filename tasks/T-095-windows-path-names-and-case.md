@@ -111,7 +111,7 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
   refused exactly when `cfg!(windows)`, and each name of (2) plus `c~1.rs`, `x\u{7f}` and `é` is accepted everywhere.
   It runs on Windows in T-073's reported step (`-p kiln-workspace --lib`).
 - Test author, `crates/kiln-workspace/tests/guard_t095.rs`: no platform cfg in the file (D-245); expectations by
-  `cfg!(windows)`; fixtures below `CARGO_TARGET_TMPDIR`, except the short-name case. It checks:
+  `cfg!(windows)` for (1) and (2), for (3) as below; fixtures below `CARGO_TARGET_TMPDIR`, except the short-name case. It checks:
   - The refusal set of (1) as an equality over U+0000 to U+00FF except `/` (the separator), one at a time inside a name
     `a<c>b`: refused exactly for the set of (1) plus `\` and NUL on Windows, and for `\` and NUL alone on Linux and
     macOS; and the look-alikes U+FF1A, U+2236, U+FF1F, U+FF0A, U+FF1C, U+FF02 accepted on every platform (corrected
@@ -222,7 +222,9 @@ in `guard_t095.rs` or the reviewer's diff check, not here:
 - AC-D1: `docs/protocol/paths.md` contains Pinned (i) item 1 (the Windows paragraph of "Lexical refusals") as worded.
   Base: absent.
 - AC-D2: `docs/protocol/paths.md` contains Pinned (i) item 2 (reserved names, trailing dot or space) as worded, and no
-  longer contains "are not yet stated for Windows (T-095)". Base: absent / present. (Q-B: which paragraphs ruling 4 means.)
+  longer says that names or case on Windows are "not yet stated" (neither T-074's sentence "… are not yet stated for
+  Windows (T-095)." nor T-093's "Platforms" clause "… are not yet stated (T-095)"). Base (main with T-093): absent /
+  present. (Q-B: which paragraphs ruling 4 means.)
 - AC-D3: the D-270 citations: `docs/control-protocol.md` contains "(shown in CI run 44358453526,
   `tasks/ci-runs/T-074-round-1.md`, for a junction" and `docs/protocol/project.md` contains "the `awa1_*` tests of
   `guard_t074.rs` in CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`" (Pinned (i), last item). Base: both cite
@@ -261,7 +263,8 @@ The record `tasks/ci-runs/T-095-round-N.md`, from the artefacts of the task's he
   shows `==== guard_t095: exit status 0`, every `guard_t095` test `ok`, and its `MEASURED:` lines; and `====
   acceptance_t095: exit status 0` with its three tests `ok` (added at the spec check: the step runs every file there).
 
-**One CI round expected, two if a measured sentence needs rewording.** If T-092 has merged first, `gate-windows`'s
+**One CI round expected, two if a measured sentence needs rewording** (the spec check: one only with an early look
+that measures the two placeholders before the join, Q-C A). If T-092 has merged first, `gate-windows`'s
 `test` step may build `kiln-workspace`'s targets, and the criterion's "FAIL only at …" is re-read against T-092's end
 state (T-092 makes 13 of its 15 targets exit 0; `acceptance_t019_workspace` and `project` are T-100's: D-273;
 corrected (spec check)).
@@ -274,16 +277,24 @@ corrected (spec check)).
 - No platform cfg on a test fn; Windows-only product lines under `#[cfg(windows)]`. Do not rename `path.rs`'s tests.
 
 ## Collisions and order
-- **T-092** (fresh spec check running) touches `disk.rs` (test module), eleven `kiln-workspace/tests/*.rs` files,
+- **T-092** (in progress since D-273; corrected (spec check)) touches `disk.rs` (test module), nine `kiln-workspace/tests/*.rs` files,
   `xtask/platform-tests.toml`, `xtask/tests/acceptance_t092.rs` and `guard_t092.rs`. **No path is shared with this
   task**, which avoids the registry, `disk.rs` and every existing test file. They may run side by side (§5.2). One
   semantic contact: none of T-092's rewritten tests should use a `:` or `<>"|?*` name on Windows. grep on `4eb349d`:
   `RelPath::new("…[:<>|?*]…")` in `crates`, `apps` gives no hit (S-4); T-092's re-check confirms against its own diff.
+  (Spec check: by run, not grep, four targets outside every task's `touches` break: Pinned (f), Q-A.)
 - **T-093** (specified, low, re-check running) touches `docs/protocol/paths.md` and `project.md`, both shared. Not in
   flight together. Recommended: **T-093 first** (low, about 150,000, ready sooner), and its macOS case row (row 4) and
   `skipped` rows (2, 3) are the macOS halves of this task's (3) and (4). This task then re-checks the sentences of
   Pinned (i) against T-093's text (Q-5).
 - T-094 (draft; `disk.rs`, `paths.md`): after.
+- **T-100** (draft, D-273; `acceptance_t019_workspace.rs`, `project.rs`, the registry, `xtask/tests/` (2)): no shared
+  path; it runs **after** this task ("T-095 … settles what names mean on Windows", D-273), so its skipped-name helper
+  follows Interface (4) (added at the spec check).
+- **T-092's AC-3** (semantic contact, added at the spec check): it requires the general Windows step to print "exactly
+  these 15 status lines and no other" and the library `test result: ok. 45 passed`. If this task merges first, that
+  step prints 17 lines (`acceptance_t095`, `guard_t095`) and the library 46 tests, so T-092's criterion must be re-read
+  then; if T-092 merges first, nothing here changes. The director orders or restates (no path is shared).
 
 ## Estimate
 T-074 booked 920,909 (D-271): 30 product lines, seven portable tests that made links, nine registry entries, six
@@ -381,7 +392,7 @@ D-273. Runs in a clone `/home/user/kiln-check-T095` of the primary (at `53be751`
 end. The sketch there: Interface (1) as one `#[cfg(windows)]` statement after the backslash check in `RelPath::new`
 (`path.contains(|c| matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*' | '\u{1}'..='\u{1f}'))`), the unit test of (5),
 the Pinned (i) sentences in the three documents, and two sketch test files `acceptance_t095.rs` (three document tests)
-and `guard_t095.rs` (the character equality). **Verdict: ready after rulings** — one blocker (Q-A), 15 corrections made
+and `guard_t095.rs` (the character equality). **Verdict: ready after rulings** — one blocker (Q-A), 21 corrections made
 in the text above (listed under each point, marked "corrected (spec check)"), seven questions.
 
 **1. The refusal itself.** VERIFIED unless marked.
@@ -551,6 +562,72 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
   bytes, so `project.md`'s equality with `git ls-files` (`:88-91`) may not hold for a pattern and a name differing in
   case. Q-F.
 
+**6. Roles, scope, estimate, order.**
+- *`touches`, one role per path:* `path.rs`, `paths.md`, `project.md`, `control-protocol.md` implementer;
+  `guard_t095.rs`, `acceptance_t095.rs` (added) test author. Each path one role — VERIFIED by the list. Pending Q-A: the
+  four targets; if ruled in, `apps/kiln-cli/src/main.rs` (test module only) and the three `kiln-commands` test files
+  each get one role (recommendation below).
+- *Log sections:* director, planner, implementer, test author, reviewer, each closed by its `<!-- end … log -->` marker
+  (the Log at the end of this file) — VERIFIED; no other role is planned.
+- *Shares no path with T-092:* T-092's `touches` on main `76ccb9f` (nine `kiln-workspace/tests/*.rs` files, `disk.rs`'s
+  test module, `xtask/platform-tests.toml`, `xtask/tests/{acceptance,guard}_t092.rs`) against this task's six (ten
+  with Q-A's four, none of them T-092's) — no equal path and no directory prefix: VERIFIED. T-092's branches change
+  `acceptance_t002.rs`, `acceptance_t002_r2.rs`, the registry and `acceptance_t092.rs` so far; none adds a `:`/`<>"|?*`
+  name (`git diff main...task/T-092 -- crates`, string literals: messages only). The contact is T-092's AC-3 count
+  (Collisions, added).
+- *After T-093 merges, re-check:* the line numbers cited here (`project.md:26`, `:82-83`, `:99` move by about six;
+  `paths.md` by six to ten); T-093's "Platforms" bullet clause (Pinned (i), added item); T-093's rows 3 and 4 sentences
+  beside item 3 (T-093 writes them only after its own CI measurement); the 14 registry quotes; `macos_t093.rs`'s
+  Windows branch against `guard_t095`'s (3) (both "fold", no conflict on the branch at `234f98c`).
+- *Estimate:* the draft's 450,000 counts one product statement, one unit test, a names-only guard, five document
+  places, one or two CI rounds. Not counted: `acceptance_t095.rs` (small, about 15,000 with its review); the four
+  targets of Q-A (A: about 60,000-90,000: four files, each case given a Windows branch, plus their review and
+  mutation share); the measured sentence (the implementer cannot fill the two placeholders before the join, so either
+  an early CI look by the director, about 30,000-50,000, Q-C A, or a second formal round after review, about
+  80,000-120,000). With Q-A A and Q-C A: **about 580,000** (ceiling 1,100,000); without Q-A (B), about 500,000 here and
+  the four targets' cost moves to T-099.
+
+**Questions for the director** (each is a choice, not corrected here):
+- **Q-A (blocker): the four Windows-green targets the rule turns red** (point 1). A: add them to `touches` —
+  `crates/kiln-commands/tests/acceptance_t032.rs`, `acceptance_t032_json.rs`, `guard_t032.rs` for the test author
+  (independent tests whose Windows behaviour this task changes, as D-256 Q-5 gave `acceptance_t002.rs` to T-074's test
+  author), `apps/kiln-cli/src/main.rs` (its `#[cfg(test)]` module only) for the implementer (in `src/`, as T-098's
+  `doc.rs` module); each affected case takes the form `if cfg!(windows) { <the path is invalid_path / RelPath::new
+  refuses it> } else { <today's body> }`, which main's `no-skip` accepts without a registry entry (D-256 Q-5;
+  the sketch's own `cfg!` test passed `no-skip`). Keeps the names that look like messages on Unix, states the Windows
+  answer, and no target goes red. Cost about 60,000-90,000. B: leave them to T-099 with a note (they stay hidden behind
+  build errors until T-098; T-099 meets failures no task caused; the tree holds tests known to be wrong on Windows,
+  against §8.1 "every test asserts each platform's specified behaviour"). C: rename the fixtures to names without `:`
+  and `"` on every platform (cheaper, about 30,000, but changes what four Unix tests check). **Rec. A.**
+- **Q-B: which paragraphs ruling 4 means by "the Windows names paragraph".** Read here as Pinned (i) items 1 (lexical
+  refusals) and 2 (reserved names), both fixed text, plus the two D-270 citations (AC-D1 to AC-D3). Not pinned: item 3
+  (placeholders until CI), items 4-5 (short clauses; the reviewer). **Rec.: as written** (no cost); if only item 2 is
+  meant, drop AC-D1.
+- **Q-C: who completes the two measured placeholders of item 3.** "To be measured by the test author on CI" is no §5.7
+  mark, and the implementer cannot see the guard before the join. A: the guard's case and short-name tests pass on base,
+  so the director pushes `task/T-095-tests` (base + guard) for an early CI look once the test author commits, writes
+  `tasks/ci-runs/T-095-early-1.md`, and passes the two `MEASURED:` lines to the implementer before the join ("to be
+  measured by the director", T-074's practice; about 30,000-50,000; keeps one formal round). B: "unchecked" in the
+  implementer's text, the reviewer writes the words from round 1's record (a document change after review: a second CI
+  round, about 80,000-120,000). **Rec. A.**
+- **Q-D: what the measurement tests assert.** Spelling after a save of `F.TXT` over `f.txt`: on macOS and Windows assert
+  exactly one entry equal to `f.txt` ignoring ASCII case, holding the saved bytes, and print its spelling without
+  asserting it; on Linux two entries. Short name: read the short name from the system (`cmd /c dir /x` with a timeout),
+  never assume `AVERYL~1`; print the drive of `std::env::temp_dir()`, that volume's `fsutil 8dot3name query` and the
+  short name or "none"; assert only that a read under the short name is `Ok(<the long file's bytes>)` or `NotFound`,
+  never another file or kind, and that the fixture is unchanged; remove the fixture on drop. On Linux and macOS the same
+  test uses `CARGO_TARGET_TMPDIR` and asserts `NotFound` for `c~1.rs`-style names. **Rec.: as stated** (no extra cost;
+  without it two test authors differ, one going red on a volume without 8.3 names).
+- **Q-E: measure Windows' own answer for `>` and U+0002-U+001F.** A: `guard_t095` also writes each of `<>:"|?*` and
+  U+0001-U+001F with `std::fs::write` into its fixture (not through Kiln) and prints one `MEASURED:` line each, so item
+  1's clause "the characters Windows does not allow" is measured, not read (about 10,000). B: keep "read, not run" in the
+  evidence line (as now corrected). **Rec. A.**
+- **Q-F: `.gitignore` and `target` matching by case on Windows** (point 5; git's behaviour known, not verified here). A:
+  out of scope, named in "Out of scope" as unchecked, a follow-up draft if wanted. B: state it in `project.md` with a
+  Windows test (`project.md` and a test file; about +60,000; it touches T-100's subject). **Rec. A.**
+- **Q-G: order with T-092** (Collisions, T-092's AC-3). A: queue T-092 before this task (it is in progress; this task
+  waits for T-093 anyway). B: whichever is second restates the other's counts. **Rec. A** (no cost if the order holds).
+
 ## Log
 ### director
 <!-- end director log -->
@@ -564,6 +641,14 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
   No probe: no choice hangs on unmeasured behaviour; two items are to be measured by the test author on CI (Interface
   (3)). Tier high (confinement boundary; no gate path). Pinned (h) n/a. Not run: anything on Windows; the join tool
   with zero acceptance targets (Q-4) · next: director (Q-1 to Q-5), fresh spec check
+- 2026-11-18 · spec check (fresh planner) · draft · did: checked against main `76ccb9f`, `task/T-093` `234f98c`,
+  `task/T-092`; ruling 4 applied (`acceptance_t095.rs` in `touches`, AC-D1 to AC-D3); 21 corrections in the text, each
+  marked "corrected (spec check)"; section "Spec check (fresh planner)" with points 1-6 and Q-A to Q-G. Ran in the clone
+  `/home/user/kiln-check-T095` (uncommitted, `target/` deleted): the sketch's lib tests (59 passed), Windows clippy with
+  and without the stand-in, main's six `xtask` steps (PASS), main's pinning tests (6/2/2/9/59), the registry quotes
+  (14/14), the sketch acceptance file (3 failed on base, 3 passed after), and the rule switched on for every platform
+  over the whole workspace (four Windows-green targets break: Q-A). Not run: anything on Windows; AC-1's IR comparison;
+  the join. Tier high unchanged (the confinement boundary) · next: director (Q-A to Q-G); re-check after T-093 merges
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
