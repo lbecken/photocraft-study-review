@@ -747,6 +747,14 @@ listing kind, the root cases, the registry plan and the gate-tool side (D-235) c
   passed · fixed the seven counterpart names and the registry text · clone's `target/` deleted · state left `draft`
 <!-- end planner log -->
 ### implementer
+- 2026-11-18 · R-355 · start, main `3b2ae24` (task file as on main, D-256 rulings read; probe record read in full) ·
+  criteria in my words: on Windows every component the walk reaches below the root is `symlink_metadata`'d and, if it
+  carries `0x400`, the call is `OutsideRoot` before anything there is touched (no link is ever followed on Windows);
+  listings give such an entry kind `symlink`; the Windows temporary create adds `custom_flags(0x0020_0000)` and skips a
+  name whose create failed while `symlink_metadata` of it succeeds; nine registry entries become one `counterpart` line
+  each (exact strings of Interface (5)); seven portable tests with the fixed names, each choosing Unix or Windows
+  expectations by `cfg!(windows)` where they differ; documents copy Pinned (i); Unix unchanged (shown by lib IR).
+  No questions so far.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
