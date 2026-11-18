@@ -339,6 +339,28 @@ high → independent test author.
   and the read-only and replaced-root ones could name tests of `guard_t073.rs` after the join.
   Not run: anything on Windows; no CI-REQUEST, because the gate is not green · next: director ruling on the two
   questions, then gate attempt 2 and CI-REQUEST
+#### Rework after review round 1 (R-345)
+- 2026-11-18 · R-345 · in_progress · rulings c1–c8 (D-250) acknowledged and accepted. did:
+  c5 `is_held_root<T: PartialEq, E>(Result<T, E>, &T) -> bool` (no platform cfg; `#[cfg_attr(not(windows),
+  allow(dead_code))]` because only the Windows check calls it) called by the Windows `current_root`; unit test
+  `held_root_check_is_inside_only_for_a_read_identity_equal_to_the_held_one` (no cfg; a failed read is outside);
+  mutant W3 (`map_or(true, …)` in it) FAILS that test on Linux (`assertion failed: !is_held_root(Err…`). Unix IR of
+  the lib (`cargo rustc -p kiln-workspace --lib --locked [--target aarch64-apple-darwin] -- --emit=llvm-ir -C
+  debuginfo=0 -C codegen-units=1`, exports of `7de171b` and `46eb6ee` at equal path length): 90 raw differing lines
+  on each of Linux and macOS, every one a `disk.rs` panic-`Location` constant or a reference to one by its renamed
+  `@alloc_` (line numbers moved); normalised, 0 lines. The generic function is never instantiated in the Unix lib,
+  so it adds no IR there; the test build's IR was not compared. c1/c3/c4 `paths.md` and `control-protocol.md` from
+  run 44268710587 (root rename ok then `outside_root`; parent rename refused on Windows, `PermissionDenied`, OS error
+  5, a difference from Linux and macOS where it succeeds, `guard_t073::acw2_root_parent_replaced_is_outside_root`;
+  removal and the replaced-parent identity case not run; the ReFS limit and the access list read, not measured,
+  T-094 named); "(on Unix)" kept (z2; `acceptance_t008_cli` ok). c6/c7 doc comments. c2 `development.md` sentence.
+  c8 registry: 9 `pending` T-074, 3 `none` (no mode bits), `read_only_target_is_refused_unless_root` →
+  `crates/kiln-workspace/tests/guard_t073.rs::acw2_save_of_read_only_target_is_refused_and_changes_nothing` (no-skip
+  accepts it; with a non-existent name it answers `platform-counterpart: … is not a test fn or a module with
+  tests`), 2 `pending` T-092; no-skip `35 platform test(s) registered (19 pending)`. Stand-ins (stub C compiler in
+  scratch): Windows lib check 0 errors; clippy `-D warnings` Windows libs+bins, lib test, `--test acceptance_t073
+  --test guard_t073` exit 0; macOS check and clippy all targets exit 0; lock vs main `1 0`, `+ "same-file",`.
+  `acceptance_t079` (adapted), `guard_t079`, `acceptance_t070`, `acceptance_t008_cli` ok · next: gate, main's tool
 <!-- end implementer log -->
 ### test author
 - 2026-11-18 · R-339 · started · base `7de171b` · rulings acknowledged: Q-1 A accepted (this file is what the
