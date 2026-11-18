@@ -135,7 +135,7 @@ platforms = "linux"
 doc = "docs/protocol/project.md"
 quote = "not valid UTF-8 or contain"
 counterpart = "none"
-reason = "no file name on macOS or Windows can be invalid Unicode"
+reason = "macOS refuses a file name that is not valid UTF-8 (os error 92, Illegal byte sequence, in the macOS run of R-285), so the fixture cannot be made there; the Windows side is T-092's"
 
 [[test]]
 file = "crates/kiln-workspace/tests/acceptance_t019_workspace.rs"
@@ -144,7 +144,7 @@ platforms = "linux"
 doc = "docs/protocol/project.md"
 quote = "not valid UTF-8 or contain"
 counterpart = "none"
-reason = "no file name on macOS or Windows can be invalid Unicode"
+reason = "macOS refuses a file name that is not valid UTF-8 (os error 92, Illegal byte sequence, in the macOS run of R-285), so the fixture cannot be made there; the Windows side is T-092's"
 
 [[test]]
 file = "crates/kiln-workspace/tests/project.rs"
@@ -153,7 +153,7 @@ platforms = "linux"
 doc = "docs/protocol/project.md"
 quote = "not valid UTF-8 or contain"
 counterpart = "none"
-reason = "no file name on macOS or Windows can be invalid Unicode"
+reason = "macOS refuses a file name that is not valid UTF-8 (os error 92, Illegal byte sequence, in the macOS run of R-285), so the fixture cannot be made there; the Windows side is T-092's"
 
 [[test]]
 file = "crates/kiln-workspace/tests/project.rs"
@@ -162,7 +162,7 @@ platforms = "linux"
 doc = "docs/protocol/project.md"
 quote = "not valid UTF-8 or contain"
 counterpart = "none"
-reason = "no file name on macOS or Windows can be invalid Unicode"
+reason = "macOS refuses a file name that is not valid UTF-8 (os error 92, Illegal byte sequence, in the macOS run of R-285), so the fixture cannot be made there; the Windows side is T-092's"
 
 [[test]]
 file = "apps/kiln/tests/acceptance_t065.rs"
