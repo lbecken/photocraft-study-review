@@ -43,6 +43,11 @@ The rule of T-071 has one hole left by its rulings and two untested cases:
   regenerates the list.
 - **From T-079's review (D-242, ruling x4; `reviews/T-079-r1.md` finding 5).** `#[cfg_attr(<predicate>,
   cfg(...))]` on a test takes it out of the test list and passes `no-skip` with no finding.
+- **From T-079's review round 2 (D-243; `reviews/T-079-r2.md`).** (1) If both case-folding helpers of
+  `tree_order_and_counts` filter whatever the probe says, the test still passes on Linux: one assertion closes
+  it. (2) The `cfg_attr` scan of `guard_t079.rs` has no self-test: undoing it passes the gate. (3) Two paths can
+  still reach the recursive drop of the 2,100-deep chain: a panic while the chain is built, and a take-down that
+  fails part-way while the test is already panicking.
 
 ## Log
 ### director
