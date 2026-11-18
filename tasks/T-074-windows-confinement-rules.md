@@ -696,6 +696,23 @@ found without one after C-3/C-4. Line references checked and holding: `disk.rs:1
 the CI round; Q-1 decides whether Interface (3) holds by construction). No rework of the design: the walk rule, the
 listing kind, the root cases, the registry plan and the gate-tool side (D-235) check out by run.
 
+### Rulings on review round 1 (director, D-257; sent to both builders)
+- **r1 (finding 1).** The test author adds to `guard_t074.rs` a case with a link below the first level: a link at
+  `root/d/l` and requests through it (`d/l/x.txt` and `d/l` itself as last component), for each link kind, expecting
+  on Windows `OutsideRoot` and no change outside; on Unix today's behaviour. The reviewer's mutant M2 (only the first
+  or the last component checked) must be killed by it in the Linux simulation of the Windows branch.
+- **r2 (finding 2).** A spec gap, closed here: a fifth temporary-name fixture (e), a dangling junction at
+  `.kiln-tmp-0` (on Unix a dangling symlink), with the same expectations as fixture (a) to (d): the save succeeds
+  through the next free name and the entry is neither followed nor changed. Whether a dangling junction can be made
+  on the runner is unchecked until the CI round; the test prints a `MEASURED:` line for it and fails naming why if
+  the fixture cannot be made.
+- **r3 (finding 3).** The implementer narrows the sentence of `docs/protocol/paths.md` about a removed root to the
+  calls a named run or test shows (the probe's `check_location`, `list_dir`, `read`; more only with a test of
+  `guard_t074.rs` named once a CI record shows it passing on Windows).
+- Noted, no change: mutant M9 is equivalent (the standard library already opens `create_new` with the reparse flag),
+  so Pinned (b2)'s flag is belt and braces; M11 (the listing kind of other reparse points) stays unchecked, as the
+  spec says the runner cannot show it.
+
 ## Log
 ### director
 <!-- end director log -->
