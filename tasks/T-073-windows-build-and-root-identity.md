@@ -361,6 +361,11 @@ high → independent test author.
   scratch): Windows lib check 0 errors; clippy `-D warnings` Windows libs+bins, lib test, `--test acceptance_t073
   --test guard_t073` exit 0; macOS check and clippy all targets exit 0; lock vs main `1 0`, `+ "same-file",`.
   `acceptance_t079` (adapted), `guard_t079`, `acceptance_t070`, `acceptance_t008_cli` ok · next: gate, main's tool
+- 2026-11-18 · R-345 · in_progress · gate attempt 2 (first of this run; 2 in all): `GATE PASSED in 719.9s` (test
+  1147 passed, 0 failed in 135 suites; no-skip `35 platform test(s) registered (19 pending)`). Main's tool
+  (`cc063a5`, export, one build) on this tree: no-skip (same line), hygiene, scorecard --check, layers, ui-commands,
+  schema PASS. Not run: anything on Windows. The commit carrying this entry changes only this file.
+  CI-REQUEST: b73309046373605de2fbb52107e1df40c492f65a · next: director (second join, CI round 2)
 <!-- end implementer log -->
 ### test author
 - 2026-11-18 · R-339 · started · base `7de171b` · rulings acknowledged: Q-1 A accepted (this file is what the
