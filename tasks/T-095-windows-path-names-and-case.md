@@ -718,6 +718,14 @@ in the text above (listed under each point, marked "corrected (spec check)"), se
 - **Q-G: order with T-092** (Collisions, T-092's AC-3). A: queue T-092 before this task (it is in progress; this task
   waits for T-093 anyway). B: whichever is second restates the other's counts. **Rec. A** (no cost if the order holds).
 
+## Notes from T-093's review (director, D-278)
+- `docs/protocol/paths.md`, the sentence that the three absent tests on macOS are `ui.window`'s: true by the
+  registry (`xtask/platform-tests.toml`), but the cited record only says "3 registered absent here": cite the
+  registry there.
+- `docs/protocol/paths.md`, row 4's macOS case sentence stands before "It is refused with `outside_root` …": that
+  "It" now reads across the inserted sentence. When this task writes the Windows case sentence beside it, order the
+  paragraph so the pronoun's subject is clear, keeping the phrases the registry quotes word for word.
+
 ## Log
 ### director
 <!-- end director log -->
