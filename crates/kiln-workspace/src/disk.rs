@@ -684,16 +684,19 @@ mod tests {
         assert_eq!(listing(&dir.join("d")), ["n.rs"]);
     }
 
+    #[cfg(unix)]
     fn mode(path: &Path) -> u32 {
         use std::os::unix::fs::PermissionsExt;
         fs::metadata(path).unwrap().permissions().mode() & 0o7777
     }
 
+    #[cfg(unix)]
     fn set_mode(path: &Path, mode: u32) {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn leftover_at_temp_name_is_never_touched() {
         let dir = fresh_dir("stale");
@@ -713,6 +716,7 @@ mod tests {
         assert_eq!(listing(&dir), [".kiln-tmp-0", "a"]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn symlink_at_temp_name_is_not_followed() {
         use std::os::unix::fs::symlink;
@@ -786,6 +790,7 @@ mod tests {
         assert_eq!(listing(&dir).len(), 4);
     }
 
+    #[cfg(unix)]
     #[test]
     fn temp_file_is_created_owner_only_and_gets_target_mode_before_rename() {
         let dir = fresh_dir("perm");
@@ -850,6 +855,7 @@ mod tests {
         assert_eq!(fs::read(dir.join(".kiln-tmp-0")).unwrap(), b"not mine");
     }
 
+    #[cfg(unix)]
     #[test]
     fn read_only_target_is_refused_unless_root() {
         use std::os::unix::fs::MetadataExt;
@@ -883,6 +889,7 @@ mod tests {
     /// Kills "temp created with the default mode instead of owner-only" (review r2 TG-4): the
     /// mode is observed on the real save path at the moment the temp file is created, before
     /// any byte is written to it.
+    #[cfg(unix)]
     #[test]
     fn save_creates_temp_owner_only_for_an_existing_target() {
         let dir = fresh_dir("temp-mode-at-create");
@@ -912,6 +919,7 @@ mod tests {
 
     /// Everything a failed save must leave as it was: the listing, and the target's bytes and
     /// mode.
+    #[cfg(unix)]
     fn snapshot(dir: &Path) -> (Vec<String>, Vec<u8>, u32) {
         (
             listing(dir),
@@ -922,6 +930,7 @@ mod tests {
 
     /// Kills "the target is emptied when a save fails after the writability check" (review r2
     /// TG-5), with three failures that can be provoked as root, all after that check.
+    #[cfg(unix)]
     #[test]
     fn failed_save_after_writability_check_leaves_target_and_listing_unchanged() {
         let setup = |name: &str| {
@@ -972,6 +981,7 @@ mod tests {
         assert_eq!(snapshot(&dir), before);
     }
 
+    #[cfg(unix)]
     #[test]
     fn new_file_gets_default_mode() {
         let dir = fresh_dir("newmode");
@@ -981,6 +991,7 @@ mod tests {
         assert_eq!(mode(&dir.join("new")), mode(&dir.join("reference")));
     }
 
+    #[cfg(unix)]
     #[test]
     fn replace_swaps_inode_keeps_permissions_and_follows_symlinks() {
         use std::os::unix::fs::{MetadataExt, symlink};
@@ -1046,6 +1057,7 @@ mod tests {
     }
 
     /// `work/` with `root/f.txt`, `outside/secret.txt` and `other/` (for parent swaps).
+    #[cfg(unix)]
     fn swap_fixture(name: &str) -> PathBuf {
         let work = fresh_dir(name);
         fs::create_dir_all(work.join("parent/root")).unwrap();
@@ -1057,6 +1069,7 @@ mod tests {
 
     /// Review r1 D-1 (ruling v4): the root path replaced by a symlink to another directory
     /// between two requests; a session keeps its root directory.
+    #[cfg(unix)]
     #[test]
     fn root_replaced_by_a_symlink_between_requests_is_outside() {
         use std::os::unix::fs::symlink;
@@ -1119,6 +1132,7 @@ mod tests {
 
     /// Review r1 D-1 (ruling v4): a directory above the root replaced by a symlink to another
     /// directory that has a `root` of its own.
+    #[cfg(unix)]
     #[test]
     fn parent_replaced_by_a_symlink_between_requests_is_outside() {
         use std::os::unix::fs::symlink;
@@ -1170,6 +1184,7 @@ mod tests {
     /// Ruling v4: the root removed (its inode freed unless held) and replaced by a link to a
     /// new directory outside; on Linux file systems such a directory often gets the freed inode
     /// number, which a bare (device, inode) comparison would take for the root.
+    #[cfg(unix)]
     #[test]
     fn root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside() {
         use std::os::unix::fs::symlink;
@@ -1217,6 +1232,7 @@ mod tests {
     /// root directory (also after the directory moved and the link followed it), and is
     /// outside once the link is pointed at another directory, including for a document opened
     /// before.
+    #[cfg(unix)]
     #[test]
     fn root_given_through_a_link_that_is_retargeted() {
         use std::os::unix::fs::symlink;
@@ -1268,6 +1284,7 @@ mod tests {
     }
 
     /// Review r1 N-1 (ruling v7): a link target ending in `/` requires a directory.
+    #[cfg(unix)]
     #[test]
     fn link_target_with_trailing_slash_requires_a_directory() {
         use std::os::unix::fs::symlink;
@@ -1300,14 +1317,17 @@ mod tests {
 
     /// A fresh work directory (as [`fresh_dir`]) removed when dropped, also when the test
     /// fails; search permission is restored on every directory first.
+    #[cfg(unix)]
     struct Work(PathBuf);
 
+    #[cfg(unix)]
     impl Work {
         fn new(name: &str) -> Work {
             Work(fresh_dir(name))
         }
     }
 
+    #[cfg(unix)]
     impl Drop for Work {
         fn drop(&mut self) {
             use std::os::unix::fs::PermissionsExt;
@@ -1327,6 +1347,7 @@ mod tests {
     }
 
     /// Wait for `child` at most 10 s (a hang detector), killing it after that.
+    #[cfg(unix)]
     fn wait_bounded(child: &mut std::process::Child) -> bool {
         for _ in 0..1000 {
             if let Some(status) = child.try_wait().unwrap() {
@@ -1339,6 +1360,7 @@ mod tests {
         false
     }
 
+    #[cfg(unix)]
     fn mkfifo(path: &Path) {
         use std::os::unix::fs::FileTypeExt;
         let mut child = std::process::Command::new("mkfifo")
@@ -1351,6 +1373,7 @@ mod tests {
     }
 
     /// `root/` with `a.txt`, `sub/c.txt`, `real/t.txt`, and `outside/secret.txt` next to it.
+    #[cfg(unix)]
     fn location_fixture(name: &str) -> (Work, PathBuf) {
         let work = Work::new(name);
         let root = work.0.join("root");
@@ -1366,6 +1389,7 @@ mod tests {
 
     /// T-037: `check_location` is `Ok` for an inside location of every kind, and opens nothing
     /// (a FIFO at the location is answered without blocking and stays a FIFO).
+    #[cfg(unix)]
     #[test]
     fn check_location_is_ok_for_every_inside_location() {
         use std::os::unix::fs::{FileTypeExt, symlink};
@@ -1424,6 +1448,7 @@ mod tests {
     }
 
     /// T-037: a location outside, a link loop, and a root that is no longer the root.
+    #[cfg(unix)]
     #[test]
     fn check_location_refuses_outside_loops_and_a_replaced_root() {
         use std::os::unix::fs::symlink;
