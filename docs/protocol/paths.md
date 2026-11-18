@@ -41,14 +41,26 @@ volume serial number and the same 64-bit file index as the held one. Measured on
   root. On Linux and macOS that rename succeeds and the session then refuses every path with
   `outside_root` (`crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root`,
   which passed on all three in that run).
-- Not run on Windows: removing a held root, and a directory above the root replaced (Windows
-  refused the rename, so there the identity check is shown only for the root itself).
+- Measured on the runner (CI run 44290286460, `tasks/ci-runs/T-074-probe-1.md`): the held root
+  can be removed while a session runs, and every call then answers `outside_root`, also after a
+  new directory takes its name, as on Linux and macOS. Not run on Windows: a directory above the
+  root replaced (Windows refused the rename).
+- **A difference from Linux and macOS:** a `..` in `--root` is resolved by its text before any
+  link is followed: with `link` a junction, `--root link\..\b` is the `b` beside `link`, not the
+  one beside the directory `link` leads to.
+- A junction or symbolic link given as `--root` leads to the root; if it is pointed elsewhere
+  while a session runs, every call answers `outside_root`, and pointed back the session works
+  there again, as on Linux and macOS.
 - A limit, read and not measured: on a file system that does not keep the 64-bit file index
   unique (ReFS is documented so), two different directories can compare equal, so a directory
   that replaced the root could be taken for it (a 128-bit identity is T-094's).
 
-The rules below this section are stated for Linux and macOS; for Windows they are not yet stated
-(T-074).
+On Windows (T-074) the rules below hold with this difference: no link is followed. Every entry
+on the way that is a reparse point — a symbolic link to a file or a directory, a junction, or any
+other reparse point — makes the path `outside_root`, wherever it leads, and nothing beyond it is
+read or written (`crates/kiln-workspace/tests/guard_t074.rs` on the `windows-2025` runner;
+reparse points other than links and junctions: unchecked, the runner cannot make one). Names
+that Windows gives a meaning, and case, are not yet stated for Windows (T-095).
 
 ## Lexical refusals (unchanged)
 
@@ -133,3 +145,12 @@ error object on stderr.
   are always caught: the next request checks the path again (`doc.open` of a path that is
   already open checks only where it leads, see The rule).
 - Unix only.
+- On Windows every reparse point on the way is refused, so files that are reparse points without
+  being links — for example cloud placeholder files of a synced folder or deduplicated files —
+  cannot be opened or saved; they answer `outside_root` (unchecked: the runner cannot make them).
+
+## For the platform report
+
+On Windows Kiln follows no link or junction inside a project and refuses every reparse point as
+outside the root, including cloud placeholder and deduplicated files (those two unchecked on the
+hosted runner).

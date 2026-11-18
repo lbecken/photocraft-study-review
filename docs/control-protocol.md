@@ -138,7 +138,9 @@ current directory). What is checked today:
   writing (a read-only file) is refused and left unchanged, and the target is replaced by renaming
   the temporary file over it. Read and not measured: the saved file gets the access list its
   directory gives a new file, not the target's own, and the temporary file is not owner-only
-  while it is written. How symlinks are followed there is not yet stated (T-074).
+  while it is written. On Windows no link is followed: a save through a symbolic link or a
+  junction is refused (`outside_root`), and a link at a temporary name makes the save use the next
+  name; see `docs/protocol/paths.md`.
 
 ## Determinism
 
