@@ -16,8 +16,8 @@ planned feature items.** The pause of D-207 is over; the earlier paragraph about
 In flight (restarts at 2026-11-17T23:02Z, 23:53Z and 2026-11-18T00:19Z; D-224, D-225):
 - **Merged on 2026-11-18:** T-071 (`0f8ea64`, D-238: the platform-test rule in main's tools) and T-079
   (`bc8d097`, D-244: the registry of 20 platform tests, four split tests, four portable fixes). **The macOS gate
-  was green on T-079's candidate** (D-243); its first run on main (run 44261526710 at `7b86bdf`) was still in its
-  Gate step when read (D-246): read its conclusion next; `gate-macos` counts from its first green run on main.
+  is green on main** (run 44261526710 at `7b86bdf`, D-248) and counts from that run, beside `window-linux`,
+  `window-probe (macos-15)` and the Linux gate; a red run of any of them on main is an incident.
 - **T-073** (the first Windows product task: `kiln-workspace` builds for Windows, the root held and identified,
   the save by rename, one reported Windows test step in CI; high; `in_progress`; D-245): implementer R-338
   (`.worktrees/T-073`), independent test author R-339 (`.worktrees/T-073-tests`), from main `7de171b`. Then:
