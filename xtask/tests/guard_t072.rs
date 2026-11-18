@@ -2,7 +2,7 @@
 //! holding on the joined branch (the spec's G-1 to G-4 and what the director's brief names).
 //!
 //! - G-1 (T-070 review round 2, finding 1): the window-probe step, run as the workflow holds it
-//!   with a fake `kiln` that never exits and ignores SIGTERM, ends within 120 s + 15 s and
+//!   with a fake `kiln` that never exits and ignores SIGTERM, ends within 120 s + 60 s (u5) and
 //!   records the kill.
 //! - G-2: every recording step (a `run:` step that runs after a failure, in every job but
 //!   `window-probe`) ends with status 0 when every command it calls fails, and ends in `exit 0`.
@@ -926,7 +926,7 @@ fn job_ids(w: &Y) -> Vec<String> {
 // ---- G-1: the probe's bound as behaviour (T-070 review round 2, finding 1) ----------------------
 
 #[test]
-fn g1_probe_with_a_kiln_that_never_exits_ends_within_135_s_and_records_the_kill() {
+fn g1_probe_with_a_kiln_that_never_exits_ends_within_180_s_and_records_the_kill() {
     let w = workflow();
     let st = steps(job(&w, "window-probe"));
     let p = step_idx(
@@ -940,12 +940,13 @@ fn g1_probe_with_a_kiln_that_never_exits_ends_within_135_s_and_records_the_kill(
     );
     let b = bench("probe");
     // A kiln that does not exit within the bound and ignores SIGTERM: only a SIGKILL ends it
-    // (it gives up after 300 s, so a failing run leaves no process behind for long).
+    // (it gives up after 400 s, after the harness timeout of 300 s, so a failing run is a
+    // timeout and leaves no process behind for long).
     let k = b.tree.join("target/debug");
     std::fs::create_dir_all(&k).unwrap();
     std::fs::write(
         k.join("kiln"),
-        "#!/usr/bin/env bash\ntrap '' TERM\nend=$((SECONDS + 300))\nwhile [ \"$SECONDS\" -lt \"$end\" ]; do sleep 1; done\n",
+        "#!/usr/bin/env bash\ntrap '' TERM\nend=$((SECONDS + 400))\nwhile [ \"$SECONDS\" -lt \"$end\" ]; do sleep 1; done\n",
     )
     .unwrap();
     let rt = b.dir.join("runner-temp");
@@ -989,11 +990,17 @@ fn g1_probe_with_a_kiln_that_never_exits_ends_within_135_s_and_records_the_kill(
         chmod.stderr
     );
     let t0 = Instant::now();
-    let o = b.run(run_of(&st[p]), &env, 200);
+    let o = b.run(run_of(&st[p]), &env, 300);
     let secs = t0.elapsed().as_secs_f64();
     assert!(
-        secs <= 135.0,
-        "the probe step took {secs:.1} s with a kiln that never exits (bound 120 s + 15 s)"
+        // Ruling u5 (D-261): 60 s of slack over the step's own 120 s covers its 5 s SIGTERM-to-
+        // SIGKILL wait, the watchdog's one-second polling (`sleep 1` per round, which drifts on a
+        // loaded runner), the start of `bash`, the fake kiln and the step's `uname`/`sw_vers`,
+        // and this test's 10 ms polling; 15 s was exceeded once on a loaded macOS runner
+        // (136.6 s). A watchdog with `sleep 2` (about 240 s) or without SIGKILL (a timeout at
+        // 300 s) still fails.
+        secs <= 180.0,
+        "the probe step took {secs:.1} s with a kiln that never exits (bound 120 s + 60 s)"
     );
     assert!(
         secs >= 115.0,
