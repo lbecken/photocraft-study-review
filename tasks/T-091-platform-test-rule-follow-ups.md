@@ -38,6 +38,9 @@ The rule of T-071 has one hole left by its rulings and two untested cases:
 - **R2-7 (nit).** Twins inside a `#[cfg(feature = …)]` module are not reported.
 - **R4-1 (test gap; `reviews/T-071-r4.md`, run R-324).** Nothing notices a clean fixture file the self-test stops
   reading (`platform-clean.rs`; true of `clean.rs` before this task too).
+- **From T-079 (D-241, ruling w2).** `xtask/tests/guard_t079.rs` pins every Linux test name of main `ee9b130`
+  as a constant; when the platform batch ends, decide whether it is retired or replaced by a tool that
+  regenerates the list.
 
 ## Log
 ### director

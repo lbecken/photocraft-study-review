@@ -328,6 +328,18 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
 - Pinned (j) stands as written: before the join the implementer runs main's gate (built from main's sources) on
   the candidate tree and logs its `no-skip` line (`20 platform test(s) registered`).
 
+### Rulings on the test author's report (director, D-241; told to both builders)
+- **w1 (question Q-T1: the item of a non-UTF-8 entry when its test is split).** For each of the four non-UTF-8
+  tests the registered item is exactly one of two names: the test's name as Interface (1) gives it (the test is
+  not split and is marked as a whole), or that name followed by `_non_utf8` (the Linux-only part split out; the
+  original name stays on the portable part, which the base-names guard already requires). No other name. A test
+  is split exactly when it checks things that also hold on macOS; the implementer says which of the four it split
+  and why.
+- **w2 (the base-names guard).** `guard_t079.rs` pins the 1,121 Linux test names of main `ee9b130`. It stays for
+  the platform batch (T-072 to T-078, T-092), where the risk is a test lost behind a cfg; a later task that
+  renames or removes a test on purpose lists `xtask/tests/guard_t079.rs` in its `touches` for the test author.
+  When the platform batch ends the director decides whether it is retired (noted in T-091).
+
 ## Log
 ### director
 <!-- end director log -->
