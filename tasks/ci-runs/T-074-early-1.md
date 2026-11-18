@@ -1,17 +1,17 @@
 # CI run 44307677646 (platforms.yml) on ci/candidate @ cec40579598ee6a2e033d0ccb434c7e2373e2217 — T-074 early look 1
 
-Record by hand; method as `tasks/ci-runs/README.md`. **DRAFT: written while the run was in progress (first check about 13:05Z); to be extended.**
+Record by hand; method as `tasks/ci-runs/README.md`. **INCOMPLETE: the run was still `in_progress` when the 25-minute wait ended (last check 13:30Z): `gate-macos` was in its "Core crates" step. Everything else had completed.**
 
 ## Run header
 - id 44307677646, run_number 29, attempt 1, event push, title "CI early look (not for merge): T-074 joined head with T-072's joined …"
 - branch `ci/candidate`; commit `cec40579598ee6a2e033d0ccb434c7e2373e2217`; created_at 2026-11-18T12:49:57Z
-- first check (updated_at 13:04:59Z): status in_progress.
+- status at the end of the wait (13:30Z): **in_progress** (only `gate-macos` unfinished). Run `updated_at` was 13:04:59Z at the first check.
 
 ## Job table (first check, about 13:05Z)
 | job | id | conclusion | note |
 |---|---|---|---|
-| gate-linux | 134813362754 | in progress | started 12:50:00Z; Gate failure (12:50:18Z-13:05:24Z); Core crates running |
-| gate-macos | 134813362960 | in progress | started 12:55:01Z; Gate running |
+| gate-linux | 134813362754 | **failure** | 12:50:00Z-13:24:23Z = 34m23s; first failing step Gate (12:50:18Z-13:05:24Z, 15m06s), failed on `test` only |
+| gate-macos | 134813362960 | **not finished** (in_progress at 13:30Z) | started 12:55:01Z (job created 12:49:58Z); Gate failure (12:55:39Z-13:24:27Z); Core crates in progress since 13:24:28Z |
 | gate-windows | 134813362421 | **failure** | 12:49:59Z-13:16:38Z = 26m39s; first failing step Gate (12:50:28Z-12:58:47Z, 8m19s); every later step success/skipped |
 | window-linux | 134813362613 | success | 12:50:00Z-12:51:40Z = 1m40s |
 | window-probe (macos-15) | 134813362978 | cancelled | 12:49:58Z-13:04:59Z = 15m01s; the job listing shows no steps |
@@ -295,3 +295,75 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ```
 ```
 The two failing names are `ac1_the_list_step_runs_the_list_records_its_status_and_prints_the_binaries` and `docs_ci_table_shows_a_green_gate_macos_with_the_inode_columns`; no other xtask test failed.
+
+## gate-linux (job 134813362754, ubuntu-24.04)
+Artefact `gate-linux-44307677646` (id 14431531262, 56,366 B, size equal, `testzip()` clean; uploaded 13:24:20Z): `core-crates.txt` 43,067 B; `gate-report.json` 5,086 B; `test-list.txt` 77,945 B; `test-output.txt` 100,128 B.
+Step timings (job listing): Set up job 1s; Checkout 2s; Install the pinned toolchain 10s; Cache cargo registry and target 4s; Gate **failure** 12:50:18Z-13:05:24Z (15m06s); Gate report success 0s; Core crates (reported, not required) success 13:05:24Z-13:12:46Z (7m22s); Test list success 13:12:46Z-13:12:47Z (1s); Full test output (gate failed) success (ran) 13:12:47Z-13:24:18Z (11m31s); Disk success 0s; Upload reports success 13:24:18Z-13:24:20Z (2s); Post Cache skipped; Post Checkout success; Complete job success. Job completed `failure` at 13:24:23Z (wall 34m23s from started_at 12:50:00Z).
+
+Gate report: `passed: false`, `failed_step: test`, 893.43 s.
+| step | status | seconds | detail |
+|---|---|---|---|
+| fmt | PASS | 1.2 | formatted |
+| clippy | PASS | 55.1 | no warnings (all targets, -D warnings) |
+| layers | PASS | 1.2 | 11 crates, 14 internal edges, layer table holds |
+| ui-commands | PASS | 0.0 | self-test ok; 14 kiln-ui file(s) scanned, 5 allowlisted path(s) |
+| hygiene | PASS | 0.1 | reviews: 59 of 71 review file(s) checked (medium/high, iteration >= 1), ok; session-paths: 696 tracked file(s) clean (0 not UTF-8, skipped) |
+| schema | PASS | 23.0 | 30 commands; audit ok; docs/commands.json current |
+| scorecard | PASS | 302.9 | 64 items: 47 verified, 0 implemented, 0 failing, 17 planned. |
+| test | **FAIL** | 506.2 | 1017 passed, 1 failed, 0 ignored in 106 suites (kept text names `queue::tests::main_xtask_is_rebuilt_from_base_on_every_run`) |
+| no-skip | PASS | 3.7 | self-test ok (17 known findings); 205 files scanned, 0 allowlisted skip(s), 35 platform test(s) registered (10 pending), today = 2026-11-18 |
+| fuzz, budgets | EMPTY | 0.0 | no targets registered yet |
+
+Failing tests (`grep -E '^test .* FAILED$' test-output.txt`, ANSI stripped; whole workspace, `cargo test --no-fail-fast`), verbatim:
+```
+test queue::tests::main_xtask_is_rebuilt_from_base_on_every_run ... FAILED
+test ac1_the_list_step_runs_the_list_records_its_status_and_prints_the_binaries ... FAILED
+test docs_ci_table_shows_a_green_gate_macos_with_the_inode_columns ... FAILED
+```
+**Three** failing tests, not two: besides the two known ones, `queue::tests::main_xtask_is_rebuilt_from_base_on_every_run` (an `xtask` library-binary unit test; also FAILED in `core-crates.txt`, `test result: FAILED. 137 passed; 1 failed`). Its block verbatim (`test-output.txt`):
+```
+---- queue::tests::main_xtask_is_rebuilt_from_base_on_every_run stdout ----
+
+thread 'queue::tests::main_xtask_is_rebuilt_from_base_on_every_run' (98912) panicked at xtask/src/queue.rs:2038:43:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+```
+(In `core-crates.txt` the same test panicked with thread id 36912 at the same place and message.)
+Totals: sum of the `test result:` lines of `test-output.txt` is 1190 passed, 3 failed in 139 result lines (command: `grep -E '^test result' | awk '{p+=$4;f+=$6;n++}'`); the gate report says 1017 passed, 1 failed in 106 suites (the difference is not explained by any file read).
+
+`xtask` (`core-crates.txt`): `==== xtask: exit status 101`; `kiln-text`, `kiln-syntax`, `kiln-search` exit status 0; sum of the 26 `test result:` lines after `-p xtask`: 310 passed, 3 failed (command: `awk '/-p xtask/{x=1}x&&/^test result/{p+=$4;f+=$6;n++}END{print p,f,n}'` on the stripped file). FAILED result lines: the library binary (`137 passed; 1 failed`) and `acceptance_t072` (`15 passed; 2 failed`).
+- `acceptance_t074` (xtask): `test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s` (tests `ac3_each_of_the_nine_entries_names_exactly_its_counterpart`, `ac3_no_entry_waits_on_t074`).
+- `acceptance_t072`: `test result: FAILED. 15 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s`.
+- `guard_t072`: `test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 125.26s`.
+- `guard_t074` (kiln-workspace, from `test-output.txt` line 1463 onward; it is not in `core-crates.txt`): `running 13 tests`, `test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s`.
+
+`Test list` (`test-list.txt`, 77,945 B, 1,595 lines): 138 binary lines (130 `Running`, 8 `Doc-tests`); 1,192 lines ending `: test` (command: `grep -c -E ': test$'` on the ANSI-stripped file). Log line `TEST LIST: exit status`: not read (log not fetched).
+
+## gate-macos (job 134813362960, macos-15) — unfinished at the end of the wait
+Job started 12:55:01Z (created 12:49:58Z; the five minutes before start are queue time, INFERRED). Steps at the last check (13:30Z, job data from `get_workflow_job`):
+| step | conclusion | start | end | duration |
+|---|---|---|---|---|
+| Set up job | success | 12:55:02Z | 12:55:04Z | 2s |
+| Checkout | success | 12:55:04Z | 12:55:09Z | 5s |
+| Install the pinned toolchain | success | 12:55:09Z | 12:55:19Z | 10s |
+| Cache cargo registry and target | success | 12:55:19Z | 12:55:39Z | 20s |
+| Gate | **failure** | 12:55:39Z | 13:24:27Z | 28m48s |
+| Gate report | success | 13:24:27Z | 13:24:28Z | 1s |
+| Core crates (reported, not required) | **in progress** | 13:24:28Z | none | running (5m42s at 13:30:10Z) |
+| Test list, Full test output (gate failed), Disk, Upload reports, Post Cache, Post Checkout | pending | not started | | |
+- Whether the job completed: **no, not within the wait**. So the second observation of "Full test output (gate failed)" cancelled after about 9 minutes and a "Disk" step that never ends is **not determinable**: neither step had started.
+- Artefact: none existed (artefact list at 13:26Z: `gate-linux-…`, `gate-windows-…`, `window-probe-windows-2025-…`, `window-linux-…`; no `gate-macos-…`).
+- Annotations: `get_check_run` for the job (id 134813362960) at 13:27Z: conclusion empty, status in_progress, output title/summary/text empty.
+- Job log: `get_job_logs` (`return_content: true`, `tail_lines: 40`) at 13:27Z returned HTTP 404; the last 40 lines of "Full test output" cannot be read (step not started either).
+- Gate report, failing tests, counts for macOS: not read (no artefact).
+
+## window-probe (macos-15) (job 134813362978)
+`get_workflow_job` via the job listing: conclusion **cancelled**, created 12:49:58Z, started_at 12:49:58Z, completed_at 13:04:59Z (15m01s), **no `steps` array** (no step ran or none was reported). `get_check_run` (13:27Z): conclusion `cancelled`, status `completed`, output title/summary/text empty (no annotation). The workflow's other macOS job (`gate-macos`) started 12:55:01Z while this job was cancelled at 13:04:59Z. Why it was cancelled: not determinable. No `window-probe-macos-15-…` artefact.
+
+## Not read
+- `gate-macos`: everything beyond the step list above (job not finished; no artefact; job log 404; no annotation). Its "Full test output" and "Disk" behaviour on this run: not determinable.
+- `window-probe (macos-15)`: no steps, no artefact; cancellation reason not shown.
+- Artefacts of `window-linux` (577 B) and `window-probe (windows-2025)` (344 B): listed, not downloaded; the probe's exit status line is not read.
+- Job logs of every job (artefacts held the data): the `TEST LIST: exit status` log lines for gate-linux and gate-windows, `Disk` step output (`df`, `target/` size), image versions.
+- Windows: `test-list.txt`/`test-output.txt` contents beyond their size (10,832 B each, 172 lines, as `T-072-round-1.md`); full text of clippy's, scorecard's and test's failing output in the gate report (kept tails only); the other 12 `windows-tests.txt` targets beyond their status lines.
+- Linux: why the gate report's counts (1017 passed, 1 failed, 106 suites) differ from the sum over `test-output.txt` (1190 passed, 3 failed, 139 result lines) is not explained by any file read.
