@@ -435,6 +435,21 @@ either a "Test list" step plus its upload line (A1) or `if: always()` on the ful
   of a failing test's output block is exactly 20.
 - **t4.** The upload lists are exact sets.
 
+### Rulings on review round 1 (director, D-260; sent to both builders)
+- **u1 (finding 1, defect).** The implementer corrects the failure printer in all three gate jobs: while a failing
+  test's block is open, a line shaped like a binary heading (`Running …`, `Doc-tests …`) is printed as part of the
+  block and counts towards its 20 lines; it is taken as a heading only when no block is open.
+- **u2 (finding 2, test gap).** The test author adds fixtures to the printer tests: output with colour codes, and a
+  failing block that contains a heading-shaped line (the block of round 1, `tasks/ci-runs/T-072-round-1.md`, is the
+  model). The new test must fail on the task's present head `d87f2e8` for finding 1 (state the message) and must
+  kill the reviewer's mutants M10 and M16.
+- **u3 (finding 3, test gap).** The test author pins the conditions of the evidence steps as an exact set per gate
+  job (`guard_t072.rs`): the full-output step's condition includes the gate step's outcome; mutant M12 is killed.
+- **u4 (findings 4 to 6, documents).** The implementer corrects the two false sentences of `docs/development.md`
+  ("the first run with `gate-macos` green" is not: run 44253737976 was; the sentence about the macOS probe's script
+  is moved under the run that showed it, 43752760283, or dropped) and the nit (the Linux `df` header is given only
+  if the record has it; "as printed" only where the cell is verbatim).
+
 ## Log
 ### director
 <!-- end director log -->
