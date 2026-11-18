@@ -356,6 +356,53 @@ high → independent test author.
   pending CI criterion of §8.1; or the file is renamed `guard_t073_windows.rs` (a path outside `touches`, so a
   ruling). I added no test that fails on base by construction (for example by reading the manifest), since the spec
   does not assign one.
+- 2026-11-18 · R-339 · tests written · `crates/kiln-workspace/tests/acceptance_t073.rs`, 10 tests, no platform cfg
+  (Q-2); the expectation differs only by `cfg!(windows)` in a branch or match guard, both sides asserting (no early
+  return). Criterion → tests → result on Linux base (`cargo test -p kiln-workspace --test acceptance_t073`, as uid 0
+  and, on a scratch copy, as uid 65534):
+  - AC-W2 / Interface (1) root accepted and used: `acw2_existing_root_is_accepted_and_used` — pass (guard on Unix);
+    refused as now: `acw2_missing_root_is_refused` (`NotFound (root)`), `acw2_file_as_root_is_refused`
+    (`Io NotADirectory (root)`) — pass.
+  - AC-W2 / Interface (1) identity, root path replaced by another directory: `acw2_root_replaced_at_same_path_is_outside_root`
+    (`root` renamed away, new `root` made), `acw2_root_parent_replaced_is_outside_root` (`p` renamed away, new `p/root`) —
+    pass. Unix: the rename must succeed, then `read`, `is_file`, `write_atomic`, `list_dir`, `check_location` and the
+    save of a document opened before are `OutsideRoot`, nothing changes, and after moving back the save works. Windows:
+    either the same, or (spec's other outcome) the rename is refused — then a control directory nobody holds was
+    renamed in the same place first, and the session must still read and save on its root. The outcome is printed as
+    `MEASURED: <test>: <platform>: rename of <dir> while the root is held: ok | refused: kind …, raw OS error …`.
+  - AC-W2 / Interface (3) save: `acw2_save_replaces_target_by_rename_and_leaves_no_temp` (a hard link to the old
+    target keeps the old bytes), `acw2_save_of_new_file_creates_it_and_leaves_no_temp`, `acw2_save_creates_temp_exclusively`
+    (decoys at `.kiln-tmp-0`/`-1` untouched), `acw2_save_keeps_writable_target_writable`,
+    `acw2_save_of_read_only_target_is_refused_and_changes_nothing` (where the read-only attribute stops writes —
+    Windows always, Unix unless uid 0 — `Io PermissionDenied` naming `f.txt`, nothing changed, document dirty; as uid 0
+    the save completes and keeps read-only) — pass.
+  - Fail on base: none on Linux or macOS (by design, see the QUESTION above); on Windows base: `compile` (the lib's 6
+    errors; `cargo check -p kiln-workspace --test acceptance_t073 --locked --target x86_64-pc-windows-msvc` → 6 `error[`).
+  Self-check (Linux, scratch copy of `disk.rs`, never committed; killed by, as uid 0 / as uid 65534): M1 target
+  written in place instead of renamed → `…replaces_target_by_rename…` / same; M2 temp copied and left behind → 8 tests /
+  7; M3 root identity check always true → both `…replaced…` tests / same; M4 temp created with truncate instead of
+  `create_new` → `…creates_temp_exclusively` / same; M5 write-protection check removed → survives as uid 0 (expected:
+  permission bits do not apply) / `…read_only_target…`; M6 target permissions not copied → `…read_only_target…` /
+  survives (only observable when the read-only target is writable to the process; Unix modes are covered by
+  `acceptance_t002_r2`); M7 refusal of the target with the wrong kind (`NotFound`) → survives as uid 0 / `…read_only…`;
+  M9 target never replaced (temp removed) → 8 / 7. Every mutant is killed on at least one identity.
+  Windows type check: on base the lib does not build there, so on a scratch copy with the lib's Unix lines stubbed
+  (not the product, not committed) `cargo clippy -p kiln-workspace --test acceptance_t073 --locked --target
+  x86_64-pc-windows-msvc -- -D warnings` is clean; `cargo check … --target aarch64-apple-darwin` clean. Windows
+  expectations: not run (no Windows here).
+- QUESTION (measurement channel, for the implementer's step): the held-root measurement of AC-W2 is printed on the
+  test's captured stdout, which libtest shows for a passing test only with `-- --show-output` (in the "successes"
+  block, after the result lines). Writing it to stderr directly was tried and dropped: the workflow's `2>&1` merge
+  split a `test <name> ... ok` line on Linux. Proposed: the reported Windows step runs `cargo test --locked
+  --no-fail-fast -p kiln-workspace --lib --test acceptance_t073 -- --show-output`, so the artefact carries the
+  `MEASURED:` lines; otherwise the measurement can be read only from which branch passed, which the result line does
+  not show.
+- Registry: none needed (no platform cfg in the file; Q-2). Not covered: the root removed (not renamed) while held —
+  Interface (4) names only the replacement; if Windows refuses both renames, no test of this file reaches the
+  identity comparison on Windows (M3 would survive there), which the `MEASURED:` lines will show.
+- Gate on the committed state: `cargo clippy -p kiln-workspace --tests -- -D warnings` clean, `cargo fmt --check`
+  clean, `cargo xtask no-skip` PASS (20 registered, unchanged), `cargo xtask hygiene` PASS. `cargo xtask ci` not run
+  (my branch changes one test file; the steps above are its share). next: director (two QUESTIONs).
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
