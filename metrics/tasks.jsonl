@@ -919,3 +919,4 @@
 {"kind":"transition","task":"T-096","iteration":2,"at":"2026-11-18T14:11:31Z","from":"draft","to":"specified"}
 {"kind":"transition","task":"T-096","iteration":2,"at":"2026-11-18T14:11:31Z","from":"specified","to":"ready"}
 {"kind":"transition","task":"T-072","iteration":2,"at":"2026-11-18T14:11:31Z","from":"self_verified","to":"tests_joined"}
+{"kind":"transition","task":"T-096","iteration":2,"at":"2026-11-18T14:11:51Z","from":"ready","to":"in_progress"}
