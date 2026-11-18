@@ -785,6 +785,14 @@ notes (point 2; the latter pending Q-B).
     `outside_root` on every platform"), but its part (c) saves through a link that stays inside, which T-074 refuses
     on Windows. I wrote it as P/w (`cfg!(windows)` on that part's expectation; no cfg attribute, so AC-2 holds).
     Recommendation: accept P/w for W14 (the same treatment M2 gave the split originals).
+  - W22 (`acceptance_t015_tools.rs`): the `#[cfg(not(unix))] panic!` and the `#[cfg(unix)]` block go; the body runs on
+    every platform with a twin `make_fake` (Unix: the same shell script text as before, mode 0755; Windows: a Rust
+    source compiled by `rustc` from the test's `PATH` to `<tool>.exe`, appending `argv` to the marker, through
+    `wait_with_timeout` (60 s), failing with "precondition: building the fake … failed" if `rustc` fails; a spawn that
+    cannot start now panics naming the command). The child's `PATH` is `std::env::join_paths([bin, split_paths(PATH)…])`
+    (on Unix the same `bin:PATH` string). `TIMEOUT`, `wait_with_timeout`, `MARKER_ENV` are now used on every platform.
+    The generated Windows source was compiled and run on Linux in scratch (`rustc --edition=2021`; one marker line per
+    start). Linux: 3 passed; stand-in clippy Windows and macOS: `Finished`.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

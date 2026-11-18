@@ -67,7 +67,7 @@ fn wait_with_timeout(mut cmd: Command) -> std::process::Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .unwrap();
+        .unwrap_or_else(|e| panic!("precondition: cannot start {cmd:?}: {e}"));
     let deadline = Instant::now() + TIMEOUT;
     loop {
         if child.try_wait().unwrap().is_some() {
@@ -127,63 +127,92 @@ fn parent_checks() {
     let _also = copy; // Copy
     assert_eq!(copy.clone(), NoTools);
 
-    #[cfg(not(unix))]
-    panic!("precondition: the fake `cargo`/`rustfmt` of this test are shell scripts and need Unix");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = fresh_dir("fake-path");
-        let bin = dir.join("bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        let marker = dir.join("marker");
-        for tool in BOTH {
-            let fake = bin.join(tool.as_str());
-            std::fs::write(
-                &fake,
-                "#!/bin/sh\necho \"$0 $*\" >> \"$KILN_T015_MARKER\"\n",
-            )
-            .unwrap();
-            std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
-        let path = match std::env::var_os("PATH") {
-            Some(old) => {
-                let mut p = std::ffi::OsString::from(&bin);
-                p.push(":");
-                p.push(old);
-                p
-            }
-            None => bin.clone().into_os_string(),
-        };
-        // The fakes are found on that PATH and leave the marker when started.
-        for tool in BOTH {
-            let mut cmd = Command::new(tool.as_str());
-            cmd.env("PATH", &path).env(MARKER_ENV, &marker);
-            let out = wait_with_timeout(cmd);
-            assert!(out.status.success(), "fake {tool:?}: {out:?}");
-        }
-        let seen = std::fs::read_to_string(&marker).unwrap();
-        assert_eq!(seen.lines().count(), 2, "{seen}");
-        std::fs::remove_file(&marker).unwrap();
-
-        // The same environment for a child copy of this test, which runs NoTools.
-        let mut cmd = Command::new(std::env::current_exe().unwrap());
-        cmd.args(["--exact", "no_tools_never_runs", "--test-threads=1"])
-            .env("PATH", &path)
-            .env(MARKER_ENV, &marker)
-            .env(CHILD_ENV, "1");
-        let out = wait_with_timeout(cmd);
-        assert!(out.status.success(), "child: {out:?}");
-        assert!(
-            String::from_utf8_lossy(&out.stdout).contains("1 passed"),
-            "the child ran the test: {out:?}"
-        );
-        assert!(
-            !marker.exists(),
-            "NoTools started a process: {:?}",
-            std::fs::read_to_string(&marker)
-        );
-        let _ = std::fs::remove_dir_all(&dir);
+    let dir = fresh_dir("fake-path");
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let marker = dir.join("marker");
+    for tool in BOTH {
+        make_fake(&bin, tool);
     }
+    // The child's PATH: `bin` first (`std::env::join_paths`: `:` on Unix, `;` on Windows).
+    let mut entries = vec![bin.clone()];
+    if let Some(old) = std::env::var_os("PATH") {
+        entries.extend(std::env::split_paths(&old));
+    }
+    let path = std::env::join_paths(entries).unwrap();
+    // The fakes are found on that PATH and leave the marker when started.
+    for tool in BOTH {
+        let mut cmd = Command::new(tool.as_str());
+        cmd.env("PATH", &path).env(MARKER_ENV, &marker);
+        let out = wait_with_timeout(cmd);
+        assert!(out.status.success(), "fake {tool:?}: {out:?}");
+    }
+    let seen = std::fs::read_to_string(&marker).unwrap();
+    assert_eq!(seen.lines().count(), 2, "{seen}");
+    std::fs::remove_file(&marker).unwrap();
+
+    // The same environment for a child copy of this test, which runs NoTools.
+    let mut cmd = Command::new(std::env::current_exe().unwrap());
+    cmd.args(["--exact", "no_tools_never_runs", "--test-threads=1"])
+        .env("PATH", &path)
+        .env(MARKER_ENV, &marker)
+        .env(CHILD_ENV, "1");
+    let out = wait_with_timeout(cmd);
+    assert!(out.status.success(), "child: {out:?}");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("1 passed"),
+        "the child ran the test: {out:?}"
+    );
+    assert!(
+        !marker.exists(),
+        "NoTools started a process: {:?}",
+        std::fs::read_to_string(&marker)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A fake `tool` in `bin` that appends a line to the file named by [`MARKER_ENV`] when started:
+/// a shell script on Unix.
+#[cfg(unix)]
+fn make_fake(bin: &Path, tool: Tool) {
+    use std::os::unix::fs::PermissionsExt;
+    let fake = bin.join(tool.as_str());
+    std::fs::write(
+        &fake,
+        format!("#!/bin/sh\necho \"$0 $*\" >> \"${MARKER_ENV}\"\n"),
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// Windows: `<tool>.exe` built with `rustc` from the test's `PATH` (ruling 4 of T-092, probe
+/// P-D3/P-D4). Script fakes (`.cmd`, `.bat`) are not used: with only those on the child's `PATH`,
+/// `Command::new` ran the real tools (P-D1, P-D2). If `rustc` cannot be started or fails, the
+/// test fails naming why.
+#[cfg(windows)]
+fn make_fake(bin: &Path, tool: Tool) {
+    let src = bin.join(format!("{}-fake.rs", tool.as_str()));
+    std::fs::write(
+        &src,
+        format!(
+            "use std::io::Write;\n\
+             fn main() {{\n\
+             \x20   let line = std::env::args().collect::<Vec<_>>().join(\" \");\n\
+             \x20   let marker = std::env::var_os(\"{MARKER_ENV}\").expect(\"{MARKER_ENV}\");\n\
+             \x20   let mut f = std::fs::OpenOptions::new().create(true).append(true).open(marker).unwrap();\n\
+             \x20   writeln!(f, \"{{line}}\").unwrap();\n\
+             }}\n"
+        ),
+    )
+    .unwrap();
+    let exe = bin.join(format!("{}.exe", tool.as_str()));
+    let mut cmd = Command::new("rustc");
+    cmd.arg("--edition=2021").arg("-o").arg(&exe).arg(&src);
+    let out = wait_with_timeout(cmd);
+    assert!(
+        out.status.success() && exe.is_file(),
+        "precondition: building the fake {tool:?} with `rustc` failed: {out:?}"
+    );
 }
 
 /// AC-3: every `Display` is the pinned text, `Tool::as_str` is exact, and `ToolError` is a
