@@ -607,4 +607,18 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   ci`, macOS/Windows runs. · next: join
 <!-- end test author log -->
 ### reviewer
+- 2026-11-18 · R-330 · review round 1 · `reviews/T-079-r1.md` at `885f4f1` · verdict **request-changes**. Rulings read
+  on main and accepted: D-199 Q-1 A, Q-2 A, Q-3 A; D-233 Q-4 B ((W) not reviewed), Q-5 A, Q-6 A, Q-7 A; D-235; D-239 Q-8 A
+  (first commit `c61acc5` = `git apply` of the patch = `park/T-071-reviewed` for all 8 paths); D-241 w1 (all four split,
+  each `_non_utf8` copy equals its base fn), w2. Findings: 1 defect (3: `deep_trees_stop_at_the_depth_bound` aborts
+  `gate-macos` by a stack overflow in the drop's recursive `remove_dir_all` of the 2,100-deep chain; reproduced on Linux
+  with a 256 KiB stack, backtrace in std's `remove_dir_all_recursive`), 2 test gaps (4: `guard_t079` ignores
+  `cfg_attr(<linux>, cfg(<false>))`, mutant M15; 6: a lying `folds_case` silences `s/t/z` on Linux, M9), 3 spec gaps for
+  the director (1: the non-UTF-8 reason is false for Windows; 2: T-076/T-077 drafts do not carry their counterparts or the
+  registry; 5: `no-skip` misses the M15 form, for T-091). On Linux nothing of the base is lost (cargo's list at the head =
+  the 1,121 base names + 12 new; each split and fix read old against new). Main's tool on the tree: `no-skip` `20 platform
+  test(s) registered (8 pending)`, `scorecard`, `layers`, `ui-commands`, `schema` PASS. AC-4 0 errors; macOS stub stand-in
+  check and clippy exit 0. CI record round 1 read after my written expectation. Mutants 19 (2 equivalent; 6 acceptance,
+  7 procedure, 2 own tests; 2 survived). Not run: macOS/Windows myself, a case-folding file system, the whole suite per
+  mutant. Scratch deleted. · next: implementer (findings 3, 6), test author (finding 4), director (1, 2, 5)
 <!-- end reviewer log -->
