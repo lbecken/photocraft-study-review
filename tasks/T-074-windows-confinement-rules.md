@@ -939,6 +939,22 @@ listing kind, the root cases, the registry plan and the gate-tool side (D-235) c
     only at `acceptance_t074`); macOS (Unix expectations assumed, `..` `physical` per the spec's INFERRED realpath note).
   - Notes for the implementer/director (no question): a platform-only test was not needed (no registry entry from me).
     Scratch `target/` removed at the end · next: director (join)
+- 2026-11-18 · R-360 · rework after review round 1 · rulings r1, r2 (D-257) read on main and accepted (r3 is the
+  implementer's) · did, in `guard_t074.rs` only, no test renamed: r1 → new `awa1_link_below_the_first_level` (each of
+  the 4 kinds at `root/d/l`, inside (`root/e`), outside, nowhere × `d/l/x.txt` and `d/l`; 24 cases through the same
+  calls as the other `awa1_*`, plus `list_dir(d)` listing `l` as `Symlink`; Windows `OutsideRoot` and fixture unchanged,
+  Unix today's behaviour); r2 → new `awa3_temp_name_held_by_a_dangling_junction` (fixture (e): junction at
+  `.kiln-tmp-0` to a missing `out/gone`; same expectations as (a)-(d)); every `awa3_*` now prints one `MEASURED:` line
+  per planted entry (what was made and whether its target exists); a fixture that cannot be made fails naming why
+  (`plant`). Guards now 15 · runs: `cargo test -p kiln-workspace --test guard_t074` → 15 passed; `cargo fmt --check`
+  clean; `cargo clippy -p kiln-workspace -p xtask --all-targets -- -D warnings` clean; `cargo xtask no-skip` PASS `35 …
+  (19 pending)`; `cargo clippy -p kiln-workspace --test guard_t074 --locked --target x86_64-pc-windows-msvc -- -D
+  warnings` clean (type-checked only) · mutant check (scratch copy, Linux simulation of the Windows branch: `cfg!(windows)`
+  → `true` in `link_case_at`'s expectation; the walk refuses a symlink only where the mutant says): every component →
+  15 passed (positive control); first request component only → `awa1_link_below_the_first_level` FAIL; last only →
+  the 4 old `awa1_*` + the new one FAIL; first or last (the reviewer's M2) → `awa1_link_below_the_first_level` FAIL, the
+  14 others pass (the gap the ruling names, now closed). Scratch removed · only CI can show: whether a dangling junction
+  can be made on the runner (`MEASURED:` line of (e)), and all Windows behaviour · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
