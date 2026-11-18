@@ -423,6 +423,23 @@ high → independent test author.
   Gate on the committed state: clippy `--tests -D warnings` clean, `fmt --check` clean, `no-skip` PASS (20
   registered), `hygiene` PASS, `cargo check --test acceptance_t073 --test guard_t073 --target aarch64-apple-darwin`
   clean. next: director.
+- 2026-11-18 · R-342 · ruling z1 (D-249, read on main) accepted · did: `xtask/tests/acceptance_t079.rs`'s two tests
+  now check T-079's 20 entries, not the whole registry. An entry belongs to one of the 20 when its `(file, item)` is
+  that test's pair (for the 4 non-UTF-8 tests either name of ruling w1). Test 1, renamed from
+  `ac1_registry_entries_are_exactly_the_twenty_of_interface_2_and_2a` to
+  `ac1_each_of_the_twenty_has_exactly_one_entry_with_its_fields`: for each of the 20, exactly one entry belongs to
+  it, with exactly T-079's `platforms`, `counterpart`, `task` ("missing" / "changed" / "entered more than once").
+  Test 2 (name kept): the `pending` entries among those belonging to the 20 are exactly T-079's 8 with task and
+  `expires = "2026-12-31"`. Other entries are ignored. The module docs say so; the rest of the file is unchanged.
+  The rename is free: `guard_t079.rs` pins the Linux test names of `ee9b130`, and
+  `git cat-file -e ee9b130:xtask/tests/acceptance_t079.rs` → the file does not exist there; no name of it is in the
+  pinned list. Cases (scratch copy, `cargo test -p xtask --test acceptance_t079`; test 1 / test 2): base ok/ok;
+  base + 15 `disk.rs` pending entries (T-092, unix) ok/ok; one of the 20 removed FAIL/FAIL; platforms changed
+  FAIL/ok; counterpart `none`→`pending` FAIL/FAIL; task T-076→T-092 FAIL/FAIL; expiry changed ok/FAIL; one of the 20
+  entered twice FAIL/ok; a non-UTF-8 test under both names FAIL/ok; an extra entry for a T-079 pair with other
+  fields FAIL/ok. Every rejection fails at least one test. Committed state: `cargo test -p xtask --test
+  acceptance_t079 --test guard_t079` 2 + 6 ok; `cargo clippy -p xtask --tests -- -D warnings` clean; `cargo fmt
+  --check` clean; `cargo xtask no-skip` and `hygiene` PASS. next: director.
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->
