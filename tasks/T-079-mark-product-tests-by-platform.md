@@ -343,6 +343,18 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
 ## Log
 ### director
 <!-- end director log -->
+- 2026-11-18 **CI round 1** (the implementer's `CI-REQUEST`; record `tasks/ci-runs/T-079-round-1.md`, from the six
+  artefacts, run R-331): run 44245093360 on `ci/candidate` at the joined head
+  `885f4f1557d4aa1196e79e4136a1f6e1f55da6c4`. `gate-linux` success; the counted jobs success. `xtask` exit status 0
+  on all three platforms (Linux 286 passed, macOS 281, Windows 278; 23 binaries each); `acceptance_t079` 2 of 2 and
+  `guard_t079` 6 of 6 on all three; the 8 `xtask` entries present or absent as registered. **`gate-macos` is not
+  green, from one cause**: the test thread of `deep_trees_stop_at_the_depth_bound` (the 2,100-deep chain, one of
+  the four portable fixes) overflows its stack and aborts the binary `acceptance_t019_cli`, leaving 5 of its 7
+  tests without a verdict (`5 scorecard problems`). Of the 16 formerly failing macOS tests: 8 absent as registered,
+  the 4 non-UTF-8 tests ok under their original names with the `_non_utf8` parts absent, 2 portable fixes ok, 2 in
+  the aborted binary. The pending CI criterion: clauses 3 and 4 not met (the macOS gate and its scorecard list),
+  the others met. Rework is ruled with the review's findings.
+
 ### planner
 - 2026-11-15 · R-285 · draft · did: full spec from the split of T-071 (D-180 Q-1 B) · not run: builds · next: director
 - 2026-11-18 · R-321 · specified · did: re-specified in full under v1.5 against task/T-071 @ b7dd7d6; Windows check probed twice (scratch, deleted) · not run: CI · next: director (Q-4 to Q-8)
