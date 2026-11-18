@@ -598,6 +598,12 @@ renamed to carry the new bound (it is not on main yet). The test author states i
     OUTPUT: exit status 101`, the remark. `core-crates.txt`: `acceptance_t072` 17 passed, `guard_t072` 7 passed.
     Artefact: the six files of round 1.
   - Window jobs as in round 1.
+- 2026-11-18 · R-359 · ruling D-258 on R-359-1 accepted: `docs/development.md:139-141` now says the CI table is of run
+  44297266071 (`tasks/ci-runs/T-072-round-1.md`), made with the post-T-054 settings; the pre-T-054 list keeps the
+  bootstrap table and the 12 GB. D-249: `git grep` on main for `43752760283`, `Figures recorded before T-054`,
+  `default debug info`, `Runners, wall times` in `xtask/tests`, `crates`, `apps`: no hit (only `acceptance_t072.rs`
+  on this branch reads the table, by its heading). The commit called `<edit sha>` in the R-359 report is `6a17b85`.
+  Gate and `cargo test -p xtask` re-run after this edit (results in the next line). CI expectation for round 2 unchanged.
 <!-- end implementer log -->
 ### test-author
 - 2026-11-18 · R-352 · tests from the spec alone (worktree base `b96ee55`; spec read on main, with the rulings Q-3 A1, Q-4 A, Q-5 A, Q-6 A of D-254 and the note added 11:20Z: accepted, AC-9 checks `-- --show-output`) · files `xtask/tests/acceptance_t072.rs` (17 tests), `xtask/tests/guard_t072.rs` (7 tests); YAML reader and `if:` evaluator copied from `acceptance_t070.rs`; step scripts run in `bash --noprofile --norc -eo pipefail` (GitHub's form) with fakes first on `PATH`, Git Bash on Windows or a failure naming why; no platform cfg, no `#[ignore]`.

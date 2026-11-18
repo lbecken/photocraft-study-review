@@ -136,8 +136,9 @@ to `crates/kiln-commands/src/doc.rs`, two runs each, on a shared machine). The g
 above are from the bootstrap; the build tree after a whole gate run in a worktree is 3.8 GB
 (`du -sh target` after `cargo xtask ci` from an empty `target/`, same machine and date; 12 GB
 before T-054, D-182). Figures recorded before T-054 are records of their runs, made with Cargo's
-default debug info: the bootstrap table above, the CI table under "Runners, wall times and disk"
-(run 43752760283), and the 12 GB of a worktree after the gate (D-182). Both CI workflows already
+default debug info: the bootstrap table above and the 12 GB of a worktree after the gate (D-182).
+The CI table under "Runners, wall times and disk" is of run 44297266071, made with these settings
+(`tasks/ci-runs/T-072-round-1.md`). Both CI workflows already
 set `CARGO_INCREMENTAL=0`.
 
 ## Scorecard: `cargo xtask scorecard [--check]`
