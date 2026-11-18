@@ -1745,7 +1745,7 @@ fn ac1_s9_doc_must_be_a_tracked_md_file_under_docs() {
             "unix_only",
             "unix",
             &toml_str(&doc),
-            quote,
+            QUOTE,
             NONE,
         )]);
         t.write(REGISTRY, &format!("{}# {QUOTE}\n", r.text));
