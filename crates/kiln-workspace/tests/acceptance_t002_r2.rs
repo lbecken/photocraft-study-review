@@ -178,10 +178,7 @@ mod support {
                         },
                     );
                 } else if ft.is_dir() {
-                    out.insert(
-                        rel,
-                        Entry::Dir { mode: mode_of(&m) },
-                    );
+                    out.insert(rel, Entry::Dir { mode: mode_of(&m) });
                     walk(root, &p, out);
                 } else {
                     out.insert(

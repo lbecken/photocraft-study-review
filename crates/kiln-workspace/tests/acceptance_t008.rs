@@ -745,7 +745,7 @@ struct Swap {
 impl Swap {
     /// `parent == false`: `work/root` becomes a link to `outside`. `parent == true`: the root
     /// is `work/p/root` and `work/p` becomes a link to `evil`, which holds a `root/` (Unix only:
-/// Windows refuses to rename `work/p` while the root below it is held, T-072 round 3).
+    /// Windows refuses to rename `work/p` while the root below it is held, T-072 round 3).
     fn new(w: &Work, parent: bool) -> Swap {
         let s = if parent {
             Swap {
