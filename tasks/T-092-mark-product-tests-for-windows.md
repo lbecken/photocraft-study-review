@@ -772,6 +772,20 @@ notes (point 2; the latter pending Q-B).
   - W24 (`acceptance_t036_workspace.rs`): `#![cfg(unix)]` after `#![cfg(test)]` (header says why), one entry `<file>`,
     quote `paths.md` "A root that Kiln cannot open for reading is refused too", `counterpart = "none"`. Body unchanged.
     Linux: 1 passed; Windows/macOS stand-in: `Finished`; no-skip PASS (42 registered).
+  - W25-W30 (`confinement.rs`): twin `support::symlink` (same name and signature shape as std's, so call sites are
+    unchanged; Unix: std's `symlink`; Windows: relative targets rebuilt by `PathBuf::push` of their components,
+    `symlink_dir`/`symlink_file` by Pinned (d)). `mkfifo`, `bounded`, `TIMEOUT`, `not_a_file`, `T036_*`, `mod t036`
+    and the Unix imports: `#[cfg(unix)]` (used only by U parts). W25: unchanged body (every answer `outside_root`).
+    W26 (P/w): `cfg!(windows)` → each of `in`, `din/t.txt`, `ain`, `in2`, `back`, `dd` is `outside_root` at read,
+    `is_file` false, write refused, target unchanged; `ghost` `outside_root` at read and write, target not created;
+    Unix branch the same statements as before; the `DiskFs::new` errors (dangling, file link) are the same on both
+    (`DiskFs::new` is platform-free: `fs::metadata` first). W27, W30: `#[cfg(unix)]`, entries. W28 split: the original
+    keeps `a.txt`, `sub/f.txt`, `c.txt` with the same Unix assertions (one `no_temp_files` added at the end), Windows
+    `c.txt` → `outside_root`, dirty, target and snapshot unchanged; `swaps_between_open_and_save_are_checked_again_unix`
+    holds the FIFO `g.txt` with the same assertions, entry quote "Each request is checked again." (it names "or the file
+    by a FIFO"), counterpart the original. W29 (P/w): `loop`, `h39`, `h40`, `viaparent`, `absin` → `outside_root` on
+    Windows; Unix statements unchanged; `toloop`, `f.txt/x`, `nodir/x` the same on both. Linux: 7 passed (base 6 + the
+    new `_unix`); expected on Windows 4; stand-in clippy Windows and macOS: `Finished`; no-skip PASS (45 registered).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
