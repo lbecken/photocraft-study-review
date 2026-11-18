@@ -1099,20 +1099,31 @@ fn tree_order_and_counts() {
 
     // Rule 2 for `.git` of every kind, at any depth; a dot name sorts by its bytes. `s/t/Z` and
     // `s/t/z` are two files only where the file system does not fold case.
-    let dot_git = as_held_in(
-        tree_of(&[
-            (".git/HEAD", file("ref\n")),
-            ("s/.git", file("gitdir: elsewhere\n")),
-            ("s/.gitx", file("listed\n")),
-            ("s/t/.git", link("..")),
-            ("s/t/-", file("1")),
-            ("s/t/_", file("2")),
-            ("s/t/Z", file("3")),
-            ("s/t/\u{e9}", file("4")),
-            ("s/t/z", file("5")),
-        ]),
-        &w.dir,
+    let dot_git_written = tree_of(&[
+        (".git/HEAD", file("ref\n")),
+        ("s/.git", file("gitdir: elsewhere\n")),
+        ("s/.gitx", file("listed\n")),
+        ("s/t/.git", link("..")),
+        ("s/t/-", file("1")),
+        ("s/t/_", file("2")),
+        ("s/t/Z", file("3")),
+        ("s/t/\u{e9}", file("4")),
+        ("s/t/z", file("5")),
+    ]);
+    // The case probe is checked against the tree as written: both twins on disk where it says
+    // case is not folded, exactly one where it says it is (a lying probe fails here).
+    materialize(&dot_git_written, &w.at("dg-written"));
+    let twins = fs::read_dir(w.at("dg-written/s/t"))
+        .unwrap()
+        .filter(|e| e.as_ref().unwrap().file_name().eq_ignore_ascii_case("z"))
+        .count();
+    assert_eq!(
+        twins,
+        if folds_case(&w.dir) { 1 } else { 2 },
+        "`s/t/Z` and `s/t/z` on disk against the case probe"
     );
+    fs::remove_dir_all(w.at("dg-written")).unwrap();
+    let dot_git = as_held_in(dot_git_written, &w.dir);
     check_against_model("dot-git", &dot_git, &w.at("dg"));
     let got = listing(&tree_ok(&w.dir, &json!({}), &["--root", "dg"], TIMEOUT));
     assert_eq!(got.ignored, 3, "{got:?}");
