@@ -613,6 +613,11 @@ fn acw2_save_keeps_writable_target_writable() {
     let mut disk = new_disk(&w.at("root"), "keepperm");
     disk.write_atomic(&rp("f.txt"), NEW)
         .unwrap_or_else(|e| panic!("[{OS}] keepperm: write_atomic(f.txt): expected Ok, got {e:?}"));
+    assert_eq!(
+        fs::read(w.at("root/f.txt")).unwrap(),
+        NEW,
+        "[{OS}] keepperm: f.txt after first save"
+    );
     let meta = fs::metadata(w.at("root/f.txt")).unwrap();
     assert!(
         !meta.permissions().readonly(),
