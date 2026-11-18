@@ -2,11 +2,12 @@
 id: T-071
 title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; the gate's own tests compile and pass on all three"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (xtask/); the approval row must contain `gate paths`. No dependency change.
-state: tests_joined
+state: in_progress
 owner_role: planner
 scorecard_items: []     # none claimed; the tests it marks stay tied to their items
 depends_on: [T-070]     # its Windows evidence is T-070's gate-windows core-crates step; and both edit docs/development.md (§5.2)
 touches:                # one role per path (D-153). All but the last two: implementer. Product test files: T-079 (ruling Q-1 B, D-180)
+  - .github/workflows/platforms.yml          # GATE PATH: implementer: `--no-fail-fast` on the core-crates step's per-package `cargo test`, in the three gate jobs; nothing else (ruling s11, D-226)
   - xtask/src/platforms.rs                  # GATE PATH: new: the registry's reader and rules (shared by no-skip and scorecard)
   - xtask/src/noskip.rs                     # GATE PATH
   - xtask/src/scorecard.rs                  # GATE PATH
@@ -25,6 +26,7 @@ touches:                # one role per path (D-153). All but the last two: imple
   - crates/kiln-workspace/tests/acceptance_t002.rs        # the two inert helpers (lines 169–187) and the test that uses them (line 924): this task's own rule fails on them, so it fixes them
   - docs/development.md                     # implementer: the `no-skip` and `scorecard` rows of "The gate" and a paragraph on the registry
   - xtask/tests/acceptance_t071.rs          # GATE PATH: test author
+  - xtask/tests/acceptance_t070.rs          # GATE PATH: test author: the one expectation on the core-crates `cargo test` command, only if `--no-fail-fast` breaks it (ruling s11, D-226)
   - xtask/tests/guard_t071.rs               # GATE PATH: test author (today's no-skip findings that must stay)
 budget_tokens: 1100000  # high (v1.4); estimate about 800,000 after the split (R-285)
 iteration: 2
@@ -347,6 +349,48 @@ fails there, it is ruled as a stated platform difference before this task is que
   registry file is an empty registry; off Linux a failed test build is reported and the step goes on;
   `acceptance_t002::disk_save_replaces_via_rename_without_leftovers` fails on Windows by design, naming why, until
   the product does it there.
+
+### Rulings on review round 1 and CI round 1 (director, D-226; `reviews/T-071-r1.md` at `5bf01d8717a2d17088b72d38a758ef8b29540874`; record `tasks/ci-runs/T-071-round-1.md`; told to both builders)
+Threat model as before (D-026): honest mistakes and corner-cutting, not a determined evader. A hole that a plain
+way of writing a test falls into is closed; a contrived one is stated as a limit of the tool.
+- **s1 (finding 1; implementer).** A `cfg_attr` that makes `test` or `ignore` conditional
+  (`#[cfg_attr(<any predicate>, test)]`, `#[cfg_attr(<any>, ignore)]`) is a `cfg-disabled` finding.
+- **s2 (finding 2; implementer).** A helper's platform cfg is the combination of its own and its enclosing
+  `mod` and `impl` items' cfgs: twins whose cfg sits on the enclosing item are twins.
+- **s3 (finding 3; implementer).** A statement counts as a complement only if its platform cfg is its only cfg.
+- **s4 (finding 4; implementer).** Statements in blocks at any depth inside a test fn are inspected, a fn nested in
+  it included. The unit test that asserts otherwise is changed.
+- **s5 (finding 5; implementer).** An item's platforms are the intersection of its own cfg and its enclosing
+  items' cfgs; an empty intersection is a `cfg-disabled` finding, registered or not.
+- **s6 (finding 6; implementer).** The trivial bodies of the spec's list count in their path-qualified forms too
+  (`Option::None`, `Result::Ok(())`, `core::`/`std::` prefixes).
+- **s7 (finding 7; implementer).** An empty block or empty statement is not a complement.
+- **s8 (finding 8, spec gap).** Not closed; **stated as limits** in the "Platform tests" paragraph of
+  `docs/development.md`, each with a toy case the reviewer ran: a runtime `if cfg!(…)` branch that is not an
+  early return; `cfg` inside a macro call; twins written with `not(any(…))` or any form outside the six of p5; a
+  body that does nothing in a form outside the spec's list. `guard_t071` keeps pinning the runtime branch.
+- **s9 (finding 9; implementer).** `doc` is exactly: a repository-relative path, with `/`, of a tracked `.md` file
+  under `docs/`. Anything else (the registry, a test file, an absolute path, a file outside `docs/`) is
+  `platform-sentence`.
+- **s10 (findings 10, 15; the spec's text corrected here).** Pinned (a): eight new kinds. AC-6's scorecard clause
+  reads: off Linux the step's output names the platform and says the page was not compared **whether it passes
+  or reports problems** (when it reports problems, that line comes first). Implementer.
+- **s11 (finding 16; AC-6's Windows clause; implementer).** (i) The toy repositories of `xtask`'s tests are made
+  independent of the machine's git settings where they are created (line-ending conversion off, and whatever
+  else the helper leaves to the machine), in the helpers this task may edit; if a needed helper is outside
+  `touches`, name it in a QUESTION line. (ii) Comparisons of printed paths read `\` as `/`. (iii) A test of the
+  director's tools (queue, join, publish, worktree) that still cannot run on Windows for a stated reason is
+  registered (`unix` or `linux`, no counterpart, ruling Q-5 A); every other `xtask` test passes on Windows.
+  (iv) So that one CI round shows every failing binary, the core-crates step's per-package `cargo test` gets
+  `--no-fail-fast` in the three gate jobs of `.github/workflows/platforms.yml` (in `touches` for this one flag);
+  if `xtask/tests/acceptance_t070.rs` pins the command so that the flag breaks it, the test author adapts that
+  one expectation (it is in the test author's `touches` for that).
+- **s12 (test gaps; test author).** Tests that kill M9 (the `use` exemption widened to any item), M13 (a missing
+  registry file must not make the step pass empty: with platform tests present and no registry the step fails
+  with `platform-unlisted` lines) and M21 (methods in `impl` blocks are helpers); and a test for each of s1 to
+  s7, s9 and s10. The nit (a `skips.toml` entry of a platform kind) is not changed.
+- The pending CI criterion stays open: AC-6 and the Windows verdict of `guard_t054`'s backtrace test are read on
+  CI round 2 after the re-join.
 
 ## Log
 ### director
