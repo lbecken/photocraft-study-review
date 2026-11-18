@@ -372,3 +372,37 @@ platforms = "unix"
 doc = "docs/decisions.md"
 quote = "saving to a target the user cannot write returns `PermissionDenied` and leaves the file untouched"
 counterpart = "crates/kiln-workspace/tests/guard_t073.rs::acw2_save_of_read_only_target_is_refused_and_changes_nothing"
+
+[[test]]
+file = "crates/kiln-workspace/tests/acceptance_t008.rs"
+item = "non_regular_files_are_refused_without_blocking"
+platforms = "unix"
+doc = "docs/protocol/paths.md"
+quote = "Directories, FIFOs, sockets and devices are refused"
+counterpart = "none"
+reason = "the test makes a FIFO, a Unix-domain socket and reads /dev/null: Windows has no FIFOs or Unix-domain sockets that std can make, and reserved device names are ordinary files under the walk (T-074-probe-1.md I1-I6)"
+
+[[test]]
+file = "crates/kiln-workspace/tests/acceptance_t008.rs"
+item = "save_onto_non_regular_files_leaves_them_alone"
+platforms = "unix"
+doc = "docs/protocol/paths.md"
+quote = "Directories, FIFOs, sockets and devices are refused"
+counterpart = "none"
+reason = "the test saves onto a FIFO and a Unix-domain socket: Windows has no FIFOs or Unix-domain sockets that std can make, and reserved device names are ordinary files under the walk (T-074-probe-1.md I1-I6)"
+
+[[test]]
+file = "crates/kiln-workspace/tests/acceptance_t008.rs"
+item = "outside_root_wins_over_not_found_unix"
+platforms = "unix"
+doc = "docs/protocol/paths.md"
+quote = "A path whose location is outside the root is refused"
+counterpart = "crates/kiln-workspace/tests/acceptance_t008.rs::outside_root_wins_over_not_found"
+
+[[test]]
+file = "crates/kiln-workspace/tests/acceptance_t008.rs"
+item = "parent_swapped_between_requests_is_refused"
+platforms = "unix"
+doc = "docs/protocol/paths.md"
+quote = "the root, or a directory above it, was replaced, for example by a symlink to another directory"
+counterpart = "crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root"

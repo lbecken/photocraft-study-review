@@ -13,20 +13,34 @@
 //! socket paths stay below 108 bytes). Every call that touches a FIFO, socket or device runs on
 //! a helper thread and must return within [`HANG`]; on a hang the test unblocks the FIFO and
 //! fails, it never blocks the suite (D-028 (8)).
+//!
+//! Platforms (T-092): the FIFO, socket and device tests, and the swap of the root's parent (a
+//! rename Windows refuses while the root is held), are Unix tests listed in
+//! `xtask/platform-tests.toml`; every other test runs on every platform. On Windows every
+//! reparse point on the walk answers `outside_root` (T-074, `docs/protocol/paths.md`), so where a
+//! link that stays inside is followed on Unix the expected answer is chosen with `cfg!(windows)`.
 #![cfg(test)]
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::os::unix::fs::{FileTypeExt, MetadataExt, symlink};
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
+#[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::process::{Command, Stdio};
+#[cfg(unix)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
-use kiln_workspace::{DiskFs, Document, MemoryFs, RelPath, Vfs, VfsError};
+#[cfg(unix)]
+use kiln_workspace::MemoryFs;
+use kiln_workspace::{DiskFs, Document, RelPath, Vfs, VfsError};
 
 /// Bytes of every outside file an escape must not reach.
 const SECRET: &[u8] = b"s3cr3t-content\n";
@@ -64,9 +78,9 @@ impl Work {
         self.at("root")
     }
 
-    /// Create the symlink `work/<at>` pointing to `target` (verbatim).
+    /// Create the symlink `work/<at>` pointing to `target` (verbatim on Unix; see [`make_link`]).
     fn link(&self, at: &str, target: &str) {
-        symlink(target, self.at(at)).unwrap();
+        make_link(target, &self.at(at));
     }
 
     fn file(&self, at: &str, bytes: &[u8]) {
@@ -90,11 +104,34 @@ impl Drop for Work {
     }
 }
 
+/// A symlink at `link` to `target`, verbatim.
+#[cfg(unix)]
+fn make_link(target: &str, link: &Path) {
+    std::os::unix::fs::symlink(target, link).unwrap();
+}
+/// Windows: the target is built with `PathBuf::push` from its `/`-separated parts (ruling Q-B
+/// of T-092); a directory link when the target, resolved from the link's directory, is an
+/// existing directory when the link is made, else a file link (Pinned (d)).
+#[cfg(windows)]
+fn make_link(target: &str, link: &Path) {
+    let mut t = PathBuf::new();
+    for part in target.split('/') {
+        t.push(part);
+    }
+    let made = if link.parent().unwrap().join(&t).is_dir() {
+        std::os::windows::fs::symlink_dir(&t, link)
+    } else {
+        std::os::windows::fs::symlink_file(&t, link)
+    };
+    made.unwrap_or_else(|e| panic!("fixture: link {} -> {}: {e}", link.display(), t.display()));
+}
+
 fn rp(s: &str) -> RelPath {
     RelPath::new(s).unwrap_or_else(|e| panic!("RelPath::new({s:?}) rejected: {e:?}"))
 }
 
 /// Make a FIFO at `path` with the `mkfifo` utility, killed after [`HANG`].
+#[cfg(unix)]
 fn mkfifo(path: &Path) {
     let mut child = Command::new("mkfifo")
         .arg(path)
@@ -119,6 +156,7 @@ fn mkfifo(path: &Path) {
 
 /// Bind a Unix socket at a short path in the same file system and rename it to `path`. The
 /// listener is returned so the socket stays live for the test.
+#[cfg(unix)]
 fn socket_at(path: &Path) -> UnixListener {
     static N: AtomicUsize = AtomicUsize::new(0);
     let short = std::env::temp_dir().join(format!(
@@ -133,26 +171,52 @@ fn socket_at(path: &Path) -> UnixListener {
     listener
 }
 
-/// Every entry under `dir`, recursively, symlinks not followed: type, link target, bytes.
+/// What a non-directory entry is: link target, bytes, or (Unix) FIFO or socket.
+#[cfg(unix)]
+fn describe(p: &Path, ft: fs::FileType) -> String {
+    if ft.is_symlink() {
+        format!("link -> {}", fs::read_link(p).unwrap().display())
+    } else if ft.is_file() {
+        format!("file {}", fs::read(p).unwrap().escape_ascii())
+    } else if ft.is_fifo() {
+        "fifo".to_owned()
+    } else if ft.is_socket() {
+        "socket".to_owned()
+    } else {
+        "other".to_owned()
+    }
+}
+/// Windows: link target or bytes (std makes no FIFO or Unix-domain socket there).
+#[cfg(windows)]
+fn describe(p: &Path, ft: fs::FileType) -> String {
+    if ft.is_symlink() {
+        format!("link -> {}", fs::read_link(p).unwrap().display())
+    } else if ft.is_file() {
+        format!("file {}", fs::read(p).unwrap().escape_ascii())
+    } else {
+        "other".to_owned()
+    }
+}
+
+/// Every entry under `dir`, recursively, symlinks not followed: type, link target, bytes. Keys
+/// are `/`-joined relative paths on every platform.
 fn snapshot(dir: &Path) -> BTreeMap<String, String> {
     fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
         for e in fs::read_dir(dir).unwrap() {
             let p = e.unwrap().path();
-            let rel = p.strip_prefix(base).unwrap().to_string_lossy().into_owned();
+            let rel = p
+                .strip_prefix(base)
+                .unwrap()
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
             let ft = fs::symlink_metadata(&p).unwrap().file_type();
-            let desc = if ft.is_symlink() {
-                format!("link -> {}", fs::read_link(&p).unwrap().display())
-            } else if ft.is_dir() {
+            let desc = if !ft.is_symlink() && ft.is_dir() {
                 walk(base, &p, out);
                 "dir".to_owned()
-            } else if ft.is_file() {
-                format!("file {}", fs::read(&p).unwrap().escape_ascii())
-            } else if ft.is_fifo() {
-                "fifo".to_owned()
-            } else if ft.is_socket() {
-                "socket".to_owned()
             } else {
-                "other".to_owned()
+                describe(&p, ft)
             };
             out.insert(rel, desc);
         }
@@ -412,12 +476,29 @@ fn link_swapped_in_after_open_is_refused_at_save() {
     fs::remove_file(w.at("root/c.txt")).unwrap();
     w.link("root/c.txt", "real/t.txt");
     assert_reaches(&w, "c.txt", b"c original\n");
-    c.save(&mut fs_).unwrap();
-    assert!(!c.is_dirty());
-    assert_eq!(
-        fs::read(w.at("root/real/t.txt")).unwrap(),
-        b"EDIT c original\n"
-    );
+    if cfg!(windows) {
+        // T-074: on Windows every reparse point on the walk answers `outside_root`, a link
+        // that stays inside included; the save is refused and nothing changes.
+        let e = c.save(&mut fs_).unwrap_err();
+        assert_eq!(
+            save_message(&e),
+            "cannot save c.txt: resolves outside the root",
+            "Windows: save through an inside link"
+        );
+        assert!(c.is_dirty(), "Windows: c.txt document is no longer dirty");
+        assert_eq!(
+            fs::read(w.at("root/real/t.txt")).unwrap(),
+            b"c original\n",
+            "Windows: the link's target changed"
+        );
+    } else {
+        c.save(&mut fs_).unwrap();
+        assert!(!c.is_dirty());
+        assert_eq!(
+            fs::read(w.at("root/real/t.txt")).unwrap(),
+            b"EDIT c original\n"
+        );
+    }
     assert_eq!(
         fs::read_link(w.at("root/c.txt")).unwrap(),
         Path::new("real/t.txt")
@@ -436,6 +517,7 @@ fn link_swapped_in_after_open_is_refused_at_save() {
 // AC-6
 
 #[test]
+#[cfg(unix)]
 fn non_regular_files_are_refused_without_blocking() {
     let w = Work::new("nonreg");
     let fifo = w.at("root/p");
@@ -486,6 +568,7 @@ fn non_regular_files_are_refused_without_blocking() {
 // AC-7
 
 #[test]
+#[cfg(unix)]
 fn save_onto_non_regular_files_leaves_them_alone() {
     let w = Work::new("nonregsave");
     let fifo = w.at("root/p");
@@ -542,27 +625,17 @@ fn save_onto_non_regular_files_leaves_them_alone() {
 fn outside_root_wins_over_not_found() {
     let w = Work::new("prec");
     w.file("root/real/keep.txt", b"keep\n");
-    mkfifo(&w.at("outside/fifo"));
     w.link("root/gone", "../outside/none.txt");
     w.link("root/ghost2", "real/none.txt");
     w.link("root/up", "..");
     w.link("root/self", ".");
-    w.link("root/po", "../outside/fifo");
-    w.link("root/dn", "/dev/null");
     w.link("root/dlink", "../outside");
-    let fifos = vec![w.at("outside/fifo")];
+    let fifos: Vec<PathBuf> = Vec::new();
     // Preconditions: what each link reaches.
     assert!(!w.at("outside/none.txt").exists());
     assert!(!w.at("root/real/none.txt").exists());
     assert_eq!(fs::canonicalize(w.at("root/up")).unwrap(), w.dir);
     assert_eq!(fs::canonicalize(w.at("root/self")).unwrap(), w.root());
-    assert!(fs::metadata(w.at("root/po")).unwrap().file_type().is_fifo());
-    assert!(
-        fs::metadata(w.at("root/dn"))
-            .unwrap()
-            .file_type()
-            .is_char_device()
-    );
     assert_eq!(
         fs::canonicalize(w.at("root/dlink")).unwrap(),
         w.at("outside")
@@ -591,12 +664,12 @@ fn outside_root_wins_over_not_found() {
             &w,
         );
     }
-    // Dangling inside: not found.
+    // Dangling inside: not found (Windows: a link on the walk is `outside_root`, T-074).
     assert_refused(
         "read",
         read_t(&root, "ghost2", &fifos),
         "ghost2",
-        "not found",
+        if cfg!(windows) { OUTSIDE } else { "not found" },
         &w,
     );
     // Missing components inside the root: not found, as today.
@@ -606,22 +679,49 @@ fn outside_root_wins_over_not_found() {
     // Outside wins over not-a-file.
     assert_refused("read", read_t(&root, "up", &fifos), "up", OUTSIDE, &w);
     assert!(!is_file_t(&root, "up", &fifos));
-    // The root itself is a directory inside.
+    // The root itself is a directory inside (Windows: the link to it is `outside_root`).
     assert_refused(
         "read",
         read_t(&root, "self", &fifos),
         "self",
-        NOT_A_FILE,
+        if cfg!(windows) { OUTSIDE } else { NOT_A_FILE },
         &w,
     );
+    // The lexical refusal comes first, before any VFS call.
+    assert!(RelPath::new("../outside/secret.txt").is_err());
+
+    assert_eq!(snapshot(&w.dir), before);
+    assert_eq!(fs::read(w.at("outside/secret.txt")).unwrap(), SECRET);
+    assert_no_temp(&w.dir);
+}
+
+/// The Unix part of `outside_root_wins_over_not_found`: a link to an outside FIFO and a link to
+/// a device answer `outside_root`, without blocking.
+#[test]
+#[cfg(unix)]
+fn outside_root_wins_over_not_found_unix() {
+    let w = Work::new("precunix");
+    mkfifo(&w.at("outside/fifo"));
+    w.link("root/po", "../outside/fifo");
+    w.link("root/dn", "/dev/null");
+    let fifos = vec![w.at("outside/fifo")];
+    // Preconditions: what each link reaches.
+    assert!(fs::metadata(w.at("root/po")).unwrap().file_type().is_fifo());
+    assert!(
+        fs::metadata(w.at("root/dn"))
+            .unwrap()
+            .file_type()
+            .is_char_device()
+    );
+    let before = snapshot(&w.dir);
+    let root = w.root();
+
     // An outside FIFO is refused as outside, without blocking.
     assert_refused("read", read_t(&root, "po", &fifos), "po", OUTSIDE, &w);
     assert!(!is_file_t(&root, "po", &fifos));
     // An outside device.
     assert_refused("read", read_t(&root, "dn", &fifos), "dn", OUTSIDE, &w);
     assert!(!is_file_t(&root, "dn", &fifos));
-    // The lexical refusal comes first, before any VFS call.
-    assert!(RelPath::new("../outside/secret.txt").is_err());
 
     assert_eq!(snapshot(&w.dir), before);
     assert_eq!(fs::read(w.at("outside/secret.txt")).unwrap(), SECRET);
@@ -644,7 +744,8 @@ struct Swap {
 
 impl Swap {
     /// `parent == false`: `work/root` becomes a link to `outside`. `parent == true`: the root
-    /// is `work/p/root` and `work/p` becomes a link to `evil`, which holds a `root/`.
+    /// is `work/p/root` and `work/p` becomes a link to `evil`, which holds a `root/` (Unix only:
+/// Windows refuses to rename `work/p` while the root below it is held, T-072 round 3).
     fn new(w: &Work, parent: bool) -> Swap {
         let s = if parent {
             Swap {
@@ -675,7 +776,7 @@ impl Swap {
     /// through the root path with ordinary file-system calls.
     fn swap(&self) {
         fs::rename(&self.moved, &self.aside).unwrap();
-        symlink(self.link_to, &self.moved).unwrap();
+        make_link(self.link_to, &self.moved);
         assert_eq!(fs::read(self.root.join("secret.txt")).unwrap(), SECRET);
         assert_eq!(fs::read(self.root.join("f.txt")).unwrap(), b"outside f\n");
     }
@@ -737,6 +838,7 @@ fn root_swapped_between_requests_is_refused() {
 }
 
 #[test]
+#[cfg(unix)]
 fn parent_swapped_between_requests_is_refused() {
     swapped_root_is_refused("parentswap", true);
 }
@@ -757,22 +859,36 @@ fn replace_root(w: &Work, link: bool) -> (PathBuf, String) {
     let fresh = if link { w.at("fresh") } else { root.clone() };
     fs::create_dir(&fresh).unwrap();
     if link {
-        symlink("fresh", &root).unwrap();
+        make_link("fresh", &root);
     }
     fs::write(fresh.join("secret.txt"), SECRET).unwrap();
     // The replacement really is what the root path now reaches.
     assert_eq!(fs::read(root.join("secret.txt")).unwrap(), SECRET);
     assert!(!root.join("f.txt").exists());
     let new = fs::metadata(&root).unwrap();
-    let note = format!(
+    (fresh, identity_note(&old, &new))
+}
+
+/// Whether the replacement reused the old root's inode number (Unix).
+#[cfg(unix)]
+fn identity_note(old: &fs::Metadata, new: &fs::Metadata) -> String {
+    format!(
         "old root inode {} (dev {}), new {} (dev {}): inode number reused: {}",
         old.ino(),
         old.dev(),
         new.ino(),
         new.dev(),
         old.ino() == new.ino() && old.dev() == new.dev()
-    );
-    (fresh, note)
+    )
+}
+/// Windows: stable Rust exposes no file identity, so the note names only what was replaced.
+#[cfg(windows)]
+fn identity_note(old: &fs::Metadata, new: &fs::Metadata) -> String {
+    format!(
+        "old root a directory: {}, new root a directory: {} (no file identity on Windows)",
+        old.is_dir(),
+        new.is_dir()
+    )
 }
 
 fn removed_root_is_refused(name: &str, link: bool) {

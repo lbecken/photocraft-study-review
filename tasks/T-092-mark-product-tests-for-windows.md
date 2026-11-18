@@ -743,6 +743,24 @@ notes (point 2; the latter pending Q-B).
     W10, W11: `#[cfg(unix)]`, entries added now (registry kept in step with each file so `no-skip` stays green). Linux:
     fixtures and assertions the same (same link targets, same modes, same snapshot fields); 10 passed as base. Stand-in
     clippy Windows and macOS `-D warnings`: `Finished`. main's `no-skip`: PASS, 37 registered (10 pending).
+  - W12-W21 (`acceptance_t008.rs`): twin `make_link` (Unix: `symlink` verbatim as before; Windows: Pinned (d), Q-B)
+    and twin `describe` (Windows without the FIFO/socket branches) under one `snapshot`, whose keys are now
+    `/`-joined components on every platform (on Linux the same strings; on Windows `assert_no_temp`'s `rsplit('/')`
+    would otherwise see `\`-joined keys and check nothing); twin `identity_note` (W20/W21: the inode is only in the
+    message; Windows names the kinds). `mkfifo`, `socket_at`, `MemoryFs` and the Unix imports: `#[cfg(unix)]`.
+    W15, W16, W19: `#[cfg(unix)]`, entries added. W17 split: the original keeps every link that Windows can make
+    (`gone`, `ghost2`, `up`, `self`, `dlink`) with the same assertions on Unix and `cfg!(windows)` → `outside_root` for
+    `ghost2` and `self`; `outside_root_wins_over_not_found_unix` holds the FIFO `po` and the device `dn` with their
+    preconditions and assertions unchanged (its own `Work` `precunix`), entry → the original. W18, W20, W21: same
+    expected values on every platform (each answer is `outside_root` already), so no `cfg!(windows)` was needed.
+    W14: part (c) (`c.txt` → `real/t.txt`, a link that stays inside) is followed on Unix; on Windows T-074 makes it
+    `outside_root`, so I chose that expectation with `cfg!(windows)` (save refused, document dirty, target unchanged):
+    see QUESTION 1. Linux: 11 passed (base 10 + the new `_unix`); stand-in clippy Windows and macOS: `Finished`;
+    expected on Windows 7. main's `no-skip`: PASS, 41 registered (10 pending).
+  - QUESTION 1 (W14): the table sorts `link_swapped_in_after_open_is_refused_at_save` as P ("the answer is
+    `outside_root` on every platform"), but its part (c) saves through a link that stays inside, which T-074 refuses
+    on Windows. I wrote it as P/w (`cfg!(windows)` on that part's expectation; no cfg attribute, so AC-2 holds).
+    Recommendation: accept P/w for W14 (the same treatment M2 gave the split originals).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
