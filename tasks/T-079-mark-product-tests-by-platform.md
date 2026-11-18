@@ -561,6 +561,13 @@ the 4 fixes are unchanged by T-071's merge (their files are not in the patch). N
   platform test(s) registered (8 pending), today = 2026-11-18`; `hygiene` (56 of 68 review files, 678 tracked files
   clean), `scorecard` (64 items: 47 verified, 0 implemented, 0 failing, 17 planned), `layers`, `ui-commands`,
   `schema` PASS.
+- gate attempt 3 (`cargo xtask ci` at `6caa3a7`): `GATE PASSED in 602.0s` (`test` 1134 passed, 0 failed, 0
+  ignored in 133 suites; `no-skip` `… 20 platform test(s) registered (8 pending) …`). Attempts so far: 3 local (all
+  green) and 1 CI round. Scratch dir deleted. Expected on macOS in CI round 2: `acceptance_t019_cli` runs all 7
+  tests to a verdict (the chain is no longer removed by recursion); `deep_trees_stop_at_the_depth_bound` and
+  `tree_order_and_counts` pass if nothing else differs there (the folding branch has never run here; `twins` should
+  be 1 there). Not run: macOS, Windows. Next: director (join, CI round 2).
+- CI-REQUEST: 6caa3a7443e74ad4df22f069ba20fb173b8dcdbb
 <!-- end implementer log -->
 ### test author
 - 2026-11-18 · R-328 · tests written (one QUESTION) · did: `xtask/tests/acceptance_t079.rs` (2 tests) and
