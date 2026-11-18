@@ -790,6 +790,15 @@ notes (point 2; the latter pending Q-B).
     `assert_links_kept` shared; `cfg!(windows)` → each of `in`, `din/t.txt`, `ain`, `in2`, `back` is `outside_root` at
     read and write, `is_file` false, target unchanged; `ghost` refused, not created; the Unix branch is the former
     body; `DiskFs::new`'s errors (dangling, file link) the same on both. Linux: 1 passed; stand-in clippy: `Finished`.
+  - W32, W33 (`guard_t036_removal_workspace.rs`): `#![cfg(unix)]` (header says why), one entry `<file>` →
+    `disk.rs::tests::root_removed_on_every_platform` (the prototype's form). Body unchanged.
+  - W34, W35 (`guard_t036_workspace.rs`): twin `symlink` (a directory link; Windows `symlink_dir`, target by
+    `PathBuf::push`) and twin `remove_dir_link` (Unix `remove_file` as before; Windows `remove_dir`, ruling Q-B); the
+    snapshot's keys `/`-joined (same strings on Linux; `assert_nothing_created`'s `rsplit('/')` needs it on Windows).
+    W34: body otherwise unchanged. W35 split: the original runs `RenameRoot` and `Remove` (same assertions);
+    `vanished_root_is_refused_unix` runs `RenameParent` through the same `vanished_root_case`; the variant and its match
+    arm carry `#[cfg(unix)]` (else dead on Windows). Entry → `guard_t073.rs::acw2_root_parent_replaced_is_outside_root`.
+    Linux: 2 + 3 passed (base 2 + 2, plus the new `_unix`); stand-in clippy Windows and macOS: `Finished`.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
