@@ -799,6 +799,13 @@ notes (point 2; the latter pending Q-B).
     `vanished_root_is_refused_unix` runs `RenameParent` through the same `vanished_root_case`; the variant and its match
     arm carry `#[cfg(unix)]` (else dead on Windows). Entry → `guard_t073.rs::acw2_root_parent_replaced_is_outside_root`.
     Linux: 2 + 3 passed (base 2 + 2, plus the new `_unix`); stand-in clippy Windows and macOS: `Finished`.
+  - W40, W41 (`disk.rs` test module, two new tests, no product line): `leftover_at_temp_name_is_never_touched_on_every_platform`
+    (the original's fixture with `set_readonly(true)` for mode 0444, checked by `readonly()`) and
+    `failed_save_after_writability_check_leaves_target_and_listing_unchanged_on_every_platform` (the original's three
+    failures; setup without a mode; `snapshot_on_every_platform` = listing, bytes, read-only attribute; case 1 also
+    asserts `AlreadyExists`, as P-C1 measured). The two pending entries now name them (no `reason`, `task`, `expires`).
+    Linux lib: 60 passed (base 58); stand-in clippy `--lib --profile test -D warnings` Windows and macOS: `Finished`.
+    main's no-skip: PASS, 47 registered (8 pending); no `task = "T-092"` left.
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->

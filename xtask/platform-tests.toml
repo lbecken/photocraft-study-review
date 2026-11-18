@@ -229,10 +229,7 @@ item = "tests::leftover_at_temp_name_is_never_touched"
 platforms = "unix"
 doc = "docs/decisions.md"
 quote = "a save never reads, writes, replaces or deletes any file other than its target and a temp file it created itself"
-counterpart = "pending"
-reason = "the test makes the leftover read-only and checks it by its mode: Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have; the Windows test of the same sentence is written by T-092"
-task = "T-092"
-expires = "2026-12-31"
+counterpart = "crates/kiln-workspace/src/disk.rs::tests::leftover_at_temp_name_is_never_touched_on_every_platform"
 
 [[test]]
 file = "crates/kiln-workspace/src/disk.rs"
@@ -274,10 +271,7 @@ item = "tests::failed_save_after_writability_check_leaves_target_and_listing_unc
 platforms = "unix"
 doc = "docs/decisions.md"
 quote = "target emptied when a save fails late"
-counterpart = "pending"
-reason = "the test sets the target's mode and compares it in its snapshot: Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have; the Windows test of the same sentence is written by T-092"
-task = "T-092"
-expires = "2026-12-31"
+counterpart = "crates/kiln-workspace/src/disk.rs::tests::failed_save_after_writability_check_leaves_target_and_listing_unchanged_on_every_platform"
 
 [[test]]
 file = "crates/kiln-workspace/src/disk.rs"
