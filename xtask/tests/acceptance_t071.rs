@@ -1406,9 +1406,10 @@ fn has_line(o: &Out, kind: &str, file: &str, lines: RangeInclusive<usize>, item:
         .any(|l| has_token(l, item) && names_at(l, file, &lines))
 }
 
-/// s1: a `cfg_attr` that makes `test` or `ignore` conditional is `cfg-disabled`.
+/// s1 as clarified (question 8, D-226): `#[cfg_attr(<any predicate>, test)]` is `cfg-disabled`;
+/// `#[cfg_attr(<predicate>, ignore)]` stays exactly one `cfg-attr-ignore` finding.
 #[test]
-fn ac1_s1_conditional_test_or_ignore_by_cfg_attr_is_cfg_disabled() {
+fn ac1_s1_conditional_test_is_cfg_disabled_and_conditional_ignore_stays_cfg_attr_ignore() {
     let file = "crates/toy/tests/attr.rs";
     let t = Toy::no_skip("s1-cfg-attr");
     t.write(
@@ -1417,17 +1418,31 @@ fn ac1_s1_conditional_test_or_ignore_by_cfg_attr_is_cfg_disabled() {
     );
     let o = t.run_no_skip();
     assert_eq!(o.code, Some(1), "conditional test/ignore:\n{}", o.text);
-    for (item, line) in [
-        ("test_on_unix_only", 2),
-        ("ignored_on_windows", 3),
-        ("test_with_feature", 4),
-    ] {
+    for (item, line) in [("test_on_unix_only", 2), ("test_with_feature", 4)] {
         assert!(
             has_line(&o, "cfg-disabled", file, line..=line, item),
             "s1: a `cfg-disabled` line naming {file}:{line} and `{item}`:\n{}",
             o.text
         );
     }
+    let at3: Vec<&str> = o
+        .text
+        .lines()
+        .filter(|l| names_at(l, file, &(3..=3)))
+        .collect();
+    assert_eq!(
+        at3.len(),
+        1,
+        "the conditional ignore gives exactly one finding at {file}:3:\n{}",
+        o.text
+    );
+    assert!(
+        has_token(at3[0], "cfg-attr-ignore")
+            && !has_token(at3[0], "cfg-disabled")
+            && has_token(at3[0], "ignored_on_windows"),
+        "the finding at {file}:3 is `cfg-attr-ignore` naming `ignored_on_windows`: {}",
+        at3[0]
+    );
 }
 
 /// s2: a helper's platform cfg includes its enclosing `mod`'s and `impl`'s cfgs.
