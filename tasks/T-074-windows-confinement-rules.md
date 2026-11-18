@@ -2,7 +2,7 @@
 id: T-074
 title: "On Windows, refuse every reparse point on the walk as outside the root, keep saves working past links at temporary names, state the Windows walk and root in the documents, and give the nine pending disk.rs tests their Windows counterparts"
 tier: high              # METHODOLOGY v1.5 §4: the confinement boundary (the disk.rs walk) and the persistence path (the temporary file); gate paths (xtask/platform-tests.toml, xtask/tests/); the approval row must say `gate paths`. No dependency change.
-state: draft
+state: ready
 owner_role: planner
 scorecard_items: []     # none claimed: the ws.* items are verified on Linux; per-platform confirmation is the evaluator's (ADR-0009 Decision 3)
 depends_on: [T-073]     # merged (8bf4c3a). T-072 runs beside this task (D-254); its merge is needed before this task's CI round, not before dispatch (pending CI criterion)
@@ -14,7 +14,8 @@ touches:                # one role per path (D-153); cut by D-254 ruling 1 (name
   - docs/control-protocol.md                 # implementer: exactly the sentence "How symlinks are followed there is not yet stated (T-074)."
   - crates/kiln-workspace/tests/guard_t074.rs   # test author: the Windows runtime tests (Interface (6)); pass on Unix base
   - xtask/tests/acceptance_t074.rs           # GATE PATH: test author: AC-3, the registry criterion (fails on base everywhere)
-budget_tokens: 1100000  # high (v1.5); estimate about 780,000 (see Estimate)
+  - crates/kiln-workspace/tests/acceptance_t002.rs  # test author: the one test `save_through_symlink_updates_target` only (D-256 Q-5; Interface (7))
+budget_tokens: 1100000  # high (v1.5); estimate about 880,000 (D-256; see Estimate)
 iteration: 2
 found_by: planner       # ADR-0009 (R-255); re-specified under v1.5
 origin_task: null
@@ -96,7 +97,18 @@ changed. A failure with nothing at the name is returned as now. Reason for a fix
 "a leftover … only makes the next save use the next name" (`disk.rs:11-13`), and a project holding a junction at
 `.kiln-tmp-0` (a hostile or merely odd repository) would otherwise make every save in that directory fail on Windows
 (PROBE H2). Which of the two links in H refused the create is not determinable from the record (the loop stops at the
-first error); the tests cover each alone. Only the Windows `create_temp` (`disk.rs:431-449`) changes.
+first error); the tests cover the pair exactly as H planted it and each kind alone (D-256 Q-2). Only the Windows
+`create_temp` (`disk.rs:431-449`) changes. Exactly (D-256 Q-1, Q-3):
+- The create opens with `std::os::windows::fs::OpenOptionsExt::custom_flags(0x0020_0000)` (`FILE_FLAG_OPEN_REPARSE_POINT`)
+  in addition to `write(true)` and `create_new(true)`; no other flag.
+- For each name `.kiln-tmp-0` … `.kiln-tmp-99` in order: the create succeeds → that name is used; it fails with
+  `AlreadyExists` → next name; it fails otherwise and `fs::symlink_metadata(<name>)` is `Ok` → next name; it fails
+  otherwise and `symlink_metadata` fails (whatever its kind, `NotFound` included) → the create's own error is returned
+  (`VfsError::Io` with the create's kind and message, as now).
+- When no name was free (every one of the 100 skipped by the two rules above), the save fails as on Unix:
+  `VfsError::Io` with kind `AlreadyExists` and message "all 100 temporary file names are taken" (`disk.rs:445-448`),
+  whatever the individual creates answered. No test is required for the mixed case (D-256 Q-3); the existing no-cfg
+  `all_temp_names_taken_fails_without_changes_then_recovers` (`disk.rs:774-803`) keeps covering plain files on Windows.
 ### (4) The root cases on Windows (measured at base; unchanged by this task; stated in paths.md)
 - `--root` a junction: its target is the root (PROBE E2, E3); the junction retargeted while a session runs → every call
   `outside_root`, nothing read in the other directory (E5); pointed back → the session works again (E7).
@@ -106,6 +118,13 @@ first error); the tests cover each alone. Only the Windows `create_temp` (`disk.
   allows it (PROBE F1, F7), every call then answers `outside_root` (F3, F8), also after a new directory takes the name
   (F4, F5).
 - `..` in the `--root` text is resolved by its text before any link is followed (PROBE K2-K4): a difference from Unix.
+- Unprobed, expected the same and **unchecked until this task's first CI round** (spec check F-6, F-7): a directory
+  symbolic link as `--root` (as a junction, first bullet); the held root removed and a junction to a new directory put at
+  its name (every call `outside_root`). The first CI round must show both in `guard_t074` (and #11, #12 of (5)). If it
+  shows otherwise: a call that is not `outside_root` after the root was replaced is a confinement defect — the builder
+  logs `QUESTION:` and stops, the director rules; a symbolic link as `--root` that does not behave as a junction makes
+  the reviewer narrow the `paths.md` root sentence of Pinned (i) to junctions and state the symbolic-link case as what was
+  measured. No document sentence rests on the removed-then-junction case.
 ### (5) The nine pending registry entries (`disk.rs::tests::…`, `platforms = "unix"`; the Unix tests stay as they are)
 Each becomes `counterpart = "<file>::<item>"` (no `reason`, `task`, `expires`). The new tests are the implementer's
 (D-254 ruling 3), in `disk.rs`'s `#[cfg(test)]` module, **with no platform cfg on the test fn**: each asserts the Unix
@@ -113,33 +132,67 @@ behaviour on Unix and this Interface on Windows, chosen with `cfg!(windows)`, bo
 helper may be defined per platform (Unix `symlink`; Windows `std::os::windows::fs::symlink_file`/`symlink_dir`, which
 work on the runner, PROBE A1, A2, A5, A6, and a junction by `cmd /C mklink /J` under a timeout, PROBE A3), each form doing
 its work (`no-skip`'s `inert-helper` rule). They run on Windows in T-073's reported step (`-p kiln-workspace --lib`).
+The new tests' names are fixed here (the registry cites them and AC-3 checks them; D-256): the implementer uses exactly
+the names in the table, all in `crates/kiln-workspace/src/disk.rs`'s module `tests`.
 
-| # | Entry (`tests::`) | Windows counterpart |
-|---|---|---|
-| 2 | `symlink_at_temp_name_is_not_followed` | new: a junction at `.kiln-tmp-0`, and separately a file symlink there, are not followed or changed; the save succeeds under the next free name (Interface (3)) |
-| 8 | `replace_swaps_inode_keeps_permissions_and_follows_symlinks` | new: a save through a file symlink (relative and absolute) or a junction is `outside_root`; link, target and directory unchanged |
-| 9 | `root_replaced_by_a_symlink_between_requests_is_outside` | new: Interface (4), second bullet |
-| 10 | `parent_replaced_by_a_symlink_between_requests_is_outside` | `crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root` (exists, no platform cfg; the parent's rename is refused on Windows, run 44268710587) |
-| 11 | `root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside` | new: Interface (4), third bullet |
-| 12 | `root_given_through_a_link_that_is_retargeted` | new: Interface (4), first bullet |
-| 13 | `link_target_with_trailing_slash_requires_a_directory` | the new test of #8 (a directory link refused; on Windows no link is followed, so a target's trailing `/` has no Windows form) |
-| 14 | `check_location_is_ok_for_every_inside_location` | new: `check_location` `Ok` for a file, a directory, nothing and a missing parent; `outside_root` for a link or junction at a middle and at the last component |
-| 15 | `check_location_refuses_outside_loops_and_a_replaced_root` | new: a junction to outside, a junction to inside, a junction loop and a replaced root each `outside_root` |
+| # | Entry (`tests::`) | Counterpart (exact item) | What it asserts on Windows |
+|---|---|---|---|
+| 2 | `symlink_at_temp_name_is_not_followed` | `tests::link_at_temp_name_is_not_followed_on_every_platform` | Interface (3), four fixtures each in a fresh directory: (a) H's pair (junction at `.kiln-tmp-0` to an outside directory, file symlink at `.kiln-tmp-1` to a missing outside file); (b) a junction alone at `.kiln-tmp-0`; (c) a file symlink alone at `.kiln-tmp-0` to an existing outside file; (d) a dangling file symlink alone at `.kiln-tmp-0` to a missing outside path. Each: the save `Ok`, the target holds the new bytes, the links still links with their targets, the outside unchanged and the missing path still missing, no `.kiln-tmp-*` left besides the planted ones |
+| 8 | `replace_swaps_inode_keeps_permissions_and_follows_symlinks` | `tests::save_through_a_link_on_every_platform` | a save through a file symlink (relative and absolute), a directory symlink and a junction on the way is `OutsideRoot`; link, target and directory unchanged |
+| 9 | `root_replaced_by_a_symlink_between_requests_is_outside` | `tests::root_replaced_by_a_link_on_every_platform` | Interface (4), second bullet |
+| 10 | `parent_replaced_by_a_symlink_between_requests_is_outside` | `crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root` (exists, no platform cfg; the parent's rename is refused on Windows, run 44268710587) | — (exists) |
+| 11 | `root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside` | `tests::root_removed_on_every_platform` | Interface (4), third bullet (a new directory at the name: PROBE F4, F5), and a junction to a new directory at the name (unprobed: Interface (4), last paragraph) |
+| 12 | `root_given_through_a_link_that_is_retargeted` | `tests::root_given_through_a_link_on_every_platform` | Interface (4), first bullet, once with a junction and once with a directory symbolic link as `--root` (D-256 Q-4) |
+| 13 | `link_target_with_trailing_slash_requires_a_directory` | `tests::save_through_a_link_on_every_platform` (the test of #8; on Windows no link is followed, so a target's trailing `/` has no Windows form) | — |
+| 14 | `check_location_is_ok_for_every_inside_location` | `tests::check_location_inside_on_every_platform` | `check_location` `Ok` for a file, a directory, nothing and a missing parent; `OutsideRoot` for a link or junction at a middle and at the last component |
+| 15 | `check_location_refuses_outside_loops_and_a_replaced_root` | `tests::check_location_outside_on_every_platform` | a junction to outside, a junction to inside, a junction loop and a replaced root each `OutsideRoot` |
+
+Registry text (the implementer's; exact): in each of the nine entries, keep the lines `file`, `item`, `platforms`, `doc`,
+`quote` byte for byte and replace the four lines `counterpart = "pending"`, `reason = …`, `task = "T-074"`,
+`expires = "2026-12-31"` by the single line `counterpart = "<file>::<item>"` with `<file>` =
+`crates/kiln-workspace/src/disk.rs` and `<item>` from the table (#10: the `guard_t073.rs` path in full). Example (#2):
+`counterpart = "crates/kiln-workspace/src/disk.rs::tests::link_at_temp_name_is_not_followed_on_every_platform"`. No
+other line of the registry changes and no entry is added.
 
 ### (6) Tests (test author)
 - `crates/kiln-workspace/tests/guard_t074.rs`: Rust API (`DiskFs`, `Vfs`, `Document`); no platform cfg in the file (T-073
   ruling Q-2, D-245); every fixture below `CARGO_TARGET_TMPDIR`. For each kind the runner can make (file symlink relative
   and absolute, directory symlink, junction; leading inside, outside, nowhere; at a middle and at the last component):
   `read`, `write_atomic`, `is_file`, `list_dir`, `check_location` and a `Document` save answer Interface (1)-(2) on Windows
-  and today's behaviour on Unix; Interface (3); the four root cases of (4), each printing one `MEASURED:` line as in
-  `guard_t073.rs`. A case the runner cannot set up fails naming why, never passes (§8.1). It must not need a module file
+  and today's behaviour on Unix; Interface (3) with the four fixtures (a)-(d) of (5) #2 (H's pair, the junction alone,
+  the file link alone, the dangling file link to outside alone); the root cases of (4) — a junction as `--root` and
+  retargeted, a **directory symbolic link as `--root`** and retargeted (D-256 Q-4), replaced, removed (also with a junction
+  to a new directory at the name), `..` in the root text — each printing one `MEASURED:` line as in `guard_t073.rs`
+  (`MEASURED: <case>: <what was observed>`), and after a removal or replacement every one of `read`, `write_atomic`,
+  `is_file` (false), `list_dir`, `check_location` (spec check F-5). A case the runner cannot set up fails naming why, never passes (§8.1). It must not need a module file
   in a subdirectory of `tests/` (T-072's step runs each `tests/*.rs` as one target).
 - `xtask/tests/acceptance_t074.rs`: AC-3, reading `xtask/platform-tests.toml` as text as `acceptance_t079.rs` does.
+### (7) `acceptance_t002::save_through_symlink_updates_target` (test author; D-256 Q-5)
+This existing test has no platform cfg, makes a relative file link inside the root on every platform
+(`acceptance_t002.rs:184-191`, Windows: `symlink_file`) and asserts the save goes through it; it passes on Windows at base
+(`tasks/ci-runs/T-073-round-2.md:52`: of `io.save-atomic`'s three tests only `disk_save_replaces_via_rename_without_leftovers`
+fails there) and would fail after Interface (1). Form, chosen by a run of main's `no-skip` (spec check, D-256 Q-5): the
+name and the fixture lines stay; the body after `let path = rp("d/link.txt");` becomes `if cfg!(windows) { … } else {
+<today's body, unchanged> }`, the Windows branch asserting: `Document::open(&disk, &path)` is
+`Err(OpenError::Vfs(VfsError::OutsideRoot { .. }))`; `disk.write_atomic(&path, …)` is
+`Err(VfsError::OutsideRoot { path })`; `d/target.txt` still holds `target\n`; `d/link.txt` is still a symbolic link; the
+listing of `d` equals the one before. No early `return` (main's `no-skip` calls that a skip: run, FAIL `early-return`), no
+platform cfg added, no registry entry (main's `no-skip` on that form: PASS, `35 … (19 pending)` on base + this change).
+No other line of `acceptance_t002.rs` changes: **T-092 later rewrites the rename test in this file**
+(`disk_save_replaces_via_rename_without_leftovers`, its `#[cfg(windows)] panic!` at `:939-942`) and re-checks this test
+when it is specified.
 
 ## Pinned
 - (a) Errors: no new kind; a reparse point is `VfsError::OutsideRoot` (`rejected` / `outside_root`, messages as now).
 - (b) Files: `.kiln-tmp-N` as now (Interface (3) changes only which names count as taken). Registry layout as
-  `xtask/platform-tests.toml:9-18`.
+  `xtask/platform-tests.toml:9-18`; the nine entries' exact text in Interface (5).
+- (b2) The Windows temporary create (D-256 Q-1): `custom_flags(0x0020_0000)` (`FILE_FLAG_OPEN_REPARSE_POINT`) with
+  `create_new(true)` makes the create act on the name itself: an existing link or junction at the name is never followed,
+  so its target is neither created nor opened, and the create fails (the name exists) — then Interface (3)'s rules apply.
+  This rests on the Win32 documentation of `CreateFileW` (read, not run here) and is **unchecked until this task's first CI
+  round**, where (5) #2 fixtures (c) and (d) and `guard_t074`'s Interface (3) cases show it (the outside file unchanged, the
+  missing outside path still missing). If the round shows a target created or changed, it is a confinement defect: the
+  builder logs `QUESTION:` and stops; no document sentence about temporary names stands until it is shown.
 - (c) Order: lexical check, root check, walk (the reparse test at each component, before following or descending), type,
   open, as now.
 - (d) Platform: Windows x86_64 MSVC (CI `windows-2025`; the probe's volume was `D:`, PROBE B4, I9; its file system was not
@@ -157,7 +210,13 @@ its work (`no-skip`'s `inert-helper` rule). They run on Windows in T-073's repor
   (`platform-tests.toml:310-376`; `grep -n 'doc = "docs/protocol/paths.md"' xtask/platform-tests.toml` → 7 entries and the
   template comment `:13`; spec check C-1) keep their quoted sentences word for word. On Windows (spec check F-11):
   `crates/kiln-workspace/tests/acceptance_t002.rs::save_through_symlink_updates_target` (no platform cfg, a relative file
-  link made by `symlink_file`, `:188-191`, `:945-973`) passes at base and fails after Interface (1) — Q-5.
+  link made by `symlink_file`, `:188-191`, `:945-973`) passes at base and would fail after Interface (1): it gets the
+  Windows branch of Interface (7) (D-256 Q-5). Main's tests on that path (D-249; `grep -rn "acceptance_t002" --include=*.rs
+  crates apps xtask`): `xtask/tests/guard_t079.rs:1291-1305` lists its test names, among them this one (`:1301`), and asks
+  only that they still exist — the name stays: `cargo test -p xtask --test guard_t079` on the changed file in the spec
+  check's clone → 4 passed, 0 failed; `xtask/tests/acceptance_t005_r2.rs:164` names `xtask/tests/acceptance_t002.rs`, another
+  file; `acceptance_t002_r2.rs` is another file; `scorecard/items/io.save-atomic.toml:5` lists the name (unchanged; the
+  scorecard is computed on Linux, where the test's body is today's).
 - (g) Worked examples, executed on the runner at base (PROBE lines) against the model "Windows follows no link; a taken
   name is skipped": `read sr` (relative file link to `f.txt`): base `Ok([102])` (C1), after `OutsideRoot`; `read j/x`
   (junction to `d` inside, `d/x` exists): base `OutsideRoot` (C3), after `OutsideRoot`; `write_atomic f.txt` with links at
@@ -189,8 +248,9 @@ its work (`no-skip`'s `inert-helper` rule). They run on Windows in T-073's repor
   - `paths.md` "The root", a Windows bullet: "A junction or symbolic link given as `--root` leads to the root; if it is
     pointed elsewhere while a session runs, every call answers `outside_root`, and pointed back the session works there
     again, as on Linux and macOS." Evidence: for a junction PROBE E2-E7 (after a retarget only `read` was run, E5),
-    G1-G5; **a symbolic link as `--root`: unchecked** (the probe made junctions only, E1, E4, E6, G2, G4), the reviewer's
-    first check (spec check C-4, Q-4).
+    G1-G5; **a symbolic link as `--root`: unchecked at base** (the probe made junctions only, E1, E4, E6, G2, G4), shown on
+    the head by `guard_t074.rs` (D-256 Q-4); the reviewer checks that `MEASURED:` line before the sentence stands, else
+    narrows it (Interface (4), last paragraph; spec check C-4).
   - `paths.md` "Residual limits", a new bullet: "On Windows every
     reparse point on the way is refused, so files that are reparse points without being links — for example cloud
     placeholder files of a synced folder or deduplicated files — cannot be opened or saved; they answer `outside_root`
@@ -222,10 +282,11 @@ Local (Linux; implementer, re-run by the reviewer):
   `reviews/T-073-r1.md`). The `--test guard_t074` form is run by the test author before handover and by the reviewer
   after the join, not by the implementer, who does not see that file before the join (§6; spec check C-6).
 - AC-3 (`xtask/tests/acceptance_t074.rs`; fails on base on every platform by assertion): for each of the nine (file, item)
-  pairs of Interface (5) the registry holds exactly one entry, with `platforms = "unix"`, a `counterpart` that is not
-  `pending` and not `none`, and no `task` or `expires`; for #10 the counterpart is exactly
-  `crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root`; no entry has `task = "T-074"`.
-  Variant it must reject: one of the nine left `pending` with `task = "T-095"`.
+  pairs of Interface (5) the registry holds exactly one entry, with `platforms = "unix"`, `counterpart` equal to exactly
+  the string of Interface (5)'s "Registry text" for that row (#10:
+  `crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root`), and no `reason`, `task` or
+  `expires`; no entry has `task = "T-074"`. Variants it must reject: one of the nine left `pending` with `task = "T-095"`;
+  #14 naming `crates/kiln-workspace/src/disk.rs::tests::check_location_outside_on_every_platform` (another row's test).
 - AC-4: `cargo xtask no-skip` on the candidate prints `35 platform test(s) registered (10 pending)` (19 − 9; the new tests
   carry no platform cfg, so no entry is added). Variant to reject: a counterpart naming a `#[cfg(unix)]` test.
 Through CI (pending criterion, §8.1; fail-on-base evidence on Windows is the probe record, D-254 ruling 8):
@@ -233,13 +294,21 @@ Through CI (pending criterion, §8.1; fail-on-base evidence on Windows is the pr
   written" `ok` on Windows. Fails on base for a relative file link inside the root: PROBE C1 `read sr: Ok([102])`, C2
   `check_location sr: Ok(())` (the junction and absolute-link cases already pass at base: C1, C3, C4, C5, C6).
 - AC-W2 (Interface (2)): `list_dir` kinds of links and junctions `symlink` on Windows. Holds at base (PROBE C7): a guard.
-- AC-W3 (Interface (3)): a save with a junction at `.kiln-tmp-0`, and one with a file symlink there, each `Ok`, the link and
-  its target unchanged, no temporary file left. Fails on base: PROBE H2 (`PermissionDenied`, os error 5), H3 — **for the
+- AC-W3 (Interface (3), Pinned (b2)): in `guard_t074` and in (5) #2, the four fixtures (a) H's pair, (b) a junction alone at
+  `.kiln-tmp-0`, (c) a file symlink alone there to an existing outside file, (d) a dangling file symlink alone there to a
+  missing outside path: each save `Ok`, the target holds the new bytes, each link still a link with its target, the
+  outside file unchanged, the missing path still missing, no temporary file left. (a) is the fail-on-base evidence; (b)-(d)
+  are unmeasured at base. Fails on base: PROBE H2 (`PermissionDenied`, os error 5), H3 — **for the
   pair only** (junction at `.kiln-tmp-0` and file link at `.kiln-tmp-1` together, as H1 planted them); for each entry
   alone base behaviour is not measured (which one refused is not determinable, Interface (3)) (spec check C-8, Q-2).
-- AC-W4 (Interface (4)): the four root cases `ok` with their `MEASURED:` lines. Hold at base (PROBE E2-E7, F1-F8, G1-G5,
-  K2-K4): guards for the sentences of Pinned (i).
-- AC-W5 (Interface (5)): each new counterpart test of `disk.rs` `ok` on Windows in T-073's step.
+- AC-W4 (Interface (4)): the root cases of Interface (6) `ok` with their `MEASURED:` lines, every call answering as stated.
+  Hold at base for a junction (PROBE E2-E7, F1-F8, G1-G5, K2-K4): guards for the sentences of Pinned (i); the directory
+  symbolic link as `--root` and the removed-then-junction case are unmeasured at base (Interface (4), last paragraph).
+- AC-W5 (Interface (5)): each of the seven counterpart tests of `disk.rs`, by the names of Interface (5), `ok` on Windows
+  in T-073's step.
+- AC-W6 (Interface (7)): `acceptance_t002::save_through_symlink_updates_target` `ok` on Windows in T-072's step (and on
+  Linux and macOS as today). Fails on base on Windows: at base the open through the link succeeds (the test passed there,
+  `T-073-round-2.md:52`), so the Windows branch's first assertion fails.
 
 ### The pending CI criterion (v1.5 §8.1), for the approval row
 The record `tasks/ci-runs/T-074-round-N.md`, from the artefacts of the task's head **rebased on a main that holds T-072**
@@ -257,14 +326,20 @@ Counts to expect (spec check C-7, from `tasks/ci-runs/T-073-round-2.md` plus thi
 (n = `acceptance_t074`'s tests, from the test author's log); `guard_t074` every test `ok`, 0 failed, the count from the
 test author's log. T-072's step reports every `crates/kiln-workspace/tests/*.rs` target: the record lists each one's
 exit status; a non-zero status is allowed only where it was non-zero at base for the same tests
-(`acceptance_t002`: its `#[cfg(windows)]` precondition panic, `acceptance_t002.rs:939-942`), and no test that passed
-on Windows at base may fail there — open: `acceptance_t002::save_through_symlink_updates_target`, Q-5.
+(`acceptance_t002`: its `#[cfg(windows)]` precondition panic in `disk_save_replaces_via_rename_without_leftovers`,
+`acceptance_t002.rs:939-942`, T-092's), and no test that passed on Windows at base may fail there;
+`acceptance_t002::save_through_symlink_updates_target` `ok` (AC-W6). The seven counterparts `ok` in T-073's step by
+the names of Interface (5) (AC-W5; spec check F-12: their fixtures are under the system temp directory on `C:`, where no
+link was made by the probe — unchecked until this round; if a link or junction cannot be made there, the test fails
+naming why, never passes, and the implementer moves that test's fixtures to a directory under the workspace's
+`target/` on the work volume; no document sentence rests on the fixture's volume).
 **Two CI rounds expected.** If T-072 has not merged when this task's head is ready, `guard_t074` is not run on Windows and
 the criterion cannot be met: the director waits for T-072 (it does not edit the workflow here).
 
 ## Out of scope and implementer notes
 - Names Windows gives a meaning, streams, case, short names (T-095); the 128-bit identity (T-094); the saved file's access
-  list (D-254 ruling 7); product test files outside `disk.rs`'s module (T-092); a CLI test file (D-254 ruling 5);
+  list (D-254 ruling 7); product test files outside `disk.rs`'s module (T-092), except the one test of Interface (7)
+  (D-256 Q-5); a CLI test file (D-254 ruling 5);
   following links on Windows (ADR-0009 Q-6 A, a later decision); an identity-read failure on Windows (not measurable on
   the runner, PROBE J).
 - The test author's file has no platform cfg; a platform-only test it cannot avoid is named in its report and the
@@ -277,13 +352,15 @@ the criterion cannot be met: the director waits for T-072 (it does not edit the 
   `xtask/tests/acceptance_t072.rs`, `guard_t072.rs`); this task's CI round needs it merged (above).
 - `docs/protocol/paths.md`, `project.md`: T-093 (specified, low; dispatched after this task), T-094, T-095 (drafts) →
   after; each re-checks the sentences of (i). `disk.rs`: T-092, T-094, T-075 (drafts) → after. `xtask/platform-tests.toml`:
-  T-092, T-095 → after.
+  T-092, T-095 → after. `crates/kiln-workspace/tests/acceptance_t002.rs`: T-092 (draft; rewrites the rename test there)
+  → after, and re-checks `save_through_symlink_updates_target` (Interface (7)).
 
 ## Estimate
 T-073 (same file and platform, about 60 product lines, a test module, an independent Windows test file, 2 CI rounds)
 booked 860,977 (D-252). This task: about 30 product lines (the reparse test, the list kind, the temporary-name rule), seven
 portable unit tests that make links and junctions, nine registry entries, six document places, a guard file and an xtask
-test, no workflow edit, 2 CI rounds: **about 780,000** (ceiling 1,100,000). Arm: high → independent test author.
+test, one test of `acceptance_t002.rs`, no workflow edit, 2 CI rounds: **about 880,000** (D-256; ceiling 1,100,000;
+spec check §6). Arm: high → independent test author.
 
 ## Questions and rulings
 ### Rulings on the planner's questions (director, D-254)
@@ -292,6 +369,22 @@ test, no workflow edit, 2 CI rounds: **about 780,000** (ceiling 1,100,000). Arm:
 implementer in `disk.rs`'s module; 4 other reparse points listed `symlink`; 5 no CLI test file; 6 every reparse point
 refused, a stated limit, "unchecked" where the runner cannot show it, a line under "For the platform report"; 7 access
 list out of scope; 8 the probe record is the Windows fail-on-base evidence.
+
+### Rulings on the fresh spec check (director, D-256), written in
+Q-1 yes: Pinned (b2), Interface (3) "Exactly". Q-2 yes: Interface (5) #2 fixtures (a)-(d), (6), AC-W3. Q-3 yes:
+Interface (3) "Exactly" (no test). Q-4 yes: (5) #12, (6), AC-W4, Pinned (i) root sentence. Q-5 yes: `touches`,
+Interface (7), AC-W6, Pinned (f), Collisions; form chosen by run (Interface (7)). Estimate 880,000.
+Each finding closed (spec check below): F-1 → C-8 + Q-2 (AC-W3 (a)); F-2 → Q-1 (Pinned (b2), unchecked until CI round 1,
+what happens otherwise stated); F-3 → Q-3; F-4 → no change (Unix is path-based too; the window is the stated residual
+limit, Pinned (e)); F-5 → C-3 + Interface (6) (every call after removal/replacement), the reviewer checks before the
+sentence stands; F-6 → C-4 + Q-4; F-7 → (5) #11 + Interface (4) last paragraph (unchecked until CI round 1; a
+non-`outside_root` answer is a defect, no sentence rests on it); F-8 → C-5; F-9 → C-6; F-10 → C-7; F-11 → Q-5;
+F-12 → pending criterion (unchecked until CI round 1; fixture move if a link cannot be made; no sentence rests on it).
+Agreed between the builders by this text (re-read from each side): the seven counterpart names and the registry's exact
+text (Interface (5); AC-3 checks the strings); error variants `VfsError::OutsideRoot`, `VfsError::Io` with
+`AlreadyExists` and its message, `OpenError::Vfs(VfsError::OutsideRoot { .. })`; the `MEASURED:` line form; the
+`acceptance_t002` form. Left free on purpose: `guard_t074`'s and `acceptance_t074`'s test names (cited by no other
+file; the CI record takes them from the test author's log).
 
 ### Spec check (planner, after the probe and D-254)
 - **S-1 T-072's general step and this task's files** (`tasks/T-072-gate-green-on-macos.md` Interface (6), AC-9): it runs,
@@ -629,6 +722,12 @@ listing kind, the root cases, the registry plan and the gate-tool side (D-235) c
   Q-1 to Q-5; T-095: one line reference); ran main's `no-skip` on a mock-up of the planned registry and three variants, main's seven gate steps and
   `cargo test -p xtask` on a prototype tree, Windows clippy of a prototype of Interface (1)-(3) · verdict: ready after
   rulings · not run: anything on Windows; T-072's branch (not read) · state left `draft` · next: director
+- 2026-11-18 · D-256 rulings written in (Q-1 to Q-5, estimate 880,000; F-1 to F-12 each closed, list under "Rulings on the
+  fresh spec check") · Q-5 form by run in the clone: an `if cfg!(windows) { …; return; }` form → main's `no-skip` FAIL
+  `early-return`; `if cfg!(windows) { … } else { today's body }` → PASS `35 … (19 pending)`, Linux `cargo test -p
+  kiln-workspace --test acceptance_t002 save_through_symlink` 1 passed, `cargo clippy -p kiln-workspace --test
+  acceptance_t002 -- -D warnings` clean for Linux and `x86_64-pc-windows-msvc`, `cargo test -p xtask --test guard_t079`
+  passed · fixed the seven counterpart names and the registry text · clone's `target/` deleted · state left `draft`
 <!-- end planner log -->
 ### implementer
 <!-- end implementer log -->
