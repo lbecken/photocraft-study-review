@@ -1202,6 +1202,80 @@ fn ac1_gate_jobs_run_the_gate_and_upload_the_reports_whatever_its_result() {
     }
 }
 
+/// T-073 (ruling Q-1 A, D-245): `gate-windows`, and no other gate job, has one reported step
+/// that runs `cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073`
+/// after the gate, whatever the gate's result, writes its output to a file the job's upload
+/// includes, and never turns the job red (`set +e`, ending in `exit 0`).
+#[test]
+fn t073_gate_windows_reports_the_workspace_lib_and_t073_tests() {
+    const CMD: &str =
+        "cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073";
+    let w = workflow();
+    let is_it = |s: &Y| {
+        run_of(s)
+            .lines()
+            .flat_map(shell_statements)
+            .any(|x| invokes_cargo_test(&x) && squash(&x).contains(&squash(CMD)))
+    };
+    for (id, _) in GATE_JOBS {
+        let st = steps(job(&w, id));
+        let hits: Vec<usize> = (0..st.len()).filter(|&i| is_it(&st[i])).collect();
+        if id != "gate-windows" {
+            assert!(hits.is_empty(), "job `{id}` runs the T-073 Windows step");
+            continue;
+        }
+        assert_eq!(hits.len(), 1, "job `{id}`: one step runs `{CMD}`");
+        let i = hits[0];
+        let gate = step_idx(id, st, "runs the gate", |s| {
+            run_of(s).contains("cargo xtask ci --keep-going --report gate-report.json")
+        });
+        let up = step_idx(id, st, "uses actions/upload-artifact", |s| {
+            uses_of(s).starts_with("actions/upload-artifact@")
+        });
+        assert!(
+            gate < i && i < up,
+            "job `{id}`: the T-073 step is not between the gate and the upload"
+        );
+        assert!(
+            runs(st[i].get("if"), FAILED) && runs(st[i].get("if"), PASSED),
+            "job `{id}`: the T-073 step does not run whatever the gate's result"
+        );
+        let run = run_of(&st[i]);
+        let lines: Vec<&str> = run
+            .lines()
+            .map(|l| strip_comment(l).trim())
+            .filter(|l| !l.is_empty())
+            .collect();
+        assert_eq!(
+            lines.first().copied(),
+            Some("set +e"),
+            "job `{id}`: the T-073 step does not start with `set +e`"
+        );
+        assert_eq!(
+            lines.last().copied(),
+            Some("exit 0"),
+            "job `{id}`: the T-073 step does not end with `exit 0` (reported, not required)"
+        );
+        let cmd_line = lines
+            .iter()
+            .find(|l| squash(l).contains(&squash(CMD)))
+            .unwrap();
+        let out = cmd_line
+            .split_once('>')
+            .map(|(_, r)| r.split_whitespace().next().unwrap_or(""))
+            .unwrap_or("");
+        assert!(
+            out.ends_with(".txt"),
+            "job `{id}`: the T-073 step does not write its output to a file: `{cmd_line}`"
+        );
+        let path = st[up].at(&["with", "path"]).and_then(Y::str).unwrap_or("");
+        assert!(
+            path.lines().any(|l| l.trim() == out),
+            "job `{id}`: the upload does not include the T-073 step's file {out}"
+        );
+    }
+}
+
 #[test]
 fn ac1_window_jobs_build_run_and_upload() {
     let w = workflow();

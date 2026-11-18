@@ -188,6 +188,19 @@ jobs:
           echo "CORE CRATES: exit status per package:$summary (reported, not required)"
           exit 0
 
+      - name: Workspace lib and T-073 tests (reported, not required)
+        if: always()
+        # T-073 (ruling Q-1 A, D-245): the gate's `test` step cannot build on Windows until T-092;
+        # these two test targets can. Each test's line (`test <name> ... ok`) is kept in
+        # workspace-tests.txt; the step's status is always 0, the gate step decides the colour.
+        run: |
+          set +e
+          cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073 > workspace-tests.txt 2>&1
+          rc=$?
+          grep -E '^(test |     Running |error)' workspace-tests.txt
+          echo "WORKSPACE TESTS: exit status $rc (reported, not required)"
+          exit 0
+
       - name: Full test output (gate failed)
         if: failure() && steps.gate.outcome == 'failure'
         run: |
@@ -217,6 +230,7 @@ jobs:
             gate-report.json
             core-crates.txt
             test-output.txt
+            workspace-tests.txt
           if-no-files-found: warn
           retention-days: 30
 
