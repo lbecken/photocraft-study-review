@@ -35,29 +35,35 @@ volume serial number and the same 64-bit file index as the held one. Measured on
 `windows-2025` runner in CI run 44268710587 (`tasks/ci-runs/T-073-round-1.md`):
 - The held root itself can be renamed while a session runs; every call then answers
   `outside_root`, and once the root is moved back the session works there again, as on Linux and
-  macOS (`crates/kiln-workspace/tests/guard_t073.rs::acw2_root_replaced_at_same_path_is_outside_root`).
+  macOS (`crates/kiln-workspace/tests/guard_t073.rs::acw2_root_replaced_at_same_path_is_outside_root`;
+  on macOS listed on the green `gate-macos` job of CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`, "Addendum for T-093").
 - **A difference from Linux and macOS:** while a session holds the root, Windows refuses to rename
   a directory above it (`PermissionDenied`, OS error 5), and the session goes on working on its
   root. On Linux and macOS that rename succeeds and the session then refuses every path with
   `outside_root` (`crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root`,
-  which passed on all three in that run).
+  which passed on all three in that run; on macOS by name: listed on the green `gate-macos` job of
+  CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`, "Addendum for T-093", and its branch for Linux and macOS fails unless the rename succeeds).
 - The held root can be removed while a session runs, empty or with a file in it; then a read, a
   save, a check whether a file exists, a listing and `check_location` each answer `outside_root`
   (a file is never reported as existing), also after a new directory takes its name, as on Linux
   and macOS. Measured on the runner in CI run 44290286460 (`tasks/ci-runs/T-074-probe-1.md`:
   `check_location`, `list_dir` and `read`) and in CI run 44307677646
   (`tasks/ci-runs/T-074-early-1.md`: all five calls, and for the root removed with a file the
-  save of a document opened before, `guard_t074.rs::awa4_root_removed_while_held`). Not run on Windows: a directory above the root
+  save of a document opened before, `guard_t074.rs::awa4_root_removed_while_held`; on macOS listed on
+  the green `gate-macos` job of CI run 44358453526, `tasks/ci-runs/T-074-round-1.md:558`). Not run on Windows: a directory above the root
   replaced (Windows refused the rename).
 - **A difference from Linux and macOS:** a `..` in `--root` is resolved by its text before any
   link is followed: with `link` a junction, `--root link\..\b` is the `b` beside `link`, not the
   one beside the directory `link` leads to (CI runs 44290286460 and 44307677646,
-  `guard_t074.rs::awa4_dotdot_after_a_junction_in_the_root_text`).
+  `guard_t074.rs::awa4_dotdot_after_a_junction_in_the_root_text`). On macOS, with `link` a symbolic
+  link, it is the `b` beside the directory `link` leads to (the same test's branch for Linux and
+  macOS, listed on the green `gate-macos` job of CI run 44358453526, `tasks/ci-runs/T-074-round-1.md:558`).
 - A junction or symbolic link given as `--root` leads to the root; if it is pointed elsewhere
   while a session runs, every call answers `outside_root`, and pointed back the session works
   there again, as on Linux and macOS (CI run 44307677646, `tasks/ci-runs/T-074-early-1.md`:
   `guard_t074.rs::awa4_root_given_through_a_junction_and_retargeted` and
-  `::awa4_root_given_through_a_directory_link_and_retargeted`).
+  `::awa4_root_given_through_a_directory_link_and_retargeted`; on macOS, where both plant a
+  symbolic link, both are listed on the green `gate-macos` job of CI run 44358453526, `tasks/ci-runs/T-074-round-1.md:558`).
 - A limit, read and not measured: on a file system that does not keep the 64-bit file index
   unique (ReFS is documented so), two different directories can compare equal, so a directory
   that replaced the root could be taken for it (a 128-bit identity is T-094's).
@@ -153,7 +159,16 @@ error object on stderr.
   Changes made between two requests, to the path or to the root and the directories above it,
   are always caught: the next request checks the path again (`doc.open` of a path that is
   already open checks only where it leads, see The rule).
-- Unix only.
+- **Platforms.** The rules of this page hold on Linux and macOS as written. On macOS: the tests
+  of the scorecard item `ws.path-confinement` (`scorecard/items/ws.path-confinement.toml`) ran and
+  passed on the green `gate-macos` job of CI run 44358453526 (`tasks/ci-runs/T-074-round-1.md`,
+  scorecard step `macos: 64 items; 216 tests ran; 3 registered absent here`, the 3 being
+  `ui.window`'s); the bound of 40 symlinks and its message
+  (`crates/kiln-workspace/tests/confinement.rs::walk_corner_cases`) and a root given through a
+  symlink (`crates/kiln-workspace/src/disk.rs`, `disk::tests::failed_rename_removes_own_temp_and_keeps_target`
+  and `disk::tests::root_given_through_a_link_that_is_retargeted`) by name, listed on that job
+  (`tasks/ci-runs/T-074-round-1.md`, "Addendum for T-093"). On Windows they hold with the differences stated in The root and The rule (T-073,
+  T-074); names and case on Windows are not yet stated (T-095).
 - On Windows every reparse point on the way is refused, so files that are reparse points without
   being links — for example cloud placeholder files of a synced folder or deduplicated files —
   cannot be opened or saved; they answer `outside_root` (unchecked: the runner cannot make them).

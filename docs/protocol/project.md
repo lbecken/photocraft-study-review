@@ -23,7 +23,13 @@ Result:
   `symlink` or `other`.
 - `ignored`: entries not listed because rule 2 or rule 3 below skips them, each counted once;
   nothing below them is visited.
-- `skipped`: names not listed because they are not valid UTF-8 or contain `\`.
+- `skipped`: names not listed because they are not valid UTF-8 or contain `\`. On macOS the
+  runner's file system refused to create a name that is not valid UTF-8 (`Illegal byte
+  sequence`, OS error 92, in the failing CI run 43765532298:
+  `tasks/T-079-mark-product-tests-by-platform.md`), so there `skipped` counts only names with
+  `\` (`crates/kiln-workspace/tests/acceptance_t019_workspace.rs::tree_counts_skipped_names_on_disk`,
+  listed on the green `gate-macos` job of CI run 44358453526, `tasks/ci-runs/T-074-round-1.md`,
+  "Addendum for T-093"); whether other macOS file systems refuse such names is unmeasured on macOS.
 - `too_deep`: directories listed but not descended because of the depth bound (rule 5).
 - `truncated`: true only if an entry beyond `limit` exists.
 
@@ -108,7 +114,7 @@ counted in `too_deep`.
 
 A directory whose location on the host has a path of 4,096 bytes or more cannot be listed, and
 the command fails with `io_error`; whether that happens depends on how long the root's own host
-path is.
+path is. On macOS the bound is the host's path limit (unmeasured on macOS).
 
 A directory or a `.gitignore` that cannot be read (for example for lack of permission) makes
 the whole command fail with `io_error`.
