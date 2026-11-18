@@ -1093,7 +1093,10 @@ mod tests {
         (
             listing(dir),
             fs::read(dir.join("f")).unwrap(),
-            fs::metadata(dir.join("f")).unwrap().permissions().readonly(),
+            fs::metadata(dir.join("f"))
+                .unwrap()
+                .permissions()
+                .readonly(),
         )
     }
 

@@ -251,7 +251,11 @@ fn links_inside_and_excursions_back_inside_are_followed() {
             if cfg!(windows) {
                 // T-074: on Windows every reparse point on the walk is `outside_root`, a link
                 // whose location stays inside included; nothing is read or written.
-                assert_eq!(fs_.read(&p(path)), Err(outside(path)), "Windows: read {path}");
+                assert_eq!(
+                    fs_.read(&p(path)),
+                    Err(outside(path)),
+                    "Windows: read {path}"
+                );
                 assert!(!fs_.is_file(&p(path)), "Windows: is_file {path}");
                 assert_eq!(
                     fs_.write_atomic(&p(path), path.as_bytes()),
@@ -282,7 +286,10 @@ fn links_inside_and_excursions_back_inside_are_followed() {
                 Err(outside("ghost")),
                 "Windows"
             );
-            assert!(!root.join("real/new.txt").exists(), "Windows: ghost's target created");
+            assert!(
+                !root.join("real/new.txt").exists(),
+                "Windows: ghost's target created"
+            );
         } else {
             assert_eq!(
                 fs_.read(&p("ghost")),
