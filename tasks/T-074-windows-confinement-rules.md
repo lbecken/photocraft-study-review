@@ -437,6 +437,80 @@ Checked every "PROBE" citation against the record line by line. Agree: Goal (C1 
   the name is returned as now" on Windows (no way found to make the create fail with nothing at the name); the reviewer
   reads it in the code.
 
+#### 3. The nine registry entries and main's `no-skip` (run)
+The nine are exactly those with `task = "T-074"` (`grep -c 'task = "T-074"' xtask/platform-tests.toml` → 9;
+`platform-tests.toml:237-380`), each `platforms = "unix"`, and Interface (5) disposes of each once (table rows 2, 8-15). Main's
+rule (`xtask/src/platforms.rs:985-1006`): a named counterpart must be a test fn (or module with tests) that exists on every
+platform of the entry's complement; nothing forbids two entries naming one counterpart (#8 and #13) and nothing compares
+what the counterpart asserts with the quote.
+- Baseline, scratch clone at `9603d97`: `cargo xtask no-skip` → `PASS … 201 files scanned, 0 allowlisted skip(s), 35
+  platform test(s) registered (19 pending)`.
+- Mock-up of the planned registry (`/home/user/kiln-check-T074-scripts/mock_t074.py`: the nine entries rewritten to
+  `counterpart = "<file>::<item>"` with `reason`/`task`/`expires` removed, #10 naming `guard_t073.rs::acw2_root_parent_
+  replaced_is_outside_root`, #8 and #13 one test; seven stub tests with no platform cfg in `disk.rs`'s module choosing
+  their branch by `cfg!(windows)`, and a `#[cfg(unix)]`/`#[cfg(windows)]` link helper each doing work) → `PASS … 35 platform
+  test(s) registered (10 pending)`: **AC-4's line confirmed.**
+- Variant: #14's counterpart naming `tests::new_file_gets_default_mode` (`#[cfg(unix)]`) → `FAIL … platform-counterpart:
+  entry 34: counterpart … exists on linux, macos only, not on every one of windows`: **AC-4's variant is rejected.**
+- Variant: the Windows twin of the helper with body `true` → `FAIL … inert-helper`: Interface (5)'s helper rule holds.
+- `guard_t073.rs::acw2_root_parent_replaced_is_outside_root` (#10): exists, no platform cfg (`guard_t073.rs:486`; the file
+  has `#![cfg(test)]` only, `:27`), so the registry accepts it (also in the mock-up run).
+- Counterparts against their quotes (no tool checks this; for the reviewer): #8 quotes "through a symlink, the link's target
+  is replaced and the link is kept" and its Windows counterpart asserts the opposite (refusal); acceptable only because
+  `control-protocol.md` gains the Windows sentence (Pinned (i)). #13's quote ("A link whose target ends in `/` must lead to
+  a directory") has no Windows form at all; naming #8's test is allowed by the tool, `none` with that reason would be the
+  plainer record (note, no question: the director's D-250 gave all nine to this task). #12 quotes a *symlink* as `--root`
+  while Interface (4) tests a junction (F-6, Q-4). #11: F-7.
+- Prototype of the prescribed code shape (`/home/user/kiln-check-T074-scripts/proto_t074.py`: Interface (1) as an arm
+  `#[cfg(windows)] Ok(meta) if is_reparse_point(&meta) => return Err(OutsideRoot)` before the symlink arm; (2) a
+  `#[cfg(windows)]` re-binding of `kind` from `entry.metadata()`'s attributes; (3) `Err(_) if fs::symlink_metadata(&temp)
+  .is_ok() => continue` in the Windows `create_temp`, plus `custom_flags(0x0020_0000)` (Q-1 option A); one counterpart
+  shape with `symlink_file`/`symlink_dir` helpers): 21 added product lines with comments, after `cargo fmt` (`git diff -U0`
+  counted above the test module). Results: `cargo clippy -p
+  kiln-workspace --lib --locked --target x86_64-pc-windows-msvc -- -D warnings` → `Finished`, 0 warnings, **no C compiler
+  stub**; the same with `--profile test` → `Finished`, 0 warnings; `cargo clippy --workspace --lib --bins --locked --target
+  x86_64-pc-windows-msvc -- -D warnings` with the stub of `reviews/T-073-r1.md` (it must handle MSVC's `-Fo<path>` as
+  well as `-o`; with `-o` only, `tree-sitter-rust`'s build fails) → `Finished`, 0 warnings; Linux `cargo test -p
+  kiln-workspace --lib --locked` → 52 passed (51 at base + 1 shape test). Not linked or run for Windows.
+
+#### 4. D-235 and D-249 (run)
+- **D-235 (S-3): confirmed.** On the prototype + mock-up tree, main's tool (no file under `xtask/src` changed, so the
+  clone's `cargo xtask` is main's): `fmt` PASS, `layers` PASS (11 crates, 14 edges), `ui-commands` PASS, `hygiene` PASS
+  (692 tracked files clean), `schema` PASS (30 commands, `docs/commands.json` current), `scorecard` PASS (64 items: 47
+  verified), `no-skip` PASS `35 … (10 pending)`. `cargo test --locked -p xtask --no-fail-fast` → 287 passed, 0 failed
+  (summed over the `test result:` lines). `clippy` and `test` of the whole gate not run (the Linux lib tests and the three
+  Windows clippy forms of §3 were).
+- **D-249 (S-4), `grep -rlE '<path>' --include=*.rs crates apps xtask` on `9603d97`:** `disk.rs` → `xtask/tests/guard_t079.rs`
+  only (22 names at `:1241-1262` and the no-cfg check `:505-511`; `every_linux_test_name_of_the_base_still_exists`,
+  `:381`, wants a superset, so new names pass — confirmed by the `cargo test -p xtask` run). `platform-tests.toml` →
+  `acceptance_t079.rs` (T-079's 20 only, passes), `acceptance_t071.rs`/`guard_t071.rs` (toy registries), the rest
+  comments or the tool itself (`xtask/src/noskip.rs`, `platforms.rs`: §3). `paths.md` → `acceptance_t008_cli.rs:576-578`
+  (contains `outside_root`, `not_a_file`: passes), comments in `disk.rs`, `vfs.rs`. `project.md` → five files, doc
+  references only. `control-protocol.md` → 17 files (16 besides `acceptance_t008_cli.rs`, not 15: C-2), of which only
+  `acceptance_t008_cli.rs:549-574` reads "Paths": the lexical bullet and the save bullet's first sentence verbatim
+  (`:563-574`, the save bullet `:566-568`), and the absence of "Symbolic links are followed, including links that point
+  outside the root" (`:557-560`); the planned sentence keeps both and says neither. No test contains "How symlinks are
+  followed", "not yet stated", "Not run on Windows" or "Unix only" as a pin (grep: only a comment in
+  `acceptance_t002.rs:169`). `guard_t074`, `acceptance_t074`: no hits. All of S-4 confirmed, with C-2's two numbers.
+- **F-11 (blocker-level, missed by S-4 and Pinned (f): a main test pins on Windows what this task changes).**
+  `grep -rln "symlink_file\|symlink_dir\|mklink" --include=*.rs crates apps xtask` → among product tests only
+  `crates/kiln-workspace/tests/acceptance_t002.rs`. Its `save_through_symlink_updates_target` (`:945-973`) has **no
+  platform cfg**, its helper's Windows twin makes a relative file link (`:188-191`, `symlink_file("target.txt", …)`), and
+  it asserts the save goes through the link and keeps it. On Windows at base it **passes**: the scorecard step of T-073's
+  round 2 ran `io.save-atomic`'s three tests and named only `disk_save_replaces_via_rename_without_leftovers` as failing
+  (`tasks/ci-runs/T-073-round-2.md:52`), consistent with PROBE C1 `read sr: Ok`. After Interface (1) it fails on Windows
+  (`Document::open` → `OutsideRoot`, `unwrap` panics). The test is listed by the scorecard item `io.save-atomic`
+  (`scorecard/items/io.save-atomic.toml:5`) and by `guard_t079.rs:1301` (name only). T-072's general step runs
+  `acceptance_t002` on Windows (it is a `crates/kiln-workspace/tests/*.rs` file), so the record will show a test that
+  passed at base now failing, inside a target that is already red (`:939-942`). §8.1: after this task the test asserts on
+  Windows the opposite of the specified behaviour. `acceptance_t002.rs` is not in `touches` (T-092's per Out of scope).
+  Q-5.
+- **T-072's planned tests (its spec only).** `acceptance_t072.rs` AC-9 runs the step's script with a fake `cargo` in a
+  scratch tree of three test files, and must reject a fixed `--test` list (T-072 AC-9): it names no path of this task.
+  `guard_t072.rs` G-1 to G-4 read the workflow only. Interface (6) runs every `crates/kiln-workspace/tests/*.rs`; its
+  ruling (added 11:20Z) carries `--show-output`, on which AC-W1-W4's `MEASURED:` lines depend: confirmed in T-072's
+  rulings, still unchecked against T-072's branch (not read). Nothing in T-072's spec pins a path of T-074.
+
 ## Log
 ### director
 <!-- end director log -->

@@ -2,7 +2,7 @@
 id: T-072
 title: "Make every CI gate job show which tests ran and why one failed, on success too; make incidents/ a ledger path; settle the nightly run"
 tier: high              # METHODOLOGY v1.5 §4: gate paths (.github/workflows/platforms.yml, xtask/ledger.toml, xtask/tests/); the approval row must contain `gate paths`. No dependency change, no product code.
-state: in_progress
+state: self_verified
 owner_role: planner
 scorecard_items: []     # produces evidence; changes no behaviour of Kiln's binaries
 depends_on: [T-079, T-073]   # both merged (bc8d097; 8bf4c3a): T-073 changed platforms.yml and acceptance_t070.rs (spec check after T-073, below)
@@ -425,6 +425,15 @@ either a "Test list" step plus its upload line (A1) or `if: always()` on the ful
 - Added 11:20Z (from T-074's planner, sent to the test author): AC-9 as written does not check that the general
   Windows step passes `--show-output`; Interface (6) requires it (the `MEASURED:` lines of later tasks depend on it).
   The test author checks the flag in the step's command; the implementer's step carries it as Interface (6) says.
+
+### Rulings on the test author's questions (director, D-255; sent to both builders)
+- **t1.** G-4 stands as written by the test author (the window jobs write and upload only their own records). That
+  the window jobs' steps are unchanged by this task is the reviewer's diff check, not a test (T-077 will change them).
+- **t2.** Pinned (d)'s bash rule covers both test files: a test that runs a step script uses `bash` (on Windows Git
+  Bash where found) and otherwise fails naming why; no platform cfg.
+- **t3.** "Abort lines" are the lines with `has overflowed its stack` and `fatal runtime error`; "the first 20 lines"
+  of a failing test's output block is exactly 20.
+- **t4.** The upload lists are exact sets.
 
 ## Log
 ### director
