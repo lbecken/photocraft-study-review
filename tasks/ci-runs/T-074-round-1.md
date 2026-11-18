@@ -644,3 +644,71 @@ Made for `tasks/T-093-macos-document-sentences.md` (rule E1, question Q-4 option
 
 ### Finding
 All six names the spec names for rows 2 (`\` half) and 6 to 9 are present in the list, each once under the binary the spec's file path implies. The list gives names only; which branch a test took on macOS is not in the artefact.
+
+## Main after the merge
+The push to `main` that carried T-074's merge: pushed head `4eb349da2a34e7c3c0fa9dc06c8a7484f4692b54` ("ledger: T-074 merged (D-271)", runs created 2026-11-18T18:49:59Z), which contains the merge head `25054fe1ef2db1ec33eb641b29b5f7f9c30c30d4`. Read from `actions_list` (`list_workflow_runs`, `list_workflow_jobs`, `list_workflow_run_artifacts`), `actions_get` (`get_workflow_run`, `get_workflow_job`, `download_workflow_run_artifact`) and one job log (`ci.yml`), last read about 19:22Z.
+
+### Runs
+| workflow | run id | number | conclusion | created / last updated |
+|---|---|---|---|---|
+| `ci.yml` | 44373961102 | 565 | success | 18:49:59Z / 19:01:24Z |
+| `platforms.yml` | 44373961129 | 41 | **failure** (completed) | 18:49:59Z / 19:17:37Z |
+
+### `window-probe (macos-15)` (job 135047985621): first
+- Runner assigned: **yes** (`runner_id` 1000001089, `runner_name` "GitHub Actions 1000001089"). Conclusion: **success**. Wall 18:50:03Z–18:50:52Z = 49s.
+- Artefact `window-probe-macos-15-44373961129` (id 14459823116, 704 bytes; zip checked; `window-probe.txt` 2,549 bytes). Lines, verbatim:
+  - `PROBE OS: macos-15 Darwin <runner host name> 24.6.0 Darwin Kernel Version 24.6.0: Sun Oct 11 23:44:11 PDT 2026; root:xnu-11417.140.69.713.47~2/RELEASE_ARM64_VMAPPLE arm64` (host name shortened here)
+  - `ProductVersion:		15.8.2`
+  - `PROBE: exit status 0`
+  - `PROBE: stdout     2174 bytes, 3 lines`; stderr section empty.
+
+### `platforms.yml` jobs (run 44373961129)
+| job | job id | conclusion | wall (completed − started) |
+|---|---|---|---|
+| `window-probe (macos-15)` | 135047985621 | success | 49s (18:50:03Z–18:50:52Z) |
+| `window-linux` | 135047985299 | success | 1m36s (18:50:01Z–18:51:37Z) |
+| `window-probe (windows-2025)` | 135047985615 | failure (step "Window probe" failed, 18:52:29Z–18:52:30Z; its record uploaded) | 2m33s (18:50:02Z–18:52:35Z) |
+| `gate-windows` | 135047985406 | failure | 27m35s (18:50:02Z–19:17:37Z) |
+| `gate-macos` | 135047984926 | **cancelled**, no runner (`runner_id` 0, `runner_name` ""; no steps) | 15m01s (18:49:59Z–19:05:00Z, queued throughout) |
+| `gate-linux` | 135047987934 | skipped | none (no start or end time of its own) |
+
+### `ci.yml` run 44373961102, job `gate` (135047984960, ubuntu-24.04)
+- Conclusion success; wall 18:50:02Z–19:01:23Z = 11m21s. No artefact; read from the job log.
+- Image: `Image: ubuntu-24.04`, `Version: 20261111.127.1`; runner version `2.338.2`; toolchain `cargo 1.97.0 (c980f4866 2026-06-30)`.
+- Log lines: `PASS  test          459.5s  1200 passed, 0 failed, 0 ignored in 140 suites` and `GATE PASSED in 626.9s (11 steps; 2 step(s) EMPTY (nothing registered): fuzz, budgets)`; scorecard `64 items: 47 verified, 0 implemented, 0 failing, 17 planned.`
+
+### `gate-macos`
+Not run: the job stayed queued until cancelled, so there is no gate report, no `test-list.txt` and no artefact. `guard_t074` present in its `test-list.txt`: **not determinable** from this run (the only macOS list read is the one of run 44358453526 above, whose line 1140 is `Running tests/guard_t074.rs`).
+
+### `window-linux`
+Success, all steps success (Window procedure (T-065) under Xvfb 18:51:11Z–18:51:35Z). Artefact `window-linux-44373961129` (577 bytes) not downloaded; its content is not read.
+
+### `gate-windows` (artefact `gate-windows-44373961129`, id 14464085345, 27,440 bytes; fetched and unpacked)
+- Gate report: `passed: false`, `failed_step: clippy`, 496.8 s. Failing gate steps: **clippy** (fail), **scorecard** (fail: `windows: 64 items; 158 tests ran; 3 registered absent here; …`, `60 scorecard problems`, the first `building test executables failed on windows (); their tests are not run`), **test** (fail: `0 passed, 0 failed, 0 ignored in 0 suites`, compile errors, e.g. `error[E0433]: cannot find `unix` in `os``, `apps\kiln\tests\acceptance_t055.rs:1317`). Passing: fmt, layers, ui-commands, hygiene, schema, no-skip; fuzz and budgets empty.
+- Step conclusions of the job: Gate failure; Gate report, Core crates (18:59:15Z–19:17:08Z), Workspace lib and T-073 tests, Test list, kiln-workspace test targets, Full test output, Disk, Upload reports: success.
+- "Workspace lib and T-073 tests" (`workspace-tests.txt`, 8,004 bytes), `test result:` lines: library 43 passed, 0 failed; `acceptance_t073` 1 passed, 0 failed; `guard_t073` 10 passed, 0 failed: 54 passed, 0 failed (the `WORKSPACE TESTS: exit status` log line is not in the file and the log was not read).
+- General step (`windows-tests.txt`, 95,467 bytes), the `==== <target>: exit status N` lines, verbatim:
+```
+==== acceptance_t002: exit status 101
+==== acceptance_t002_r2: exit status 101
+==== acceptance_t008: exit status 101
+==== acceptance_t015_tools: exit status 101
+==== acceptance_t019_workspace: exit status 101
+==== acceptance_t036_workspace: exit status 101
+==== acceptance_t073: exit status 0
+==== confinement: exit status 101
+==== guard_t008: exit status 101
+==== guard_t036_removal_workspace: exit status 101
+==== guard_t036_workspace: exit status 101
+==== guard_t073: exit status 0
+==== guard_t074: exit status 0
+==== project: exit status 101
+==== tools_contract: exit status 0
+```
+  `guard_t074: exit status 0` is present; its `test result:` line: `test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s`.
+
+### The later push to main (about 18:51Z)
+Head `32b597d6af3ef4db691ae069ccf1c40ddb474b83` ("state: T-072 and T-074 merged; planning for T-092, T-095, T-093", ledger files only): `ci.yml` run 44374245890 (number 566) success, 18:51:33Z–19:03:02Z; no `platforms.yml` run was listed for that head.
+
+### Not read
+Logs of all jobs except `ci.yml`'s `gate`; the artefacts `window-linux-44373961129` and `window-probe-windows-2025-44373961129`; `core-crates.txt`, `test-list.txt`, `test-output.txt` of `gate-windows` beyond the lines above; why `gate-macos` got no runner (the job data does not say); the `WORKSPACE TESTS: exit status` line; `ci.yml`'s Gate step beyond the log lines quoted.

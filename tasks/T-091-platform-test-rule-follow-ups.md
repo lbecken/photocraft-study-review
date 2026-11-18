@@ -57,6 +57,10 @@ The rule of T-071 has one hole left by its rulings and two untested cases:
 - Since ruling u5 widened G-1 to 180 s, a probe limit of 150 s passes the guard (M21): pin the limit by the step's
   text or by the measured time minus the limit.
 
+## Follow-up from INC-002 (director, D-274)
+A CI record should mark a job the host cancelled before any step with no runner (`runner_id` 0) as
+"no result (no runner)" by rule, so that it is neither read as red nor missed (`incidents/INC-002-…md`).
+
 ## Log
 ### director
 - 2026-11-18 filed as a draft (D-232).
