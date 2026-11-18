@@ -482,4 +482,64 @@ renamed to carry the new bound (it is not on main yet). The test author states i
   (AC-5) `xtask/ledger.toml` = main's entries plus `incidents/` mode `any`; `paths-ignore` derived from it.
   Guards G-1..G-4: the probe's watchdog, recording steps ending `exit 0`, no `continue-on-error`, pinned
   `uses:`, window jobs unchanged — none of them is to be broken by my edits. (AC-7/AC-8) through CI only.
+- 2026-11-18 · R-351 · built. Commits: `2ddd72a` (workflow + ledger), `fac4cb4` (docs). What each Interface point became:
+  (1) in each gate job a step "Test list" (`if: always()`, after core crates; in `gate-windows` after T-073's step)
+  writes `cargo test --workspace --locked --no-fail-fast -- --list` to `test-list.txt` and prints, with colour codes
+  removed, the `Running` / `Doc-tests` / `error` lines and `TEST LIST: exit status N`; the full-output step keeps its
+  condition and replaces `head -200` with an `awk` printer (no line cap; colour codes removed, because with
+  `CARGO_TERM_COLOR=always` the old greps never matched cargo's coloured `Running`/`error` lines, cf.
+  `tasks/ci-runs/T-054-round-1.md:82`): each `---- <name> stdout ----` block with its next 20 lines, preceded once by
+  the binary's `Running` line; a binary's abort lines (`has overflowed its stack`, `fatal runtime error`, `Caused by:`,
+  `process didn't exit successfully`) with its `Running` line; every `error[`, `error: could not compile`, `error: test
+  failed` line and the "N targets failed" list; every `test result:` line. Upload lists gain `test-list.txt` (all three)
+  and `windows-tests.txt` (`gate-windows`). Core-crates label = `==== cargo test --locked --no-fail-fast -p $p`.
+  (2) `incidents/` mode `any` after `methodology/` in `xtask/ledger.toml`; `incidents`, `incidents/**` after
+  `methodology/**` in `paths-ignore`. (3) nightly kept; `docs/development.md` states the late start with the two run
+  ids and offsets. (4) finding 1 is the test author's (G-1, G-2); finding 2 to T-077 (Q-4 A); finding 3: the macOS disk
+  cell now shows the record's columns as printed, inode columns included (`tasks/ci-runs/T-070-round-1.md` macOS DISK
+  block). (5) evidence paragraph and artefact list rewritten, T-073's step and `workspace-tests.txt` named, the stale
+  ":633-634" sentence replaced; **the "Runners, wall times and disk" table is not replaced yet**: its figures are "to
+  be measured by the director" from this task's CI record, not passed to me; left for the update after round 1 (or to
+  the reviewer). (6) `gate-windows` step "kiln-workspace test targets (reported, not required)", after the list and
+  before the full output, `if: always()`, `set +e` … `exit 0`, `LC_ALL=C` glob over `crates/kiln-workspace/tests/*.rs`,
+  per target a label line, `cargo test --locked --no-fail-fast -p kiln-workspace --test <t> -- --show-output`
+  appended to `windows-tests.txt`, then `==== <t>: exit status N`; log prints `====`/`test `/`test result:`/`---- `/
+  `thread `/`error`/`MEASURED:` lines and `WINDOWS TESTS: exit status per target: …`.
+  Checked locally (scripts extracted from the workflow by a `yaml.safe_load` reading, run with `bash`): the printer on a
+  scratch crate with a failing unit test, a stack-overflow abort, a 40-line failing test (cut at 20 after the header), a
+  failing doc-test and, separately, a compile error (prints `error[E0308]` and `error: could not compile`); every step
+  exit 0. The Windows step with a fake `cargo` on PATH and three files `zeta`, `alpha`, `Beta` (one failing): all three
+  named with status, in byte order, step exit 0. The list step on this worktree after the gate: 1.33 s, 1,537 lines,
+  74,715 B, 134 `Running`/`Doc-tests` lines, 1,146 `: test` lines, exit 0. The three jobs' "Test list", "Full test
+  output" and core-crates scripts are byte-identical (md5 of each extracted script).
+  Gate: `cargo xtask ci` attempt 1 PASS (876.7 s; test 1147 passed, 0 failed, 0 ignored in 135 suites). `cargo test
+  --locked --no-fail-fast -p xtask`: 23 binaries, 287 passed, 0 failed; `acceptance_t070` 14/0, `guard_t070` 7/0,
+  `guard_t079` 6/0, `acceptance_t005` 16/0, `_r2` 4/0, `_r3` 11/0, `_r4` 6/0. D-235: main's tool built from `git archive
+  main` (`13a602a`) plus this branch's diff from `b96ee55`, in a scratch directory: `no-skip` PASS (201 files, 35
+  registered, 19 pending), `hygiene` PASS (692 tracked files clean), `scorecard --check` PASS (64 items: 47 verified,
+  17 planned), `layers` PASS, `ui-commands` PASS, `schema` PASS (30 commands); that tree differs from this worktree only
+  in `metrics/tasks.jsonl` and this task file (main's newer ledger commit). Not run: anything on the runners; the test
+  author's `acceptance_t072.rs`/`guard_t072.rs` (not seen); a Windows build. Questions: none.
+- **CI expectation for the round on this head** (my branch alone, without the test author's files):
+  - `gate-linux`: green. "Test list" prints one `Running`/`Doc-tests` line per binary (134 locally) and `TEST LIST:
+    exit status 0`; "Full test output (gate failed)" skipped; `core-crates.txt` holds `==== cargo test --locked
+    --no-fail-fast -p <package>` lines; artefact: `gate-report.json`, `core-crates.txt`, `test-list.txt` (about 1,146
+    `<name>: test` lines), no `test-output.txt` (warning only).
+  - `gate-macos`: green as in `T-079-round-2.md`. As Linux: list printed, `TEST LIST: exit status 0`, full output
+    skipped; artefact as Linux; `test-list.txt` without the tests registered for Linux only.
+  - `gate-windows`: red as on main (clippy, scorecard, test). "Test list": the workspace's test build fails, so the log
+    prints `error[…]` and `error: could not compile …` lines and `TEST LIST: exit status 101`, `test-list.txt` holding
+    those errors and few or no names. "kiln-workspace test targets": 14 targets in this order — acceptance_t002,
+    acceptance_t002_r2, acceptance_t008, acceptance_t015_tools, acceptance_t019_workspace, acceptance_t036_workspace,
+    acceptance_t073, confinement, guard_t008, guard_t036_removal_workspace, guard_t036_workspace, guard_t073,
+    project, tools_contract — each with `==== <t>: exit status N`; INFERRED from S-7's type check: the 9 that do not
+    compile for Windows exit 101 with `error[` lines, `acceptance_t073`, `guard_t073` (and probably
+    `acceptance_t015_tools`, `tools_contract`) exit 0, `acceptance_t002` exits 101 with
+    `disk_save_replaces_via_rename_without_leftovers` printed as a `---- … stdout ----` block (its message); summary line
+    `WINDOWS TESTS: exit status per target: …`. "Full test output (gate failed)" runs: the log prints the `error[` and
+    `could not compile` lines and `TEST OUTPUT: exit status 101`. T-073's step unchanged (47 `ok`). Artefact:
+    `gate-report.json`, `core-crates.txt`, `test-output.txt`, `workspace-tests.txt`, `test-list.txt`,
+    `windows-tests.txt`.
+  - Window jobs unchanged; `window-probe (windows-2025)` exits 2 as on main. The list step's time per gate job is in
+    each job's step timings (Pinned (g)); expected seconds, not minutes, where the gate built the tests.
 <!-- end implementer log -->
