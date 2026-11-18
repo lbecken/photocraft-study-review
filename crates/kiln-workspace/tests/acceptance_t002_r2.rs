@@ -1,6 +1,9 @@
 //! Acceptance tests for T-002, round 2: the director's rulings of D-014 on save hygiene
 //! (temp names, symlinks, permissions, long names, error variants). Written from the spec and
-//! the rulings only. Supported platforms are Unix, so Unix APIs are used directly.
+//! the rulings only. Written for Unix first; the `support` module has a Windows twin of every
+//! helper that differs (T-092): the snapshot records permission bits and the inode on Unix, the
+//! read-only attribute on Windows (ruling 2 of T-092), and the two tests of permission bits are
+//! Unix tests listed in `xtask/platform-tests.toml`.
 //!
 //! The temp-file naming scheme is unknown and not assumed: every check is made on the
 //! directory as a whole (snapshot before and after), with decoys planted under many plausible
@@ -13,6 +16,7 @@ use support::*;
 mod support {
     use super::*;
     use std::collections::BTreeMap;
+    #[cfg(unix)]
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::path::{Path, PathBuf};
 
@@ -33,6 +37,7 @@ mod support {
         dir
     }
 
+    #[cfg(unix)]
     fn restore_perms(dir: &Path) {
         let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755));
         if let Ok(rd) = std::fs::read_dir(dir) {
@@ -50,6 +55,27 @@ mod support {
         }
     }
 
+    /// Windows: clear the read-only attribute on every file, so the directory can be removed.
+    #[cfg(windows)]
+    fn restore_perms(dir: &Path) {
+        if let Ok(rd) = std::fs::read_dir(dir) {
+            for e in rd.flatten() {
+                let p = e.path();
+                let Ok(m) = std::fs::symlink_metadata(&p) else {
+                    continue;
+                };
+                if m.is_dir() {
+                    restore_perms(&p);
+                } else if m.is_file() {
+                    let mut perm = m.permissions();
+                    #[allow(clippy::permissions_set_readonly_false)]
+                    perm.set_readonly(false);
+                    let _ = std::fs::set_permissions(&p, perm);
+                }
+            }
+        }
+    }
+
     pub fn put(p: &Path, bytes: &[u8]) {
         if let Some(parent) = p.parent() {
             std::fs::create_dir_all(parent).unwrap();
@@ -57,20 +83,77 @@ mod support {
         std::fs::write(p, bytes).unwrap();
     }
 
+    #[cfg(unix)]
     pub fn set_mode(p: &Path, mode: u32) {
         std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode)).unwrap();
     }
 
+    /// Windows has no mode bits: a mode without any write bit sets the read-only attribute,
+    /// any other clears it (std's own reading of the attribute as `readonly()`).
+    #[cfg(windows)]
+    pub fn set_mode(p: &Path, mode: u32) {
+        let mut perm = std::fs::metadata(p).unwrap().permissions();
+        perm.set_readonly(mode & 0o222 == 0);
+        std::fs::set_permissions(p, perm).unwrap();
+    }
+
+    #[cfg(unix)]
     pub fn mode(p: &Path) -> u32 {
         std::fs::metadata(p).unwrap().permissions().mode() & 0o7777
     }
 
-    /// One directory entry, seen without following symlinks.
+    /// What an entry's permissions are recorded as: the permission bits on Unix, the read-only
+    /// attribute on Windows.
+    #[cfg(unix)]
+    pub type Mode = u32;
+    #[cfg(windows)]
+    pub type Mode = bool;
+
+    #[cfg(unix)]
+    fn mode_of(m: &std::fs::Metadata) -> Mode {
+        m.permissions().mode() & 0o7777
+    }
+    #[cfg(windows)]
+    fn mode_of(m: &std::fs::Metadata) -> Mode {
+        m.permissions().readonly()
+    }
+
+    /// One directory entry, seen without following symlinks. Identity (the inode) is recorded
+    /// on Unix only: stable Rust exposes no file identity on Windows (ruling 2 of T-092).
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Entry {
-        File { bytes: Vec<u8>, mode: u32, ino: u64 },
-        Link { target: PathBuf },
-        Dir { mode: u32 },
+        File {
+            bytes: Vec<u8>,
+            mode: Mode,
+            #[cfg(unix)]
+            ino: u64,
+        },
+        Link {
+            target: PathBuf,
+        },
+        Dir {
+            mode: Mode,
+        },
+    }
+
+    /// A symlink at `link` to `target` (`/`-separated, relative to the link's directory).
+    #[cfg(unix)]
+    pub fn make_link(target: &str, link: &Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+    /// Windows: the target is built with `PathBuf::push` (ruling Q-B of T-092); a directory
+    /// link when the target, resolved from the link's directory, is an existing directory.
+    #[cfg(windows)]
+    pub fn make_link(target: &str, link: &Path) {
+        let mut t = PathBuf::new();
+        for part in target.split('/') {
+            t.push(part);
+        }
+        if link.parent().unwrap().join(&t).is_dir() {
+            std::os::windows::fs::symlink_dir(&t, link).unwrap();
+        } else {
+            std::os::windows::fs::symlink_file(&t, link).unwrap();
+        }
     }
 
     /// Every entry below `root` (relative `/`-path → entry), symlinks not followed.
@@ -97,9 +180,7 @@ mod support {
                 } else if ft.is_dir() {
                     out.insert(
                         rel,
-                        Entry::Dir {
-                            mode: m.permissions().mode() & 0o7777,
-                        },
+                        Entry::Dir { mode: mode_of(&m) },
                     );
                     walk(root, &p, out);
                 } else {
@@ -107,7 +188,8 @@ mod support {
                         rel,
                         Entry::File {
                             bytes: std::fs::read(&p).unwrap(),
-                            mode: m.permissions().mode() & 0o7777,
+                            mode: mode_of(&m),
+                            #[cfg(unix)]
                             ino: m.ino(),
                         },
                     );
@@ -207,7 +289,9 @@ mod support {
     }
 
     /// Can this process write a file whose permission bits forbid it (e.g. running as root)?
-    /// Probed by opening a 0444 file for writing without truncating it.
+    /// Probed by opening a 0444 file for writing without truncating it. Only the Unix test of
+    /// permission bits needs it.
+    #[cfg(unix)]
     pub fn bits_do_not_stop_writes(dir: &Path) -> bool {
         let probe = dir.join("probe-ro");
         put(&probe, b"p");
@@ -274,7 +358,7 @@ fn save_never_writes_through_symlinks_at_temp_names() {
     for (i, name) in names.iter().enumerate() {
         let victim = root.join(format!("victims/v{i}"));
         put(&victim, format!("victim {i}\n").as_bytes());
-        std::os::unix::fs::symlink(format!("../victims/v{i}"), root.join("d").join(name)).unwrap();
+        make_link(&format!("../victims/v{i}"), &root.join("d").join(name));
     }
     let before = snapshot(&root);
 
@@ -301,7 +385,7 @@ fn save_ignores_self_pointing_and_dangling_symlinks_at_temp_names() {
             } else {
                 format!("ghost-{i}")
             };
-            std::os::unix::fs::symlink(&to, root.join(name)).unwrap();
+            make_link(&to, &root.join(name));
         }
         let before = snapshot(&root);
         let mut disk = DiskFs::new(&root).unwrap();
@@ -331,7 +415,7 @@ fn save_through_symlink_with_decoys_changes_only_the_link_target() {
     let root = fresh_dir("symlink_doc_decoys");
     put(&root.join("real/t.txt"), b"target\n");
     std::fs::create_dir_all(root.join("work")).unwrap();
-    std::os::unix::fs::symlink("../real/t.txt", root.join("work/l.txt")).unwrap();
+    make_link("../real/t.txt", &root.join("work/l.txt"));
     for dir in ["real", "work"] {
         for base in ["t.txt", "l.txt"] {
             for (i, name) in decoy_names(base).iter().enumerate() {
@@ -344,16 +428,40 @@ fn save_through_symlink_with_decoys_changes_only_the_link_target() {
     }
     let before = snapshot(&root);
     let mut disk = DiskFs::new(&root).unwrap();
-    let mut doc = Document::open(&disk, &rp("work/l.txt")).unwrap();
-    insert_end(&mut doc, "via link\n");
-    doc.save(&mut disk).unwrap();
-    assert_only_target_changed(
-        &before,
-        &snapshot(&root),
-        "real/t.txt",
-        b"target\nvia link\n",
-        "through link",
-    );
+    if cfg!(windows) {
+        // T-074 Interface (1), (7): on Windows no link is followed; open and save are refused
+        // (as `acceptance_t002::save_through_symlink_updates_target`) and nothing changes.
+        let path = rp("work/l.txt");
+        let opened = Document::open(&disk, &path);
+        assert!(
+            matches!(
+                opened,
+                Err(kiln_workspace::OpenError::Vfs(VfsError::OutsideRoot { .. }))
+            ),
+            "Windows: Document::open through a file symlink: expected Err(Vfs(OutsideRoot)), got {opened:?}"
+        );
+        assert_eq!(
+            disk.write_atomic(&path, b"target\nvia link\n"),
+            Err(VfsError::OutsideRoot { path: path.clone() }),
+            "Windows: write_atomic through a file symlink"
+        );
+        assert_eq!(
+            snapshot(&root),
+            before,
+            "Windows: a refused save through a link changed the tree"
+        );
+    } else {
+        let mut doc = Document::open(&disk, &rp("work/l.txt")).unwrap();
+        insert_end(&mut doc, "via link\n");
+        doc.save(&mut disk).unwrap();
+        assert_only_target_changed(
+            &before,
+            &snapshot(&root),
+            "real/t.txt",
+            b"target\nvia link\n",
+            "through link",
+        );
+    }
 }
 
 /// A document whose own name looks like a temp name of another document: saving either one
@@ -401,6 +509,7 @@ fn documents_named_like_temp_files_do_not_clobber_each_other() {
 /// After saving, the target keeps its exact mode (0600 stays 0600, etc.), and no entry in the
 /// directory is group- or world-readable unless it was before.
 #[test]
+#[cfg(unix)]
 fn saved_file_is_never_more_readable_than_the_target() {
     for m in [0o600, 0o640, 0o604, 0o644, 0o660, 0o700, 0o755] {
         let root = fresh_dir(&format!("mode_{m:o}"));
@@ -437,6 +546,7 @@ fn saved_file_is_never_more_readable_than_the_target() {
 /// test checks the other branch strictly: either the same refusal, or a complete save that keeps
 /// the read-only mode — never a partial state or an extra file.
 #[test]
+#[cfg(unix)]
 fn save_to_unwritable_target_is_permission_denied_and_untouched() {
     for m in [0o444, 0o400, 0o555] {
         let root = fresh_dir(&format!("readonly_{m:o}"));

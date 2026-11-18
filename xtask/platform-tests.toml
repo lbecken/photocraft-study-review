@@ -351,3 +351,24 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "is refused with `outside_root` when the root path no longer leads to the root"
 counterpart = "crates/kiln-workspace/src/disk.rs::tests::check_location_outside_on_every_platform"
+
+# T-092: the Unix parts of `kiln-workspace`'s integration tests (modes, FIFOs, sockets,
+# devices, identities, inode reuse, a rename Windows refuses); every other test of these files
+# runs on every platform.
+
+[[test]]
+file = "crates/kiln-workspace/tests/acceptance_t002_r2.rs"
+item = "saved_file_is_never_more_readable_than_the_target"
+platforms = "unix"
+doc = "docs/decisions.md"
+quote = "new content is never more readable than the file it replaces or becomes"
+counterpart = "none"
+reason = "Windows has no mode bits: the test sets and compares Unix permission modes (`PermissionsExt::mode`/`from_mode`), as the `disk.rs` entry `tests::temp_file_is_created_owner_only_and_gets_target_mode_before_rename`"
+
+[[test]]
+file = "crates/kiln-workspace/tests/acceptance_t002_r2.rs"
+item = "save_to_unwritable_target_is_permission_denied_and_untouched"
+platforms = "unix"
+doc = "docs/decisions.md"
+quote = "saving to a target the user cannot write returns `PermissionDenied` and leaves the file untouched"
+counterpart = "crates/kiln-workspace/tests/guard_t073.rs::acw2_save_of_read_only_target_is_refused_and_changes_nothing"
