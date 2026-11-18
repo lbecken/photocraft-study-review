@@ -884,7 +884,7 @@ notes (point 2; the latter pending Q-B).
     `root/dlink/secret.txt`, `root/chain`, `root/px`: "reaches the outside content"; `root/t`: "does not reach:
     NotFound". With these the file's count is 178 + 12 = 190. If `chain` or `abs` does not reach either, the tests still
     pass as long as one link reaches, and the lines will say which.
-  CI-REQUEST: see the next line (the commit that holds this entry)
+  CI-REQUEST: 672bb8877b346d0c9e065f0f02d2b8b20127b361 (the commit after it adds only this line)
 <!-- end implementer log -->
 ### test author
 - 2026-11-18 · test author (R-392) · in_progress · did: wrote `xtask/tests/acceptance_t092.rs` (AC-1) and
