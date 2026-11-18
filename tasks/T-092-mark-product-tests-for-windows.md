@@ -870,6 +870,7 @@ notes (point 2; the latter pending Q-B).
     unchecked until CI round 1: whether each rewritten P/w test passes on Windows as written (Pinned (c), (d)).
     No information outside the repository was needed. Token use about 215,000 of my share of 320,000.
     Next: director (CI round 1 on the commit below; QUESTION 1).
+  CI-REQUEST: 0019cbb8fde3c9da5dd3ce012b6047567b1f8fa4 (the commit after it adds only this line to the log)
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
