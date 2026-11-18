@@ -806,6 +806,46 @@ notes (point 2; the latter pending Q-B).
     asserts `AlreadyExists`, as P-C1 measured). The two pending entries now name them (no `reason`, `task`, `expires`).
     Linux lib: 60 passed (base 58); stand-in clippy `--lib --profile test -D warnings` Windows and macOS: `Finished`.
     main's no-skip: PASS, 47 registered (8 pending); no `task = "T-092"` left.
+  - **Expectation for CI round 1** (written before it runs; AC-3). Step "kiln-workspace test targets (reported, not
+    required)", `==== <t>: exit status 0`, `test result: ok.`, passed count, and the tests new or changed in body
+    for Windows (every test of a target that did not compile on Windows before runs there for the first time):
+    `acceptance_t002` 15 (changed: `disk_save_replaces_via_rename_without_leftovers`); `acceptance_t002_r2` 8 (all 8
+    first run; changed body: `save_through_symlink_with_decoys_changes_only_the_link_target`; the other 7 only through
+    the `support` twins and `make_link`); `acceptance_t008` 7 (first run; changed: `link_swapped_in_after_open_is_refused_at_save`,
+    `outside_root_wins_over_not_found`; `open_through_escaping_symlinks_is_refused`,
+    `save_through_escaping_symlinks_touches_nothing`, `root_swapped_between_requests_is_refused`,
+    `root_removed_and_replaced_by_link_is_refused`, `root_removed_and_replaced_by_new_directory_is_refused` through
+    `make_link`, `identity_note`, `describe`); `acceptance_t015_tools` 3 (changed: `no_tools_never_runs`);
+    `acceptance_t036_workspace` 0 (`running 0 tests`); `acceptance_t073` 1; `confinement` 4 (first run; changed:
+    `links_inside_and_excursions_back_inside_are_followed`, `swaps_between_open_and_save_are_checked_again`,
+    `walk_corner_cases`; `escapes_are_refused_at_read_write_and_is_file` through `symlink`); `guard_t008` 1 (changed:
+    `symlinks_inside_root_still_work`); `guard_t036_removal_workspace` 0 (`running 0 tests`); `guard_t036_workspace` 2
+    (first run; changed: `vanished_root_is_refused`; `retargeted_root_link_is_refused` through the twin helpers);
+    `guard_t073` 10; `guard_t074` 15; `tools_contract` 5 — 71 in all. `acceptance_t019_workspace` and `project`:
+    `exit status 101`, `error: could not compile `kiln-workspace` (test "<t>") due to 5 / 3 previous errors`, no
+    `test result:` line (untouched; stand-in shows the same 5 and 3). Step "Workspace lib and T-073 tests": line
+    beginning `WORKSPACE TESTS: exit status 0`, library `test result: ok. 45 passed` with
+    `test disk::tests::leftover_at_temp_name_is_never_touched_on_every_platform ... ok` and
+    `test disk::tests::failed_save_after_writability_check_leaves_target_and_listing_unchanged_on_every_platform ... ok`.
+    Most at risk (Pinned (d), unchecked): `acceptance_t008::open_through_escaping_symlinks_is_refused` and
+    `save_through_escaping_symlinks_touches_nothing` (precondition `assert_reaches(t)` with `s/../secret.txt` after a
+    directory link), `outside_root_wins_over_not_found` (`canonicalize` of `up`/`self`), and the 255-byte name of
+    `acceptance_t002_r2::file_with_255_byte_name_opens_edits_and_saves` (path length under `CARGO_TARGET_TMPDIR`).
+    `confinement.rs:138,201` (`t`, `dd`) have no reach precondition, so they cannot fail that way.
+  - Checks before the CI round (tree at this commit's parent plus this log): `cargo xtask ci` attempt 1 → `GATE PASSED`
+    (test 1205 passed, 0 failed; no-skip 47 registered, 8 pending). main's `xtask` (`git archive main`, built in a
+    scratch directory) on the tree: `no-skip`, `hygiene` (717 files), `layers`, `ui-commands`, `schema`, `scorecard --check`
+    (64 items: 47 verified, 0 failing) all PASS. `cargo test -p xtask --test guard_t079 --test acceptance_t079 --test
+    acceptance_t074 --test guard_t071` → 6, 2, 2, 6 passed (`acceptance_t073` is a `kiln-workspace` target: 1 passed in
+    the gate). Windows stand-in `cargo clippy -p kiln-workspace --lib --tests --locked --keep-going --target
+    x86_64-pc-windows-msvc -- -D warnings` → exit 101, `could not compile` for exactly `acceptance_t019_workspace` (5
+    errors) and `project` (3); `--lib --test <t>` exit 0 for each of the 13 targets of AC-3; macOS stand-in
+    `--all-targets -- -D warnings` → exit 0. Linux unchanged: every base test name passes under the same name
+    (`guard_t079` 6 passed); 3 new `_unix` tests and 2 new `disk.rs` tests added. Main moved by ledger commits only
+    (`76ccb9f`, `024820b`) since my base. Not run: anything on Windows or macOS itself (nothing links here);
+    unchecked until CI round 1: whether each rewritten P/w test passes on Windows as written (Pinned (c), (d)).
+    No information outside the repository was needed. Token use about 215,000 of my share of 320,000.
+    Next: director (CI round 1 on the commit below; QUESTION 1).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
