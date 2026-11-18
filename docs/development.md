@@ -98,11 +98,12 @@ listed twice is an error of the `no-skip` step; a missing file is an empty regis
 `cfg` on a test stays a `cfg-disabled` skip, and so does `#[cfg_attr(<predicate>, test)]`. An
 item's platforms are its own cfg's intersected with those of the `mod` (and `impl`) items around
 it; a platform cfg whose intersection is empty is `cfg-disabled`, registered or not. `xtask/` is a
-gate path, so only a high-tier task changes the registry (METHODOLOGY §4). The registry lists the
-tests of `xtask`'s queue, worktree and publish tools (Linux or Unix only, no counterpart: those
-tools run on the director's Linux machine) and the product tests of a facility macOS lacks
-(`/dev/full`, file names that are not UTF-8, X11's behaviour without a display), each Linux only;
-the Windows marking of the product tests is T-092's.
+gate path, so only a high-tier task changes the registry (METHODOLOGY §4). The registry lists
+each test behind a platform form with one of two kinds of reason: a test of `xtask`'s queue,
+worktree or publish tools, which run only on the director's Linux machine (no counterpart); or a
+product test of a facility another platform lacks (for example `/dev/full` or file names that are
+not UTF-8 on macOS, Unix modes, FIFOs or Unix symlinks on Windows), whose counterpart is the test
+of the same sentence there, `none` with the reason, or `pending` with the task that writes it.
 
 Limits (D-226 s8): the rule reads attributes in the source, so a test can still check nothing on
 a platform in these ways without a finding, each shown by a toy test file with an empty registry
