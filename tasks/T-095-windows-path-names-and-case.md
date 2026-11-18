@@ -160,7 +160,8 @@ Windows clause; the quoted words "not valid UTF-8 or contain" stay (`xtask/platf
   - `paths.md`, replacing "Names that Windows gives a meaning, and case, are not yet stated for Windows (T-095).":
     "Names that Windows reserves for devices (`CON`, `NUL`, `aux.rs`, …) and names ending in a dot or a space are
     ordinary files of the project for Kiln, which reaches every file through `\\?\` paths. Other Windows programs may
-    not open them (T-095; CI run 44290286460)." Evidence: PROBE I1-I3, I5, I11, I12.
+    not open them (T-095; CI run 44290286460)." Evidence: PROBE I1-I3, I5, I11, I12 (for `CON`, `NUL`, `nul.rs`,
+    `con.txt`, `a.`, `b `); `aux.rs` itself: `guard_t095` in the CI round (not in the probe; corrected (spec check)).
   - `paths.md` "The rule", after the re-open item, a Windows bullet: "On Windows names differ only by case on the
     default file system: `F.TXT` reads and saves `f.txt` (after the save the file is named <measured>), and an 8.3 short
     name, on a volume that has them, names its long one (<measured or unchecked>). A path already open is recognised
@@ -193,7 +194,8 @@ T-074).
   and I1 `write_atomic "x<y": Err(Io … InvalidFilename …)`. Unmeasured at base: `>` and U+0002 to U+001F; the rule
   covers them by construction.
 - AC-W2 (Interface (2)): `aux.rs`, `CON`, `a.`, `b ` written, read, listed and saved on Windows. Holds at base (PROBE
-  I1-I3, I5, I6), so it is a guard.
+  I1-I3, I5, I6 for `CON`, `a.`, `b ` by `write_atomic`/`read`/`list_dir`; `aux.rs` and the `Document` save are not in
+  the probe and are inferred from `AUX`, `nul.rs` and `write_atomic`: corrected (spec check)), so it is a guard.
 - AC-W3 (Interface (3)): `F.TXT` reads and saves `f.txt`; the two `MEASURED:` lines (spelling after the save, short name
   on `C:`) are present. The reading holds at base (PROBE I7); the spelling and the short name are unmeasured, and the
   test's first run measures them.
