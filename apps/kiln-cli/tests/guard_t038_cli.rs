@@ -36,6 +36,14 @@ use serde_json::{Value, json};
 /// Hang detector for every child process and every response; never a duration assertion.
 const TIMEOUT: Duration = Duration::from_secs(10);
 const SECRET: &[u8] = b"outside secret\n";
+/// `ELOOP` (too many levels of symbolic links), whose number is the platform's: 40 on Linux,
+/// 62 on macOS (`<errno.h>` of each).
+#[cfg(target_os = "linux")]
+const ELOOP: i32 = 40;
+/// `ELOOP` (too many levels of symbolic links), whose number is the platform's: 40 on Linux,
+/// 62 on macOS (`<errno.h>` of each).
+#[cfg(target_os = "macos")]
+const ELOOP: i32 = 62;
 
 // ---------------------------------------------------------------------------------------------
 // Fixture.
@@ -85,7 +93,7 @@ impl Work {
         let err = fs::metadata(self.at(&format!("{dir}/{l1}"))).unwrap_err();
         assert_eq!(
             err.raw_os_error(),
-            Some(40), // ELOOP
+            Some(ELOOP),
             "precondition: {dir}/{l1} is a link loop: {err}"
         );
     }
