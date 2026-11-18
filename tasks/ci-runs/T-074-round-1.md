@@ -587,3 +587,27 @@ Values of this run first, then the early-2 value.
 - Windows: the contents of `test-list.txt` beyond its size (compile errors only); the compile errors of the 9 non-compiling `kiln-workspace` targets beyond the first error and closing line; the full text of clippy's, scorecard's and test's failing output beyond what the gate report keeps (60/62/27 lines); `xtask/platform-tests.toml` at 720f1d5 and the source of `main_xtask_is_rebuilt_from_base_on_every_run` (why it is absent on Windows is not determinable from this run's files).
 - Which `kiln-workspace` library tests are new against main (no main run read); the seven `_windows`-named tests: no such names in the list.
 - `Rust versions` lines of the gate-macos and gate-windows logs were not re-read; the macOS runner version line was read (2.338.2).
+
+## Re-run of the failed and cancelled jobs (attempt 2)
+Run 44358453526 (`platforms.yml`, `ci/candidate`, head `720f1d56ac27b83594dd96f16734b04b2f8d4c7f`), `run_attempt` 2, re-run started 2026-11-18T18:00:37Z (`run_started_at`). Read from `actions_list` `list_workflow_jobs` (filter `latest`) and `actions_get` `get_workflow_job`; last read about 18:21Z. At that read the run was still `in_progress` (`updated_at` 2026-11-18T18:15:41Z).
+
+| job | job id | conclusion at last read | wall (completed − started) | runner |
+|---|---|---|---|---|
+| `window-probe (macos-15)` | 135016071934 | cancelled | 15m01s (18:00:40Z–18:15:41Z) | none: `runner_id` 0, `runner_name` "" |
+| `window-probe (windows-2025)` | 135016071898 | failure | 2m13s (18:00:42Z–18:02:55Z) | 1000001076 |
+| `gate-windows` | 135016071316 | in progress (started 18:00:42Z) | not complete | 1000001075 |
+| `gate-linux`, `window-linux`, `gate-macos` | 135016074729, 135016145457, 135016175475 | success | not re-run: the list returns them with `run_attempt` 2 but with the attempt-1 times (17:25Z–17:58Z) | as in attempt 1 |
+
+### `window-probe (macos-15)`
+- Runner assigned: **no**. The job stayed `queued` from 18:00:40Z (`created_at` = `started_at`) at every read between about 18:03Z and 18:15Z; it became `completed`, `conclusion: cancelled`, `completed_at` 2026-11-18T18:15:41Z, with `runner_id` 0, `runner_name` "" and `runner_group_id` 0.
+- Steps: none (the job data has no `steps`).
+- `PROBE: exit status N` line: none, the probe did not run. Artefact `window-probe-macos-15-44358453526`: no artefact listing of the re-run was read, so none is claimed; no job log was read.
+
+### `window-probe (windows-2025)` (re-run)
+Set up job, Checkout, Install the pinned toolchain, Cache cargo registry and target: success. Build kiln: success (18:01:10Z–18:02:49Z). Window probe: failure (18:02:49Z–18:02:51Z). Upload the probe's record: success (18:02:51Z–18:02:52Z). Post Cache: skipped. Post Checkout, Complete job: success. Artefact not read.
+
+### `gate-windows` (re-run, unfinished at last read)
+Steps through Cache cargo registry and target: success. Gate: failure (18:01:12Z–18:09:21Z, 8m09s). Gate report: success (18:09:21Z). Core crates (reported, not required): in progress at the last read. Later steps pending. Nothing of its artefact read.
+
+### Not read here
+Final run conclusion; `gate-windows` completion and artefacts; any artefact or log of the re-run.

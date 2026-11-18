@@ -254,3 +254,30 @@ Run `status: completed`, run conclusion **failure** (`updated_at` 2026-11-18T17:
 - `xtask/platform-tests.toml` at 1275379 and the source of `main_xtask_is_rebuilt_from_base_on_every_run` and of `guard_t072.rs`: not read, so why the first is absent on Windows is not determinable from this run's files.
 - Why the Linux gate counts 1,176 passed while `test-list.txt` has 1,175 names: not explained by any file read.
 - Per-test results other than those named above (xtask `core-crates.txt` lines were counted, not read test by test).
+
+## Main after the merge
+Push to `main` at about 17:55Z carrying `c581532433b601f35fc43f1ce66485cc72ef4a3f` ("queue: record T-072 merged", parent chain lists merge head `0deb1738e2f3d9addb6fd258cff440248e2e1ead` before it, from `list_commits`) and the ledger commit `516870a27e558d9c99f84695de5494b46e3f1062` ("ledger: T-072 merged (D-268)", 17:55:01Z). The push's `head_sha` for both runs is `516870a…`. Read from `actions_list` `list_workflow_runs` / `list_workflow_jobs`, last read about 18:21Z.
+
+### `ci.yml` run 44363941014 (run number 560): success
+Job `gate` (135012496480): success, 11m19s (17:55:09Z–18:06:28Z); runner 1000001074; Gate step success (17:55:56Z–18:06:24Z). Gate report (log tail): `test`: `1176 passed, 0 failed, 0 ignored in 138 suites`; no-skip `204 files scanned, 0 allowlisted skip(s), 35 platform test(s) registered (19 pending)`; scorecard `64 items: 47 verified, 0 implemented, 0 failing, 17 planned.`; hygiene `62 of 74 review file(s)`, `710 tracked file(s) clean`. Image version: not read (the log tail did not reach the header).
+
+### `platforms.yml` run 44363940844 (run number 40, attempt 1): `in_progress` at last read
+| job | job id | conclusion | wall | runner |
+|---|---|---|---|---|
+| `window-probe (macos-15)` | 135012495895 | success | 52s (17:55:11Z–17:56:03Z) | assigned, 1000001072 |
+| `window-linux` | 135012496028 | success | 2m25s (17:55:09Z–17:57:34Z) | 1000001070 |
+| `window-probe (windows-2025)` | 135012496061 | failure (Window probe step failure 17:57:28Z–17:57:30Z) | 2m26s (17:55:09Z–17:57:35Z) | 1000001071 |
+| `gate-linux` | 135012498284 | skipped (created and completed 17:55:07Z) | 0s | none |
+| `gate-macos` | 135012496859 | in progress | not complete | assigned, 1000001073 |
+| `gate-windows` | 135012495348 | in progress | not complete | 1000001069 |
+
+- `gate-macos`: Gate step success (17:55:43Z–18:11:51Z); Gate report success; Core crates in progress at 18:18Z. Gate report counts, `TEST LIST: exit status` line, `test-list.txt` counts: not read (job unfinished, no artefact yet).
+- `gate-windows`: Gate step failure (17:55:39Z–18:03:58Z); Gate report success; Core crates in progress at 18:18Z. Failing gate steps, "Workspace lib and T-073 tests" counts and the `==== <target>: exit status N` lines: not read (job unfinished).
+- `gate-linux` did not run on this push (skipped), so there is no Linux gate report or `TEST LIST` line from this run; the only Linux gate on this push is the `ci.yml` job above.
+- Artefacts listed at 18:18Z: `window-probe-windows-2025-44363940844` (344 B), `window-probe-macos-15-44363940844` (704 B), `window-linux-44363940844` (577 B); none downloaded.
+
+### Later pushes to main (ledger files only)
+`ci.yml` runs 561 (`6a38a2b045f9c24b25c7c6569e0ed0405af4c136`), 562 (`8dffc66c1ed07b8471fb0fd7dc9b92da8636545d`), 563 (`78db3ef1f515873dbe17e72219b89cfcabdcd16d`): all completed, success. No `platforms.yml` run for them was seen in the listings read.
+
+### Not read
+Run 40's final conclusion; `gate-macos` and `gate-windows` reports, test counts, `TEST LIST` lines, target exit-status lines; every artefact's contents; the macOS window probe's `PROBE:` line; the `ci.yml` image version; whether the later pushes' changed files are ledger-only (taken from the brief).

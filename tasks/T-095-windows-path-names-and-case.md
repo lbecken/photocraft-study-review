@@ -66,6 +66,11 @@ system is consulted, or stated as a limit), tested on the runner.
 About 500,000: a short product change, unit tests in `path.rs` (they run on Windows in T-073's `--lib` step), a guard file
 by an independent test author (reported on Windows by T-072's general step), three or four document places, 1–2 CI rounds.
 
+## Note from T-074's review (director, D-270)
+`docs/control-protocol.md:145` cites "`awa3_*`" and `docs/protocol/project.md:82` cites "`awa1_*`" for run
+44307677646, which did not yet hold the two tests added later (`reviews/T-074-r2.md`, the nit). This task, which
+edits the same documents, names run 44358453526 (all 15 guards; `tasks/ci-runs/T-074-round-1.md`) there.
+
 ## Log
 ### director
 <!-- end director log -->
