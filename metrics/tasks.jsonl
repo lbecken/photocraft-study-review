@@ -860,3 +860,8 @@
 {"kind":"transition","task":"T-079","iteration":2,"at":"2026-11-18T07:26:34Z","from":"tests_joined","to":"reviewed"}
 {"kind":"transition","task":"T-079","iteration":2,"at":"2026-11-18T07:26:34Z","from":"reviewed","to":"queued"}
 {"kind":"transition","task":"T-079","iteration":2,"at":"2026-11-18T07:46:36Z","from":"queued","to":"merged"}
+{"kind":"run","task":"iter-2","iteration":2,"run":"R-336","role":"planner","tier":null,"started_at":"2026-11-18T07:47:26Z","ended_at":"2026-11-18T07:56:36Z","wall_s":550,"tokens":58909,"tool_calls":25,"gate_attempts":0,"outcome":"completed","missing_context":"none","note":"T-072 and T-073 re-specified in full under v1.5 against main 7b86bdf; T-072 cut to the CI evidence, its macOS document sentences split into T-093 (new, low); the two runs on main that no push started are the nightly schedule (cron 17 3 * * *, verified); T-073 with a prototype probe of about 51 lines: clippy clean for Windows for every library and both binaries, kiln-workspace's tests pass on Linux (127), the lock gains one line; tokens are the delta of the running figure (842847 - 783938)"}
+{"kind":"transition","task":"T-073","iteration":2,"at":"2026-11-18T07:57:51Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-073","iteration":2,"at":"2026-11-18T07:57:51Z","from":"specified","to":"ready"}
+{"kind":"transition","task":"T-072","iteration":2,"at":"2026-11-18T07:57:51Z","from":"draft","to":"specified"}
+{"kind":"transition","task":"T-093","iteration":2,"at":"2026-11-18T07:57:51Z","from":"draft","to":"specified"}
