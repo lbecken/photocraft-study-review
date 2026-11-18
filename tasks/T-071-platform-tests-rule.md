@@ -2,7 +2,7 @@
 id: T-071
 title: "Make no-skip and the scorecard step follow the platform-test rule: a registry of tests that exist only on some platforms, each with its counterpart or the reason there is none; no helper that does nothing on one platform; the gate's own tests compile and pass on all three"
 tier: high              # METHODOLOGY v1.4 §4: gate paths (xtask/); the approval row must contain `gate paths`. No dependency change.
-state: tests_joined
+state: queued
 owner_role: planner
 scorecard_items: []     # none claimed; the tests it marks stay tied to their items
 depends_on: [T-070]     # its Windows evidence is T-070's gate-windows core-crates step; and both edit docs/development.md (§5.2)
@@ -438,6 +438,14 @@ way of writing a test falls into is closed; a contrived one is stated as a limit
   platform line first (s10). `acceptance_t071` 28 of 28, `guard_t071` 6 of 6, `acceptance_t070` 13 of 13 and
   `guard_t070` 7 of 7 on all three. macOS workspace: 1,101 passed, 16 failed, exactly the 16 product tests of
   D-199 (T-079's). AC-6: every clause met except "`xtask` exit status 0 on `gate-windows`" (the 2 failures).
+
+- 2026-11-18 **CI round 4: the pending CI criterion is met** (record `tasks/ci-runs/T-071-round-4.md`, from the six
+  artefacts, run R-322): run 44220309842 on `ci/candidate` at `b7dd7d621f4a90b4eb7165f6118a0be88fb7dad1` (the joined
+  and reviewed head). `xtask` exit status 0 on all three platforms, 21 test binaries each: Linux 278 passed, macOS
+  273, **Windows 270 passed and 0 failed** (`seed_reuses_non_member_artifacts_only ... ok`,
+  `seeded_worktree_builds_its_own_source ... ok`). `gate-linux` success; `window-linux` and
+  `window-probe (macos-15)` success. AC-6 met in every clause (the scorecard clause as s10 words it). The macOS
+  and Windows gates stay red for the product tests (T-079) and `kiln-workspace` (T-073), as the spec expects.
 
 ### planner
 - 2026-11-15 · R-255 · draft · did: filed from ADR-0009 · next: director
