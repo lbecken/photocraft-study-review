@@ -691,6 +691,20 @@ notes (point 2; the latter pending Q-B).
   saves through a link that stays inside the root, which is `outside_root` on Windows since T-074; the expected
   answer of that part is chosen with `cfg!(windows)`, with no cfg attribute on the test. Accepted.
 
+### Rulings on review round 1 and CI round 1 (director, D-277; sent to both builders)
+- **b1 (CI round 1, the case Pinned (d) left unchecked).** In run 44383948281 on Windows the fixture precondition
+  `assert_reaches` of `acceptance_t008.rs` (reading `root/<link>` through the kernel reaches the outside content)
+  answered `NotFound` in W12 and W13 (`tasks/ci-runs/T-092-round-1.md`): at least one link form of the fixture is
+  not an escape on Windows. The precondition becomes per fixture and per platform: on Unix it stays strict; on
+  Windows each fixture link is measured first and a `MEASURED:` line says for each whether the kernel reaches the
+  outside content; a fixture that reaches is asserted as before; one that does not reach is still asserted to be
+  refused by Kiln (`outside_root`, since every reparse point on the walk is refused) with nothing outside changed;
+  and at least one fixture of each test must reach on Windows, or the test fails naming the forms tried (a test of
+  escapes with no real escape shows nothing). If no form reaches, that is a `QUESTION:` before any further change.
+- **b2 (review finding 1).** `guard_t008::symlinks_inside_root_still_work`: the check that the links are kept must
+  not depend on the verbatim prefix and takes no platform cfg: compare with `read_link` taken right after the
+  fixture is made, as the reviewer proposes. The same pattern is looked for in the other rewritten files.
+
 ## Log
 ### director
 - 2026-11-18 filed as a draft (D-233).
