@@ -1,7 +1,7 @@
 # CI run 44297420849 (platforms.yml) on ci/candidate @ d6f780562e35f42c071ffe864a91ff02ff29881f — T-072 round 1
 
 Record by hand; method as `tasks/ci-runs/README.md` (artefacts first, job logs only where an artefact does not hold the line).
-**INCOMPLETE: `gate-macos` had not finished when the 25-minute wait ended (about 12:33Z); see "Not read".**
+**INCOMPLETE: `gate-macos` had not finished when the waits ended (last check 12:49Z, 59 minutes after the job started); see "gate-macos (unfinished)" and "Not read".**
 
 ## Run header
 - id 44297420849, run_number 27, attempt 1, event push, workflow `platforms`, title "Join task/T-072-tests into task/T-072"
@@ -22,6 +22,23 @@ Wall time = `completed_at` − `started_at` of the job (job listing).
 
 Artefacts (`list_workflow_run_artifacts`, fetched with `download_workflow_run_artifact` and curl; size equal to `size_in_bytes`, `testzip()` clean; scratch directory removed after the record):
 `gate-linux-44297420849` 55,429 B; `gate-windows-44297420849` 25,204 B; `window-probe-macos-15-…` 704 B; `window-probe-windows-2025-…` 344 B; `window-linux-…` 577 B (the last three listed, not downloaded). No `gate-macos-…` artefact existed at the last listing.
+
+## gate-macos (unfinished)
+Job 134777981910, runner label `macos-15`, started 11:50:00Z; status `in_progress` with no `completed_at` at the last check (12:49:33Z). Step list as of that check (job data, `get_workflow_job`; unchanged since 12:27:07Z):
+| step | conclusion | duration |
+|---|---|---|
+| Set up job | success | 2s |
+| Checkout | success | 4s |
+| Install the pinned toolchain | success | 12s |
+| Cache cargo registry and target | success | 18s |
+| Gate | **failure** | 17m40s (11:50:37Z–12:08:17Z) |
+| Gate report | success | 1s |
+| Core crates (reported, not required) | success | 9m44s (12:08:18Z–12:18:02Z) |
+| Test list | success | 4s (12:18:02Z–12:18:06Z) |
+| Full test output (gate failed) | **cancelled** | 9m01s (12:18:06Z–12:27:07Z) |
+| Disk | **in_progress, no completed_at** | running since 12:27:07Z (more than 22 minutes at the last check) |
+| Upload reports, Post Cache, Post Checkout | pending | not started |
+Why "Full test output" was cancelled: **not determinable**. The job's `timeout-minutes` is 120 (`.github/workflows/platforms.yml` at d6f7805, line 59; the step has no `timeout-minutes` of its own). At the cancellation (12:27:07Z) the job had run 37m07s, and 59m33s at the last check, so no timeout was reached. The check run has no annotation (`get_check_run`: conclusion empty, output title/summary/text empty) and `get_job_logs` returned HTTP 404 each time (12:33Z, 12:49Z). The cancellation was not made by anything this record can see (a manual cancel, a runner loss or a runner-side stop are all possible; none is shown). What "Disk" did: nothing is visible; it started at the moment the previous step was cancelled and never finished. The job has no conclusion, so "Upload reports" has not run and **no `gate-macos-44297420849` artefact exists** (artefact list at 12:33Z holds only gate-linux, gate-windows and the three window artefacts). This job's gate report, `TEST LIST: exit status`, list size, `df`/inode line and `target/` size: not read.
 
 ## gate-linux (ubuntu-24.04, image `ubuntu-24.04` version 20261111.370.1 per the job log header)
 Step timings (job listing):
@@ -178,11 +195,32 @@ macOS inode columns: not read.
 **Window jobs**: `window-linux` success, `window-probe (macos-15)` success, `window-probe (windows-2025)` failure with Build kiln success (as on main); the probe's `PROBE: exit status 2` line itself: **not read** (artefact not downloaded).
 **"List step's time per gate job in step timings; seconds, not minutes, where the gate built the tests"**: **met**: Linux 1 s, Windows 1 s, macOS 4 s.
 
+## The implementer's head: run 44297266071 (head 277e25812aaf364f94e4d17a52ec14bf3f2e9b52)
+Run number 26, created 2026-11-18T11:43:29Z, completed `failure` (gate-windows and window-probe (windows-2025) red; gate-macos and gate-linux success). It has the new evidence steps but not the test files (so no `acceptance_t072`/`guard_t072`). Figures from the job listing, the artefacts of this run and the job logs (read with `get_job_logs`, tail only; images from the log header). Artefacts fetched as for the other run, sizes equal to the list, `testzip()` clean.
+
+| | gate-linux (134777450280) | gate-macos (134777450278) | gate-windows (134777450277) |
+|---|---|---|---|
+| conclusion | **success** | **success** | **failure** (gate: clippy, scorecard, test, as on main) |
+| runner label, image | ubuntu-24.04; `ubuntu-24.04` version 20261111.127.1 | macos-15; `macos-15-arm64` version 20261104.0514.1 | windows-2025; `windows-2025-vs2026` version 20261103.298.1 |
+| wall (started–completed) | 11m49s (11:43:32Z–11:55:21Z) | 24m13s (11:43:33Z–12:07:46Z) | 18m38s (11:43:32Z–12:02:10Z) |
+| Gate step | 8m24s (report 500.9 s) | 15m58s (report 949.2 s) | 6m26s (report 364.9 s) |
+| "Test list" step | under 1 s (11:55:18Z–11:55:18Z; log 11:55:18.10–.79) | 4s | 2s (12:01:54Z–12:01:56Z) |
+| "Full test output (gate failed)" | skipped | skipped | ran, 1s |
+| `TEST LIST: exit status` line (log) | `TEST LIST: exit status 0 (recorded; the gate step decides the colour)` | `TEST LIST: exit status 0 (recorded; the gate step decides the colour)` | `TEST LIST: exit status 101 (recorded; the gate step decides the colour)` |
+| `test-list.txt`: binaries, test names | 134 (126 `Running`, 8 `Doc-tests`); 1,146 names; 1,537 lines, 74,715 B | 134 (126 + 8); 1,129 names; 1,520 lines, 73,757 B | 0; 0 (172 lines of compile errors, 10,832 B) |
+| gate report | passed; test "1147 passed, 0 failed, 0 ignored in 135 suites" | passed; test "1130 passed, 0 failed, 0 ignored in 135 suites"; scorecard "macos: 64 items; 216 tests ran; 3 registered absent here; page not compared (computed on Linux)" | not passed, failed_step `clippy`; test "0 passed, 0 failed, 0 ignored in 0 suites"; scorecard "windows: 64 items; 158 tests ran; 3 registered absent here; page not compared (computed on Linux)" |
+| artefact (zip size) and files | `gate-linux-44297266071` 30,234 B: `gate-report.json` 1,986; `core-crates.txt` 37,668; `test-list.txt` 74,715 | `gate-macos-44297266071` 30,021 B: `gate-report.json` 2,028; `core-crates.txt` 37,498; `test-list.txt` 73,757 | `gate-windows-44297266071` 24,106 B: `gate-report.json` 16,858; `core-crates.txt` 37,949; `test-output.txt` 10,832; `workspace-tests.txt` 7,134; `test-list.txt` 10,832; `windows-tests.txt` 62,809 |
+| disk line (log, verbatim) | `/dev/mapper/cow-root  145G   62G   83G  43% /` | header `Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on`, line `/dev/disk2s5   320Gi   260Gi    42Gi    87%    2.3M  436M    1%   /System/Volumes/Data` | header `Filesystem      Size  Used Avail Use% Mounted on`, line `D:              220G  3.7G  217G   2% /d` |
+| `target/` (log) | `4.5G	target` | `3.2G	target` | `3.5G	target` |
+| `xtask` (core-crates) | exit 0, 287 passed, 0 failed (23 binaries) | exit 0, 282 passed, 0 failed (23) | exit 0, 279 passed, 0 failed (23) |
+
+Other lines of this run: gate-windows ran the 14-target step with the same 14 status lines as the d6f7805 run (`acceptance_t002_r2`… 101; `acceptance_t073`, `guard_t073`, `tools_contract` 0; `WINDOWS TESTS: exit status per target: …` and `TEST OUTPUT: exit status 101` in the log). Wall times of the other jobs: window-linux 59s, window-probe (macos-15) 51s, window-probe (windows-2025) 1m56s (job listing). Steps' durations in gate-macos: Core crates 7m38s (11:59:56Z–12:07:34Z); gate-linux Core crates 2m58s; gate-windows Core crates 11m19s. The macOS `df` here differs from the figures quoted in the documentation row that the d6f7805 test prints (`/dev/disk2s5 320Gi 262Gi 40Gi 87% 2.3M 419M 1% …`, a different run's data).
+
 ## Other observations
 - The Linux and Windows gate steps were red only because of the two known acceptance tests (Linux) or the Windows compile/test failures as on main; there is no failing test beyond those two on Linux. Clippy's named Windows target is now `kiln-cli` `guard_t036_removal_cli` (17 errors).
 - Why `ac1_the_list_step_…` fails (INFERRED from its message): the test looks for a line `TEST LIST: exit status 101`, while the step prints `TEST LIST: exit status 101 (recorded; the gate step decides the colour)`.
 
 ## Not read
-- `gate-macos`: everything (unfinished: Full test output cancelled, Disk in progress, no artefact, `get_job_logs` returned HTTP 404 while it ran): gate report, `TEST LIST: exit status` line, `test-list.txt` size/counts, core-crates/xtask totals and the two T-072 test binaries, `df` line with inode columns, `target/` size, image version, total wall.
+- `gate-macos` of run 44297420849: everything beyond the step list (unfinished at 12:49Z: Full test output cancelled for a reason not shown, Disk without end, no artefact, `get_job_logs` HTTP 404 each time): conclusion, wall time, gate report, `TEST LIST: exit status` line, `test-list.txt` size/counts, core-crates/xtask totals and the two T-072 test binaries, `df` line with inode columns, `target/` size, image version, total wall.
 - Windows image version (log read as a tail of 900 lines); the three window artefacts' contents (including the Windows probe's exit status).
 - The first lines of clippy's, scorecard's and test's failing output on Windows (the report keeps the last 60/27 lines).
