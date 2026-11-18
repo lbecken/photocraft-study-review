@@ -693,8 +693,8 @@ differing from their blobs without it and 0 of 589 with it, T-070 Pinned (g)).
 **Runners, wall times and disk.** Labels as pinned by T-070: `macos-15` (arm64), `windows-2025`
 (x64), `ubuntu-24.04` (x64); GitHub's documentation gives 3 CPU and 7 GB of memory for
 `macos-15` and 4 CPU and 16 GB for the other two, which no run here shows. Run 44297266071 of
-`platforms` (T-072's candidate `277e258` on `ci/candidate`, a run with `gate-macos` green; the
-first was run 44253737976, `tasks/ci-runs/T-079-round-2.md`; the director's record
+`platforms` (T-072's candidate `277e258` on `ci/candidate`, a run with `gate-macos` green, as
+was the earlier run 44253737976, `tasks/ci-runs/T-079-round-2.md`; the director's record
 `tasks/ci-runs/T-072-round-1.md`, section "The implementer's head") showed, per job (wall time =
 the job's completion minus its start, so queueing is not counted; the disk column gives the `df`
 lines the record quotes from the job's `DISK` step, the header where the record has it, with runs
