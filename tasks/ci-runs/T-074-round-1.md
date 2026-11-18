@@ -722,3 +722,13 @@ Run 44373961129 (`platforms.yml`, branch `main`, head `4eb349da2a34e7c3c0fa9dc06
 - Other jobs of the re-run (attempt 2): `gate-windows` failure; `window-probe (windows-2025)` failure; `window-probe (macos-15)` success; `window-linux` success; `gate-linux` skipped.
 
 Not read here: logs of any of these jobs, and the artefacts of this re-run beyond the list.
+
+## Main: second re-run of `gate-macos` (INC-002)
+
+Run 44373961129 (`platforms.yml`, branch `main`, head `4eb349da2a34e7c3c0fa9dc06c8a7484f4692b54`), `run_attempt` 3 (queued about 20:03Z; job created 2026-11-18T20:03:26Z); read with `list_workflow_jobs`, `get_workflow_job` and `list_workflow_run_artifacts`; artefact fetched with curl (31668 B equal to `size_in_bytes`, `testzip()` clean).
+
+- `gate-macos` (job 135093954995, label `macos-15`): **a runner was assigned** (`runner_id` 1000001136, `runner_name` "GitHub Actions 1000001136"). Conclusion **success**; `started_at` 2026-11-18T20:03:29Z, `completed_at` 2026-11-18T20:31:21Z (27 min 52 s). Steps: Gate success (20:03:55Z–20:21:59Z), Gate report, Core crates (20:21:59Z–20:31:10Z), Test list, Disk, Upload reports success; Full test output (gate failed) skipped.
+- Artefact `gate-macos-44373961129` (id 14468292071): `core-crates.txt`, `gate-report.json`, `test-list.txt`. Gate report: `passed: true`, `failed_step: null`, 1074.17 s; every step pass (fuzz and budgets empty); `scorecard` detail `macos: 64 items; 216 tests ran; 3 registered absent here; page not compared (computed on Linux)`; `test` step `1183 passed, 0 failed, 0 ignored in 140 suites`.
+- Other jobs of attempt 3 at the time of reading (job listing, `latest`): `gate-windows` and `window-probe (windows-2025)` ran again (window-probe failure at 20:06:11Z; gate-windows had Gate failure and was in Core crates at the first read, final conclusion not read here); `gate-linux` skipped; `window-linux` and `window-probe (macos-15)` show the success of the earlier attempt (started 18:50Z).
+
+Not read here: the `test-list.txt` of this attempt (whether `guard_t074`'s tests are listed for macOS: not determinable from what was read), logs, image version.

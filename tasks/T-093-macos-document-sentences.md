@@ -10,7 +10,7 @@ touches:                # one role per path (D-153): implementer (low tier: impl
   - docs/protocol/paths.md                  # the macOS sentences of Interface; "Unix only." replaced
   - docs/protocol/project.md                # the macOS sentences of Interface
   - apps/kiln-cli/tests/macos_t093.rs       # new: the tests a sentence needs where no existing test shows it (portable: they assert each platform's behaviour)
-budget_tokens: 150000   # low (v1.5); see Estimate
+budget_tokens: 280000   # low tier; extended from 150,000 by D-275 (`Extend T-093 to 280,000`)
 iteration: 2
 found_by: planner       # split off T-072 in R-336 (the macOS sentences of the draft's touches)
 origin_task: null

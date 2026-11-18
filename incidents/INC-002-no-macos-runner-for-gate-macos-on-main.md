@@ -6,7 +6,7 @@ detected_at: 2026-11-18T19:20Z
 detected_by: the director, from the record of main's `platforms.yml` run after T-074's merge (helper run R-388)
 platform: macos
 red_from: 2026-11-18T19:06Z    # `gate-macos` of run 44373961129 cancelled after 15 min 01 s with no runner (created about 18:51Z)
-green_at: null                 # the next completed `gate-macos` on main; a re-run of the run's failed and cancelled jobs was queued at 19:20Z
+green_at: 2026-11-18T20:31Z    # `gate-macos` of run 44373961129, attempt 3: success, 1183 passed, 0 failed (runner assigned)
 red_minutes: 0                 # no red minute: no result
 origin_task: null        # not a task's defect
 fix_task: null
@@ -40,6 +40,9 @@ had `gate-macos` running with its gate step green when last read (run 40).
 | 18:49 | T-074 merged by the queue; pushed 18:50 |
 | 19:06 | `gate-macos` of main's run 44373961129 cancelled, no runner |
 | 19:20 | detected; a re-run of that run's failed and cancelled jobs queued |
+| 19:36 | the re-run's `gate-macos` cancelled again, no runner (19:21 to 19:36) |
+| 20:03 | second re-run queued; a runner is assigned |
+| 20:31 | `gate-macos` success: 1183 passed, 0 failed, 0 ignored. **Closed**: 85 minutes without a result for a counted job on main, no red minute |
 
 ## Why the gate and queue did not stop it
 Nothing was wrong with the tree: the local gate and the queue's gates passed, and the candidate's macOS gate was
