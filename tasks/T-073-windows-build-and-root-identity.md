@@ -478,4 +478,10 @@ high → independent test author.
   Windows sentences must follow the measurement: held root renamable, its parent not, os error 5), finding 5 (test gap:
   `from_path` error taken as inside survives); spec gaps 2 (`docs/development.md:101-105` stale), 3 (identity on ReFS),
   4 (the save drops the target's ACL on Windows) for the director · not run: anything on Windows · next: director
+- 2026-11-18 · R-346 · review round 2 (delta 8bbe10a..5858927, final) · rulings c1–c8 (D-250) read on main and
+  accepted · all 7 round-1 findings fixed (1, 2, 5, 6, 7) or ruled (3 → T-094, 4 → T-074 note, sentences marked read);
+  lib IR base 7de171b vs 5858927 equal on Linux and macOS after normalising, `is_held_root` not instantiated on Unix;
+  12 mutants (own 3, procedure 9, survived 0); main's tool six PASS; CI expectation committed (fa032f9) before the
+  round-2 record, which was not on main at the end · verdict approve, CI criterion of round 2 pending (listed in
+  `reviews/T-073-r2.md`); nit 1 and the stale T-092 note as follow-ups · next: director
 <!-- end reviewer log -->
