@@ -1,68 +1,52 @@
 # State
 
-_Last updated: 2026-11-18 08:07 UTC_
+_Last updated: 2026-11-18 10:50 UTC_
 
 ## Now
-The `ci/…` branches can stay (the owner, D-207).
+Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.5** (D-221). Cut 2 is built and
+evaluated (`evaluations/iter-2-cut-2.md`, T-084, D-215). **The owner's instruction in force (D-218, 2026-11-17):
+first the platform track (macOS, then Windows; no signed installers, D-173), then the 17 planned feature items.**
+Follow-ups of cut 2 stay drafts unless a platform or feature task needs one. The `ci/…` branches stay (D-207);
+`ci/candidate` is the one reused branch for CI evidence (a forced push there is allowed).
 
-Iteration 2, second stage (ADR-0007 as amended by D-147), under methodology **v1.4** (D-176).
-Cut 1 is reached and evaluated (D-170). **The owner's instruction (D-171): run the retrospective, then go on to cut
-2, and make the editor multi-platform (Linux, macOS, Windows).** Signed installers are out of scope (D-173); `ci/…`
-branches may be pushed and are deleted after their task merges (D-185).
+Scorecard on main: 64 items: 47 verified, 0 implemented, 0 failing, 17 planned.
 
-**Resumed on 2026-11-17 (D-218, the owner: "continue with 1, and then 2"): first the platform track, then the 17
-planned feature items.** The pause of D-207 is over; the earlier paragraph about it above is history.
+**Platform track, state on 2026-11-18 10:50Z**
+- Merged: T-070 (`platforms.yml`), T-071 (`0f8ea64`, the platform-test rule), T-079 (`bc8d097`, registry and
+  portable fixes: macOS gate green), **T-073 (`8bf4c3a`, D-252: `kiln-workspace` and `kiln` build for Windows; the
+  root held and identified there; 47 of 47 file-system tests pass on the Windows runner)**.
+- Counted jobs (a red run on main is an incident): the Linux gate (`ci.yml`), `window-linux`,
+  `window-probe (macos-15)` (D-202), `gate-macos` (D-248). Not green yet: `gate-windows` (other crates' test
+  targets: T-092), `window-probe (windows-2025)` (no OpenGL 2.0 on the hosted runner: T-077).
+- **In flight:** a planner specifies T-074 in full under v1.5 (Windows confinement rules; high; carries 9 pending
+  registry entries); another re-checks T-072's spec (CI evidence) against the tree after T-073. Both are then
+  dispatched side by side (D-245). CI on the push with T-073's merge is still to be read.
+- Order after that (D-245): T-092 (product tests on Windows) with T-093 (macOS document sentences) beside it,
+  then T-075, T-076 (becomes high tier), T-077, T-078 (unsigned artefacts only).
+- Pending registry entries expire 2026-12-31: 9 on T-074, 2 on T-092, 3 on T-076, 5 on T-077.
+- After the track: a platform report to the owner, with the deferred tooling batch (T-043, T-087 to T-090, about
+  4 to 5 M tokens; D-223: the owner decides) and the drafts T-091, T-094. Then the feature items, each draft
+  re-specified in full under v1.5.
 
-In flight (restarts at 2026-11-17T23:02Z, 23:53Z and 2026-11-18T00:19Z; D-224, D-225):
-- **Merged on 2026-11-18:** T-071 (`0f8ea64`, D-238: the platform-test rule in main's tools) and T-079
-  (`bc8d097`, D-244: the registry of 20 platform tests, four split tests, four portable fixes). **The macOS gate
-  is green on main** (run 44261526710 at `7b86bdf`, D-248) and counts from that run, beside `window-linux`,
-  `window-probe (macos-15)` and the Linux gate; a red run of any of them on main is an incident.
-- **T-073** (the first Windows product task: `kiln-workspace` builds for Windows, the root held and identified,
-  the save by rename, one reported Windows test step in CI; high; `in_progress`; D-245): implementer R-338
-  (`.worktrees/T-073`), independent test author R-339 (`.worktrees/T-073-tests`), from main `7de171b`. Then:
-  merge the tests branch, join, push the joined head to `ci/candidate` (a forced push there is allowed), CI
-  record from the artefacts (resume the planner of ADR-0009), review (a fresh reviewer), a row beginning
-  `Approve T-073` with `gate paths` and the dependency change, queue. Estimate about 1,050,000 of 1,100,000: an
-  `Extend` row before the run that would pass the ceiling.
-- **Specified and waiting** (D-245): T-072 (CI evidence; beside T-074, after a re-check), T-093 (macOS document
-  sentences; when `docs/protocol/paths.md` is free, beside T-092). Then T-074, T-092, T-075 to T-078.
-- **Methodology v1.5** is written (D-221) and in force from the task after T-071.
-- **Tooling batch** (T-043 re-specified, drafts T-087 to T-090): waits behind the platform track, to be put to
-  the owner with the platform report (D-223). Accepted work not done, listed here by v1.5 change 13.
-Then, by D-199: T-079 (`specified`; spec check against main first), T-072, T-073, T-074, T-075, T-076, T-077,
-T-078. After the platform track: the planned feature items (drafts T-060 to T-063, T-022, T-024 to T-031 and
-others; each needs its spec). Next free task number: T-094. Next run id: R-340. Next decision: D-247.
-The evaluation at cut 2 is published (`evaluations/iter-2-cut-2.md`, T-084, D-215).
+**Rules added by decisions since v1.5** (to go into the next methodology version): D-235 (a task that changes a
+gate rule does not also use it; the spec check states what main's tool says about the candidate tree, and builder
+and reviewer run main's `xtask` on it), D-249 (the spec check greps main's tests for every path the task changes),
+D-229 (a ruling changed after a test was written to it goes to both builders with the test named).
 
-Merged since cut 1: T-069 (CI fix), T-057 (project panel), T-070 (`platforms.yml`: gate on three systems, the
-Linux window procedure, window probes), T-058 (tabs), T-054 (lighter debug profile; the interim variables of
-D-186 are gone, D-211), T-059 (status bar, `60cc322`, D-214). **Cut 2 is built.**
+**CI reading:** records come from uploaded artefacts by a fresh helper following `tasks/ci-runs/README.md`
+(stored as `tasks/ci-runs/T-NNN-round-N.md`); small lookups by a light helper through the GitHub tools. The
+nightly `platforms.yml` run on main (cron `17 3 * * *`) is read at each session start and handoff.
 
-Platform track (paused by D-207): counted jobs `window-linux`, `window-probe (macos-15)` (D-202); not yet green
-`gate-macos` (22 tests that assume Linux, D-199), `gate-windows` and `window-probe (windows-2025)` (does not
-compile). Specified and waiting: T-071, T-079; drafts T-072 to T-078. Order when resumed: T-071, T-079, T-072,
-T-073, T-074, T-075, T-076, T-077, T-078. The Windows verdict of T-054's backtrace guard is read on T-071's CI
-round.
+Ids: next task number T-095, next run R-348, next decision D-253.
 
-CI on main: `ci.yml` run 429 on `51ee7c1` (T-054's merge) green and the two counted platform jobs green there
-(D-213); the runs on the push with T-059's merge (`20f63f4`) are read at the next addendum.
+Drafts: T-074 to T-078, T-091, T-092, T-094 (platform); T-043, T-087 to T-090 (tooling, deferred); T-082, T-083,
+T-085, T-086, T-066, T-068, T-053, T-064, T-080, T-081, T-051, T-033, T-041 (last; the owner is told first),
+T-060 to T-063, T-022, T-024 to T-031, T-044 to T-048, T-050, T-007, T-009, T-034. T-052 abandoned.
+Specified and waiting: T-072, T-093, T-043.
 
-Scorecard on main: 64 items: 47 verified, 0 implemented, 0 failing, 17 planned. Merged in this stage: T-055
-(`kiln script`, ADR-0008), T-056 (editor view), T-065 (the window), T-067 (evaluation at cut 1), T-069 (CI fix,
-INC-001 closed in D-179), T-057 (project panel, `7e8a01c`, D-192). The product: `kiln [--root <dir>] [<path>…]`
-opens a window with a project panel and one editor; Linux with X11 only until the platform tasks merge.
-
-**Branches for the owner to delete (D-198; the director's deletion was refused with 403):** `ci/T-070`,
-`ci/T-070-negative`, `ci/T-054` (pushed 23:36Z for ruling Q-4 A of T-054), `ci/T-058` (pushed 23:51Z), `ci/T-059` (pushed 01:36Z). The owner said on 2026-11-16 that they can stay for now (D-207).
-
-Drafts: T-066, T-068, T-053, T-064, T-051, T-043, T-033, T-041 (last; owner told first), T-080, T-081, T-060 to
-T-063, T-022, T-024 to T-031, T-044 to T-048, T-050, T-007, T-009, T-034. T-052 abandoned.
-
-Methodology **v1.4** is in force (D-176): among its rules, a task's tier is at least the highest tier of the items
-it claims and is fixed at `specified`; rulings live on main and the director commits only joins and scorecard ties
-on a task branch; a `touches` path belongs to one role; **after every push the director reads the CI run of the
-pushed commit and records it** (INC-001, closed in D-179).
+Accepted work not done (v1.5 change 13): the tooling batch above; the retrospective material collected since
+cut 2 (D-235, D-249, D-229, six restarts, booking slips, T-071's cost of 1,286,681 against 800,000, T-079 as the
+first clean v1.5 task, T-073: a task for another platform has almost only guards on Linux).
 
 ## Resume
 Read `docs/CHARTER.md`, `methodology/METHODOLOGY.md`, the last rows of `docs/decisions.md`, the newest file in
