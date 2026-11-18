@@ -935,6 +935,10 @@ notes (point 2; the latter pending Q-B).
     Recommendation: count them under AC-1; if the director prefers AC-1's text alone, drop them and keep no-skip as the
     check (it misses F10, F14).
   · next: director (join)
+- 2026-11-18 · test author (R-392, rulings a1/a2 D-275 acknowledged and accepted) · in_progress · did: removed the guard
+  `registry_entries_of_other_tasks_are_as_on_base` and its base list (a1: a left-alone pin; it carried nothing else, its
+  exactly-once check covered only the same 33 entries); a2 noted (the two source-side tests count under AC-1). Runs:
+  `guard_t092` 2/2, `cargo fmt --check` clean, clippy `-D warnings` clean, `no-skip` PASS · next: director (join)
 <!-- end test author log -->
 ### reviewer
 <!-- end reviewer log -->

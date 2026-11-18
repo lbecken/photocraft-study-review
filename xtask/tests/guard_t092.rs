@@ -11,15 +11,11 @@
 //! 2. No test of the 10 files T-092 touches (the 9 test files and `disk.rs`) is ignored: the
 //!    list of `#[ignore]` and `#[cfg_attr(…, ignore)]` attributes in them equals the empty list
 //!    (Out of scope: "`#[ignore]`, skips and early returns are not used").
-//! 3. Interface (2), "Other entries are not changed": each entry of the base's registry other
-//!    than the two `disk.rs` entries T-092 rewrites still exists exactly once with the base's
-//!    `(file, item, platforms, counterpart, task)`. Entries are compared one by one, never by the
-//!    file's count, so a later task's new entries do not break it (D-249); a later task that
-//!    changes one of these entries (T-076, T-077 resolving their pending ones) updates the list
-//!    below, as it updates `acceptance_t079.rs` for the same entries. Not compared: `doc`,
-//!    `quote`, `reason`, `expires` (T-100 rewrites four `reason`s).
 //!
-//! Only `std::fs`, `toml` and `syn` are used (the same on Linux, macOS and Windows); paths are
+//! Not guarded here (ruling a1, D-275): that no other task's registry entry changed is the
+//! reviewer's diff check, not a permanent pin (D-043).
+//!
+//! Only `std::fs` and `syn` are used (the same on Linux, macOS and Windows); paths are
 //! `/`-separated repository-relative strings. No process is spawned.
 #![cfg(test)]
 
@@ -28,7 +24,6 @@ use std::path::{Path, PathBuf};
 
 use syn::visit::{self, Visit};
 
-const REGISTRY: &str = "xtask/platform-tests.toml";
 const DISK: &str = "crates/kiln-workspace/src/disk.rs";
 const WS: &str = "crates/kiln-workspace";
 
@@ -98,45 +93,6 @@ const PORTABLE: [(&str, &str); 24] = [
     (G008, "symlinks_inside_root_still_work"),
     (G036_WS, "retargeted_root_link_is_refused"),
     (G036_WS, "vanished_root_is_refused"),
-];
-
-/// The base's registry entries (main `76ccb9f`, 35 entries) without the two `disk.rs` entries
-/// pending on T-092, as `(file, item, platforms, counterpart, task)`.
-#[rustfmt::skip]
-const BASE_OTHERS: [(&str, &str, &str, &str, Option<&str>); 33] = [
-    ("xtask/src/queue.rs", "tests::basic_refusals_write_nothing", "linux", "none", None),
-    ("xtask/src/worktree.rs", "tests::create_seed_list_remove", "linux", "none", None),
-    ("xtask/src/publish.rs", "tests::a_failed_content_commit_in_step_four_exits_one", "unix", "none", None),
-    ("xtask/tests/acceptance_t013_publish.rs", "publish_refuses_while_the_queue_lock_is_held_and_releases_it_for_the_queue", "linux", "none", None),
-    ("xtask/tests/guard_t005.rs", "worktree_build_does_not_touch_main_target", "unix", "none", None),
-    ("xtask/tests/acceptance_t005_r3.rs", "tampered_cached_gate_binary_does_not_decide_the_gate", "linux", "none", None),
-    ("xtask/tests/acceptance_t005_r4.rs", "planted_future_dated_xtask_does_not_decide_the_gate", "linux", "none", None),
-    ("xtask/src/queue.rs", "tests::main_xtask_is_rebuilt_from_base_on_every_run", "unix", "none", None),
-    ("apps/kiln/tests/acceptance_t055.rs", "ac8_stdout_write_failure_exits_1", "linux", "pending", Some("T-076")),
-    ("apps/kiln-cli/tests/acceptance_t004_r2.rs", "run_and_control_exit_1_when_stdout_cannot_be_written", "linux", "pending", Some("T-076")),
-    ("apps/kiln-cli/tests/run.rs", "run_exits_1_when_stdout_cannot_be_written", "linux", "pending", Some("T-076")),
-    ("crates/kiln-workspace/tests/acceptance_t019_workspace.rs", "disk_list_dir_reports_entries_by_their_own_kind_and_skips_bad_names_non_utf8", "linux", "none", None),
-    ("crates/kiln-workspace/tests/acceptance_t019_workspace.rs", "tree_counts_skipped_names_on_disk_non_utf8", "linux", "none", None),
-    ("crates/kiln-workspace/tests/project.rs", "disk_list_dir_reports_own_kinds_sorted_and_skips_odd_names_non_utf8", "linux", "none", None),
-    ("crates/kiln-workspace/tests/project.rs", "documented_differences_from_git_non_utf8", "linux", "none", None),
-    ("apps/kiln/tests/acceptance_t065.rs", "ac1_no_display_exits_2_with_one_line", "linux", "pending", Some("T-077")),
-    ("apps/kiln/tests/acceptance_t065.rs", "ac1_no_display_every_window_form", "linux", "pending", Some("T-077")),
-    ("apps/kiln/tests/acceptance_t065.rs", "ac1_wayland_only_or_unreachable_display_exits_2", "linux", "pending", Some("T-077")),
-    ("apps/kiln/tests/window_t065.rs", "without_a_display_the_window_exits_2_with_one_line", "linux", "pending", Some("T-077")),
-    ("apps/kiln/tests/guard_t055.rs", "kiln_without_subcommand_and_display_exits_nonzero_with_a_message", "linux", "pending", Some("T-077")),
-    ("crates/kiln-workspace/src/disk.rs", "tests::symlink_at_temp_name_is_not_followed", "unix", "crates/kiln-workspace/src/disk.rs::tests::link_at_temp_name_is_not_followed_on_every_platform", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::temp_file_is_created_owner_only_and_gets_target_mode_before_rename", "unix", "none", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::read_only_target_is_refused_unless_root", "unix", "crates/kiln-workspace/tests/guard_t073.rs::acw2_save_of_read_only_target_is_refused_and_changes_nothing", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::save_creates_temp_owner_only_for_an_existing_target", "unix", "none", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::new_file_gets_default_mode", "unix", "none", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::replace_swaps_inode_keeps_permissions_and_follows_symlinks", "unix", "crates/kiln-workspace/src/disk.rs::tests::save_through_a_link_on_every_platform", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::root_replaced_by_a_symlink_between_requests_is_outside", "unix", "crates/kiln-workspace/src/disk.rs::tests::root_replaced_by_a_link_on_every_platform", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::parent_replaced_by_a_symlink_between_requests_is_outside", "unix", "crates/kiln-workspace/tests/guard_t073.rs::acw2_root_parent_replaced_is_outside_root", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::root_removed_and_replaced_by_a_link_to_a_new_directory_is_outside", "unix", "crates/kiln-workspace/src/disk.rs::tests::root_removed_on_every_platform", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::root_given_through_a_link_that_is_retargeted", "unix", "crates/kiln-workspace/src/disk.rs::tests::root_given_through_a_link_on_every_platform", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::link_target_with_trailing_slash_requires_a_directory", "unix", "crates/kiln-workspace/src/disk.rs::tests::save_through_a_link_on_every_platform", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::check_location_is_ok_for_every_inside_location", "unix", "crates/kiln-workspace/src/disk.rs::tests::check_location_inside_on_every_platform", None),
-    ("crates/kiln-workspace/src/disk.rs", "tests::check_location_refuses_outside_loops_and_a_replaced_root", "unix", "crates/kiln-workspace/src/disk.rs::tests::check_location_outside_on_every_platform", None),
 ];
 
 fn root() -> PathBuf {
@@ -476,67 +432,5 @@ fn no_test_of_the_touched_files_is_ignored() {
         found,
         Vec::<String>::new(),
         "ignore attributes in the files T-092 touches (none may be used)"
-    );
-}
-
-/// Interface (2), "Other entries are not changed": each base entry other than the two `disk.rs`
-/// ones T-092 rewrites still exists exactly once with its base `(file, item, platforms,
-/// counterpart, task)`. Rejects: T-077's `ac1_no_display_every_window_form` given a counterpart
-/// by this task; an entry of `project.rs` (T-100's) moved to `platforms = "unix"`; a base entry
-/// dropped or entered twice. New entries elsewhere are not compared.
-#[test]
-fn registry_entries_of_other_tasks_are_as_on_base() {
-    let p = root().join(REGISTRY);
-    let text = std::fs::read_to_string(&p)
-        .unwrap_or_else(|e| panic!("precondition: cannot read {}: {e}", p.display()));
-    let table: toml::Table = text
-        .parse()
-        .unwrap_or_else(|e| panic!("{REGISTRY} is not TOML: {e}"));
-    let tests = table
-        .get("test")
-        .and_then(toml::Value::as_array)
-        .unwrap_or_else(|| panic!("{REGISTRY} has no array of `test` tables"));
-    let get = |t: &toml::Value, k: &str| -> Option<String> {
-        t.get(k).map(|v| match v.as_str() {
-            Some(s) => s.to_owned(),
-            None => format!("<not a string: {v}>"),
-        })
-    };
-    let mut problems = Vec::new();
-    for (file, item, platforms, counterpart, task) in BASE_OTHERS {
-        let mine: Vec<&toml::Value> = tests
-            .iter()
-            .filter(|t| {
-                get(t, "file").as_deref() == Some(file) && get(t, "item").as_deref() == Some(item)
-            })
-            .collect();
-        let [one] = mine.as_slice() else {
-            problems.push(format!(
-                "{file}::{item}: expected exactly one entry, found {}",
-                mine.len()
-            ));
-            continue;
-        };
-        let have = (
-            get(one, "platforms"),
-            get(one, "counterpart"),
-            get(one, "task"),
-        );
-        let want = (
-            Some(platforms.to_owned()),
-            Some(counterpart.to_owned()),
-            task.map(str::to_owned),
-        );
-        if have != want {
-            problems.push(format!(
-                "{file}::{item}: (platforms, counterpart, task) = {have:?}, base has {want:?}"
-            ));
-        }
-    }
-    assert!(
-        problems.is_empty(),
-        "{REGISTRY}: entries of other tasks differ from the base (Interface (2): other entries \
-         are not changed):\n{}",
-        problems.join("\n")
     );
 }
