@@ -9,7 +9,9 @@
 //!    path forms such as `tokio::test`) in a `.rs` file under `crates/`, `apps/`, `xtask/`
 //!    (`target`, `.git`, `.worktrees` and `xtask/fixtures` skipped, as `no-skip` skips them),
 //!    whose own `cfg`s, those of the inline `mod`s around it, the file's inner `#![cfg]` and the
-//!    `mod name;` declaration of its file hold on Linux (`test`, `unix`, `target_os = "linux"`,
+//!    `mod name;` declaration of its file — written as `#[cfg(p)]` or through
+//!    `#[cfg_attr(c, …, cfg(p), …)]` with `c` true on Linux or not known (ruling x3; nested
+//!    `cfg_attr` and several attributes in one are read) — hold on Linux (`test`, `unix`, `target_os = "linux"`,
 //!    `target_family = "unix"` true; `windows` and other `target_os`/`target_family` values
 //!    false; `not`/`all`/`any` evaluated; any other predicate counts as false, so it can only
 //!    make a name absent, never present). A name is `<file>::<inline mod path>::<fn>`, the
@@ -25,8 +27,9 @@
 //!    checkout: CI checks out with `fetch-depth: 1`, so the base commit is not readable there.
 //!
 //! 2. AC-2 (ruling Q-5 A: a guard): the four tests fixed portably in Interface (1) carry no
-//!    platform cfg: the set of `cfg`/`cfg_attr` attributes with a platform predicate (`unix`,
-//!    `windows`, any `target_*` key) on the fn, inside its body at any depth, on the inline mods
+//!    platform cfg: the set of `cfg` attributes with a platform predicate (`unix`, `windows`,
+//!    any `target_*` key) and of `cfg_attr` attributes naming a platform in their predicate or
+//!    in an attribute they apply on the fn, inside its body at any depth, on the inline mods
 //!    around it, on the file (`#![cfg]`) and on the file's `mod` declaration is empty. A
 //!    `cfg!(…)` expression is not an attribute and is allowed (Interface (1): the expected
 //!    errno "chosen in the test by platform; no `cfg` on the test").
@@ -178,21 +181,64 @@ fn is_platform(m: &syn::Meta) -> bool {
     }
 }
 
-/// Whether every `#[cfg]` among `attrs` holds on Linux (`cfg_attr` does not remove an item).
+/// Whether every leaf of a cfg predicate is one `holds_on_linux` knows.
+fn known(m: &syn::Meta) -> bool {
+    match m {
+        syn::Meta::Path(p) => ["test", "unix", "windows"].iter().any(|k| p.is_ident(k)),
+        syn::Meta::NameValue(nv) => {
+            (nv.path.is_ident("target_os") || nv.path.is_ident("target_family"))
+                && str_value(nv).is_some()
+        }
+        syn::Meta::List(l) => {
+            ["not", "all", "any"].iter().any(|k| l.path.is_ident(k)) && nested(l).iter().all(known)
+        }
+    }
+}
+
+/// The cfg predicates an attribute (as its `Meta`) puts on an item in a Linux test build:
+/// `cfg(p)` gives `p`; `cfg_attr(c, a, b, …)` gives those of `a, b, …` (recursively, so nested
+/// `cfg_attr` is read) when `c` holds on Linux, or when `c` has a predicate the evaluator does
+/// not know (then the inner cfgs count, so an unknown predicate can only make a name absent).
+/// Other attributes (`ignore`, `allow`, …) give none: they do not remove a test from the list.
+fn linux_cfgs(m: &syn::Meta, out: &mut Vec<syn::Meta>) {
+    let syn::Meta::List(l) = m else { return };
+    if l.path.is_ident("cfg") {
+        out.extend(nested(l).into_iter().next());
+    } else if l.path.is_ident("cfg_attr") {
+        let args = nested(l);
+        let Some((cond, attrs)) = args.split_first() else {
+            return;
+        };
+        if holds_on_linux(cond) || !known(cond) {
+            for a in attrs {
+                linux_cfgs(a, out);
+            }
+        }
+    }
+}
+
+/// Whether the item behind `attrs` exists in a Linux test build: every cfg predicate in
+/// effect, written as `#[cfg]` or through `#[cfg_attr]` (ruling x3, D-242), holds on Linux.
 fn kept_on_linux(attrs: &[syn::Attribute]) -> bool {
-    attrs
-        .iter()
-        .filter(|a| a.path().is_ident("cfg"))
-        .filter_map(cfg_predicate)
-        .all(|m| holds_on_linux(&m))
+    let mut cfgs = Vec::new();
+    for a in attrs {
+        linux_cfgs(&a.meta, &mut cfgs);
+    }
+    cfgs.iter().all(holds_on_linux)
 }
 
 /// The platform cfg/cfg_attr attributes among `attrs`, as text (for the failure message).
+/// A `cfg_attr` counts if its predicate or any attribute it applies names a platform (so
+/// `cfg_attr(test, cfg(unix))` counts as well as `cfg_attr(unix, …)`).
 fn platform_cfgs(attrs: &[syn::Attribute], at: &str, out: &mut Vec<String>) {
     for a in attrs {
-        if let Some(m) = cfg_predicate(a)
-            && is_platform(&m)
-        {
+        let platform = match &a.meta {
+            syn::Meta::List(l) if a.path().is_ident("cfg_attr") => {
+                nested(l).iter().any(is_platform)
+            }
+            _ => cfg_predicate(a).is_some_and(|m| is_platform(&m)),
+        };
+        if platform {
             let text = quote_attr(a);
             out.push(format!("{at}: {text}"));
         }
