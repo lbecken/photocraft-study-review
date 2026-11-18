@@ -265,6 +265,13 @@ impl Toy {
         std::fs::read_to_string(self.dir.join(rel)).unwrap()
     }
 
+    fn remove(&self, rel: &str) {
+        let p = self.dir.join(rel);
+        if p.is_file() {
+            std::fs::remove_file(&p).unwrap();
+        }
+    }
+
     fn git(&self, args: &[&str], envs: &[(&str, &str)]) {
         let mut c = Command::new("git");
         hygiene(&mut c, &self.gitcfg);
@@ -1388,4 +1395,302 @@ fn ac4_scorecard_write_mode_writes_on_linux_and_is_refused_elsewhere() {
         );
         assert_eq!(t.read("docs/scorecard.md"), STALE, "{h}: nothing written");
     }
+}
+
+// ---- review round 1: rulings s1 to s7, s9, s10 and mutants M9, M13, M21 (D-226) -------------
+
+/// A `kind` line naming `file:<n>` for `n` in `lines` and the token `item`.
+fn has_line(o: &Out, kind: &str, file: &str, lines: RangeInclusive<usize>, item: &str) -> bool {
+    kind_lines(o, kind)
+        .iter()
+        .any(|l| has_token(l, item) && names_at(l, file, &lines))
+}
+
+/// s1: a `cfg_attr` that makes `test` or `ignore` conditional is `cfg-disabled`.
+#[test]
+fn ac1_s1_conditional_test_or_ignore_by_cfg_attr_is_cfg_disabled() {
+    let file = "crates/toy/tests/attr.rs";
+    let t = Toy::no_skip("s1-cfg-attr");
+    t.write(
+        file,
+        "// toy\n#[cfg_attr(unix, test)] fn test_on_unix_only() { assert_eq!(1, 1); }\n#[test] #[cfg_attr(windows, ignore)] fn ignored_on_windows() { assert_eq!(2, 2); }\n#[cfg_attr(feature = \"x\", test)] fn test_with_feature() { assert_eq!(3, 3); }\n",
+    );
+    let o = t.run_no_skip();
+    assert_eq!(o.code, Some(1), "conditional test/ignore:\n{}", o.text);
+    for (item, line) in [
+        ("test_on_unix_only", 2),
+        ("ignored_on_windows", 3),
+        ("test_with_feature", 4),
+    ] {
+        assert!(
+            has_line(&o, "cfg-disabled", file, line..=line, item),
+            "s1: a `cfg-disabled` line naming {file}:{line} and `{item}`:\n{}",
+            o.text
+        );
+    }
+}
+
+/// s2: a helper's platform cfg includes its enclosing `mod`'s and `impl`'s cfgs.
+#[test]
+fn ac3_s2_twins_whose_cfg_is_on_the_enclosing_mod_or_impl() {
+    let file = "crates/toy/tests/encl.rs";
+    let t = Toy::no_skip("s2-enclosing");
+    let cases = [
+        (
+            "twins in platform mods",
+            "// toy\n#[cfg(unix)] mod imp { pub fn check() -> u32 { std::process::id() } }\n#[cfg(windows)] mod imp { pub fn check() -> u32 { 0 } }\n#[test] fn uses() { assert!(imp::check() > 0); }\n",
+            "{ 0 }",
+        ),
+        (
+            "twins in platform impls",
+            "// toy\n#[cfg(unix)] impl S { fn check(&self) -> u32 { std::process::id() } }\n#[cfg(windows)] impl S { fn check(&self) -> u32 { 0 } }\nstruct S;\n#[test] fn uses() { assert!(S.check() > 0); }\n",
+            "{ 0 }",
+        ),
+    ];
+    for (case, source, trivial) in cases {
+        t.write(file, source);
+        let o = t.run_no_skip();
+        assert_eq!(o.code, Some(1), "{case}:\n{}", o.text);
+        assert_eq!(
+            kind_lines(&o, "inert-helper").len(),
+            1,
+            "{case}: one `inert-helper` line:\n{}",
+            o.text
+        );
+        assert!(
+            has_line(&o, "inert-helper", file, 2..=3, "check"),
+            "{case}: the `inert-helper` line names {file} at a twin's line and `check`:\n{}",
+            o.text
+        );
+        t.write(file, &source.replace(trivial, "{ std::process::id() + 1 }"));
+        assert_pass(&t.run_no_skip(), &format!("{case}, real bodies"));
+    }
+}
+
+/// Mutant M21 of review round 1: twins that are methods inside one `impl` are helpers.
+#[test]
+fn ac3_m21_method_twins_inside_one_impl_are_helpers() {
+    let file = "crates/toy/tests/methods.rs";
+    let t = Toy::no_skip("m21-methods");
+    let source = "// toy\nstruct S;\nimpl S {\n    #[cfg(unix)] fn check(&self) -> Option<u32> { Some(std::process::id()) }\n    #[cfg(not(unix))] fn check(&self) -> Option<u32> { None }\n}\n#[test] fn uses() { assert!(S.check().is_some()); }\n";
+    t.write(file, source);
+    let o = t.run_no_skip();
+    assert_eq!(o.code, Some(1), "method twins:\n{}", o.text);
+    assert!(
+        has_line(&o, "inert-helper", file, 4..=5, "check"),
+        "an `inert-helper` line naming {file} at a twin's line and `check`:\n{}",
+        o.text
+    );
+    t.write(
+        file,
+        &source.replace("{ None }", "{ Some(std::process::id() + 1) }"),
+    );
+    assert_pass(&t.run_no_skip(), "method twins with real bodies");
+}
+
+/// s3: a complement counts only if its platform cfg is its only cfg.
+#[test]
+fn ac1_s3_a_complement_with_a_second_cfg_does_not_count() {
+    let file = "crates/toy/tests/stmt.rs";
+    let t = Toy::no_skip("s3-second-cfg");
+    let fault = "// toy\n#[test] fn modes() { #[cfg(unix)] assert_eq!(1, 1); #[cfg(windows)] #[cfg(feature = \"never\")] panic!(\"no modes here\"); }\n";
+    t.write(file, fault);
+    let o = t.run_no_skip();
+    assert_eq!(o.code, Some(1), "complement with a second cfg:\n{}", o.text);
+    assert!(
+        has_line(&o, "platform-statement", file, 2..=2, "modes"),
+        "a `platform-statement` line naming {file}:2 and `modes`:\n{}",
+        o.text
+    );
+    t.write(file, &fault.replace(" #[cfg(feature = \"never\")]", ""));
+    assert_pass(
+        &t.run_no_skip(),
+        "the complement with its platform cfg only",
+    );
+}
+
+/// s4: statements in blocks at any depth inside a test fn, a fn nested in it included.
+#[test]
+fn ac1_s4_platform_statements_in_a_nested_fn_and_in_deep_blocks() {
+    let file = "crates/toy/tests/nested.rs";
+    let t = Toy::no_skip("s4-nested");
+    let cases = [
+        (
+            "a fn nested in the test",
+            "// toy\n#[test]\nfn outer_test() {\n    fn check() { #[cfg(unix)] assert_eq!(1, 1); }\n    check();\n}\n",
+            &["outer_test", "check"][..],
+        ),
+        (
+            "blocks nested in an if and a loop",
+            "// toy\n#[test]\nfn outer_test() {\n    for _ in 0..1 { if true { { #[cfg(unix)] assert_eq!(1, 1); } } }\n}\n",
+            &["outer_test"][..],
+        ),
+    ];
+    for (case, source, names) in cases {
+        t.write(file, source);
+        let o = t.run_no_skip();
+        assert_eq!(o.code, Some(1), "{case}:\n{}", o.text);
+        assert!(
+            names
+                .iter()
+                .any(|n| has_line(&o, "platform-statement", file, 4..=4, n)),
+            "{case}: a `platform-statement` line naming {file}:4 and one of {names:?}:\n{}",
+            o.text
+        );
+    }
+}
+
+/// s5: an item's platforms are the intersection of its own and its enclosing items' cfgs; an
+/// empty intersection is `cfg-disabled`, registered or not.
+#[test]
+fn ac1_s5_a_test_on_no_platform_is_cfg_disabled_registered_or_not() {
+    let file = "crates/toy/tests/nowhere.rs";
+    let t = Toy::no_skip("s5-nowhere");
+    t.write(
+        file,
+        "// toy\n#[cfg(unix)] mod outer_unix {\n    #[cfg(windows)] #[test] fn inner_windows() { assert_eq!(1, 1); }\n    #[test] fn inner_plain() { assert_eq!(2, 2); }\n}\n",
+    );
+    let entries = [
+        entry(file, "outer_unix", "unix", NONE),
+        entry(file, "outer_unix::inner_windows", "windows", NONE),
+    ];
+    for registered in [false, true] {
+        if registered {
+            set_reg(&t, &entries);
+        } else {
+            set_reg(&t, &[]);
+        }
+        let o = t.run_no_skip();
+        let case = format!("registered: {registered}");
+        assert_eq!(o.code, Some(1), "{case}:\n{}", o.text);
+        assert!(
+            has_line(&o, "cfg-disabled", file, 3..=3, "outer_unix::inner_windows"),
+            "{case}: a `cfg-disabled` line naming {file}:3 and `outer_unix::inner_windows`:\n{}",
+            o.text
+        );
+        assert!(
+            !kind_lines(&o, "cfg-disabled")
+                .iter()
+                .any(|l| names_at(l, file, &(2..=2))),
+            "{case}: the `cfg(unix)` module itself is a platform item, not `cfg-disabled`:\n{}",
+            o.text
+        );
+    }
+}
+
+/// s6: the trivial bodies count in their path-qualified forms too.
+#[test]
+fn ac3_s6_path_qualified_trivial_bodies_are_trivial() {
+    let file = "crates/toy/tests/qualified.rs";
+    let t = Toy::no_skip("s6-qualified");
+    for (ty, real, triv) in [
+        (
+            "Option<u32>",
+            "{ Some(std::process::id()) }",
+            "{ Option::None }",
+        ),
+        (
+            "Option<u32>",
+            "{ Some(std::process::id()) }",
+            "{ std::option::Option::None }",
+        ),
+        (
+            "Option<u32>",
+            "{ Some(std::process::id()) }",
+            "{ core::option::Option::None }",
+        ),
+        (
+            "std::io::Result<()>",
+            "{ std::fs::metadata(\".\").map(|_| ()) }",
+            "{ Result::Ok(()) }",
+        ),
+        (
+            "std::io::Result<()>",
+            "{ std::fs::metadata(\".\").map(|_| ()) }",
+            "{ std::result::Result::Ok(()) }",
+        ),
+        (
+            "u32",
+            "{ std::process::id() }",
+            "{ std::default::Default::default() }",
+        ),
+    ] {
+        t.write(
+            file,
+            &format!(
+                "// toy\n#[cfg(unix)] fn h() -> {ty} {real} #[cfg(not(unix))] fn h() -> {ty} {triv}\n#[test] fn uses_h() {{ let _ = h(); }}\n"
+            ),
+        );
+        assert_one(
+            &t.run_no_skip(),
+            "inert-helper",
+            &[src(file, 2)],
+            "h",
+            &format!("twin body `{triv}`"),
+        );
+    }
+}
+
+/// s7: an empty block or empty statement is not a complement. (`#[cfg(windows)] ;` is not Rust:
+/// rustc and syn reject an attribute on an empty statement, so the empty statement is `();`.)
+#[test]
+fn ac1_s7_an_empty_complement_does_not_count() {
+    let file = "crates/toy/tests/stmt.rs";
+    let t = Toy::no_skip("s7-empty");
+    for empty in ["{}", "();"] {
+        t.write(
+            file,
+            &format!("// toy\n#[test] fn modes() {{ #[cfg(unix)] assert_eq!(1, 1); #[cfg(windows)] {empty} }}\n"),
+        );
+        let o = t.run_no_skip();
+        let case = format!("complement `#[cfg(windows)] {empty}`");
+        assert_eq!(o.code, Some(1), "{case}:\n{}", o.text);
+        assert!(
+            has_line(&o, "platform-statement", file, 2..=2, "modes"),
+            "{case}: a `platform-statement` line naming {file}:2 and `modes`:\n{}",
+            o.text
+        );
+    }
+}
+
+/// Mutant M9 of review round 1: only `use` items are exempt; any other item under a platform cfg
+/// in a test body is a platform statement.
+#[test]
+fn ac1_m9_only_use_items_are_exempt() {
+    let file = "crates/toy/tests/items.rs";
+    let t = Toy::no_skip("m9-items");
+    for item in [
+        "#[cfg(unix)] const LIMIT: u32 = 1;",
+        "#[cfg(unix)] struct Probe;",
+    ] {
+        t.write(
+            file,
+            &format!("// toy\n#[test] fn modes() {{ {item} assert_eq!(2, 2); }}\n"),
+        );
+        let o = t.run_no_skip();
+        let case = format!("`{item}` in a test body");
+        assert_eq!(o.code, Some(1), "{case}:\n{}", o.text);
+        assert!(
+            has_line(&o, "platform-statement", file, 2..=2, "modes"),
+            "{case}: a `platform-statement` line naming {file}:2 and `modes`:\n{}",
+            o.text
+        );
+    }
+}
+
+/// Mutant M13 of review round 1: with platform tests present and no registry file the step
+/// fails with `platform-unlisted` lines; it never passes.
+#[test]
+fn ac1_m13_no_registry_file_lists_the_platform_tests_as_unlisted() {
+    let t = Toy::no_skip("m13-no-registry");
+    t.write(PLAT, PLAT_RS);
+    t.remove(REGISTRY);
+    let o = t.run_no_skip();
+    assert_one(
+        &o,
+        "platform-unlisted",
+        &[src(PLAT, 2)],
+        "unix_only",
+        "no registry file",
+    );
 }

@@ -610,6 +610,17 @@ task cannot both change the rule and use it in the tree: main's tool judges the 
   `target_os = "windows"` or `any(..)` read as a platform → guard_other_cfgs. Accepted: one statement
   finding per block. clippy `-D warnings`, `fmt --check`, `no-skip`, `hygiene`: clean. Not run: `cargo
   xtask ci`; macOS, Windows. · next: director (join)
+- 2026-11-18 · R-314 · rework after review round 1 (in progress) · did: rulings s1–s12 (D-226) acknowledged
+  and accepted. Added to `acceptance_t071.rs` (each fails on base by assertion): s1
+  `ac1_s1_conditional_test_or_ignore_by_cfg_attr_is_cfg_disabled`, s2
+  `ac3_s2_twins_whose_cfg_is_on_the_enclosing_mod_or_impl`, M21 `ac3_m21_method_twins_inside_one_impl_are_helpers`,
+  s3 `ac1_s3_a_complement_with_a_second_cfg_does_not_count`, s4
+  `ac1_s4_platform_statements_in_a_nested_fn_and_in_deep_blocks`, s5
+  `ac1_s5_a_test_on_no_platform_is_cfg_disabled_registered_or_not`, s6
+  `ac3_s6_path_qualified_trivial_bodies_are_trivial`, s7 `ac1_s7_an_empty_complement_does_not_count`, M9
+  `ac1_m9_only_use_items_are_exempt`, M13 `ac1_m13_no_registry_file_lists_the_platform_tests_as_unlisted`.
+  s7: `#[cfg(windows)] ;` is not Rust (rustc: "expected statement after outer attribute"; syn: "expected an
+  expression"), so the empty statement is tested as `#[cfg(windows)] ();` (review finding 7's form).
 <!-- end test author log -->
 ### reviewer
 - 2026-11-18 · R-311 · review round 1 · reviewed f7d511352027bdd8b0e48f207c3aac9ad5bbca85 · verdict: request-changes (`reviews/T-071-r1.md`). Rulings D-180, D-199, D-205, D-220 p1–p7, D-222 q1, q2 read on main and accepted. Findings: 7 defects (AC-6 Windows clause not met per the CI record, run 44201932507: 22 xtask unit tests fail on Windows, no integration binary ran; `cfg_attr(unix, test)` unseen; `mod`/`impl` twins not `inert-helper`; a complement disabled by another cfg counts; nested fns in a test not inspected; a test behind `windows` inside a `unix` mod passes with entries; `Option::None`/`Result::Ok(())` not trivial), 5 spec gaps (AC-6's macOS detail-line clause cannot hold while the step fails; empty complement; runtime `cfg!`, single helpers, macro bodies, other forms; `doc` may be any file; "seven" kinds in Pinned (a)), 3 test gaps (mutants M9, M13, M21 survive), 1 nit. Mutants 23: 18 killed by acceptance, 17 by own tests (overlap), 2 by own tests only, 3 survived. AC-5 run: Windows and macOS check 0 errors; no xtask test name of base lost (225 → 261). Machine restarted at 00:19Z during the run; earlier results kept were written down before it. Not run: macOS, Windows, the whole `cargo xtask ci`; CI record read at the end (R-312, main 14130e6): agrees on Linux and macOS xtask exit 0, disagrees on Windows and the macOS detail line; `guard_t054` Windows verdict still pending. · next: director
