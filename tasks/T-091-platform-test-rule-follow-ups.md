@@ -49,6 +49,14 @@ The rule of T-071 has one hole left by its rulings and two untested cases:
   still reach the recursive drop of the 2,100-deep chain: a panic while the chain is built, and a take-down that
   fails part-way while the test is already panicking.
 
+## Follow-ups from T-072 (director, D-265; `reviews/T-072-r2.md`)
+- The failure printer prints the first 20 lines of a failing test's block: a panic message after more than 20
+  lines of output is in the artefact, not in the job log (`tasks/ci-runs/T-072-negative.md`). Print the panic lines
+  of a failing block wherever they fall.
+- No test has the `error: N targets failed` line inside an open block (mutant M23 survives).
+- Since ruling u5 widened G-1 to 180 s, a probe limit of 150 s passes the guard (M21): pin the limit by the step's
+  text or by the measured time minus the limit.
+
 ## Log
 ### director
 - 2026-11-18 filed as a draft (D-232).

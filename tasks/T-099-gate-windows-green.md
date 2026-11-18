@@ -32,6 +32,12 @@ director's row names that run).
 - The probe record (to be written by the director under `tasks/ci-runs/`), and T-098's last CI record.
 - Pending entries allowed at the end: T-076's 3 and T-077's 5 (`no-skip` accepts them until 2026-12-31).
 
+## Note from T-072's CI round 5 (director, D-265)
+On Windows the gate's `test` step now ends its kept text with "failed to remove `xtask.exe`: Access is denied"
+(`tasks/ci-runs/T-072-round-5.md`; first seen after T-096 merged). Not a test target. To be explained by this task:
+probably a build that tries to replace the running `xtask.exe` (the gate runs under it), perhaps from the nested
+`cargo test` of `xtask/tests/acceptance_t096.rs`. INFERRED, not shown.
+
 ## Log
 ### director
 <!-- end director log -->
