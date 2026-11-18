@@ -793,6 +793,9 @@ notes (point 2; the latter pending Q-B).
     (on Unix the same `bin:PATH` string). `TIMEOUT`, `wait_with_timeout`, `MARKER_ENV` are now used on every platform.
     The generated Windows source was compiled and run on Linux in scratch (`rustc --edition=2021`; one marker line per
     start). Linux: 3 passed; stand-in clippy Windows and macOS: `Finished`.
+  - W24 (`acceptance_t036_workspace.rs`): `#![cfg(unix)]` after `#![cfg(test)]` (header says why), one entry `<file>`,
+    quote `paths.md` "A root that Kiln cannot open for reading is refused too", `counterpart = "none"`. Body unchanged.
+    Linux: 1 passed; Windows/macOS stand-in: `Finished`; no-skip PASS (42 registered).
 <!-- end implementer log -->
 ### test author
 <!-- end test author log -->
