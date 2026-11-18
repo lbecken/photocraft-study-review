@@ -220,7 +220,8 @@ task = "T-077"
 expires = "2026-12-31"
 
 # T-073: the Unix-only tests of `disk.rs`'s own test module (Unix facilities: modes, FIFOs,
-# `uid`, inodes, symlinks made with Unix calls); their Windows counterparts are T-092's.
+# `uid`, inodes, symlinks made with Unix calls); their Windows counterparts are T-074's (links,
+# the walk), T-092's (plain-std forms), none (mode bits), or a test of `guard_t073.rs`.
 
 [[test]]
 file = "crates/kiln-workspace/src/disk.rs"
@@ -240,8 +241,8 @@ platforms = "unix"
 doc = "docs/decisions.md"
 quote = "fail if anything, including a symlink, already exists at that name"
 counterpart = "pending"
-reason = "the test plants symlinks made with `std::os::unix::fs::symlink`; how links are made and treated on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test plants symlinks made with `std::os::unix::fs::symlink`; how links are made and treated on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -250,10 +251,8 @@ item = "tests::temp_file_is_created_owner_only_and_gets_target_mode_before_renam
 platforms = "unix"
 doc = "docs/decisions.md"
 quote = "existing target: temp owner-only, target's mode applied before rename"
-counterpart = "pending"
-reason = "the sentence is about Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have; the Windows test of the same sentence is written by T-092"
-task = "T-092"
-expires = "2026-12-31"
+counterpart = "none"
+reason = "Windows has no mode bits: the sentence is about Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have"
 
 [[test]]
 file = "crates/kiln-workspace/src/disk.rs"
@@ -261,10 +260,7 @@ item = "tests::read_only_target_is_refused_unless_root"
 platforms = "unix"
 doc = "docs/decisions.md"
 quote = "saving to a target the user cannot write returns `PermissionDenied` and leaves the file untouched"
-counterpart = "pending"
-reason = "the test reads the file's owner uid and inode and sets Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have; the Windows test of the same sentence is written by T-092"
-task = "T-092"
-expires = "2026-12-31"
+counterpart = "crates/kiln-workspace/tests/guard_t073.rs::acw2_save_of_read_only_target_is_refused_and_changes_nothing"
 
 [[test]]
 file = "crates/kiln-workspace/src/disk.rs"
@@ -272,10 +268,8 @@ item = "tests::save_creates_temp_owner_only_for_an_existing_target"
 platforms = "unix"
 doc = "docs/decisions.md"
 quote = "existing target: temp owner-only, target's mode applied before rename"
-counterpart = "pending"
-reason = "the sentence is about Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have; the Windows test of the same sentence is written by T-092"
-task = "T-092"
-expires = "2026-12-31"
+counterpart = "none"
+reason = "Windows has no mode bits: the sentence is about Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have"
 
 [[test]]
 file = "crates/kiln-workspace/src/disk.rs"
@@ -294,10 +288,8 @@ item = "tests::new_file_gets_default_mode"
 platforms = "unix"
 doc = "docs/decisions.md"
 quote = "new target: temp created with the default mode under the umask"
-counterpart = "pending"
-reason = "the sentence is about Unix permission modes (`PermissionsExt::mode`/`from_mode`), which Windows does not have and the umask; the Windows test of the same sentence is written by T-092"
-task = "T-092"
-expires = "2026-12-31"
+counterpart = "none"
+reason = "Windows has no mode bits: the sentence is about Unix permission modes (`PermissionsExt::mode`/`from_mode`) and the umask, which Windows does not have"
 
 [[test]]
 file = "crates/kiln-workspace/src/disk.rs"
@@ -306,8 +298,8 @@ platforms = "unix"
 doc = "docs/control-protocol.md"
 quote = "through a symlink, the link's target is replaced and the link is kept"
 counterpart = "pending"
-reason = "the test compares inode numbers and modes and plants symlinks made with `std::os::unix::fs::symlink`; how symlinks are followed on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test compares inode numbers and modes and plants symlinks made with `std::os::unix::fs::symlink`; how symlinks are followed on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -317,8 +309,8 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "the session refuses every path with `outside_root`, at open and at save"
 counterpart = "pending"
-reason = "the test replaces the root by one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test replaces the root by one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -328,8 +320,8 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "the root, or a directory above it, was replaced, for example by a symlink to another directory"
 counterpart = "pending"
-reason = "the test replaces the root's parent by one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test replaces the root's parent by one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -339,8 +331,8 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "only so that no other directory can take its identity"
 counterpart = "pending"
-reason = "the test compares device and inode numbers (`MetadataExt::dev`/`ino`) and plants one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test compares device and inode numbers (`MetadataExt::dev`/`ino`) and plants one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -350,8 +342,8 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "if `--root` is a symlink to a directory, that directory is the root"
 counterpart = "pending"
-reason = "the test gives the root through one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test gives the root through one of symlinks made with `std::os::unix::fs::symlink`; the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -361,8 +353,8 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "A link whose target ends in `/` must lead to a directory, as the kernel requires"
 counterpart = "pending"
-reason = "the test plants symlinks made with `std::os::unix::fs::symlink`; the walk on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test plants symlinks made with `std::os::unix::fs::symlink`; the walk on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -372,8 +364,8 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "A path that is already open is checked again, for where it leads only."
 counterpart = "pending"
-reason = "the test makes a FIFO with `mkfifo` and plants symlinks made with `std::os::unix::fs::symlink`; Windows has no FIFOs and its walk is not yet stated (T-074); the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test makes a FIFO with `mkfifo` and plants symlinks made with `std::os::unix::fs::symlink`; Windows has no FIFOs and its walk is not yet stated (T-074); the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
 
 [[test]]
@@ -383,6 +375,6 @@ platforms = "unix"
 doc = "docs/protocol/paths.md"
 quote = "is refused with `outside_root` when the root path no longer leads to the root"
 counterpart = "pending"
-reason = "the test plants symlinks made with `std::os::unix::fs::symlink` and replaces the root by one; the walk on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-092"
-task = "T-092"
+reason = "the test plants symlinks made with `std::os::unix::fs::symlink` and replaces the root by one; the walk on Windows is not yet stated (T-074); the Windows test of the same sentence is written by T-074"
+task = "T-074"
 expires = "2026-12-31"
