@@ -215,10 +215,7 @@ fn unix_branch() {
     let channel = pinned_channel();
 
     // rustup is needed: the toolchain file is honoured by its proxies (Pinned (d)).
-    let v = run_to(
-        &mut clean("rustup", &checkout()).arg("--version"),
-        SHORT_SECS,
-    );
+    let v = run_to(clean("rustup", &checkout()).arg("--version"), SHORT_SECS);
     assert_eq!(
         v.code,
         Some(0),
@@ -229,7 +226,7 @@ fn unix_branch() {
 
     // The real pinned toolchain, as this checkout selects it.
     let s = run_to(
-        &mut clean("rustc", &checkout()).args(["--print", "sysroot"]),
+        clean("rustc", &checkout()).args(["--print", "sysroot"]),
         SHORT_SECS,
     );
     assert_eq!(s.code, Some(0), "rustc --print sysroot:\n{}", s.text());
@@ -279,7 +276,7 @@ fn unix_branch() {
     // default answers and cannot build ...
     let outside = scratch.0.join("no-toolchain-file");
     std::fs::create_dir_all(&outside).unwrap();
-    let mut probe = |dir: &Path| {
+    let probe = |dir: &Path| {
         run_to(
             clean("cargo", dir)
                 .arg("--version")
