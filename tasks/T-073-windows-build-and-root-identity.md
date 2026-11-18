@@ -16,6 +16,7 @@ touches:                # one role per path (D-153)
   - .github/workflows/platforms.yml          # GATE PATH: implementer, only with Q-1 A: one reported Windows step
   - xtask/tests/acceptance_t070.rs           # GATE PATH: implementer, only with Q-1 A: the expectation of that step
   - crates/kiln-workspace/tests/acceptance_t073.rs   # test author: Windows behaviour (Interface (4))
+  - crates/kiln-workspace/tests/guard_t073.rs        # test author: the runtime tests of Interface (4), which pass on Unix base (ruling y1, D-247)
 budget_tokens: 1100000  # high (v1.5); estimate about 1,050,000 (an Extend row is likely)
 iteration: 2
 found_by: planner       # ADR-0009 (R-255); re-specified R-336 (v1.5 §5.7)
@@ -191,6 +192,22 @@ high → independent test author.
   line and no package version changes. The approval row names the dependency change and `gate paths`.
 - Order: this task now (the Windows critical path: T-073, T-074, T-092, T-075 to T-078); T-072 and T-093 after it,
   where their paths are free (T-093 shares `docs/protocol/paths.md` with this task and with T-074).
+
+### Rulings on the test author's report (director, D-247; told to both builders)
+- **y1 (question 1: nothing fails on base on Linux).** The ten runtime tests of Interface (4) assert, on Unix,
+  behaviour the spec keeps unchanged, so they pass on base there: they are guards. They move to
+  `crates/kiln-workspace/tests/guard_t073.rs` (in the test author's `touches` now), unchanged. On Windows they are
+  the runtime evidence of AC-W2. `acceptance_t073.rs` holds what fails on base on every platform and can be read
+  there: the crate's manifest declares `same-file` exactly as ruling Q-4 A says — under a Windows-only target
+  table, with the version `=1.0.6`, and nowhere else in the manifest (read as text; no new dev-dependency, since
+  the lock may gain exactly one line). One variant it must reject: the dependency in `[dependencies]`.
+- **y2 (question 2: where the measurement shows).** The reported Windows step runs both files and prints the
+  passing tests' output: `cargo test --locked --no-fail-fast -p kiln-workspace --lib --test acceptance_t073 --test
+  guard_t073 -- --show-output` (implementer; the expectation in `acceptance_t070.rs` follows). The `MEASURED:`
+  lines of the two root-rename tests are then in the record, and the director reads them for the Pinned
+  sentence on a held root.
+- Not tested and noted for T-074: removing (not renaming) a held root; and, if Windows refuses both renames, the
+  identity check has no Windows test in this task.
 
 ## Log
 ### director
