@@ -197,7 +197,6 @@ mod support {
     }
 
     /// (device, inode) of every regular file under `dir`, and the symlinks found there.
-    #[cfg(unix)]
     pub fn inodes(dir: &Path) -> (BTreeMap<(u64, u64), String>, Vec<String>) {
         use std::os::unix::fs::MetadataExt;
         let mut files = BTreeMap::new();
@@ -221,7 +220,6 @@ mod support {
 
     /// Symlinks under `seed`, and files under `seed` that are the same inode as a file under
     /// `source` (hard links). Cargo's own uplift hard links inside one target are fine.
-    #[cfg(unix)]
     pub fn shared_entries(source: &Path, seed: &Path) -> Vec<String> {
         let (src, _) = inodes(source);
         let (files, mut out) = inodes(seed);
@@ -274,7 +272,6 @@ fn seeded_worktree_builds_its_own_source() {
 // AC-11: guard. Base seeds with `cp -a --reflink=auto`, an independent copy; a seed made of hard
 // links, symlinks or a shared directory would fail this.
 #[test]
-#[cfg(unix)] // device and inode numbers are Unix metadata (xtask/platform-tests.toml)
 fn worktree_build_does_not_touch_main_target() {
     let root = seed_repo("ac11");
     let main_target = root.join("target");

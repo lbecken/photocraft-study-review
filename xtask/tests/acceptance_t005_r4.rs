@@ -7,9 +7,7 @@
 //! committed on main before each run (R6). Outside the R12 test, any `metrics/` change a run
 //! leaves is committed by the test (a no-op once the queue commits its own record).
 
-use std::path::Path;
-#[cfg(target_os = "linux")] // used by the Linux-only R13 (a) test only
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::Value;
@@ -23,7 +21,6 @@ type Files<'a> = &'a [(&'a str, Option<&'a str>)];
 /// One file change.
 type Change<'a> = (&'a str, Option<&'a str>);
 /// Extra environment for a queue run.
-#[cfg(target_os = "linux")] // used by the Linux-only R13 (a) test only
 type Env = Vec<(&'static str, String)>;
 
 // ---- helpers ------------------------------------------------------------------------------
@@ -74,7 +71,6 @@ fn record_raw(r: &Repo, id: &str, env: &[(&'static str, String)]) -> (Out, Value
     (o, rec)
 }
 
-#[cfg(target_os = "linux")] // used by the Linux-only R13 (a) test only
 fn record(r: &Repo, id: &str, env: &[(&'static str, String)]) -> (Out, Value) {
     let out = record_raw(r, id, env);
     commit_ledger(r);
@@ -553,13 +549,10 @@ fn queue_commits_its_own_record_and_hand_edits_are_refused() {
 
 // ---- R13 (a): a planted, future-dated fake xtask does not decide the gate -----------------
 
-#[cfg(target_os = "linux")]
 const FAKE_GATE: &str = "#!/bin/sh\n# planted fake xtask (T-005 R13 test)\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = --report ]; then printf '%s' '{\"passed\": true, \"failed_step\": null, \"seconds\": 0.0, \"steps\": []}' > \"$2\"; fi\n  shift\ndone\necho 'planted gate: PASSED'\nexit 0\n";
 
 /// Replace every built `xtask` executable under `dir` (an ELF whose name contains `xtask`
 /// and has no extension) with a fake green gate dated one day in the future. Returns them.
-/// Linux only: the queue's build tree and its ELF binaries (xtask/platform-tests.toml).
-#[cfg(target_os = "linux")]
 fn plant_future_fakes(dir: &Path) -> Vec<PathBuf> {
     use std::os::unix::fs::PermissionsExt as _;
     let future = std::time::SystemTime::now() + std::time::Duration::from_secs(86_400);
@@ -603,7 +596,6 @@ fn plant_future_fakes(dir: &Path) -> Vec<PathBuf> {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // xtask/platform-tests.toml
 fn planted_future_dated_xtask_does_not_decide_the_gate() {
     let r = Repo::new("r4-r13-plant");
     let s = r.root.parent().unwrap().to_path_buf();

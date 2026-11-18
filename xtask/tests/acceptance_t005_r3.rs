@@ -258,14 +258,11 @@ fn lock_version(lock: &str, name: &str) -> Option<String> {
 
 // ---- R1: the gate binary is rebuilt from base_sha every run -------------------------------
 
-#[cfg(target_os = "linux")]
 const FAKE_GATE: &str = "#!/bin/sh\n# tampered copy of xtask (T-005 R1 test)\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = --report ]; then printf '%s' '{\"passed\": true, \"failed_step\": null, \"seconds\": 0.0, \"steps\": []}' > \"$2\"; fi\n  shift\ndone\necho 'tampered gate: PASSED'\nexit 0\n";
 
 /// Overwrite every built `xtask` executable (ELF named `xtask` or `xtask-<hash>`) under `dir`
 /// with a fake that reports a green gate; its mtime becomes newer than any source, so cargo
-/// considers it fresh. Returns the files replaced. Linux only: the queue's build tree and its
-/// ELF binaries (xtask/platform-tests.toml).
-#[cfg(target_os = "linux")]
+/// considers it fresh. Returns the files replaced.
 fn tamper_xtask_binaries(dir: &Path) -> Vec<PathBuf> {
     use std::os::unix::fs::PermissionsExt as _;
     let mut out = Vec::new();
@@ -304,7 +301,6 @@ fn tamper_xtask_binaries(dir: &Path) -> Vec<PathBuf> {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // xtask/platform-tests.toml
 fn tampered_cached_gate_binary_does_not_decide_the_gate() {
     let r = Repo::new("r3-r1-tamper");
     let scratch_dir = r.root.parent().unwrap().to_path_buf();
